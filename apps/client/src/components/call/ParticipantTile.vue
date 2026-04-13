@@ -11,8 +11,6 @@ const props = defineProps<{
   audioEnabled: boolean
   /** Bumps play() when stream ref or tracks change (local / remote). */
   playRev?: number
-  /** Extra tick after remote addTrack (useRemoteMedia). */
-  refreshTick?: number
   /** CSS size tier from parent grid: sm | md | lg */
   sizeTier: 'sm' | 'md' | 'lg'
   /** Remote/local tile with strongest mic level (Web Audio analyser). */
@@ -24,8 +22,7 @@ function initials(name: string): string {
   return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || '?'
 }
 
-/** Remote: reuse one MediaStream per kind; sync tracks (avoid new MediaStream every computed run). */
-const videoSplitStream = shallowRef<MediaStream | null>(null)
+/** Remote: audio-only split stream for <audio> (video uses the same composite stream as props). */
 const audioSplitStream = shallowRef<MediaStream | null>(null)
 
 function clearSplitHolder(holder: { value: MediaStream | null }): void {
@@ -70,18 +67,15 @@ watch(
   () => [props.stream, props.playRev ?? 0, props.isLocal] as const,
   () => {
     if (!props.stream || props.isLocal) {
-      clearSplitHolder(videoSplitStream)
       clearSplitHolder(audioSplitStream)
       return
     }
-    syncSplitStream(videoSplitStream, props.stream.getVideoTracks())
     syncSplitStream(audioSplitStream, props.stream.getAudioTracks())
   },
   { immediate: true },
 )
 
 onUnmounted(() => {
-  clearSplitHolder(videoSplitStream)
   clearSplitHolder(audioSplitStream)
 })
 
@@ -180,10 +174,9 @@ const placeholderHint = computed(() => {
       />
       <div v-if="showVideo" class="tile-video-wrap">
         <StreamVideo
-          :stream="isLocal ? stream : videoSplitStream"
+          :stream="stream"
           muted
           :play-rev="playRev"
-          :refresh-tick="refreshTick ?? 0"
           :report-video-ui="!isLocal"
           fill
           @video-ui="onVideoUi"

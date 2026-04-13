@@ -82,7 +82,6 @@ const {
             :video-enabled="t.videoEnabled"
             :audio-enabled="t.audioEnabled"
             :play-rev="t.playRev"
-            :refresh-tick="t.refreshTick"
             :size-tier="sizeTier"
             :active-speaker="activeSpeakerPeerId === t.peerId"
           />

@@ -31,8 +31,7 @@ const { sendTransport, createSendTransport, closeSendTransport, publishLocalMedi
 const { localStream, startLocalMedia, stopLocalMedia } = useLocalMedia()
 const {
   remotePeerStreams,
-  remotePlayRev,
-  remoteVideoRefreshTick,
+  remotePeerPlayRevs,
   recvTransport,
   setupReceivePath,
   stopRemoteMedia,
@@ -249,8 +248,7 @@ function clearLogs(): void {
           :key="e.peerId"
           :stream="e.stream"
           :muted="false"
-          :play-rev="remotePlayRev"
-          :refresh-tick="remoteVideoRefreshTick"
+          :play-rev="remotePeerPlayRevs.get(e.peerId) ?? 0"
         />
       </div>
     </fieldset>

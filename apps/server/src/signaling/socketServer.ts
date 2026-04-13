@@ -11,7 +11,6 @@ import {
   handleDisconnect,
   handleJoinRoom,
   handleProduce,
-  handleSetVideoConsumerLayers,
   handleUpdateDisplayName,
 } from './messageHandlers'
 
@@ -71,20 +70,8 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'consume': {
-              const { transportId, producerId, rtpCapabilities, gridSizeTier } = parsed.data.payload
-              await handleConsume(
-                socket,
-                transportId,
-                producerId,
-                rtpCapabilities,
-                deps,
-                gridSizeTier,
-              )
-              break
-            }
-            case 'set-video-consumer-layers': {
-              const { gridSizeTier } = parsed.data.payload
-              await handleSetVideoConsumerLayers(socket, gridSizeTier, deps)
+              const { transportId, producerId, rtpCapabilities } = parsed.data.payload
+              await handleConsume(socket, transportId, producerId, rtpCapabilities, deps)
               break
             }
             default:

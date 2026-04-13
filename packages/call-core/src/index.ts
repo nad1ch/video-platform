@@ -23,11 +23,8 @@ export { getAudioAnalysisAudioContext } from './audio/audioAnalysisContext'
 export { useActiveSpeaker, type ActiveSpeakerTile } from './audio/useActiveSpeaker'
 
 export { useLocalMedia } from './media/useLocalMedia'
-export {
-  gridSizeTierFromParticipantCount,
-  spatialLayerForGridSizeTier,
-  VP8_SIMULCAST_ENCODINGS,
-} from './media/videoSimulcast'
+export { gridSizeTierFromParticipantCount } from './media/gridTier'
+export { spatialLayerForGridSizeTier, VP8_SIMULCAST_ENCODINGS } from './media/videoSimulcast'
 export { useMediasoupDevice } from './media/useMediasoupDevice'
 export {
   useRemoteMedia,

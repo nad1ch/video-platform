@@ -7,10 +7,9 @@ import type {
   Transport,
   TransportOptions,
 } from 'mediasoup-client/types'
-import { computed, onUnmounted, ref, shallowRef } from 'vue'
+import { computed, onUnmounted, shallowRef } from 'vue'
 import type { SendTransportRoomApi } from '../transport/useSendTransport'
 import { waitForSignalingMessage } from '../signaling/signalingWait'
-import { gridSizeTierFromParticipantCount } from './videoSimulcast'
 
 export type RemoteProducerInfo = {
   producerId: string
@@ -161,46 +160,22 @@ export function useRemoteMedia() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([peerId, stream]) => ({ peerId, stream }))
   })
-  /** Bumps when remote MediaStream is mutated (addTrack); remote tiles use this to call play() again. */
-  const remotePlayRev = ref(0)
-  /** Extra nudge for <video> after remote addTrack (autoplay / decode edge cases). */
-  const remoteVideoRefreshTick = ref(0)
+  /**
+   * Per-remote-peer counter: bump only when that peer's stream changes (not global).
+   * Single rev per peer (no separate refresh tick).
+   */
+  const remotePeerPlayRevs = shallowRef(new Map<string, number>())
   const consumedProducerIds = new Set<string>()
   /** In-flight consume per producerId (sync vs new-producer overlap). */
   const consumingProducerIds = new Set<string>()
   const consumersByProducerId = new Map<string, Consumer>()
   let unsubscribeNewProducer: (() => void) | null = null
   let unsubscribeProducerSync: (() => void) | null = null
-  let roomApiRef: SendTransportRoomApi | null = null
-  /** Used in consume() + server layer updates; synced from producer list / remote peer count. */
-  const gridSizeTierRef = shallowRef<'sm' | 'md' | 'lg'>('lg')
 
-  function setGridTierFromProducerList(list: RemoteProducerInfo[]): void {
-    const remotePeers = new Set(list.map((p) => p.peerId))
-    const n = remotePeers.size + 1
-    gridSizeTierRef.value = gridSizeTierFromParticipantCount(n)
-  }
-
-  function refreshGridTierFromRemotePeerCount(): void {
-    const n = streamsByPeerId.size + 1
-    const next = gridSizeTierFromParticipantCount(n)
-    if (next === gridSizeTierRef.value) {
-      return
-    }
-    gridSizeTierRef.value = next
-    roomApiRef?.sendJson({
-      type: 'set-video-consumer-layers',
-      payload: { gridSizeTier: next },
-    })
-  }
-
-  /** Align server-side consumer layers with grid tier (tile size / participant count). */
-  function setVideoConsumerGridTier(tier: 'sm' | 'md' | 'lg'): void {
-    gridSizeTierRef.value = tier
-    roomApiRef?.sendJson({
-      type: 'set-video-consumer-layers',
-      payload: { gridSizeTier: tier },
-    })
+  function bumpRemotePeerPlayRev(peerId: string): void {
+    const pr = new Map(remotePeerPlayRevs.value)
+    pr.set(peerId, (pr.get(peerId) ?? 0) + 1)
+    remotePeerPlayRevs.value = pr
   }
 
   const remoteStreams = computed(() => remotePeerStreams.value.map((e) => e.stream))
@@ -228,13 +203,13 @@ export function useRemoteMedia() {
       }
     }
     remotePeerStreamsMap.value = next
-    remotePlayRev.value += 1
   }
 
   function wireRemoteTrack(stream: MediaStream, peerId: string, track: MediaStreamTrack): void {
     track.onended = () => {
       stream.removeTrack(track)
       syncRemotePeerStreamsRef()
+      bumpRemotePeerPlayRev(peerId)
       if (import.meta.env.DEV) {
         console.log('[track] ended', track.id, { peerId })
       }
@@ -274,8 +249,7 @@ export function useRemoteMedia() {
     }
 
     syncRemotePeerStreamsRef()
-    remoteVideoRefreshTick.value += 1
-    refreshGridTierFromRemotePeerCount()
+    bumpRemotePeerPlayRev(peerId)
   }
 
   async function ensureRecvTransport(device: Device, room: SendTransportRoomApi): Promise<Transport> {
@@ -355,7 +329,6 @@ export function useRemoteMedia() {
           transportId: transport.id,
           producerId,
           rtpCapabilities: device.rtpCapabilities,
-          gridSizeTier: gridSizeTierRef.value,
         },
       })
 
@@ -473,7 +446,6 @@ export function useRemoteMedia() {
     room: SendTransportRoomApi,
     existing: RemoteProducerInfo[],
   ): Promise<void> {
-    roomApiRef = room
     await ensureRecvTransport(device, room)
     startNewProducerListener(device, room)
     unsubscribeProducerSync?.()
@@ -494,7 +466,6 @@ export function useRemoteMedia() {
     })
     const missed = room.drainPendingNewProducers?.() ?? []
     const merged = mergeProducerLists(existing, missed)
-    setGridTierFromProducerList(merged)
     if (import.meta.env.DEV) {
       console.log('[setupReceivePath]', {
         fromRoomState: existing.length,
@@ -514,7 +485,6 @@ export function useRemoteMedia() {
   }
 
   function stopRemoteMedia(): void {
-    roomApiRef = null
     unsubscribeNewProducer?.()
     unsubscribeNewProducer = null
     unsubscribeProducerSync?.()
@@ -532,7 +502,7 @@ export function useRemoteMedia() {
     }
     streamsByPeerId.clear()
     remotePeerStreamsMap.value = new Map()
-    remoteVideoRefreshTick.value = 0
+    remotePeerPlayRevs.value = new Map()
     consumedProducerIds.clear()
     consumingProducerIds.clear()
     const t = recvTransport.value
@@ -549,8 +519,7 @@ export function useRemoteMedia() {
   return {
     recvTransport,
     remotePeerStreams,
-    remotePlayRev,
-    remoteVideoRefreshTick,
+    remotePeerPlayRevs,
     remoteStreams,
     ensureRecvTransport,
     consumeProducer,
@@ -558,6 +527,5 @@ export function useRemoteMedia() {
     syncExistingProducers,
     setupReceivePath,
     stopRemoteMedia,
-    setVideoConsumerGridTier,
   }
 }

@@ -6,7 +6,6 @@ const props = withDefaults(
     stream: MediaStream | null
     muted?: boolean
     playRev?: number
-    refreshTick?: number
     fill?: boolean
     /** When false, skip videoUi events (local preview). */
     reportVideoUi?: boolean
@@ -14,7 +13,6 @@ const props = withDefaults(
   {
     muted: false,
     fill: false,
-    refreshTick: 0,
     reportVideoUi: true,
   },
 )
@@ -24,6 +22,9 @@ const emit = defineEmits<{
 }>()
 
 const el = ref<HTMLVideoElement | null>(null)
+
+/** Avoid tearing down listeners / play() when only playRev bumps but video track is unchanged. */
+let lastBoundVideoTrackId: string | undefined
 
 let detachUiListeners: (() => void) | null = null
 
@@ -76,15 +77,35 @@ async function bindStream(): Promise<void> {
     return
   }
 
-  detachVideoUi()
-
   if (!s) {
+    lastBoundVideoTrackId = undefined
+    detachVideoUi()
     v.srcObject = null
     if (props.reportVideoUi) {
       emit('videoUi', { readyState: -1, videoWidth: 0, videoHeight: 0 })
     }
     return
   }
+
+  const vid = s.getVideoTracks()[0]
+  const tid = vid?.id
+  const sameStreamAndTrack =
+    v.srcObject === s && tid !== undefined && tid === lastBoundVideoTrackId
+
+  if (sameStreamAndTrack) {
+    v.muted = Boolean(props.muted)
+    if (v.paused) {
+      try {
+        await v.play()
+      } catch (err) {
+        console.warn('[StreamVideo] play failed', err)
+      }
+    }
+    return
+  }
+
+  lastBoundVideoTrackId = tid
+  detachVideoUi()
 
   if (v.srcObject !== s) {
     v.srcObject = s
@@ -104,7 +125,7 @@ async function bindStream(): Promise<void> {
 }
 
 watch(
-  () => [props.stream, props.playRev ?? 0, props.refreshTick ?? 0, props.reportVideoUi] as const,
+  () => [props.stream, props.playRev ?? 0, props.reportVideoUi] as const,
   () => {
     void bindStream()
   },

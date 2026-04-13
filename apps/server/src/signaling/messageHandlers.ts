@@ -77,14 +77,6 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       transportId: z.string().min(1),
       producerId: z.string().min(1),
       rtpCapabilities: z.unknown(),
-      /** Client grid tier → simulcast spatial layer for this video consumer. */
-      gridSizeTier: z.enum(['sm', 'md', 'lg']).optional(),
-    }),
-  }),
-  z.object({
-    type: z.literal('set-video-consumer-layers'),
-    payload: z.object({
-      gridSizeTier: z.enum(['sm', 'md', 'lg']),
     }),
   }),
 ])
@@ -146,16 +138,6 @@ export type ServerMessage =
 export type SignalingDeps = {
   roomManager: RoomManager
   socketPeer: Map<WsSocket, Peer>
-}
-
-function spatialLayerForGridSizeTier(tier: 'sm' | 'md' | 'lg' | undefined): number {
-  if (tier === 'sm') {
-    return 0
-  }
-  if (tier === 'md') {
-    return 1
-  }
-  return 2
 }
 
 export function sendServerMessage(socket: WsSocket, message: ServerMessage): void {
@@ -505,7 +487,6 @@ export async function handleConsume(
   producerId: string,
   rtpCapabilities: unknown,
   deps: SignalingDeps,
-  gridSizeTier?: 'sm' | 'md' | 'lg',
 ): Promise<void> {
   const peer = getPeerForSocket(socket, deps)
   if (!peer) {
@@ -550,19 +531,10 @@ export async function handleConsume(
       await sourceProducer.resume()
     }
 
-    const preferredLayers =
-      sourceProducer.kind === 'video'
-        ? {
-            spatialLayer: spatialLayerForGridSizeTier(gridSizeTier ?? 'lg'),
-            temporalLayer: 2,
-          }
-        : undefined
-
     const consumer = await transport.consume({
       producerId,
       rtpCapabilities: caps,
       paused: true,
-      preferredLayers,
     })
 
     console.log('[consume] consumer created', {
@@ -592,30 +564,6 @@ export async function handleConsume(
   } catch (err) {
     console.error('consume failed', err)
     sendConsumeFailed(socket, producerId, 'server_consume_error')
-  }
-}
-
-export async function handleSetVideoConsumerLayers(
-  socket: WsSocket,
-  gridSizeTier: 'sm' | 'md' | 'lg',
-  deps: SignalingDeps,
-): Promise<void> {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
-    return
-  }
-  const spatialLayer = spatialLayerForGridSizeTier(gridSizeTier)
-  for (const consumer of peer.getConsumers()) {
-    if (consumer.closed || consumer.kind !== 'video') {
-      continue
-    }
-    try {
-      await consumer.setPreferredLayers({ spatialLayer, temporalLayer: 2 })
-    } catch (err) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[set-video-consumer-layers] skipped consumer', consumer.id, err)
-      }
-    }
   }
 }
 
