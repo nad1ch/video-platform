@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.clientMessageSchema = void 0;
 exports.sendServerMessage = sendServerMessage;
 exports.handleJoinRoom = handleJoinRoom;
+exports.handleUpdateDisplayName = handleUpdateDisplayName;
 exports.handleCreateTransport = handleCreateTransport;
 exports.handleConnectTransport = handleConnectTransport;
 exports.handleProduce = handleProduce;
@@ -30,6 +31,13 @@ exports.clientMessageSchema = zod_1.z.discriminatedUnion('type', [
         payload: zod_1.z.object({
             roomId: zod_1.z.string().min(1),
             peerId: zod_1.z.string().min(1),
+            displayName: zod_1.z.string().max(64).optional(),
+        }),
+    }),
+    zod_1.z.object({
+        type: zod_1.z.literal('update-display-name'),
+        payload: zod_1.z.object({
+            displayName: zod_1.z.string().min(1).max(64),
         }),
     }),
     zod_1.z.object({
@@ -83,6 +91,9 @@ function collectExistingProducers(room, excludePeerId) {
             continue;
         }
         for (const producer of p.getProducers()) {
+            if (producer.closed) {
+                continue;
+            }
             list.push({ producerId: producer.id, peerId: p.id, kind: producer.kind });
         }
     }
@@ -151,30 +162,76 @@ function replaceDuplicatePeerId(room, incomingSocket, peerId, deps) {
     }
     finalizeRoomIfEmpty(room, deps.roomManager);
 }
-async function handleJoinRoom(socket, roomId, peerId, deps) {
+function sanitizeDisplayName(raw, peerId) {
+    const t = raw?.trim() ?? '';
+    if (t.length > 0) {
+        return t.slice(0, 64);
+    }
+    return `Guest ${peerId.length > 6 ? peerId.slice(-6) : peerId}`;
+}
+async function handleJoinRoom(socket, roomId, peerId, displayName, deps) {
     disassociateSocketFromCurrentRoom(socket, deps);
     let room = await deps.roomManager.getOrCreateRoom(roomId);
     replaceDuplicatePeerId(room, socket, peerId, deps);
     room = await deps.roomManager.getOrCreateRoom(roomId);
-    const peer = new Peer_1.Peer(peerId, socket, room.id);
+    const name = sanitizeDisplayName(displayName, peerId);
+    const peer = new Peer_1.Peer(peerId, socket, room.id, name);
     room.addPeer(peer);
     deps.socketPeer.set(socket, peer);
     const others = room
         .getPeers()
         .filter((p) => p.id !== peerId)
-        .map((p) => p.id);
+        .map((p) => ({ peerId: p.id, displayName: p.displayName }));
     const routerRtpCapabilities = room.getRouter().rtpCapabilities;
     const existingProducers = collectExistingProducers(room, peerId);
+    if (process.env.NODE_ENV !== 'production') {
+        const producerSnapshot = room.getPeers().map((p) => ({
+            peerId: p.id,
+            displayName: p.displayName,
+            producers: p.getProducers().filter((pr) => !pr.closed).map((pr) => ({ id: pr.id, kind: pr.kind })),
+        }));
+        console.log('[join]', {
+            roomId: room.id,
+            peerId,
+            displayName: name,
+            peersInRoom: others.length + 1,
+            existingProducers: existingProducers.length,
+            producerSnapshot,
+        });
+    }
     sendServerMessage(socket, {
         type: 'room-state',
         payload: { peers: others, routerRtpCapabilities, existingProducers },
     });
-    const joinedMsg = { type: 'peer-joined', payload: { peerId } };
+    const joinedMsg = {
+        type: 'peer-joined',
+        payload: { peerId, displayName: name },
+    };
     for (const p of room.getPeers()) {
         if (p.id === peerId) {
             continue;
         }
         p.sendJson(joinedMsg);
+    }
+}
+function handleUpdateDisplayName(socket, displayName, deps) {
+    const peer = getPeerForSocket(socket, deps);
+    if (!peer) {
+        return;
+    }
+    const room = deps.roomManager.getRoom(peer.roomId);
+    if (!room) {
+        return;
+    }
+    const trimmed = displayName.trim().slice(0, 64);
+    const name = trimmed.length > 0 ? trimmed : sanitizeDisplayName(undefined, peer.id);
+    peer.displayName = name;
+    const msg = {
+        type: 'peer-display-name',
+        payload: { peerId: peer.id, displayName: name },
+    };
+    for (const p of room.getPeers()) {
+        p.sendJson(msg);
     }
 }
 function getPeerForSocket(socket, deps) {
@@ -274,25 +331,41 @@ async function handleProduce(socket, transportId, kind, rtpParameters, requestId
         console.error('produce failed', err);
     }
 }
+function sendConsumeFailed(socket, producerId, reason) {
+    sendServerMessage(socket, { type: 'consume-failed', payload: { producerId, reason } });
+}
 async function handleConsume(socket, transportId, producerId, rtpCapabilities, deps) {
     const peer = getPeerForSocket(socket, deps);
     if (!peer) {
+        sendConsumeFailed(socket, producerId, 'no_peer');
         return;
     }
     const room = deps.roomManager.getRoom(peer.roomId);
     if (!room) {
+        sendConsumeFailed(socket, producerId, 'no_room');
         return;
     }
     const transport = peer.getTransport(transportId);
     if (!transport || transport.closed || transportDirection(transport) !== 'recv') {
+        sendConsumeFailed(socket, producerId, 'invalid_recv_transport');
         return;
     }
     const sourceProducer = findProducerInRoom(room, producerId);
     if (!sourceProducer || sourceProducer.closed) {
+        sendConsumeFailed(socket, producerId, 'producer_not_found_or_closed');
         return;
     }
     const caps = rtpCapabilities;
-    if (!room.getRouter().canConsume({ producerId, rtpCapabilities: caps })) {
+    const canConsume = room.getRouter().canConsume({ producerId, rtpCapabilities: caps });
+    if (!canConsume) {
+        if (process.env.NODE_ENV !== 'production') {
+            console.warn('[canConsume] false', {
+                producerId,
+                kind: sourceProducer.kind,
+                consumerPeerId: peer.id,
+            });
+        }
+        sendConsumeFailed(socket, producerId, 'can_consume_false');
         return;
     }
     try {
@@ -327,6 +400,7 @@ async function handleConsume(socket, transportId, producerId, rtpCapabilities, d
     }
     catch (err) {
         console.error('consume failed', err);
+        sendConsumeFailed(socket, producerId, 'server_consume_error');
     }
 }
 function handleDisconnect(socket, deps) {

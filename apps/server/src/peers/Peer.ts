@@ -1,5 +1,5 @@
 import WebSocket from 'ws'
-import type { Consumer, Producer, WebRtcTransport } from 'mediasoup/node/lib/types'
+import type { Consumer, Producer, WebRtcTransport } from 'mediasoup/types'
 
 export class Peer {
   readonly id: string

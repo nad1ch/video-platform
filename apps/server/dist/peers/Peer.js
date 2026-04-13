@@ -9,13 +9,16 @@ class Peer {
     id;
     socket;
     roomId;
+    /** Shown to other participants (from join-room / update-display-name). */
+    displayName;
     transports = new Map();
     producers = new Map();
     consumers = new Map();
-    constructor(id, socket, roomId) {
+    constructor(id, socket, roomId, displayName) {
         this.id = id;
         this.socket = socket;
         this.roomId = roomId;
+        this.displayName = displayName;
     }
     sendJson(payload) {
         if (this.socket.readyState === ws_1.default.OPEN) {

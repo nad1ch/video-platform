@@ -5,9 +5,12 @@ import type {
   DtlsParameters,
   IceCandidate,
   IceParameters,
-} from 'mediasoup/node/lib/WebRtcTransportTypes'
-import type { MediaKind, RtpCapabilities, RtpParameters } from 'mediasoup/node/lib/rtpParametersTypes'
-import type { Producer, WebRtcTransport } from 'mediasoup/node/lib/types'
+  MediaKind,
+  Producer,
+  RtpCapabilities,
+  RtpParameters,
+  WebRtcTransport,
+} from 'mediasoup/types'
 import { createWebRtcTransport } from '../mediasoup/createWebRtcTransport'
 import { Peer } from '../peers/Peer'
 import type { Room } from '../rooms/Room'

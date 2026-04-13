@@ -25,8 +25,13 @@ function attachSocketServer(wss, roomManager) {
                 try {
                     switch (parsed.data.type) {
                         case 'join-room': {
-                            const { roomId, peerId } = parsed.data.payload;
-                            await (0, messageHandlers_1.handleJoinRoom)(socket, roomId, peerId, deps);
+                            const { roomId, peerId, displayName } = parsed.data.payload;
+                            await (0, messageHandlers_1.handleJoinRoom)(socket, roomId, peerId, displayName, deps);
+                            break;
+                        }
+                        case 'update-display-name': {
+                            const { displayName } = parsed.data.payload;
+                            (0, messageHandlers_1.handleUpdateDisplayName)(socket, displayName, deps);
                             break;
                         }
                         case 'create-transport': {

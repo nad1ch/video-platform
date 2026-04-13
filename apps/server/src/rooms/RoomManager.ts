@@ -1,4 +1,4 @@
-import type { Worker } from 'mediasoup/node/lib/types'
+import type { Worker } from 'mediasoup/types'
 import { Room } from './Room'
 
 export class RoomManager {

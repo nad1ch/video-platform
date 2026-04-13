@@ -1,5 +1,5 @@
 import { createWorker } from 'mediasoup'
-import type { Worker } from 'mediasoup/node/lib/types'
+import type { Worker } from 'mediasoup/types'
 import pino from 'pino'
 
 export type CreateMediasoupWorkerOptions = {

@@ -1,5 +1,4 @@
-import type { Router, WebRtcTransport } from 'mediasoup/node/lib/types'
-import type { TransportListenInfo } from 'mediasoup/node/lib/TransportTypes'
+import type { Router, TransportListenInfo, WebRtcTransport } from 'mediasoup/types'
 
 let warnedAnnouncedMissing = false
 

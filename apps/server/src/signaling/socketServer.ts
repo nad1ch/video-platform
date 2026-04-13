@@ -1,5 +1,5 @@
 import type { WebSocketServer } from 'ws'
-import type { DtlsParameters } from 'mediasoup/node/lib/WebRtcTransportTypes'
+import type { DtlsParameters } from 'mediasoup/types'
 import type { RoomManager } from '../rooms/RoomManager'
 import type { Peer } from '../peers/Peer'
 import type { WebSocket } from 'ws'

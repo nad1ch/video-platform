@@ -1,5 +1,5 @@
 import { getSupportedRtpCapabilities } from 'mediasoup'
-import type { Router, RouterRtpCodecCapability, Worker } from 'mediasoup/node/lib/types'
+import type { Router, RouterRtpCodecCapability, Worker } from 'mediasoup/types'
 
 /**
  * Use mediasoup's full codec entries (incl. rtcpFeedback like transport-cc / nack).

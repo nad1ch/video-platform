@@ -1,5 +1,5 @@
 {
-  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "extends": ["../../tsconfig.base.json", "@vue/tsconfig/tsconfig.dom.json"],
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "types": ["vite/client"],
@@ -14,12 +14,7 @@
       "call-core/utils": ["../../packages/call-core/src/utils/index.ts"],
       "call-core/*": ["../../packages/call-core/src/*"]
     },
-
-    /* Linting */
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "erasableSyntaxOnly": true
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
 }

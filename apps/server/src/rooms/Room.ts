@@ -1,4 +1,4 @@
-import type { Router, Worker } from 'mediasoup/node/lib/types'
+import type { Router, Worker } from 'mediasoup/types'
 import type { Peer } from '../peers/Peer'
 import { createRouter } from '../mediasoup/createRouter'
 
