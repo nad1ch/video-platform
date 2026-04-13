@@ -1,4 +1,4 @@
-import { storeToRefs } from 'pinia'
+import { getActivePinia, storeToRefs } from 'pinia'
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import { gridSizeTierFromParticipantCount } from './media/gridTier'
 import { useCallSessionStore } from './stores/callSession'
@@ -58,6 +58,12 @@ function stringValue(v: unknown): string {
 }
 
 export function useCallEngine(options?: CallEngineOptions) {
+  if (getActivePinia() === undefined) {
+    throw new Error(
+      'useCallEngine requires an active Pinia app (call app.use(createPinia()) before mount). If you use a workspace package, ensure Vite resolve.dedupe includes "pinia" and "vue" so there is only one Pinia instance.',
+    )
+  }
+
   const session = options?.session ?? useCallSessionStore()
   const { roomId, selfPeerId, selfDisplayName, inCall } = storeToRefs(session)
 
