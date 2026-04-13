@@ -1,4 +1,5 @@
 import { computed, onScopeDispose, ref, watch } from 'vue'
+import { gridSizeTierFromParticipantCount } from './media/videoSimulcast'
 import { useCallSessionStore } from './stores/callSession'
 import { playAllPageAudio } from './audio/audioPlaybackUnlock'
 import { useActiveSpeaker } from './audio/useActiveSpeaker'
@@ -63,8 +64,14 @@ export function useCallEngine(options?: CallEngineOptions) {
     toggleMic,
     toggleCam,
   } = useLocalMedia()
-  const { remotePeerStreams, remotePlayRev, remoteVideoRefreshTick, setupReceivePath, stopRemoteMedia } =
-    useRemoteMedia()
+  const {
+    remotePeerStreams,
+    remotePlayRev,
+    remoteVideoRefreshTick,
+    setupReceivePath,
+    stopRemoteMedia,
+    setVideoConsumerGridTier,
+  } = useRemoteMedia()
 
   const roomApi = { sendJson, addMessageListener, drainPendingNewProducers }
 
@@ -120,16 +127,19 @@ export function useCallEngine(options?: CallEngineOptions) {
     computed(() => session.inCall),
   )
 
-  const sizeTier = computed<'sm' | 'md' | 'lg'>(() => {
-    const n = tiles.value.length
-    if (n <= 4) {
-      return 'lg'
-    }
-    if (n <= 9) {
-      return 'md'
-    }
-    return 'sm'
-  })
+  const sizeTier = computed<'sm' | 'md' | 'lg'>(() =>
+    gridSizeTierFromParticipantCount(tiles.value.length),
+  )
+
+  watch(
+    () => [sizeTier.value, session.inCall] as const,
+    ([tier, inCall]) => {
+      if (!inCall) {
+        return
+      }
+      setVideoConsumerGridTier(tier)
+    },
+  )
 
   const gridModifier = computed(() => {
     const n = tiles.value.length

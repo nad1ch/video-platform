@@ -1,5 +1,9 @@
 version: "3.9"
 
+# Default: API + mediasoup ports only.
+# With TURN: docker compose --profile turn up
+# Then set ICE_SERVERS_JSON or TURN_* on the server so browsers use coturn (see apps/server/env.example).
+
 services:
   server:
     build: ../apps/server
@@ -12,4 +16,28 @@ services:
       - /app/node_modules
     environment:
       NODE_ENV: development
+      # Example when `coturn` service is up (same compose network):
+      # ICE_SERVERS_JSON: '[{"urls":["turn:coturn:3478?transport=udp","turn:coturn:3478?transport=tcp"],"username":"webrtc","credential":"change-me"}]'
     command: npm run dev
+
+  coturn:
+    profiles: ["turn"]
+    image: coturn/coturn:4.6.2
+    container_name: video-platform-coturn
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "5349:5349/tcp"
+    command:
+      - -n
+      - --log-file=stdout
+      - --listening-port=3478
+      - --tls-listening-port=5349
+      - --min-port=49160
+      - --max-port=49200
+      - --fingerprint
+      - --lt-cred-mech
+      - --user=webrtc:change-me
+      - --realm=video-platform
+      - --no-cli
+      # Set on real deploy (public IP or Docker host): --external-ip=203.0.113.10

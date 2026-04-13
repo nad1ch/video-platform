@@ -11,9 +11,11 @@ exports.handleCreateTransport = handleCreateTransport;
 exports.handleConnectTransport = handleConnectTransport;
 exports.handleProduce = handleProduce;
 exports.handleConsume = handleConsume;
+exports.handleSetVideoConsumerLayers = handleSetVideoConsumerLayers;
 exports.handleDisconnect = handleDisconnect;
 const ws_1 = __importDefault(require("ws"));
 const zod_1 = require("zod");
+const clientIceServers_1 = require("../config/clientIceServers");
 const createWebRtcTransport_1 = require("../mediasoup/createWebRtcTransport");
 const Peer_1 = require("../peers/Peer");
 const directionSchema = zod_1.z.enum(['send', 'recv']);
@@ -68,20 +70,49 @@ exports.clientMessageSchema = zod_1.z.discriminatedUnion('type', [
             transportId: zod_1.z.string().min(1),
             producerId: zod_1.z.string().min(1),
             rtpCapabilities: zod_1.z.unknown(),
+            /** Client grid tier → simulcast spatial layer for this video consumer. */
+            gridSizeTier: zod_1.z.enum(['sm', 'md', 'lg']).optional(),
+        }),
+    }),
+    zod_1.z.object({
+        type: zod_1.z.literal('set-video-consumer-layers'),
+        payload: zod_1.z.object({
+            gridSizeTier: zod_1.z.enum(['sm', 'md', 'lg']),
         }),
     }),
 ]);
+function spatialLayerForGridSizeTier(tier) {
+    if (tier === 'sm') {
+        return 0;
+    }
+    if (tier === 'md') {
+        return 1;
+    }
+    return 2;
+}
 function sendServerMessage(socket, message) {
     if (socket.readyState === ws_1.default.OPEN) {
         socket.send(JSON.stringify(message));
     }
 }
+let loggedClientIceConfig = false;
 function serializeTransportOptions(transport) {
+    const iceServers = (0, clientIceServers_1.getClientIceServersFromEnv)();
+    const iceTransportPolicy = (0, clientIceServers_1.getIceTransportPolicyFromEnv)();
+    if (!loggedClientIceConfig && (iceServers?.length || iceTransportPolicy)) {
+        loggedClientIceConfig = true;
+        console.log('[ice] client RTCConfiguration extras:', {
+            extraIceServers: iceServers?.length ?? 0,
+            iceTransportPolicy: iceTransportPolicy ?? 'all (default)',
+        });
+    }
     return {
         id: transport.id,
         iceParameters: transport.iceParameters,
         iceCandidates: transport.iceCandidates,
         dtlsParameters: transport.dtlsParameters,
+        ...(iceServers?.length ? { iceServers } : {}),
+        ...(iceTransportPolicy ? { iceTransportPolicy } : {}),
     };
 }
 function collectExistingProducers(room, excludePeerId) {
@@ -334,7 +365,7 @@ async function handleProduce(socket, transportId, kind, rtpParameters, requestId
 function sendConsumeFailed(socket, producerId, reason) {
     sendServerMessage(socket, { type: 'consume-failed', payload: { producerId, reason } });
 }
-async function handleConsume(socket, transportId, producerId, rtpCapabilities, deps) {
+async function handleConsume(socket, transportId, producerId, rtpCapabilities, deps, gridSizeTier) {
     const peer = getPeerForSocket(socket, deps);
     if (!peer) {
         sendConsumeFailed(socket, producerId, 'no_peer');
@@ -372,10 +403,17 @@ async function handleConsume(socket, transportId, producerId, rtpCapabilities, d
         if (sourceProducer.paused) {
             await sourceProducer.resume();
         }
+        const preferredLayers = sourceProducer.kind === 'video'
+            ? {
+                spatialLayer: spatialLayerForGridSizeTier(gridSizeTier ?? 'lg'),
+                temporalLayer: 2,
+            }
+            : undefined;
         const consumer = await transport.consume({
             producerId,
             rtpCapabilities: caps,
             paused: true,
+            preferredLayers,
         });
         console.log('[consume] consumer created', {
             producerId,
@@ -401,6 +439,26 @@ async function handleConsume(socket, transportId, producerId, rtpCapabilities, d
     catch (err) {
         console.error('consume failed', err);
         sendConsumeFailed(socket, producerId, 'server_consume_error');
+    }
+}
+async function handleSetVideoConsumerLayers(socket, gridSizeTier, deps) {
+    const peer = getPeerForSocket(socket, deps);
+    if (!peer) {
+        return;
+    }
+    const spatialLayer = spatialLayerForGridSizeTier(gridSizeTier);
+    for (const consumer of peer.getConsumers()) {
+        if (consumer.closed || consumer.kind !== 'video') {
+            continue;
+        }
+        try {
+            await consumer.setPreferredLayers({ spatialLayer, temporalLayer: 2 });
+        }
+        catch (err) {
+            if (process.env.NODE_ENV !== 'production') {
+                console.warn('[set-video-consumer-layers] skipped consumer', consumer.id, err);
+            }
+        }
     }
 }
 function handleDisconnect(socket, deps) {

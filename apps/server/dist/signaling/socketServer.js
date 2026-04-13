@@ -50,8 +50,13 @@ function attachSocketServer(wss, roomManager) {
                             break;
                         }
                         case 'consume': {
-                            const { transportId, producerId, rtpCapabilities } = parsed.data.payload;
-                            await (0, messageHandlers_1.handleConsume)(socket, transportId, producerId, rtpCapabilities, deps);
+                            const { transportId, producerId, rtpCapabilities, gridSizeTier } = parsed.data.payload;
+                            await (0, messageHandlers_1.handleConsume)(socket, transportId, producerId, rtpCapabilities, deps, gridSizeTier);
+                            break;
+                        }
+                        case 'set-video-consumer-layers': {
+                            const { gridSizeTier } = parsed.data.payload;
+                            await (0, messageHandlers_1.handleSetVideoConsumerLayers)(socket, gridSizeTier, deps);
                             break;
                         }
                         default:

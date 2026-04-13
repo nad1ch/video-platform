@@ -6,6 +6,7 @@ import type {
   TransportOptions,
 } from 'mediasoup-client/types'
 import { onUnmounted, shallowRef } from 'vue'
+import { VP8_SIMULCAST_ENCODINGS } from '../media/videoSimulcast'
 import { waitForSignalingMessage } from '../signaling/signalingWait'
 
 function isTransportCreatedMessage(
@@ -177,10 +178,25 @@ export function useSendTransport() {
       throw new Error('Send transport required')
     }
     for (const track of stream.getTracks()) {
-      if (track.kind !== 'audio' && track.kind !== 'video') {
+      if (track.kind === 'audio') {
+        await transport.produce({ track })
         continue
       }
-      await transport.produce({ track })
+      if (track.kind !== 'video') {
+        continue
+      }
+      try {
+        await transport.produce({
+          track,
+          encodings: VP8_SIMULCAST_ENCODINGS,
+          codecOptions: { videoGoogleStartBitrate: 300 },
+        })
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.warn('[sendTransport] simulcast produce failed, using single layer', err)
+        }
+        await transport.produce({ track })
+      }
     }
   }
 
