@@ -39,7 +39,15 @@ function resolveWsUrl(explicit?: string): string {
     return explicit
   }
   const fromEnv = import.meta.env.VITE_SIGNALING_URL
-  return typeof fromEnv === 'string' && fromEnv.length > 0 ? fromEnv : 'ws://localhost:3000'
+  if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) {
+    return fromEnv.trim()
+  }
+  if (import.meta.env.DEV) {
+    return 'ws://localhost:3000'
+  }
+  throw new Error(
+    'VITE_SIGNALING_URL is not set. Add it in Vercel → Environment Variables or apps/client/.env.production (use wss:// when the app is served over HTTPS).',
+  )
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
