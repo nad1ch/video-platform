@@ -15,7 +15,7 @@ import { waitForCondition } from './utils/waitForCondition'
 export type CallSessionStore = ReturnType<typeof useCallSessionStore>
 
 export type CallEngineOptions = {
-  /** Overrides `VITE_SIGNALING_URL` / default WS URL. */
+  /** Overrides `VITE_SIGNALING_URL`. Use a DNS-only host (e.g. media.example.com) if the SPA is behind a CDN proxy. */
   signalingUrl?: string
   /**
    * Identity / room UI state. Omit to use `useCallSessionStore()` from this package.
