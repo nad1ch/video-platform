@@ -1,11 +1,16 @@
 import { type ComputedRef, onMounted, onUnmounted, shallowRef, watch } from 'vue'
+import { getAudioAnalysisAudioContext } from './audioAnalysisContext'
 import {
   isAudioPlaybackUnlocked,
-  playAllPageAudio,
+  playAllPageAudioThrottled,
   registerAudioUnlockHook,
 } from './audioPlaybackUnlock'
 
 const RESUME_POLL_MS = 2000
+/** RMS at or above → can become / stay active speaker (hysteresis on). */
+const SPEAK_ON = 0.05
+/** RMS below this for current speaker → allow handoff / clear (hysteresis off). */
+const SPEAK_OFF = 0.02
 
 export type ActiveSpeakerTile = {
   peerId: string
@@ -21,8 +26,6 @@ type PeerNode = {
 }
 
 const FFT_SIZE = 512
-/** Normalized RMS above this counts as "speaking" (tune for mic / room). */
-const SPEAK_THRESHOLD = 0.04
 
 function rmsTimeDomain(analyser: AnalyserNode): number {
   const buf = new Uint8Array(analyser.fftSize)
@@ -32,7 +35,7 @@ function rmsTimeDomain(analyser: AnalyserNode): number {
     const v = (buf[i]! - 128) / 128
     sum += v * v
   }
-  return Math.sqrt(sum / buf.length)
+  return Math.min(1, Math.sqrt(sum / buf.length))
 }
 
 export function useActiveSpeaker(
@@ -40,7 +43,7 @@ export function useActiveSpeaker(
   inCall: ComputedRef<boolean>,
 ) {
   const activeSpeakerPeerId = shallowRef<string | null>(null)
-  const ctx = new AudioContext()
+  const ctx = getAudioAnalysisAudioContext()
   const nodes = new Map<string, PeerNode>()
   let raf = 0
   let resumePollId: ReturnType<typeof setInterval> | null = null
@@ -64,7 +67,7 @@ export function useActiveSpeaker(
       return
     }
     tryResumeAudioContext()
-    playAllPageAudio()
+    playAllPageAudioThrottled()
   }
 
   function teardownPeer(peerId: string): void {
@@ -130,17 +133,38 @@ export function useActiveSpeaker(
     }
 
     if (ctx.state === 'running') {
+      const levels = new Map<string, number>()
+      for (const [peerId, { analyser }] of nodes) {
+        levels.set(peerId, rmsTimeDomain(analyser))
+      }
+
       let bestId: string | null = null
       let bestLevel = 0
-      for (const [peerId, { analyser }] of nodes) {
-        const level = rmsTimeDomain(analyser)
-        if (level > bestLevel) {
-          bestLevel = level
+      for (const [peerId, lvl] of levels) {
+        if (lvl > bestLevel) {
+          bestLevel = lvl
           bestId = peerId
         }
       }
-      activeSpeakerPeerId.value =
-        bestId !== null && bestLevel >= SPEAK_THRESHOLD ? bestId : null
+
+      const cur = activeSpeakerPeerId.value
+      const curLevel = cur !== null ? (levels.get(cur) ?? 0) : 0
+
+      if (cur !== null && curLevel >= SPEAK_OFF) {
+        let next = cur
+        if (
+          bestId !== null &&
+          bestId !== cur &&
+          bestLevel >= SPEAK_ON &&
+          bestLevel > curLevel
+        ) {
+          next = bestId
+        }
+        activeSpeakerPeerId.value = next
+      } else {
+        activeSpeakerPeerId.value =
+          bestId !== null && bestLevel >= SPEAK_ON ? bestId : null
+      }
     }
 
     raf = requestAnimationFrame(tick)
@@ -222,7 +246,6 @@ export function useActiveSpeaker(
     for (const id of [...nodes.keys()]) {
       teardownPeer(id)
     }
-    void ctx.close()
   })
 
   return { activeSpeakerPeerId }

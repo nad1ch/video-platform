@@ -6,7 +6,7 @@ import type {
   TransportOptions,
 } from 'mediasoup-client/types'
 import { onUnmounted, shallowRef } from 'vue'
-import { waitForSignalingMessage } from './signalingWait'
+import { waitForSignalingMessage } from '../signaling/signalingWait'
 
 function isTransportCreatedMessage(
   data: unknown,

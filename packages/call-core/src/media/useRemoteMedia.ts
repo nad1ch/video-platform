@@ -8,8 +8,8 @@ import type {
   TransportOptions,
 } from 'mediasoup-client/types'
 import { computed, onUnmounted, ref, shallowRef } from 'vue'
-import type { SendTransportRoomApi } from './useSendTransport'
-import { waitForSignalingMessage } from './signalingWait'
+import type { SendTransportRoomApi } from '../transport/useSendTransport'
+import { waitForSignalingMessage } from '../signaling/signalingWait'
 
 export type RemoteProducerInfo = {
   producerId: string

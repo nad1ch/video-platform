@@ -1,253 +1,44 @@
 <script setup lang="ts">
-import { computed, onScopeDispose, ref, watch } from 'vue'
-import { useCallSessionStore } from '../../stores/callSession'
-import { playAllPageAudio } from '../../features/room/audioPlaybackUnlock'
-import { useActiveSpeaker } from '../../features/room/useActiveSpeaker'
-import { useLocalMedia } from '../../features/room/useLocalMedia'
-import { useMediasoupDevice } from '../../features/room/useMediasoupDevice'
-import { useRemoteMedia } from '../../features/room/useRemoteMedia'
-import { useRoomConnection } from '../../features/room/useRoomConnection'
-import { useSendTransport } from '../../features/room/useSendTransport'
-import { waitForCondition } from '../../features/room/waitForCondition'
+import { computed } from 'vue'
+import { useCallEngine, type CallTile } from 'call-core'
 import ParticipantTile from './ParticipantTile.vue'
 
-const session = useCallSessionStore()
-
 const {
-  lastRoomState,
-  wsStatus,
-  connect: roomConnect,
-  joinRoom,
-  sendUpdateDisplayName,
-  disconnect: roomDisconnect,
-  sendJson,
-  addMessageListener,
-  drainPendingNewProducers,
-} = useRoomConnection()
-
-const { device, loadDevice, reset: deviceReset } = useMediasoupDevice()
-const { createSendTransport, closeSendTransport, publishLocalMedia } = useSendTransport()
-const {
-  localStream,
-  localPlayRev,
+  session,
+  joining,
+  joinError,
+  joinCall,
+  leaveCall,
+  tiles,
+  sizeTier,
+  gridModifier,
+  activeSpeakerPeerId,
   micEnabled,
   camEnabled,
-  startLocalMedia,
-  stopLocalMedia,
   toggleMic,
   toggleCam,
-} = useLocalMedia()
-const { remotePeerStreams, remotePlayRev, remoteVideoRefreshTick, setupReceivePath, stopRemoteMedia } =
-  useRemoteMedia()
+  wsStatus,
+} = useCallEngine()
 
-const roomApi = { sendJson, addMessageListener, drainPendingNewProducers }
-
-const joining = ref(false)
-const joinError = ref<string | null>(null)
-
-const DISPLAY_NAME_DEBOUNCE_MS = 400
-let displayNameDebounceTimer: ReturnType<typeof setTimeout> | null = null
-
-type TileModel = {
-  peerId: string
-  stream: MediaStream | null
-  displayName: string
-  isLocal: boolean
-  videoEnabled: boolean
-  audioEnabled: boolean
-  playRev?: number
-  refreshTick?: number
-}
-
-const tiles = computed<TileModel[]>(() => {
-  const selfId = session.selfPeerId
-  const list: TileModel[] = [
-    {
-      peerId: selfId,
-      stream: localStream.value,
-      displayName: session.selfDisplayName.trim() || 'You',
-      isLocal: true,
-      videoEnabled: camEnabled.value,
-      audioEnabled: micEnabled.value,
-      playRev: localPlayRev.value,
-    },
-  ]
-
-  const remotes = [...remotePeerStreams.value]
-    .filter((e) => e.peerId !== selfId)
-    .sort((a, b) => a.peerId.localeCompare(b.peerId))
-
-  for (const { peerId, stream } of remotes) {
-    const a = stream.getAudioTracks()[0]
-    const v = stream.getVideoTracks()[0]
-    list.push({
-      peerId,
-      stream,
-      displayName: session.labelFor(peerId),
-      isLocal: false,
-      videoEnabled: v ? v.enabled : false,
-      audioEnabled: a ? a.enabled : true,
-      playRev: remotePlayRev.value,
-      refreshTick: remoteVideoRefreshTick.value,
-    })
+/** Remote active speaker → large tile; everyone else (incl. local) in strip / grid. */
+const speakerLayout = computed(() => {
+  const id = activeSpeakerPeerId.value
+  if (!id || tiles.value.length < 2) {
+    return { featured: null as CallTile | null, rest: tiles.value }
   }
-
-  return list
-})
-
-const { activeSpeakerPeerId } = useActiveSpeaker(
-  computed(() =>
-    tiles.value.map((t) => ({
-      peerId: t.peerId,
-      stream: t.stream,
-      audioEnabled: t.audioEnabled,
-    })),
-  ),
-  computed(() => session.inCall),
-)
-
-const sizeTier = computed<'sm' | 'md' | 'lg'>(() => {
-  const n = tiles.value.length
-  if (n <= 4) {
-    return 'lg'
+  const featured = tiles.value.find((t) => t.peerId === id && !t.isLocal) ?? null
+  if (!featured) {
+    return { featured: null as CallTile | null, rest: tiles.value }
   }
-  if (n <= 9) {
-    return 'md'
-  }
-  return 'sm'
-})
-
-const gridModifier = computed(() => {
-  const n = tiles.value.length
-  if (n <= 1) {
-    return 'call-page__grid--1'
-  }
-  if (n <= 4) {
-    return 'call-page__grid--4'
-  }
-  if (n <= 9) {
-    return 'call-page__grid--9'
-  }
-  return 'call-page__grid--12'
-})
-
-watch(
-  () => lastRoomState.value?.peers,
-  (list) => {
-    if (list) {
-      session.replaceRemoteDisplayNames(list)
-    }
-  },
-  { deep: true },
-)
-
-watch(
-  () => session.selfDisplayName,
-  (name) => {
-    if (!session.inCall) {
-      return
-    }
-    if (displayNameDebounceTimer !== null) {
-      clearTimeout(displayNameDebounceTimer)
-    }
-    displayNameDebounceTimer = setTimeout(() => {
-      displayNameDebounceTimer = null
-      sendUpdateDisplayName(name.trim() || 'You')
-    }, DISPLAY_NAME_DEBOUNCE_MS)
-  },
-)
-
-onScopeDispose(() => {
-  if (displayNameDebounceTimer !== null) {
-    clearTimeout(displayNameDebounceTimer)
-    displayNameDebounceTimer = null
+  return {
+    featured,
+    rest: tiles.value.filter((t) => t.peerId !== featured.peerId),
   }
 })
 
-watch(
-  () => localStream.value,
-  (s) => {
-    if (!import.meta.env.DEV) {
-      return
-    }
-    console.log('[localTile] localStream', s)
-    console.log('[localTile] videoTracks', s?.getVideoTracks())
-    console.log('[localTile] audioTracks', s?.getAudioTracks())
-  },
-  { immediate: true },
+const restSizeTier = computed(() =>
+  speakerLayout.value.featured ? ('sm' as const) : sizeTier.value,
 )
-
-watch(
-  () => localPlayRev.value,
-  (v) => {
-    if (import.meta.env.DEV) {
-      console.log('[localTile] localPlayRev', v)
-    }
-  },
-  { immediate: true },
-)
-
-function teardownMedia(): void {
-  stopRemoteMedia()
-  stopLocalMedia()
-  closeSendTransport()
-  deviceReset()
-  roomDisconnect()
-  session.clearRemoteDisplayNames()
-  session.setInCall(false)
-}
-
-async function joinCall(): Promise<void> {
-  joinError.value = null
-  joining.value = true
-  try {
-    await roomConnect()
-    joinRoom(
-      session.roomId.trim() || 'demo',
-      session.selfPeerId,
-      session.selfDisplayName.trim() || 'You',
-    )
-    await waitForCondition(() => lastRoomState.value != null, 15_000)
-
-    session.replaceRemoteDisplayNames(lastRoomState.value?.peers ?? [])
-
-    const caps = lastRoomState.value?.routerRtpCapabilities
-    if (!caps) {
-      throw new Error('No router capabilities from room')
-    }
-
-    await loadDevice(caps)
-
-    const d = device.value
-    if (!d?.loaded) {
-      throw new Error('Device failed to load')
-    }
-
-    const existing = lastRoomState.value?.existingProducers ?? []
-    await setupReceivePath(d, roomApi, existing)
-    await createSendTransport(d, roomApi)
-
-    const stream = await startLocalMedia()
-    if (!localStream.value || stream.getTracks().length === 0) {
-      throw new Error('Camera/microphone not available (no tracks)')
-    }
-    await publishLocalMedia(stream)
-
-    session.setInCall(true)
-    queueMicrotask(() => {
-      playAllPageAudio()
-    })
-  } catch (e) {
-    joinError.value = e instanceof Error ? e.message : String(e)
-    teardownMedia()
-  } finally {
-    joining.value = false
-  }
-}
-
-function leaveCall(): void {
-  teardownMedia()
-}
 </script>
 
 <template>
@@ -302,7 +93,41 @@ function leaveCall(): void {
           </button>
         </div>
 
-        <div class="call-page__grid" :class="gridModifier">
+        <div
+          v-if="speakerLayout.featured"
+          class="call-page__stage call-page__stage--split"
+        >
+          <div class="call-page__featured">
+            <ParticipantTile
+              :display-name="speakerLayout.featured.displayName"
+              :stream="speakerLayout.featured.stream"
+              :is-local="speakerLayout.featured.isLocal"
+              :video-enabled="speakerLayout.featured.videoEnabled"
+              :audio-enabled="speakerLayout.featured.audioEnabled"
+              :play-rev="speakerLayout.featured.playRev"
+              :refresh-tick="speakerLayout.featured.refreshTick"
+              size-tier="lg"
+              :active-speaker="activeSpeakerPeerId === speakerLayout.featured.peerId"
+            />
+          </div>
+          <div class="call-page__rest">
+            <ParticipantTile
+              v-for="t in speakerLayout.rest"
+              :key="t.peerId"
+              :display-name="t.displayName"
+              :stream="t.stream"
+              :is-local="t.isLocal"
+              :video-enabled="t.videoEnabled"
+              :audio-enabled="t.audioEnabled"
+              :play-rev="t.playRev"
+              :refresh-tick="t.refreshTick"
+              :size-tier="restSizeTier"
+              :active-speaker="activeSpeakerPeerId === t.peerId"
+            />
+          </div>
+        </div>
+
+        <div v-else class="call-page__grid" :class="gridModifier">
           <ParticipantTile
             v-for="t in tiles"
             :key="t.peerId"
@@ -444,6 +269,54 @@ function leaveCall(): void {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+/* Discord-style: main speaker + thumbnails */
+.call-page__stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.call-page__stage--split .call-page__featured {
+  flex: 1;
+  min-height: min(52vh, 480px);
+  min-width: 0;
+}
+
+.call-page__stage--split .call-page__featured :deep(.tile) {
+  min-height: 100%;
+}
+
+.call-page__stage--split .call-page__rest {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+  max-height: 40vh;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+@media (min-width: 880px) {
+  .call-page__stage--split {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .call-page__stage--split .call-page__featured {
+    min-height: 0;
+    flex: 1;
+  }
+
+  .call-page__stage--split .call-page__rest {
+    width: 220px;
+    max-height: none;
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+    align-content: start;
+  }
 }
 
 .call-page__grid {

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { nextTick, onUnmounted, ref, watch } from 'vue'
-import { isAudioPlaybackUnlocked, playAllPageAudio } from '../features/room/audioPlaybackUnlock'
+import {
+  isAudioPlaybackUnlocked,
+  playAllPageAudioThrottled,
+} from 'call-core'
 
 const props = withDefaults(
   defineProps<{
@@ -127,7 +130,7 @@ async function bindAudio(): Promise<void> {
   if (isAudioPlaybackUnlocked()) {
     requestAnimationFrame(() => {
       void a.play().catch(() => {})
-      playAllPageAudio()
+      playAllPageAudioThrottled()
     })
   }
 

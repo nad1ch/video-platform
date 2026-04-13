@@ -2,7 +2,7 @@ import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import './style.css'
 import App from './App.vue'
-import { initAudioPlaybackUnlock } from './features/room/audioPlaybackUnlock'
+import { initAudioPlaybackUnlock } from 'call-core'
 
 initAudioPlaybackUnlock()
 

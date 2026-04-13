@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useLocalMedia } from '../features/room/useLocalMedia'
-import { useMediasoupDevice } from '../features/room/useMediasoupDevice'
-import { useRemoteMedia } from '../features/room/useRemoteMedia'
-import { useRoomConnection } from '../features/room/useRoomConnection'
-import { useSendTransport } from '../features/room/useSendTransport'
+import {
+  useLocalMedia,
+  useMediasoupDevice,
+  useRemoteMedia,
+  useRoomConnection,
+  useSendTransport,
+} from 'call-core'
 import StreamVideo from '../components/StreamVideo.vue'
 
 const roomId = ref('demo')

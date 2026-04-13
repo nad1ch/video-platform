@@ -24,6 +24,19 @@ export function playAllPageAudio(): void {
   }
 }
 
+const PLAY_ALL_MIN_MS = 300
+let lastPlayAllTs = 0
+
+/** Same as playAllPageAudio but skips bursts (visibility, retries). */
+export function playAllPageAudioThrottled(): void {
+  const now = Date.now()
+  if (now - lastPlayAllTs < PLAY_ALL_MIN_MS) {
+    return
+  }
+  lastPlayAllTs = now
+  playAllPageAudio()
+}
+
 function runUnlock(): void {
   if (unlocked) {
     return
