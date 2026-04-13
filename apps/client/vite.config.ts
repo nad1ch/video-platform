@@ -8,6 +8,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
+  build: {
+    // Avoid Lightning CSS native `.node` bindings on Linux CI (e.g. Cloudflare Pages).
+    // Requires `esbuild` in devDependencies (Vite 8 does not ship it for this path).
+    cssMinify: 'esbuild',
+  },
   resolve: {
     alias: {
       'call-core/audio': path.resolve(__dirname, '../../packages/call-core/src/audio/index.ts'),
