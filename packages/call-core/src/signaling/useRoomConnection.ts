@@ -34,20 +34,35 @@ type ServerMessage =
     }
   | { type: 'transport-connected'; payload: { transportId: string } }
 
+function assertProductionUsesWss(url: string): void {
+  if (!import.meta.env.PROD) {
+    return
+  }
+  if (!/^wss:\/\//i.test(url.trim())) {
+    throw new Error(
+      'Production requires wss:// for signaling (ws:// is blocked on HTTPS pages). Set VITE_SIGNALING_URL to a wss:// URL.',
+    )
+  }
+}
+
 function resolveWsUrl(explicit?: string): string {
-  if (typeof explicit === 'string' && explicit.length > 0) {
-    return explicit
+  let url: string
+  if (typeof explicit === 'string' && explicit.trim().length > 0) {
+    url = explicit.trim()
+  } else {
+    const fromEnv = import.meta.env.VITE_SIGNALING_URL
+    if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) {
+      url = fromEnv.trim()
+    } else if (import.meta.env.DEV) {
+      url = 'ws://localhost:3000'
+    } else {
+      throw new Error(
+        'VITE_SIGNALING_URL is not defined. Set it in Vercel or .env.production. Use wss:// for HTTPS.',
+      )
+    }
   }
-  const fromEnv = import.meta.env.VITE_SIGNALING_URL
-  if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) {
-    return fromEnv.trim()
-  }
-  if (import.meta.env.DEV) {
-    return 'ws://localhost:3000'
-  }
-  throw new Error(
-    'VITE_SIGNALING_URL is not set. Add it in Vercel → Environment Variables or apps/client/.env.production (use wss:// when the app is served over HTTPS).',
-  )
+  assertProductionUsesWss(url)
+  return url
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -330,6 +345,9 @@ export function useRoomConnection(wsUrl?: string) {
 
       wsStatus.value = 'connecting'
 
+      if (import.meta.env.DEV) {
+        console.log('[ws] connecting to', resolvedUrl)
+      }
       const ws = new WebSocket(resolvedUrl)
       wsRef.value = ws
 
