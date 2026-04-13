@@ -53,20 +53,6 @@ function isTransportConnectedMessage(
   return p.transportId === transportId
 }
 
-function isProducerSync(
-  data: unknown,
-): data is { type: 'producer-sync'; payload: { producers: RemoteProducerInfo[] } } {
-  if (!data || typeof data !== 'object') {
-    return false
-  }
-  const msg = data as { type?: string; payload?: unknown }
-  if (msg.type !== 'producer-sync' || !msg.payload || typeof msg.payload !== 'object') {
-    return false
-  }
-  const p = msg.payload as { producers?: unknown }
-  return Array.isArray(p.producers)
-}
-
 function isNewProducer(data: unknown): data is { type: 'new-producer'; payload: RemoteProducerInfo } {
   if (!data || typeof data !== 'object') {
     return false
@@ -81,6 +67,54 @@ function isNewProducer(data: unknown): data is { type: 'new-producer'; payload: 
     typeof p.peerId === 'string' &&
     (p.kind === 'audio' || p.kind === 'video')
   )
+}
+
+function isConsumeFailedForProducer(
+  data: unknown,
+  producerId: string,
+): data is { type: 'consume-failed'; payload: { producerId: string; reason: string } } {
+  if (!data || typeof data !== 'object') {
+    return false
+  }
+  const msg = data as { type?: string; payload?: unknown }
+  if (msg.type !== 'consume-failed' || !msg.payload || typeof msg.payload !== 'object') {
+    return false
+  }
+  const p = msg.payload as { producerId?: string; reason?: string }
+  return typeof p.producerId === 'string' && p.producerId === producerId && typeof p.reason === 'string'
+}
+
+function parseProducerSyncPayload(data: unknown): RemoteProducerInfo[] | null {
+  if (!data || typeof data !== 'object') {
+    return null
+  }
+  const msg = data as { type?: string; payload?: unknown }
+  if (msg.type !== 'producer-sync') {
+    return null
+  }
+  const payload = msg.payload
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+  const raw = (payload as { producers?: unknown }).producers
+  if (!Array.isArray(raw)) {
+    return null
+  }
+  const list: RemoteProducerInfo[] = []
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') {
+      continue
+    }
+    const r = row as { producerId?: unknown; peerId?: unknown; kind?: unknown }
+    if (
+      typeof r.producerId === 'string' &&
+      typeof r.peerId === 'string' &&
+      (r.kind === 'audio' || r.kind === 'video')
+    ) {
+      list.push({ producerId: r.producerId, peerId: r.peerId, kind: r.kind })
+    }
+  }
+  return list.length > 0 ? list : null
 }
 
 function isConsumedForProducer(
@@ -118,12 +152,24 @@ export function useRemoteMedia() {
   const recvTransport = shallowRef<Transport | null>(null)
   /** Stable MediaStream per remote peer (mutate with addTrack / removeTrack only). */
   const streamsByPeerId = new Map<string, MediaStream>()
-  const remotePeerStreams = ref<RemotePeerStream[]>([])
+  /** shallowRef(Map) clone-on-write — reliable Vue updates vs reactive(Map). */
+  const remotePeerStreamsMap = shallowRef(new Map<string, MediaStream>())
+  const remotePeerStreams = computed<RemotePeerStream[]>(() => {
+    const m = remotePeerStreamsMap.value
+    return Array.from(m.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([peerId, stream]) => ({ peerId, stream }))
+  })
   /** Bumps when remote MediaStream is mutated (addTrack); remote tiles use this to call play() again. */
   const remotePlayRev = ref(0)
+  /** Extra nudge for <video> after remote addTrack (autoplay / decode edge cases). */
+  const remoteVideoRefreshTick = ref(0)
   const consumedProducerIds = new Set<string>()
+  /** In-flight consume per producerId (sync vs new-producer overlap). */
+  const consumingProducerIds = new Set<string>()
   const consumersByProducerId = new Map<string, Consumer>()
   let unsubscribeNewProducer: (() => void) | null = null
+  let unsubscribeProducerSync: (() => void) | null = null
 
   const remoteStreams = computed(() => remotePeerStreams.value.map((e) => e.stream))
 
@@ -137,9 +183,19 @@ export function useRemoteMedia() {
   }
 
   function syncRemotePeerStreamsRef(): void {
-    remotePeerStreams.value = Array.from(streamsByPeerId.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([id, stream]) => ({ peerId: id, stream }))
+    const next = new Map(remotePeerStreamsMap.value)
+    const nextIds = new Set(streamsByPeerId.keys())
+    for (const id of [...next.keys()]) {
+      if (!nextIds.has(id)) {
+        next.delete(id)
+      }
+    }
+    for (const [id, stream] of streamsByPeerId) {
+      if (next.get(id) !== stream) {
+        next.set(id, stream)
+      }
+    }
+    remotePeerStreamsMap.value = next
     remotePlayRev.value += 1
   }
 
@@ -186,6 +242,7 @@ export function useRemoteMedia() {
     }
 
     syncRemotePeerStreamsRef()
+    remoteVideoRefreshTick.value += 1
   }
 
   async function ensureRecvTransport(device: Device, room: SendTransportRoomApi): Promise<Transport> {
@@ -228,18 +285,6 @@ export function useRemoteMedia() {
       )
         .then(() => {
           success()
-          return waitForSignalingMessage(
-            room.addMessageListener,
-            (d) => isProducerSync(d),
-            10_000,
-          ).catch(() => null)
-        })
-        .then((sync) => {
-          if (sync?.payload.producers.length) {
-            for (const item of sync.payload.producers) {
-              void consumeProducer(device, room, item.producerId, item.peerId)
-            }
-          }
         })
         .catch((err) => fail(err instanceof Error ? err : new Error(String(err))))
     })
@@ -248,12 +293,12 @@ export function useRemoteMedia() {
     return transport
   }
 
-  async function consumeProducer(
+  async function runConsumeProducer(
     device: Device,
     room: SendTransportRoomApi,
-    producerId: string,
-    peerId: string,
+    info: RemoteProducerInfo,
   ): Promise<void> {
+    const { producerId, peerId, kind } = info
     if (consumedProducerIds.has(producerId)) {
       return
     }
@@ -268,6 +313,9 @@ export function useRemoteMedia() {
     consumedProducerIds.add(producerId)
 
     try {
+      if (import.meta.env.DEV) {
+        console.log('[consume] request', { producerId, peerId, kind })
+      }
       room.sendJson({
         type: 'consume',
         payload: {
@@ -279,9 +327,13 @@ export function useRemoteMedia() {
 
       const msg = await waitForSignalingMessage(
         room.addMessageListener,
-        (d) => isConsumedForProducer(d, producerId),
+        (d) => isConsumedForProducer(d, producerId) || isConsumeFailedForProducer(d, producerId),
         TIMEOUT_MS,
       )
+
+      if (msg.type === 'consume-failed') {
+        throw new Error(`consume-failed: ${msg.payload.reason}`)
+      }
 
       const consumer = await transport.consume({
         id: msg.payload.id,
@@ -316,16 +368,53 @@ export function useRemoteMedia() {
     }
   }
 
+  async function consumeProducer(
+    device: Device,
+    room: SendTransportRoomApi,
+    info: RemoteProducerInfo,
+  ): Promise<void> {
+    const { producerId } = info
+    if (consumedProducerIds.has(producerId)) {
+      return
+    }
+    if (consumingProducerIds.has(producerId)) {
+      return
+    }
+    consumingProducerIds.add(producerId)
+    try {
+      await runConsumeProducer(device, room, info)
+    } catch (e) {
+      consumedProducerIds.delete(producerId)
+      throw e
+    } finally {
+      consumingProducerIds.delete(producerId)
+    }
+  }
+
   function startNewProducerListener(device: Device, room: SendTransportRoomApi): void {
     unsubscribeNewProducer?.()
     unsubscribeNewProducer = room.addMessageListener((data) => {
       if (!isNewProducer(data)) {
         return
       }
-      void consumeProducer(device, room, data.payload.producerId, data.payload.peerId).catch((e) => {
+      void consumeProducer(device, room, {
+        producerId: data.payload.producerId,
+        peerId: data.payload.peerId,
+        kind: data.payload.kind,
+      }).catch((e) => {
         console.error('consume after new-producer failed', e)
       })
     })
+  }
+
+  function mergeProducerLists(...lists: RemoteProducerInfo[][]): RemoteProducerInfo[] {
+    const map = new Map<string, RemoteProducerInfo>()
+    for (const list of lists) {
+      for (const item of list) {
+        map.set(item.producerId, item)
+      }
+    }
+    return [...map.values()]
   }
 
   async function syncExistingProducers(
@@ -333,8 +422,15 @@ export function useRemoteMedia() {
     room: SendTransportRoomApi,
     list: RemoteProducerInfo[],
   ): Promise<void> {
+    if (import.meta.env.DEV) {
+      console.log('[syncExistingProducers]', { count: list.length })
+    }
     for (const item of list) {
-      await consumeProducer(device, room, item.producerId, item.peerId)
+      try {
+        await consumeProducer(device, room, item)
+      } catch (e) {
+        console.error('[syncExistingProducers] consume failed', item, e)
+      }
     }
   }
 
@@ -345,12 +441,47 @@ export function useRemoteMedia() {
   ): Promise<void> {
     await ensureRecvTransport(device, room)
     startNewProducerListener(device, room)
-    await syncExistingProducers(device, room, existing)
+    unsubscribeProducerSync?.()
+    unsubscribeProducerSync = room.addMessageListener((data) => {
+      const list = parseProducerSyncPayload(data)
+      if (!list) {
+        return
+      }
+      if (import.meta.env.DEV) {
+        console.log('[producer-sync]', {
+          count: list.length,
+          kinds: list.map((p) => p.kind),
+        })
+      }
+      void syncExistingProducers(device, room, list).catch((e) => {
+        console.error('[producer-sync] consume failed', e)
+      })
+    })
+    const missed = room.drainPendingNewProducers?.() ?? []
+    const merged = mergeProducerLists(existing, missed)
+    if (import.meta.env.DEV) {
+      console.log('[setupReceivePath]', {
+        fromRoomState: existing.length,
+        missedNewProducers: missed.length,
+        merged: merged.length,
+      })
+      console.log(
+        '[setupReceivePath] final producers',
+        merged.map((p) => ({
+          producerId: p.producerId,
+          peerId: p.peerId,
+          kind: p.kind,
+        })),
+      )
+    }
+    await syncExistingProducers(device, room, merged)
   }
 
   function stopRemoteMedia(): void {
     unsubscribeNewProducer?.()
     unsubscribeNewProducer = null
+    unsubscribeProducerSync?.()
+    unsubscribeProducerSync = null
     for (const consumer of consumersByProducerId.values()) {
       if (!consumer.closed) {
         consumer.close()
@@ -363,8 +494,10 @@ export function useRemoteMedia() {
       }
     }
     streamsByPeerId.clear()
-    remotePeerStreams.value = []
+    remotePeerStreamsMap.value = new Map()
+    remoteVideoRefreshTick.value = 0
     consumedProducerIds.clear()
+    consumingProducerIds.clear()
     const t = recvTransport.value
     if (t && !t.closed) {
       t.close()
@@ -380,6 +513,7 @@ export function useRemoteMedia() {
     recvTransport,
     remotePeerStreams,
     remotePlayRev,
+    remoteVideoRefreshTick,
     remoteStreams,
     ensureRecvTransport,
     consumeProducer,

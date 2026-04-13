@@ -11,6 +11,7 @@ import {
   handleDisconnect,
   handleJoinRoom,
   handleProduce,
+  handleUpdateDisplayName,
 } from './messageHandlers'
 
 export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManager): void {
@@ -39,8 +40,13 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
         try {
           switch (parsed.data.type) {
             case 'join-room': {
-              const { roomId, peerId } = parsed.data.payload
-              await handleJoinRoom(socket, roomId, peerId, deps)
+              const { roomId, peerId, displayName } = parsed.data.payload
+              await handleJoinRoom(socket, roomId, peerId, displayName, deps)
+              break
+            }
+            case 'update-display-name': {
+              const { displayName } = parsed.data.payload
+              handleUpdateDisplayName(socket, displayName, deps)
               break
             }
             case 'create-transport': {

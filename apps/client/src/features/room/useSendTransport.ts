@@ -61,9 +61,20 @@ function isProducedMessage(
   return typeof p.id === 'string' && p.requestId === requestId
 }
 
+export type PendingProducerNotice = {
+  producerId: string
+  peerId: string
+  kind: 'audio' | 'video'
+}
+
 export type SendTransportRoomApi = {
   sendJson: (obj: object) => void
   addMessageListener: (handler: (data: unknown) => void) => () => void
+  /**
+   * Flushes producers that were announced via `new-producer` before the recv listener
+   * was registered (join → loadDevice race). Call once when wiring remote media.
+   */
+  drainPendingNewProducers?: () => PendingProducerNotice[]
 }
 
 const CONNECT_TIMEOUT_MS = 45_000

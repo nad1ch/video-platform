@@ -5,7 +5,7 @@ import { useMediasoupDevice } from '../features/room/useMediasoupDevice'
 import { useRemoteMedia } from '../features/room/useRemoteMedia'
 import { useRoomConnection } from '../features/room/useRoomConnection'
 import { useSendTransport } from '../features/room/useSendTransport'
-import StreamVideo from './StreamVideo.vue'
+import StreamVideo from '../components/StreamVideo.vue'
 
 const roomId = ref('demo')
 const peerId = ref('peer-1')
@@ -21,13 +21,20 @@ const {
   disconnect: roomDisconnect,
   sendJson,
   addMessageListener,
+  drainPendingNewProducers,
 } = useRoomConnection()
 
 const { device, loaded: deviceLoaded, loadDevice, reset: deviceReset } = useMediasoupDevice()
 const { sendTransport, createSendTransport, closeSendTransport, publishLocalMedia } = useSendTransport()
 const { localStream, startLocalMedia, stopLocalMedia } = useLocalMedia()
-const { remotePeerStreams, remotePlayRev, recvTransport, setupReceivePath, stopRemoteMedia } =
-  useRemoteMedia()
+const {
+  remotePeerStreams,
+  remotePlayRev,
+  remoteVideoRefreshTick,
+  recvTransport,
+  setupReceivePath,
+  stopRemoteMedia,
+} = useRemoteMedia()
 
 const peersDisplay = computed(() => JSON.stringify([...peers.value]))
 
@@ -67,7 +74,9 @@ function attachLogListener(): void {
       type === 'produced' ||
       type === 'new-producer' ||
       type === 'consumed' ||
-      type === 'producer-sync'
+      type === 'producer-sync' ||
+      type === 'peer-display-name' ||
+      type === 'consume-failed'
     ) {
       try {
         pushLog(`[ws] ${type} ${JSON.stringify(data)}`)
@@ -106,7 +115,7 @@ function onJoin(): void {
     return
   }
   try {
-    joinRoom(roomId.value.trim() || 'demo', peerId.value.trim() || 'peer-1')
+    joinRoom(roomId.value.trim() || 'demo', peerId.value.trim() || 'peer-1', 'Debug client')
     pushLog(`join-room sent (${roomId.value} / ${peerId.value})`)
   } catch (e) {
     pushLog(`error: join — ${e instanceof Error ? e.message : String(e)}`)
@@ -159,8 +168,8 @@ async function onSetupReceive(): Promise<void> {
   busy.value = true
   try {
     const existing = lastRoomState.value?.existingProducers ?? []
-    await setupReceivePath(d, { sendJson, addMessageListener }, existing)
-    pushLog(`receive path ready; synced ${existing.length} existing producer(s)`)
+    await setupReceivePath(d, { sendJson, addMessageListener, drainPendingNewProducers }, existing)
+    pushLog('receive path ready (room-state + drained early new-producer buffer)')
   } catch (e) {
     pushLog(`error: setupReceive — ${e instanceof Error ? e.message : String(e)}`)
   } finally {
@@ -239,6 +248,7 @@ function clearLogs(): void {
           :stream="e.stream"
           :muted="false"
           :play-rev="remotePlayRev"
+          :refresh-tick="remoteVideoRefreshTick"
         />
       </div>
     </fieldset>

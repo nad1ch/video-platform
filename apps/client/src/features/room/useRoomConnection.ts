@@ -9,16 +9,22 @@ export type RemoteProducerInfo = {
   kind: 'audio' | 'video'
 }
 
+export type RoomPeerInfo = {
+  peerId: string
+  displayName: string
+}
+
 export type RoomStatePayload = {
-  peers: string[]
+  peers: RoomPeerInfo[]
   routerRtpCapabilities: RtpCapabilities
   existingProducers: RemoteProducerInfo[]
 }
 
 type ServerMessage =
   | { type: 'room-state'; payload: RoomStatePayload }
-  | { type: 'peer-joined'; payload: { peerId: string } }
+  | { type: 'peer-joined'; payload: { peerId: string; displayName: string } }
   | { type: 'peer-left'; payload: { peerId: string } }
+  | { type: 'peer-display-name'; payload: { peerId: string; displayName: string } }
   | {
       type: 'transport-created'
       payload: {
@@ -40,6 +46,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
+function parseRoomPeerList(raw: unknown): RoomPeerInfo[] | null {
+  if (!Array.isArray(raw)) {
+    return null
+  }
+  const out: RoomPeerInfo[] = []
+  for (const p of raw) {
+    if (typeof p === 'string') {
+      out.push({
+        peerId: p,
+        displayName: `Guest ${p.length > 6 ? p.slice(-6) : p}`,
+      })
+      continue
+    }
+    if (p && typeof p === 'object') {
+      const o = p as { peerId?: unknown; displayName?: unknown }
+      if (typeof o.peerId === 'string') {
+        const dn =
+          typeof o.displayName === 'string' && o.displayName.trim().length > 0
+            ? o.displayName.trim().slice(0, 64)
+            : `Guest ${o.peerId.length > 6 ? o.peerId.slice(-6) : o.peerId}`
+        out.push({ peerId: o.peerId, displayName: dn })
+      }
+    }
+  }
+  return out
+}
+
 function parseServerMessage(data: unknown): ServerMessage | null {
   if (!isRecord(data) || typeof data.type !== 'string') {
     return null
@@ -47,8 +80,8 @@ function parseServerMessage(data: unknown): ServerMessage | null {
   const payload = data.payload
 
   if (data.type === 'room-state' && isRecord(payload) && Array.isArray(payload.peers)) {
-    const peers = payload.peers
-    if (!peers.every((p) => typeof p === 'string')) {
+    const peerList = parseRoomPeerList(payload.peers)
+    if (!peerList) {
       return null
     }
     const caps = payload.routerRtpCapabilities
@@ -79,19 +112,35 @@ function parseServerMessage(data: unknown): ServerMessage | null {
     return {
       type: 'room-state',
       payload: {
-        peers: peers as string[],
+        peers: peerList,
         routerRtpCapabilities: caps as RtpCapabilities,
         existingProducers,
       },
     }
   }
 
+  if (data.type === 'peer-joined' && isRecord(payload) && typeof payload.peerId === 'string') {
+    const displayName =
+      typeof payload.displayName === 'string' && payload.displayName.trim().length > 0
+        ? payload.displayName.trim().slice(0, 64)
+        : `Guest ${payload.peerId.length > 6 ? payload.peerId.slice(-6) : payload.peerId}`
+    return { type: 'peer-joined', payload: { peerId: payload.peerId, displayName } }
+  }
+
   if (
-    data.type === 'peer-joined' &&
+    data.type === 'peer-display-name' &&
     isRecord(payload) &&
-    typeof payload.peerId === 'string'
+    typeof payload.peerId === 'string' &&
+    typeof payload.displayName === 'string' &&
+    payload.displayName.trim().length > 0
   ) {
-    return { type: 'peer-joined', payload: { peerId: payload.peerId } }
+    return {
+      type: 'peer-display-name',
+      payload: {
+        peerId: payload.peerId,
+        displayName: payload.displayName.trim().slice(0, 64),
+      },
+    }
   }
 
   if (
@@ -130,6 +179,27 @@ function parseServerMessage(data: unknown): ServerMessage | null {
 
 export type WsStatus = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
 
+function tryParseNewProducerNotice(data: unknown): RemoteProducerInfo | null {
+  if (!isRecord(data) || data.type !== 'new-producer') {
+    return null
+  }
+  const payload = data.payload
+  if (!isRecord(payload)) {
+    return null
+  }
+  const producerId = payload.producerId
+  const peerId = payload.peerId
+  const kind = payload.kind
+  if (
+    typeof producerId !== 'string' ||
+    typeof peerId !== 'string' ||
+    (kind !== 'audio' && kind !== 'video')
+  ) {
+    return null
+  }
+  return { producerId, peerId, kind }
+}
+
 export function useRoomConnection(wsUrl?: string) {
   const resolvedUrl = resolveWsUrl(wsUrl)
   const peers = ref<string[]>([])
@@ -137,6 +207,9 @@ export function useRoomConnection(wsUrl?: string) {
   const wsRef = shallowRef<WebSocket | null>(null)
   const wsStatus = ref<WsStatus>('idle')
   const messageListeners = new Set<(data: unknown) => void>()
+  /** Before drainPendingNewProducers(), stash early new-producer (recv listener not ready yet). */
+  const pendingNewProducers: RemoteProducerInfo[] = []
+  let bufferNewProducers = true
 
   function addMessageListener(handler: (data: unknown) => void): () => void {
     messageListeners.add(handler)
@@ -151,26 +224,78 @@ export function useRoomConnection(wsUrl?: string) {
     }
   }
 
+  function bufferIncomingNewProducer(data: unknown): void {
+    if (!bufferNewProducers) {
+      return
+    }
+    const row = tryParseNewProducerNotice(data)
+    if (!row) {
+      return
+    }
+    if (pendingNewProducers.some((p) => p.producerId === row.producerId)) {
+      return
+    }
+    pendingNewProducers.push(row)
+    if (import.meta.env.DEV) {
+      console.log('[ws] buffered new-producer (early)', row)
+    }
+  }
+
+  function drainPendingNewProducers(): RemoteProducerInfo[] {
+    bufferNewProducers = false
+    const out = [...pendingNewProducers]
+    pendingNewProducers.length = 0
+    if (import.meta.env.DEV && out.length > 0) {
+      console.log('[ws] drainPendingNewProducers', { count: out.length })
+    }
+    return out
+  }
+
   function applyServerMessage(message: ServerMessage): void {
     if (message.type === 'room-state') {
-      peers.value = [...message.payload.peers]
+      peers.value = message.payload.peers.map((p) => p.peerId)
       lastRoomState.value = {
-        peers: message.payload.peers,
+        peers: [...message.payload.peers],
         routerRtpCapabilities: message.payload.routerRtpCapabilities,
         existingProducers: [...message.payload.existingProducers],
       }
       return
     }
     if (message.type === 'peer-joined') {
-      const id = message.payload.peerId
-      if (!peers.value.includes(id)) {
-        peers.value = [...peers.value, id]
+      const { peerId, displayName } = message.payload
+      if (!peers.value.includes(peerId)) {
+        peers.value = [...peers.value, peerId]
+      }
+      if (lastRoomState.value && !lastRoomState.value.peers.some((p) => p.peerId === peerId)) {
+        lastRoomState.value = {
+          ...lastRoomState.value,
+          peers: [...lastRoomState.value.peers, { peerId, displayName }],
+        }
+      }
+      return
+    }
+    if (message.type === 'peer-display-name') {
+      const { peerId, displayName } = message.payload
+      if (!lastRoomState.value) {
+        return
+      }
+      const idx = lastRoomState.value.peers.findIndex((p) => p.peerId === peerId)
+      if (idx >= 0) {
+        const nextPeers = [...lastRoomState.value.peers]
+        nextPeers[idx] = { peerId, displayName }
+        lastRoomState.value = { ...lastRoomState.value, peers: nextPeers }
       }
       return
     }
     if (message.type === 'peer-left') {
       const id = message.payload.peerId
       peers.value = peers.value.filter((p) => p !== id)
+      if (lastRoomState.value) {
+        lastRoomState.value = {
+          ...lastRoomState.value,
+          peers: lastRoomState.value.peers.filter((p) => p.peerId !== id),
+        }
+      }
     }
   }
 
@@ -192,6 +317,8 @@ export function useRoomConnection(wsUrl?: string) {
       peers.value = []
       lastRoomState.value = null
       messageListeners.clear()
+      pendingNewProducers.length = 0
+      bufferNewProducers = true
 
       wsStatus.value = 'connecting'
 
@@ -205,6 +332,7 @@ export function useRoomConnection(wsUrl?: string) {
         } catch {
           return
         }
+        bufferIncomingNewProducer(data)
         notifyMessageListeners(data)
         const structured = parseServerMessage(data)
         if (structured) {
@@ -227,6 +355,8 @@ export function useRoomConnection(wsUrl?: string) {
           wsRef.value = null
         }
         messageListeners.clear()
+        pendingNewProducers.length = 0
+        bufferNewProducers = true
         reject(new Error('WebSocket connection failed'))
       }
 
@@ -236,6 +366,8 @@ export function useRoomConnection(wsUrl?: string) {
           wsStatus.value = 'closed'
         }
         messageListeners.clear()
+        pendingNewProducers.length = 0
+        bufferNewProducers = true
       }
     })
   }
@@ -248,12 +380,29 @@ export function useRoomConnection(wsUrl?: string) {
     ws.send(JSON.stringify(obj))
   }
 
-  function joinRoom(roomId: string, peerId: string): void {
+  function joinRoom(roomId: string, peerId: string, displayName?: string): void {
     const ws = wsRef.value
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not open; await connect() before joinRoom()')
     }
-    ws.send(JSON.stringify({ type: 'join-room', payload: { roomId, peerId } }))
+    const trimmed = displayName?.trim()
+    const payload: { roomId: string; peerId: string; displayName?: string } = { roomId, peerId }
+    if (trimmed && trimmed.length > 0) {
+      payload.displayName = trimmed.slice(0, 64)
+    }
+    ws.send(JSON.stringify({ type: 'join-room', payload }))
+  }
+
+  function sendUpdateDisplayName(displayName: string): void {
+    const ws = wsRef.value
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return
+    }
+    const t = displayName.trim().slice(0, 64)
+    if (!t) {
+      return
+    }
+    ws.send(JSON.stringify({ type: 'update-display-name', payload: { displayName: t } }))
   }
 
   function disconnect(): void {
@@ -267,6 +416,8 @@ export function useRoomConnection(wsUrl?: string) {
     peers.value = []
     lastRoomState.value = null
     messageListeners.clear()
+    pendingNewProducers.length = 0
+    bufferNewProducers = true
   }
 
   onUnmounted(() => {
@@ -280,8 +431,10 @@ export function useRoomConnection(wsUrl?: string) {
     wsStatus,
     connect,
     joinRoom,
+    sendUpdateDisplayName,
     disconnect,
     sendJson,
     addMessageListener,
+    drainPendingNewProducers,
   }
 }

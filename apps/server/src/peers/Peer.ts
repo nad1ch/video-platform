@@ -5,15 +5,18 @@ export class Peer {
   readonly id: string
   readonly socket: WebSocket
   readonly roomId: string
+  /** Shown to other participants (from join-room / update-display-name). */
+  displayName: string
 
   private readonly transports = new Map<string, WebRtcTransport>()
   private readonly producers = new Map<string, Producer>()
   private readonly consumers = new Map<string, Consumer>()
 
-  constructor(id: string, socket: WebSocket, roomId: string) {
+  constructor(id: string, socket: WebSocket, roomId: string, displayName: string) {
     this.id = id
     this.socket = socket
     this.roomId = roomId
+    this.displayName = displayName
   }
 
   sendJson(payload: unknown): void {

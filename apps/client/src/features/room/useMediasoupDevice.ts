@@ -17,6 +17,16 @@ export function useMediasoupDevice() {
 
     await device.value.load({ routerRtpCapabilities })
     loaded.value = true
+    if (import.meta.env.DEV && device.value.rtpCapabilities?.codecs) {
+      console.log(
+        '[device] rtpCapabilities.codecs',
+        device.value.rtpCapabilities.codecs.map((c) => ({
+          kind: c.kind,
+          mimeType: c.mimeType,
+          channels: 'channels' in c ? c.channels : undefined,
+        })),
+      )
+    }
   }
 
   function reset(): void {

@@ -32,6 +32,13 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     payload: z.object({
       roomId: z.string().min(1),
       peerId: z.string().min(1),
+      displayName: z.string().max(64).optional(),
+    }),
+  }),
+  z.object({
+    type: z.literal('update-display-name'),
+    payload: z.object({
+      displayName: z.string().min(1).max(64),
     }),
   }),
   z.object({
@@ -81,16 +88,22 @@ export type ExistingProducerInfo = {
   kind: MediaKind
 }
 
+export type RoomPeerInfo = {
+  peerId: string
+  displayName: string
+}
+
 export type ServerMessage =
   | {
       type: 'room-state'
       payload: {
-        peers: string[]
+        peers: RoomPeerInfo[]
         routerRtpCapabilities: RtpCapabilities
         existingProducers: ExistingProducerInfo[]
       }
     }
-  | { type: 'peer-joined'; payload: { peerId: string } }
+  | { type: 'peer-joined'; payload: { peerId: string; displayName: string } }
+  | { type: 'peer-display-name'; payload: { peerId: string; displayName: string } }
   | { type: 'peer-left'; payload: { peerId: string } }
   | {
       type: 'transport-created'
@@ -109,6 +122,7 @@ export type ServerMessage =
       }
     }
   | { type: 'producer-sync'; payload: { producers: ExistingProducerInfo[] } }
+  | { type: 'consume-failed'; payload: { producerId: string; reason: string } }
 
 export type SignalingDeps = {
   roomManager: RoomManager
@@ -137,6 +151,9 @@ function collectExistingProducers(room: Room, excludePeerId: string): ExistingPr
       continue
     }
     for (const producer of p.getProducers()) {
+      if (producer.closed) {
+        continue
+      }
       list.push({ producerId: producer.id, peerId: p.id, kind: producer.kind })
     }
   }
@@ -215,10 +232,19 @@ function replaceDuplicatePeerId(room: Room, incomingSocket: WsSocket, peerId: st
   finalizeRoomIfEmpty(room, deps.roomManager)
 }
 
+function sanitizeDisplayName(raw: string | undefined, peerId: string): string {
+  const t = raw?.trim() ?? ''
+  if (t.length > 0) {
+    return t.slice(0, 64)
+  }
+  return `Guest ${peerId.length > 6 ? peerId.slice(-6) : peerId}`
+}
+
 export async function handleJoinRoom(
   socket: WsSocket,
   roomId: string,
   peerId: string,
+  displayName: string | undefined,
   deps: SignalingDeps,
 ): Promise<void> {
   disassociateSocketFromCurrentRoom(socket, deps)
@@ -227,29 +253,74 @@ export async function handleJoinRoom(
   replaceDuplicatePeerId(room, socket, peerId, deps)
   room = await deps.roomManager.getOrCreateRoom(roomId)
 
-  const peer = new Peer(peerId, socket, room.id)
+  const name = sanitizeDisplayName(displayName, peerId)
+  const peer = new Peer(peerId, socket, room.id, name)
   room.addPeer(peer)
   deps.socketPeer.set(socket, peer)
 
-  const others = room
+  const others: RoomPeerInfo[] = room
     .getPeers()
     .filter((p) => p.id !== peerId)
-    .map((p) => p.id)
+    .map((p) => ({ peerId: p.id, displayName: p.displayName }))
 
   const routerRtpCapabilities: RtpCapabilities = room.getRouter().rtpCapabilities
   const existingProducers = collectExistingProducers(room, peerId)
+
+  if (process.env.NODE_ENV !== 'production') {
+    const producerSnapshot = room.getPeers().map((p) => ({
+      peerId: p.id,
+      displayName: p.displayName,
+      producers: p.getProducers().filter((pr) => !pr.closed).map((pr) => ({ id: pr.id, kind: pr.kind })),
+    }))
+    console.log('[join]', {
+      roomId: room.id,
+      peerId,
+      displayName: name,
+      peersInRoom: others.length + 1,
+      existingProducers: existingProducers.length,
+      producerSnapshot,
+    })
+  }
 
   sendServerMessage(socket, {
     type: 'room-state',
     payload: { peers: others, routerRtpCapabilities, existingProducers },
   })
 
-  const joinedMsg: ServerMessage = { type: 'peer-joined', payload: { peerId } }
+  const joinedMsg: ServerMessage = {
+    type: 'peer-joined',
+    payload: { peerId, displayName: name },
+  }
   for (const p of room.getPeers()) {
     if (p.id === peerId) {
       continue
     }
     p.sendJson(joinedMsg)
+  }
+}
+
+export function handleUpdateDisplayName(
+  socket: WsSocket,
+  displayName: string,
+  deps: SignalingDeps,
+): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  const trimmed = displayName.trim().slice(0, 64)
+  const name = trimmed.length > 0 ? trimmed : sanitizeDisplayName(undefined, peer.id)
+  peer.displayName = name
+  const msg: ServerMessage = {
+    type: 'peer-display-name',
+    payload: { peerId: peer.id, displayName: name },
+  }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
   }
 }
 
@@ -380,6 +451,10 @@ export async function handleProduce(
   }
 }
 
+function sendConsumeFailed(socket: WsSocket, producerId: string, reason: string): void {
+  sendServerMessage(socket, { type: 'consume-failed', payload: { producerId, reason } })
+}
+
 export async function handleConsume(
   socket: WsSocket,
   transportId: string,
@@ -389,26 +464,39 @@ export async function handleConsume(
 ): Promise<void> {
   const peer = getPeerForSocket(socket, deps)
   if (!peer) {
+    sendConsumeFailed(socket, producerId, 'no_peer')
     return
   }
 
   const room = deps.roomManager.getRoom(peer.roomId)
   if (!room) {
+    sendConsumeFailed(socket, producerId, 'no_room')
     return
   }
 
   const transport = peer.getTransport(transportId)
   if (!transport || transport.closed || transportDirection(transport) !== 'recv') {
+    sendConsumeFailed(socket, producerId, 'invalid_recv_transport')
     return
   }
 
   const sourceProducer = findProducerInRoom(room, producerId)
   if (!sourceProducer || sourceProducer.closed) {
+    sendConsumeFailed(socket, producerId, 'producer_not_found_or_closed')
     return
   }
 
   const caps = rtpCapabilities as RtpCapabilities
-  if (!room.getRouter().canConsume({ producerId, rtpCapabilities: caps })) {
+  const canConsume = room.getRouter().canConsume({ producerId, rtpCapabilities: caps })
+  if (!canConsume) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[canConsume] false', {
+        producerId,
+        kind: sourceProducer.kind,
+        consumerPeerId: peer.id,
+      })
+    }
+    sendConsumeFailed(socket, producerId, 'can_consume_false')
     return
   }
 
@@ -449,6 +537,7 @@ export async function handleConsume(
     })
   } catch (err) {
     console.error('consume failed', err)
+    sendConsumeFailed(socket, producerId, 'server_consume_error')
   }
 }
 
