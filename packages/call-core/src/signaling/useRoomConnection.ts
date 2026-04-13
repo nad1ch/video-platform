@@ -45,6 +45,19 @@ function assertProductionUsesWss(url: string): void {
   }
 }
 
+/** When the URL is only an origin (path `/` or empty), append `/ws` for nginx-style upstreams. */
+function withDefaultSignalingPath(url: string): string {
+  try {
+    const u = new URL(url)
+    if (u.pathname === '/' || u.pathname === '') {
+      u.pathname = '/ws'
+    }
+    return u.href
+  } catch {
+    return url
+  }
+}
+
 function resolveWsUrl(explicit?: string): string {
   let url: string
   if (typeof explicit === 'string' && explicit.trim().length > 0) {
@@ -61,6 +74,7 @@ function resolveWsUrl(explicit?: string): string {
       )
     }
   }
+  url = withDefaultSignalingPath(url)
   assertProductionUsesWss(url)
   return url
 }
