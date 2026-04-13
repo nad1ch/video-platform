@@ -1,4 +1,4 @@
-import { computed, onScopeDispose, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, toValue, watch } from 'vue'
 import { gridSizeTierFromParticipantCount } from './media/gridTier'
 import { useCallSessionStore } from './stores/callSession'
 import { playAllPageAudio } from './audio/audioPlaybackUnlock'
@@ -39,6 +39,26 @@ const DISPLAY_NAME_DEBOUNCE_MS = 400
 export function useCallEngine(options?: CallEngineOptions) {
   const session = options?.session ?? useCallSessionStore()
 
+  /** Pinia may expose setup-store fields as refs; `toValue` normalizes for script usage (prod-safe). */
+  function sessionRoomId(): string {
+    const v = toValue(session.roomId as unknown)
+    return typeof v === 'string' ? v : String(v ?? '')
+  }
+
+  function sessionSelfPeerId(): string {
+    const v = toValue(session.selfPeerId as unknown)
+    return typeof v === 'string' ? v : String(v ?? '')
+  }
+
+  function sessionSelfDisplayName(): string {
+    const v = toValue(session.selfDisplayName as unknown)
+    return typeof v === 'string' ? v : String(v ?? '')
+  }
+
+  function sessionInCall(): boolean {
+    return Boolean(toValue(session.inCall as unknown))
+  }
+
   const {
     lastRoomState,
     wsStatus,
@@ -72,12 +92,12 @@ export function useCallEngine(options?: CallEngineOptions) {
   let displayNameDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
   const tiles = computed<CallTile[]>(() => {
-    const selfId = session.selfPeerId
+    const selfId = sessionSelfPeerId()
     const list: CallTile[] = [
       {
         peerId: selfId,
         stream: localStream.value,
-        displayName: session.selfDisplayName.trim() || 'You',
+        displayName: sessionSelfDisplayName().trim() || 'You',
         isLocal: true,
         videoEnabled: camEnabled.value,
         audioEnabled: micEnabled.value,
@@ -90,6 +110,9 @@ export function useCallEngine(options?: CallEngineOptions) {
       .sort((a, b) => a.peerId.localeCompare(b.peerId))
 
     for (const { peerId, stream } of remotes) {
+      if (!stream) {
+        continue
+      }
       const a = stream.getAudioTracks()[0]
       const v = stream.getVideoTracks()[0]
       list.push({
@@ -115,7 +138,7 @@ export function useCallEngine(options?: CallEngineOptions) {
         excludeFromLevelAnalysis: t.isLocal,
       })),
     ),
-    computed(() => session.inCall),
+    computed(() => sessionInCall()),
   )
 
   const sizeTier = computed<'sm' | 'md' | 'lg'>(() =>
@@ -147,17 +170,18 @@ export function useCallEngine(options?: CallEngineOptions) {
   )
 
   watch(
-    () => session.selfDisplayName,
+    () => sessionSelfDisplayName(),
     (name) => {
-      if (!session.inCall) {
+      if (!sessionInCall()) {
         return
       }
+      const n = typeof name === 'string' ? name : String(name ?? '')
       if (displayNameDebounceTimer !== null) {
         clearTimeout(displayNameDebounceTimer)
       }
       displayNameDebounceTimer = setTimeout(() => {
         displayNameDebounceTimer = null
-        sendUpdateDisplayName(name.trim() || 'You')
+        sendUpdateDisplayName(n.trim() || 'You')
       }, DISPLAY_NAME_DEBOUNCE_MS)
     },
   )
@@ -204,9 +228,9 @@ export function useCallEngine(options?: CallEngineOptions) {
     try {
       await roomConnect()
       joinRoom(
-        session.roomId.trim() || 'demo',
-        session.selfPeerId,
-        session.selfDisplayName.trim() || 'You',
+        sessionRoomId().trim() || 'demo',
+        sessionSelfPeerId(),
+        sessionSelfDisplayName().trim() || 'You',
       )
       await waitForCondition(() => lastRoomState.value != null, 15_000)
 

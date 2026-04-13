@@ -244,7 +244,15 @@ function tryParseNewProducerNotice(data: unknown): RemoteProducerInfo | null {
 }
 
 export function useRoomConnection(wsUrl?: string) {
-  const resolvedUrl = resolveWsUrl(wsUrl)
+  /** Resolve at first connect so the app shell mounts even when prod env is misconfigured. */
+  let memoResolvedUrl: string | undefined
+  function getResolvedWsUrl(): string {
+    if (memoResolvedUrl === undefined) {
+      memoResolvedUrl = resolveWsUrl(wsUrl)
+    }
+    return memoResolvedUrl
+  }
+
   const peers = ref<string[]>([])
   const lastRoomState = shallowRef<RoomStatePayload | null>(null)
   const wsRef = shallowRef<WebSocket | null>(null)
@@ -365,6 +373,7 @@ export function useRoomConnection(wsUrl?: string) {
 
       wsStatus.value = 'connecting'
 
+      const resolvedUrl = getResolvedWsUrl()
       if (import.meta.env.DEV) {
         console.log('[ws] connecting to', resolvedUrl)
       }
