@@ -3,9 +3,16 @@
 import type { RtpCapabilities } from 'mediasoup-client/types'
 import { onUnmounted, ref, shallowRef } from 'vue'
 
+export type RemoteProducerInfo = {
+  producerId: string
+  peerId: string
+  kind: 'audio' | 'video'
+}
+
 export type RoomStatePayload = {
   peers: string[]
   routerRtpCapabilities: RtpCapabilities
+  existingProducers: RemoteProducerInfo[]
 }
 
 type ServerMessage =
@@ -48,11 +55,33 @@ function parseServerMessage(data: unknown): ServerMessage | null {
     if (caps === undefined || caps === null || typeof caps !== 'object') {
       return null
     }
+    const existingProducers: RemoteProducerInfo[] = []
+    const rawExisting = payload.existingProducers
+    if (Array.isArray(rawExisting)) {
+      for (const row of rawExisting) {
+        if (!row || typeof row !== 'object') {
+          continue
+        }
+        const r = row as { producerId?: unknown; peerId?: unknown; kind?: unknown }
+        if (
+          typeof r.producerId === 'string' &&
+          typeof r.peerId === 'string' &&
+          (r.kind === 'audio' || r.kind === 'video')
+        ) {
+          existingProducers.push({
+            producerId: r.producerId,
+            peerId: r.peerId,
+            kind: r.kind,
+          })
+        }
+      }
+    }
     return {
       type: 'room-state',
       payload: {
         peers: peers as string[],
         routerRtpCapabilities: caps as RtpCapabilities,
+        existingProducers,
       },
     }
   }
@@ -99,11 +128,14 @@ function parseServerMessage(data: unknown): ServerMessage | null {
   return null
 }
 
+export type WsStatus = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
+
 export function useRoomConnection(wsUrl?: string) {
   const resolvedUrl = resolveWsUrl(wsUrl)
   const peers = ref<string[]>([])
   const lastRoomState = shallowRef<RoomStatePayload | null>(null)
   const wsRef = shallowRef<WebSocket | null>(null)
+  const wsStatus = ref<WsStatus>('idle')
   const messageListeners = new Set<(data: unknown) => void>()
 
   function addMessageListener(handler: (data: unknown) => void): () => void {
@@ -125,6 +157,7 @@ export function useRoomConnection(wsUrl?: string) {
       lastRoomState.value = {
         peers: message.payload.peers,
         routerRtpCapabilities: message.payload.routerRtpCapabilities,
+        existingProducers: [...message.payload.existingProducers],
       }
       return
     }
@@ -160,6 +193,8 @@ export function useRoomConnection(wsUrl?: string) {
       lastRoomState.value = null
       messageListeners.clear()
 
+      wsStatus.value = 'connecting'
+
       const ws = new WebSocket(resolvedUrl)
       wsRef.value = ws
 
@@ -177,10 +212,17 @@ export function useRoomConnection(wsUrl?: string) {
         }
       }
 
-      ws.onopen = () => resolve()
+      ws.onopen = () => {
+        if (wsRef.value !== ws) {
+          return
+        }
+        wsStatus.value = 'open'
+        resolve()
+      }
 
       ws.onerror = () => {
         if (wsRef.value === ws) {
+          wsStatus.value = 'error'
           detachSocketHandlers(ws)
           wsRef.value = null
         }
@@ -191,6 +233,7 @@ export function useRoomConnection(wsUrl?: string) {
       ws.onclose = () => {
         if (wsRef.value === ws) {
           wsRef.value = null
+          wsStatus.value = 'closed'
         }
         messageListeners.clear()
       }
@@ -220,6 +263,7 @@ export function useRoomConnection(wsUrl?: string) {
       ws.close()
     }
     wsRef.value = null
+    wsStatus.value = 'closed'
     peers.value = []
     lastRoomState.value = null
     messageListeners.clear()
@@ -233,6 +277,7 @@ export function useRoomConnection(wsUrl?: string) {
     peers,
     lastRoomState,
     wsRef,
+    wsStatus,
     connect,
     joinRoom,
     disconnect,

@@ -6,9 +6,11 @@ import type { WebSocket } from 'ws'
 import {
   clientMessageSchema,
   handleConnectTransport,
+  handleConsume,
   handleCreateTransport,
   handleDisconnect,
   handleJoinRoom,
+  handleProduce,
 } from './messageHandlers'
 
 export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManager): void {
@@ -54,6 +56,16 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
                 dtlsParameters as DtlsParameters,
                 deps,
               )
+              break
+            }
+            case 'produce': {
+              const { transportId, kind, rtpParameters, requestId } = parsed.data.payload
+              await handleProduce(socket, transportId, kind, rtpParameters, requestId, deps)
+              break
+            }
+            case 'consume': {
+              const { transportId, producerId, rtpCapabilities } = parsed.data.payload
+              await handleConsume(socket, transportId, producerId, rtpCapabilities, deps)
               break
             }
             default:

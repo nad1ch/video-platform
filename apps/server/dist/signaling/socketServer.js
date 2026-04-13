@@ -39,6 +39,16 @@ function attachSocketServer(wss, roomManager) {
                             await (0, messageHandlers_1.handleConnectTransport)(socket, transportId, dtlsParameters, deps);
                             break;
                         }
+                        case 'produce': {
+                            const { transportId, kind, rtpParameters, requestId } = parsed.data.payload;
+                            await (0, messageHandlers_1.handleProduce)(socket, transportId, kind, rtpParameters, requestId, deps);
+                            break;
+                        }
+                        case 'consume': {
+                            const { transportId, producerId, rtpCapabilities } = parsed.data.payload;
+                            await (0, messageHandlers_1.handleConsume)(socket, transportId, producerId, rtpCapabilities, deps);
+                            break;
+                        }
                         default:
                             break;
                     }

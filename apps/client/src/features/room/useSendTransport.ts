@@ -1,6 +1,12 @@
 import type { Device } from 'mediasoup-client'
-import type { DtlsParameters, Transport, TransportOptions } from 'mediasoup-client/types'
+import type {
+  ConnectionState,
+  DtlsParameters,
+  Transport,
+  TransportOptions,
+} from 'mediasoup-client/types'
 import { onUnmounted, shallowRef } from 'vue'
+import { waitForSignalingMessage } from './signalingWait'
 
 function isTransportCreatedMessage(
   data: unknown,
@@ -40,40 +46,27 @@ function isTransportConnectedMessage(
   return p.transportId === transportId
 }
 
+function isProducedMessage(
+  data: unknown,
+  requestId: string,
+): data is { type: 'produced'; payload: { id: string; requestId: string } } {
+  if (!data || typeof data !== 'object') {
+    return false
+  }
+  const msg = data as { type?: string; payload?: unknown }
+  if (msg.type !== 'produced' || !msg.payload || typeof msg.payload !== 'object') {
+    return false
+  }
+  const p = msg.payload as { id?: string; requestId?: string }
+  return typeof p.id === 'string' && p.requestId === requestId
+}
+
 export type SendTransportRoomApi = {
   sendJson: (obj: object) => void
   addMessageListener: (handler: (data: unknown) => void) => () => void
 }
 
-const CONNECT_TIMEOUT_MS = 30_000
-
-function waitForMessage<T>(
-  addMessageListener: SendTransportRoomApi['addMessageListener'],
-  predicate: (data: unknown) => data is T,
-  timeoutMs: number,
-): Promise<T> {
-  return new Promise((resolve, reject) => {
-    let settled = false
-    const timer = window.setTimeout(() => {
-      if (settled) {
-        return
-      }
-      settled = true
-      unsubscribe()
-      reject(new Error('signaling wait timeout'))
-    }, timeoutMs)
-
-    const unsubscribe = addMessageListener((data) => {
-      if (settled || !predicate(data)) {
-        return
-      }
-      settled = true
-      window.clearTimeout(timer)
-      unsubscribe()
-      resolve(data)
-    })
-  })
-}
+const CONNECT_TIMEOUT_MS = 45_000
 
 export function useSendTransport() {
   const sendTransport = shallowRef<Transport | null>(null)
@@ -93,7 +86,7 @@ export function useSendTransport() {
 
     room.sendJson({ type: 'create-transport', payload: { direction: 'send' } })
 
-    const created = await waitForMessage(
+    const created = await waitForSignalingMessage(
       room.addMessageListener,
       (d): d is { type: 'transport-created'; payload: { direction: 'send'; transportOptions: TransportOptions } } =>
         isTransportCreatedMessage(d, 'send'),
@@ -102,6 +95,13 @@ export function useSendTransport() {
 
     const options = created.payload.transportOptions
     const transport = mediaDevice.createSendTransport(options)
+
+    transport.on('connectionstatechange', (state: ConnectionState) => {
+      console.log('[sendTransport] connectionState:', state, { id: transport.id })
+      if (state === 'failed') {
+        console.error('[ICE] send transport FAILED', { id: transport.id })
+      }
+    })
 
     transport.on('connect', ({ dtlsParameters }: { dtlsParameters: DtlsParameters }, success, fail) => {
       try {
@@ -117,7 +117,7 @@ export function useSendTransport() {
         return
       }
 
-      void waitForMessage(
+      void waitForSignalingMessage(
         room.addMessageListener,
         (d) => isTransportConnectedMessage(d, transport.id),
         CONNECT_TIMEOUT_MS,
@@ -126,8 +126,30 @@ export function useSendTransport() {
         .catch((err) => fail(err instanceof Error ? err : new Error(String(err))))
     })
 
-    transport.on('produce', (_params, _resolve, reject) => {
-      reject(new Error('produce signaling not implemented yet'))
+    transport.on('produce', ({ kind, rtpParameters }, resolve, reject) => {
+      const requestId = crypto.randomUUID()
+      try {
+        room.sendJson({
+          type: 'produce',
+          payload: {
+            transportId: transport.id,
+            kind,
+            rtpParameters,
+            requestId,
+          },
+        })
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)))
+        return
+      }
+
+      void waitForSignalingMessage(
+        room.addMessageListener,
+        (d) => isProducedMessage(d, requestId),
+        CONNECT_TIMEOUT_MS,
+      )
+        .then((msg) => resolve({ id: msg.payload.id }))
+        .catch((err) => reject(err instanceof Error ? err : new Error(String(err))))
     })
 
     transport.on('producedata', (_params, _resolve, reject) => {
@@ -136,6 +158,19 @@ export function useSendTransport() {
 
     sendTransport.value = transport
     return transport
+  }
+
+  async function publishLocalMedia(stream: MediaStream): Promise<void> {
+    const transport = sendTransport.value
+    if (!transport || transport.closed) {
+      throw new Error('Send transport required')
+    }
+    for (const track of stream.getTracks()) {
+      if (track.kind !== 'audio' && track.kind !== 'video') {
+        continue
+      }
+      await transport.produce({ track })
+    }
   }
 
   function closeSendTransport(): void {
@@ -153,6 +188,7 @@ export function useSendTransport() {
   return {
     sendTransport,
     createSendTransport,
+    publishLocalMedia,
     closeSendTransport,
   }
 }

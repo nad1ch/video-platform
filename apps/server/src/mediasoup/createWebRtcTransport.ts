@@ -1,9 +1,40 @@
 import type { Router, WebRtcTransport } from 'mediasoup/node/lib/types'
 import type { TransportListenInfo } from 'mediasoup/node/lib/TransportTypes'
 
+let warnedAnnouncedMissing = false
+
+/**
+ * ICE candidates must advertise an address the browser can reach. Bind stays on 0.0.0.0.
+ * Set MEDIASOUP_ANNOUNCED_ADDRESS to host LAN IP for other devices; Docker needs the host IP, not the container's.
+ */
+function resolveAnnouncedAddress(): string | undefined {
+  const fromEnv = process.env.MEDIASOUP_ANNOUNCED_ADDRESS?.trim()
+  if (fromEnv) {
+    return fromEnv
+  }
+  if (process.env.NODE_ENV !== 'production') {
+    if (!warnedAnnouncedMissing) {
+      warnedAnnouncedMissing = true
+      console.warn(
+        '[mediasoup] MEDIASOUP_ANNOUNCED_ADDRESS unset → using 127.0.0.1 (OK for two tabs on this PC). ' +
+          'For another machine on LAN, set MEDIASOUP_ANNOUNCED_ADDRESS to this host\'s LAN IP.',
+      )
+    }
+    return '127.0.0.1'
+  }
+  if (!warnedAnnouncedMissing) {
+    warnedAnnouncedMissing = true
+    console.warn(
+      '[mediasoup] MEDIASOUP_ANNOUNCED_ADDRESS unset — remote peers may get black video / no RTP. Set it to the public/LAN IP browsers use to reach this server.',
+    )
+  }
+  return undefined
+}
+
 function buildListenInfos(): TransportListenInfo[] {
-  const announced = process.env.MEDIASOUP_ANNOUNCED_ADDRESS
-  const announcedOpts = announced ? { announcedAddress: announced } : {}
+  const announced = resolveAnnouncedAddress()
+  const announcedOpts =
+    announced !== undefined && announced !== '' ? { announcedAddress: announced } : {}
 
   const udp: TransportListenInfo = {
     protocol: 'udp',

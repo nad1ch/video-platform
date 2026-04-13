@@ -6,8 +6,8 @@ import type {
   IceCandidate,
   IceParameters,
 } from 'mediasoup/node/lib/WebRtcTransportTypes'
-import type { RtpCapabilities } from 'mediasoup/node/lib/rtpParametersTypes'
-import type { WebRtcTransport } from 'mediasoup/node/lib/types'
+import type { MediaKind, RtpCapabilities, RtpParameters } from 'mediasoup/node/lib/rtpParametersTypes'
+import type { Producer, WebRtcTransport } from 'mediasoup/node/lib/types'
 import { createWebRtcTransport } from '../mediasoup/createWebRtcTransport'
 import { Peer } from '../peers/Peer'
 import type { Room } from '../rooms/Room'
@@ -47,6 +47,23 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       dtlsParameters: dtlsParametersSchema,
     }),
   }),
+  z.object({
+    type: z.literal('produce'),
+    payload: z.object({
+      transportId: z.string().min(1),
+      kind: z.enum(['audio', 'video']),
+      rtpParameters: z.unknown(),
+      requestId: z.string().min(1),
+    }),
+  }),
+  z.object({
+    type: z.literal('consume'),
+    payload: z.object({
+      transportId: z.string().min(1),
+      producerId: z.string().min(1),
+      rtpCapabilities: z.unknown(),
+    }),
+  }),
 ])
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>
@@ -58,10 +75,20 @@ export type TransportOptionsPayload = {
   dtlsParameters: DtlsParameters
 }
 
+export type ExistingProducerInfo = {
+  producerId: string
+  peerId: string
+  kind: MediaKind
+}
+
 export type ServerMessage =
   | {
       type: 'room-state'
-      payload: { peers: string[]; routerRtpCapabilities: RtpCapabilities }
+      payload: {
+        peers: string[]
+        routerRtpCapabilities: RtpCapabilities
+        existingProducers: ExistingProducerInfo[]
+      }
     }
   | { type: 'peer-joined'; payload: { peerId: string } }
   | { type: 'peer-left'; payload: { peerId: string } }
@@ -70,6 +97,18 @@ export type ServerMessage =
       payload: { direction: 'send' | 'recv'; transportOptions: TransportOptionsPayload }
     }
   | { type: 'transport-connected'; payload: { transportId: string } }
+  | { type: 'produced'; payload: { id: string; requestId: string } }
+  | { type: 'new-producer'; payload: { producerId: string; peerId: string; kind: MediaKind } }
+  | {
+      type: 'consumed'
+      payload: {
+        id: string
+        producerId: string
+        kind: MediaKind
+        rtpParameters: RtpParameters
+      }
+    }
+  | { type: 'producer-sync'; payload: { producers: ExistingProducerInfo[] } }
 
 export type SignalingDeps = {
   roomManager: RoomManager
@@ -89,6 +128,33 @@ function serializeTransportOptions(transport: WebRtcTransport): TransportOptions
     iceCandidates: transport.iceCandidates,
     dtlsParameters: transport.dtlsParameters,
   }
+}
+
+function collectExistingProducers(room: Room, excludePeerId: string): ExistingProducerInfo[] {
+  const list: ExistingProducerInfo[] = []
+  for (const p of room.getPeers()) {
+    if (p.id === excludePeerId) {
+      continue
+    }
+    for (const producer of p.getProducers()) {
+      list.push({ producerId: producer.id, peerId: p.id, kind: producer.kind })
+    }
+  }
+  return list
+}
+
+function findProducerInRoom(room: Room, producerId: string): Producer | undefined {
+  for (const p of room.getPeers()) {
+    const prod = p.getProducer(producerId)
+    if (prod) {
+      return prod
+    }
+  }
+  return undefined
+}
+
+function transportDirection(transport: WebRtcTransport): string | undefined {
+  return (transport.appData as { direction?: string } | undefined)?.direction
 }
 
 function broadcastPeerLeftToRoom(room: Room, leftPeerId: string): void {
@@ -171,10 +237,11 @@ export async function handleJoinRoom(
     .map((p) => p.id)
 
   const routerRtpCapabilities: RtpCapabilities = room.getRouter().rtpCapabilities
+  const existingProducers = collectExistingProducers(room, peerId)
 
   sendServerMessage(socket, {
     type: 'room-state',
-    payload: { peers: others, routerRtpCapabilities },
+    payload: { peers: others, routerRtpCapabilities, existingProducers },
   })
 
   const joinedMsg: ServerMessage = { type: 'peer-joined', payload: { peerId } }
@@ -244,8 +311,144 @@ export async function handleConnectTransport(
       type: 'transport-connected',
       payload: { transportId },
     })
+
+    if (transportDirection(transport) === 'recv') {
+      const r = deps.roomManager.getRoom(peer.roomId)
+      if (r) {
+        const producers = collectExistingProducers(r, peer.id)
+        sendServerMessage(socket, {
+          type: 'producer-sync',
+          payload: { producers },
+        })
+      }
+    }
   } catch (err) {
     console.error('connect-transport failed', err)
+  }
+}
+
+export async function handleProduce(
+  socket: WsSocket,
+  transportId: string,
+  kind: 'audio' | 'video',
+  rtpParameters: unknown,
+  requestId: string,
+  deps: SignalingDeps,
+): Promise<void> {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+
+  const transport = peer.getTransport(transportId)
+  if (!transport || transport.closed || transportDirection(transport) !== 'send') {
+    return
+  }
+
+  try {
+    const producer = await transport.produce({
+      kind,
+      rtpParameters: rtpParameters as RtpParameters,
+    })
+    if (producer.paused) {
+      await producer.resume()
+    }
+    peer.addProducer(producer)
+
+    sendServerMessage(socket, {
+      type: 'produced',
+      payload: { id: producer.id, requestId },
+    })
+
+    const notice: ServerMessage = {
+      type: 'new-producer',
+      payload: { producerId: producer.id, peerId: peer.id, kind: producer.kind },
+    }
+    for (const p of room.getPeers()) {
+      if (p.id === peer.id) {
+        continue
+      }
+      p.sendJson(notice)
+    }
+  } catch (err) {
+    console.error('produce failed', err)
+  }
+}
+
+export async function handleConsume(
+  socket: WsSocket,
+  transportId: string,
+  producerId: string,
+  rtpCapabilities: unknown,
+  deps: SignalingDeps,
+): Promise<void> {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+
+  const transport = peer.getTransport(transportId)
+  if (!transport || transport.closed || transportDirection(transport) !== 'recv') {
+    return
+  }
+
+  const sourceProducer = findProducerInRoom(room, producerId)
+  if (!sourceProducer || sourceProducer.closed) {
+    return
+  }
+
+  const caps = rtpCapabilities as RtpCapabilities
+  if (!room.getRouter().canConsume({ producerId, rtpCapabilities: caps })) {
+    return
+  }
+
+  try {
+    if (sourceProducer.paused) {
+      await sourceProducer.resume()
+    }
+
+    const consumer = await transport.consume({
+      producerId,
+      rtpCapabilities: caps,
+      paused: true,
+    })
+
+    console.log('[consume] consumer created', {
+      producerId,
+      kind: consumer.kind,
+      consumerPaused: consumer.paused,
+      producerPaused: sourceProducer.paused,
+    })
+
+    await consumer.resume()
+
+    console.log('[consume] after consumer.resume', {
+      consumerPaused: consumer.paused,
+    })
+
+    peer.addConsumer(consumer)
+
+    sendServerMessage(socket, {
+      type: 'consumed',
+      payload: {
+        id: consumer.id,
+        producerId: consumer.producerId,
+        kind: consumer.kind,
+        rtpParameters: consumer.rtpParameters,
+      },
+    })
+  } catch (err) {
+    console.error('consume failed', err)
   }
 }
 
