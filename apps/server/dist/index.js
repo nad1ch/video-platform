@@ -9,7 +9,6 @@ const ws_1 = require("ws");
 const createWorker_1 = require("./mediasoup/createWorker");
 const RoomManager_1 = require("./rooms/RoomManager");
 const socketServer_1 = require("./signaling/socketServer");
-const PORT = 3000;
 async function bootstrap() {
     let shuttingDown = false;
     const worker = await (0, createWorker_1.createMediasoupWorker)({
@@ -58,8 +57,10 @@ async function bootstrap() {
     };
     process.once('SIGINT', shutdown);
     process.once('SIGTERM', shutdown);
-    server.listen(PORT, () => {
-        console.log(`Server listening on http://localhost:${PORT}`);
+    const host = process.env.HOST || '0.0.0.0';
+    const port = Number(process.env.PORT) || 3000;
+    server.listen(port, host, () => {
+        console.log(`Server listening on http://${host}:${port}`);
     });
 }
 bootstrap().catch((err) => {

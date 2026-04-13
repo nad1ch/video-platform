@@ -5,8 +5,6 @@ import { createMediasoupWorker } from './mediasoup/createWorker'
 import { RoomManager } from './rooms/RoomManager'
 import { attachSocketServer } from './signaling/socketServer'
 
-const PORT = 3000
-
 async function bootstrap(): Promise<void> {
   let shuttingDown = false
 
@@ -62,9 +60,13 @@ async function bootstrap(): Promise<void> {
   process.once('SIGINT', shutdown)
   process.once('SIGTERM', shutdown)
 
-  server.listen(PORT, () => {
-    console.log(`Server listening on http://localhost:${PORT}`)
+  const host = process.env.HOST || '0.0.0.0'
+  const port = Number(process.env.PORT) || 3000
+
+  server.listen(port, host, () => {
+    console.log(`Server listening on http://${host}:${port}`)
   })
+
 }
 
 bootstrap().catch((err) => {
