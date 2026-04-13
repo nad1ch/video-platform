@@ -18,7 +18,8 @@ const props = defineProps<{
 }>()
 
 function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2)
+  const n = typeof name === 'string' ? name : String(name ?? '')
+  const parts = n.trim().split(/\s+/).filter(Boolean).slice(0, 2)
   return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || '?'
 }
 

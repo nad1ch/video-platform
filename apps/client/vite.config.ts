@@ -12,6 +12,8 @@ export default defineConfig({
     // Avoid Lightning CSS native `.node` bindings on Linux CI (e.g. Cloudflare Pages).
     // Requires `esbuild` in devDependencies (Vite 8 does not ship it for this path).
     cssMinify: 'esbuild',
+    /** Map prod stack traces to sources (disable later if you want smaller uploads). */
+    sourcemap: true,
   },
   resolve: {
     alias: {

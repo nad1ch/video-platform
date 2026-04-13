@@ -46,7 +46,9 @@ export const useCallSessionStore = defineStore('callSession', () => {
 
   function labelFor(peerId: string): string {
     if (peerId === selfPeerId.value) {
-      return selfDisplayName.value.trim() || 'You'
+      const dn = selfDisplayName.value
+      const t = typeof dn === 'string' ? dn.trim() : String(dn ?? '').trim()
+      return t || 'You'
     }
     const fromServer = remoteDisplayNames.value[peerId]
     if (fromServer) {

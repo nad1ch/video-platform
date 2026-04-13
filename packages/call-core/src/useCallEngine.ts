@@ -1,4 +1,5 @@
-import { computed, onScopeDispose, ref, toValue, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 import { gridSizeTierFromParticipantCount } from './media/gridTier'
 import { useCallSessionStore } from './stores/callSession'
 import { playAllPageAudio } from './audio/audioPlaybackUnlock'
@@ -36,28 +37,29 @@ export type CallTile = {
 
 const DISPLAY_NAME_DEBOUNCE_MS = 400
 
+function trimmedString(v: unknown): string {
+  if (typeof v === 'string') {
+    return v.trim()
+  }
+  if (v == null) {
+    return ''
+  }
+  return String(v).trim()
+}
+
+function stringValue(v: unknown): string {
+  if (typeof v === 'string') {
+    return v
+  }
+  if (v == null) {
+    return ''
+  }
+  return String(v)
+}
+
 export function useCallEngine(options?: CallEngineOptions) {
   const session = options?.session ?? useCallSessionStore()
-
-  /** Pinia may expose setup-store fields as refs; `toValue` normalizes for script usage (prod-safe). */
-  function sessionRoomId(): string {
-    const v = toValue(session.roomId as unknown)
-    return typeof v === 'string' ? v : String(v ?? '')
-  }
-
-  function sessionSelfPeerId(): string {
-    const v = toValue(session.selfPeerId as unknown)
-    return typeof v === 'string' ? v : String(v ?? '')
-  }
-
-  function sessionSelfDisplayName(): string {
-    const v = toValue(session.selfDisplayName as unknown)
-    return typeof v === 'string' ? v : String(v ?? '')
-  }
-
-  function sessionInCall(): boolean {
-    return Boolean(toValue(session.inCall as unknown))
-  }
+  const { roomId, selfPeerId, selfDisplayName, inCall } = storeToRefs(session)
 
   const {
     lastRoomState,
@@ -92,12 +94,12 @@ export function useCallEngine(options?: CallEngineOptions) {
   let displayNameDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
   const tiles = computed<CallTile[]>(() => {
-    const selfId = sessionSelfPeerId()
+    const selfId = selfPeerId.value
     const list: CallTile[] = [
       {
         peerId: selfId,
         stream: localStream.value,
-        displayName: sessionSelfDisplayName().trim() || 'You',
+        displayName: trimmedString(selfDisplayName.value) || 'You',
         isLocal: true,
         videoEnabled: camEnabled.value,
         audioEnabled: micEnabled.value,
@@ -138,7 +140,7 @@ export function useCallEngine(options?: CallEngineOptions) {
         excludeFromLevelAnalysis: t.isLocal,
       })),
     ),
-    computed(() => sessionInCall()),
+    computed(() => inCall.value),
   )
 
   const sizeTier = computed<'sm' | 'md' | 'lg'>(() =>
@@ -169,22 +171,18 @@ export function useCallEngine(options?: CallEngineOptions) {
     { deep: true },
   )
 
-  watch(
-    () => sessionSelfDisplayName(),
-    (name) => {
-      if (!sessionInCall()) {
-        return
-      }
-      const n = typeof name === 'string' ? name : String(name ?? '')
-      if (displayNameDebounceTimer !== null) {
-        clearTimeout(displayNameDebounceTimer)
-      }
-      displayNameDebounceTimer = setTimeout(() => {
-        displayNameDebounceTimer = null
-        sendUpdateDisplayName(n.trim() || 'You')
-      }, DISPLAY_NAME_DEBOUNCE_MS)
-    },
-  )
+  watch(selfDisplayName, (name) => {
+    if (!inCall.value) {
+      return
+    }
+    if (displayNameDebounceTimer !== null) {
+      clearTimeout(displayNameDebounceTimer)
+    }
+    displayNameDebounceTimer = setTimeout(() => {
+      displayNameDebounceTimer = null
+      sendUpdateDisplayName(trimmedString(name) || 'You')
+    }, DISPLAY_NAME_DEBOUNCE_MS)
+  })
 
   onScopeDispose(() => {
     if (displayNameDebounceTimer !== null) {
@@ -228,9 +226,9 @@ export function useCallEngine(options?: CallEngineOptions) {
     try {
       await roomConnect()
       joinRoom(
-        sessionRoomId().trim() || 'demo',
-        sessionSelfPeerId(),
-        sessionSelfDisplayName().trim() || 'You',
+        trimmedString(roomId.value) || 'demo',
+        stringValue(selfPeerId.value) || `peer-${Math.random().toString(36).slice(2, 10)}`,
+        trimmedString(selfDisplayName.value) || 'You',
       )
       await waitForCondition(() => lastRoomState.value != null, 15_000)
 
