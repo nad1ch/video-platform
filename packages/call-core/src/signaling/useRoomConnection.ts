@@ -45,10 +45,16 @@ function assertProductionUsesWss(url: string): void {
   }
 }
 
-/** When the URL is only an origin (path `/` or empty), append `/ws` for nginx-style upstreams. */
+/**
+ * Normalize path (strip trailing slashes), then if the path is empty or root-only, use `/ws`
+ * for nginx-style upstreams. Avoids `//ws` when the env value is `wss://host/`.
+ */
 function withDefaultSignalingPath(url: string): string {
   try {
     const u = new URL(url)
+    while (u.pathname.length > 1 && u.pathname.endsWith('/')) {
+      u.pathname = u.pathname.slice(0, -1)
+    }
     if (u.pathname === '/' || u.pathname === '') {
       u.pathname = '/ws'
     }
