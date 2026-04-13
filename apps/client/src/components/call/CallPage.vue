@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useCallEngine, type CallTile } from 'call-core'
+import { useCallEngine } from 'call-core'
 import ParticipantTile from './ParticipantTile.vue'
 
 const {
@@ -19,26 +18,6 @@ const {
   toggleCam,
   wsStatus,
 } = useCallEngine()
-
-/** Remote active speaker → large tile; everyone else (incl. local) in strip / grid. */
-const speakerLayout = computed(() => {
-  const id = activeSpeakerPeerId.value
-  if (!id || tiles.value.length < 2) {
-    return { featured: null as CallTile | null, rest: tiles.value }
-  }
-  const featured = tiles.value.find((t) => t.peerId === id && !t.isLocal) ?? null
-  if (!featured) {
-    return { featured: null as CallTile | null, rest: tiles.value }
-  }
-  return {
-    featured,
-    rest: tiles.value.filter((t) => t.peerId !== featured.peerId),
-  }
-})
-
-const restSizeTier = computed(() =>
-  speakerLayout.value.featured ? ('sm' as const) : sizeTier.value,
-)
 </script>
 
 <template>
@@ -93,41 +72,7 @@ const restSizeTier = computed(() =>
           </button>
         </div>
 
-        <div
-          v-if="speakerLayout.featured"
-          class="call-page__stage call-page__stage--split"
-        >
-          <div class="call-page__featured">
-            <ParticipantTile
-              :display-name="speakerLayout.featured.displayName"
-              :stream="speakerLayout.featured.stream"
-              :is-local="speakerLayout.featured.isLocal"
-              :video-enabled="speakerLayout.featured.videoEnabled"
-              :audio-enabled="speakerLayout.featured.audioEnabled"
-              :play-rev="speakerLayout.featured.playRev"
-              :refresh-tick="speakerLayout.featured.refreshTick"
-              size-tier="lg"
-              :active-speaker="activeSpeakerPeerId === speakerLayout.featured.peerId"
-            />
-          </div>
-          <div class="call-page__rest">
-            <ParticipantTile
-              v-for="t in speakerLayout.rest"
-              :key="t.peerId"
-              :display-name="t.displayName"
-              :stream="t.stream"
-              :is-local="t.isLocal"
-              :video-enabled="t.videoEnabled"
-              :audio-enabled="t.audioEnabled"
-              :play-rev="t.playRev"
-              :refresh-tick="t.refreshTick"
-              :size-tier="restSizeTier"
-              :active-speaker="activeSpeakerPeerId === t.peerId"
-            />
-          </div>
-        </div>
-
-        <div v-else class="call-page__grid" :class="gridModifier">
+        <div class="call-page__grid" :class="gridModifier">
           <ParticipantTile
             v-for="t in tiles"
             :key="t.peerId"
@@ -269,54 +214,6 @@ const restSizeTier = computed(() =>
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-}
-
-/* Discord-style: main speaker + thumbnails */
-.call-page__stage {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-height: 0;
-}
-
-.call-page__stage--split .call-page__featured {
-  flex: 1;
-  min-height: min(52vh, 480px);
-  min-width: 0;
-}
-
-.call-page__stage--split .call-page__featured :deep(.tile) {
-  min-height: 100%;
-}
-
-.call-page__stage--split .call-page__rest {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 0.5rem;
-  max-height: 40vh;
-  overflow-y: auto;
-  flex-shrink: 0;
-}
-
-@media (min-width: 880px) {
-  .call-page__stage--split {
-    flex-direction: row;
-    align-items: stretch;
-  }
-
-  .call-page__stage--split .call-page__featured {
-    min-height: 0;
-    flex: 1;
-  }
-
-  .call-page__stage--split .call-page__rest {
-    width: 220px;
-    max-height: none;
-    grid-template-columns: 1fr;
-    overflow-y: auto;
-    align-content: start;
-  }
 }
 
 .call-page__grid {

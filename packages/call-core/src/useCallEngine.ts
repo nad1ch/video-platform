@@ -114,6 +114,7 @@ export function useCallEngine(options?: CallEngineOptions) {
         peerId: t.peerId,
         stream: t.stream,
         audioEnabled: t.audioEnabled,
+        excludeFromLevelAnalysis: t.isLocal,
       })),
     ),
     computed(() => session.inCall),

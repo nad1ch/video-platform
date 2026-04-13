@@ -16,6 +16,11 @@ export type ActiveSpeakerTile = {
   peerId: string
   stream: MediaStream | null
   audioEnabled: boolean
+  /**
+   * Skip Web Audio tap (e.g. local preview: same USB composite device as getUserMedia video
+   * can glitch when the shared stream is also connected to an AudioContext).
+   */
+  excludeFromLevelAnalysis?: boolean
 }
 
 type PeerNode = {
@@ -89,7 +94,7 @@ export function useActiveSpeaker(
 
     const alive = new Set<string>()
     for (const t of tiles.value) {
-      if (!t.audioEnabled || !t.stream) {
+      if (t.excludeFromLevelAnalysis || !t.audioEnabled || !t.stream) {
         continue
       }
       const track = t.stream.getAudioTracks()[0]
@@ -105,7 +110,10 @@ export function useActiveSpeaker(
         teardownPeer(t.peerId)
       }
       try {
-        const source = ctx.createMediaStreamSource(t.stream)
+        // Audio-only stream: tapping the same composite {video+audio} MediaStream that feeds
+        // <video> can glitch the camera on some USB webcams; same track, wrapper stream only.
+        const audioOnlyStream = new MediaStream([track])
+        const source = ctx.createMediaStreamSource(audioOnlyStream)
         const analyser = ctx.createAnalyser()
         analyser.fftSize = FFT_SIZE
         source.connect(analyser)
@@ -219,7 +227,7 @@ export function useActiveSpeaker(
       () =>
         tiles.value.map(
           (t) =>
-            `${t.peerId}:${t.stream?.id ?? ''}:${t.audioEnabled}:${t.stream?.getAudioTracks()[0]?.id ?? ''}:${t.stream?.getAudioTracks()[0]?.readyState ?? ''}`,
+            `${t.peerId}:${t.excludeFromLevelAnalysis ? 'x' : ''}:${t.stream?.id ?? ''}:${t.audioEnabled}:${t.stream?.getAudioTracks()[0]?.id ?? ''}:${t.stream?.getAudioTracks()[0]?.readyState ?? ''}`,
         ),
     ],
     () => {

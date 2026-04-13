@@ -221,9 +221,8 @@ const placeholderHint = computed(() => {
 
 .tile--active-speaker {
   border-color: var(--accent, #c084fc);
-  box-shadow:
-    0 0 0 2px rgba(192, 132, 252, 0.45),
-    0 0 24px rgba(192, 132, 252, 0.25);
+  /* Inset glow avoids extra outer box-shadow footprint (less perceived “jump” vs video). */
+  box-shadow: inset 0 0 0 2px rgba(192, 132, 252, 0.55);
 }
 
 .tile--lg .tile-media {
