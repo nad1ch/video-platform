@@ -11,6 +11,7 @@ exports.handleCreateTransport = handleCreateTransport;
 exports.handleConnectTransport = handleConnectTransport;
 exports.handleProduce = handleProduce;
 exports.handleConsume = handleConsume;
+exports.handleSetConsumerPreferredLayers = handleSetConsumerPreferredLayers;
 exports.handleDisconnect = handleDisconnect;
 const ws_1 = __importDefault(require("ws"));
 const zod_1 = require("zod");
@@ -71,6 +72,14 @@ exports.clientMessageSchema = zod_1.z.discriminatedUnion('type', [
             rtpCapabilities: zod_1.z.unknown(),
         }),
     }),
+    zod_1.z.object({
+        type: zod_1.z.literal('set-consumer-preferred-layers'),
+        payload: zod_1.z.object({
+            consumerId: zod_1.z.string().min(1),
+            spatialLayer: zod_1.z.number().int().min(0).max(2),
+            temporalLayer: zod_1.z.number().int().min(0).max(4).optional(),
+        }),
+    }),
 ]);
 function sendServerMessage(socket, message) {
     if (socket.readyState === ws_1.default.OPEN) {
@@ -83,10 +92,12 @@ function serializeTransportOptions(transport) {
     const iceTransportPolicy = (0, clientIceServers_1.getIceTransportPolicyFromEnv)();
     if (!loggedClientIceConfig && (iceServers?.length || iceTransportPolicy)) {
         loggedClientIceConfig = true;
-        console.log('[ice] client RTCConfiguration extras:', {
-            extraIceServers: iceServers?.length ?? 0,
-            iceTransportPolicy: iceTransportPolicy ?? 'all (default)',
-        });
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('[ice] client RTCConfiguration extras:', {
+                extraIceServers: iceServers?.length ?? 0,
+                iceTransportPolicy: iceTransportPolicy ?? 'all (default)',
+            });
+        }
     }
     return {
         id: transport.id,
@@ -124,6 +135,13 @@ function findProducerInRoom(room, producerId) {
 function transportDirection(transport) {
     return transport.appData?.direction;
 }
+function detachPeerAudioProducersFromLevelObserver(peer, room) {
+    for (const pr of peer.getProducers()) {
+        if (pr.kind === 'audio') {
+            void room.removeAudioProducerFromLevelObserver(pr.id);
+        }
+    }
+}
 function broadcastPeerLeftToRoom(room, leftPeerId) {
     const msg = { type: 'peer-left', payload: { peerId: leftPeerId } };
     for (const p of room.getPeers()) {
@@ -138,9 +156,12 @@ function finalizeRoomIfEmpty(room, roomManager) {
     roomManager.removeRoom(room.id);
 }
 function removePeerFromNetwork(peer, deps) {
+    const room = deps.roomManager.getRoom(peer.roomId);
+    if (room) {
+        detachPeerAudioProducersFromLevelObserver(peer, room);
+    }
     peer.closeAllMedia();
     deps.socketPeer.delete(peer.socket);
-    const room = deps.roomManager.getRoom(peer.roomId);
     if (!room) {
         return;
     }
@@ -163,6 +184,7 @@ function replaceDuplicatePeerId(room, incomingSocket, peerId, deps) {
     if (!existing || existing.socket === incomingSocket) {
         return;
     }
+    detachPeerAudioProducersFromLevelObserver(existing, room);
     existing.closeAllMedia();
     deps.socketPeer.delete(existing.socket);
     room.removePeer(peerId);
@@ -216,6 +238,7 @@ async function handleJoinRoom(socket, roomId, peerId, displayName, deps) {
         type: 'room-state',
         payload: { peers: others, routerRtpCapabilities, existingProducers },
     });
+    room.sendActiveSpeakerCatchUpToPeer(peer);
     const joinedMsg = {
         type: 'peer-joined',
         payload: { peerId, displayName: name },
@@ -317,6 +340,7 @@ async function handleProduce(socket, transportId, kind, rtpParameters, requestId
         return;
     }
     try {
+        const previousAudioProducers = kind === 'audio' ? peer.getProducers().filter((p) => p.kind === 'audio') : [];
         const producer = await transport.produce({
             kind,
             rtpParameters: rtpParameters,
@@ -324,7 +348,16 @@ async function handleProduce(socket, transportId, kind, rtpParameters, requestId
         if (producer.paused) {
             await producer.resume();
         }
+        if (producer.kind === 'audio') {
+            for (const prev of previousAudioProducers) {
+                await room.removeAudioProducerFromLevelObserver(prev.id);
+                peer.removeProducer(prev.id);
+            }
+        }
         peer.addProducer(producer);
+        if (producer.kind === 'audio') {
+            await room.addAudioProducerToLevelObserver(producer.id);
+        }
         sendServerMessage(socket, {
             type: 'produced',
             payload: { id: producer.id, requestId },
@@ -390,16 +423,20 @@ async function handleConsume(socket, transportId, producerId, rtpCapabilities, d
             rtpCapabilities: caps,
             paused: true,
         });
-        console.log('[consume] consumer created', {
-            producerId,
-            kind: consumer.kind,
-            consumerPaused: consumer.paused,
-            producerPaused: sourceProducer.paused,
-        });
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('[consume] consumer created', {
+                producerId,
+                kind: consumer.kind,
+                consumerPaused: consumer.paused,
+                producerPaused: sourceProducer.paused,
+            });
+        }
         await consumer.resume();
-        console.log('[consume] after consumer.resume', {
-            consumerPaused: consumer.paused,
-        });
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('[consume] after consumer.resume', {
+                consumerPaused: consumer.paused,
+            });
+        }
         peer.addConsumer(consumer);
         sendServerMessage(socket, {
             type: 'consumed',
@@ -414,6 +451,40 @@ async function handleConsume(socket, transportId, producerId, rtpCapabilities, d
     catch (err) {
         console.error('consume failed', err);
         sendConsumeFailed(socket, producerId, 'server_consume_error');
+    }
+}
+/**
+ * Simulcast / SVC layer selection runs on the mediasoup worker Consumer.
+ * mediasoup-client browserside Consumer has no setPreferredLayers — the client must signal here.
+ */
+async function handleSetConsumerPreferredLayers(socket, consumerId, spatialLayer, temporalLayer, deps) {
+    const peer = getPeerForSocket(socket, deps);
+    if (!peer) {
+        return;
+    }
+    const consumer = peer.getConsumer(consumerId);
+    if (!consumer || consumer.closed || consumer.kind !== 'video') {
+        return;
+    }
+    try {
+        if (temporalLayer === undefined) {
+            await consumer.setPreferredLayers({ spatialLayer });
+        }
+        else {
+            await consumer.setPreferredLayers({ spatialLayer, temporalLayer });
+        }
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('[layers] server setPreferredLayers', { consumerId, spatialLayer, temporalLayer });
+        }
+    }
+    catch (err) {
+        if (process.env.NODE_ENV !== 'production') {
+            console.warn('[layers] server setPreferredLayers failed', { consumerId, spatialLayer, temporalLayer, err });
+        }
+        else {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error('[layers] setPreferredLayers failed', consumerId, spatialLayer, msg);
+        }
     }
 }
 function handleDisconnect(socket, deps) {

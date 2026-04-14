@@ -54,6 +54,11 @@ function attachSocketServer(wss, roomManager) {
                             await (0, messageHandlers_1.handleConsume)(socket, transportId, producerId, rtpCapabilities, deps);
                             break;
                         }
+                        case 'set-consumer-preferred-layers': {
+                            const { consumerId, spatialLayer, temporalLayer } = parsed.data.payload;
+                            await (0, messageHandlers_1.handleSetConsumerPreferredLayers)(socket, consumerId, spatialLayer, temporalLayer, deps);
+                            break;
+                        }
                         default:
                             break;
                     }

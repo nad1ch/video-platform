@@ -11,6 +11,7 @@ import {
   handleDisconnect,
   handleJoinRoom,
   handleProduce,
+  handleSetConsumerPreferredLayers,
   handleUpdateDisplayName,
 } from './messageHandlers'
 
@@ -72,6 +73,11 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             case 'consume': {
               const { transportId, producerId, rtpCapabilities } = parsed.data.payload
               await handleConsume(socket, transportId, producerId, rtpCapabilities, deps)
+              break
+            }
+            case 'set-consumer-preferred-layers': {
+              const { consumerId, spatialLayer, temporalLayer } = parsed.data.payload
+              await handleSetConsumerPreferredLayers(socket, consumerId, spatialLayer, temporalLayer, deps)
               break
             }
             default:

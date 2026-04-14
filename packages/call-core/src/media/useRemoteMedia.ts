@@ -7,9 +7,15 @@ import type {
   Transport,
   TransportOptions,
 } from 'mediasoup-client/types'
-import { computed, onUnmounted, shallowRef } from 'vue'
+import { computed, onUnmounted, shallowRef, type ShallowRef } from 'vue'
 import type { SendTransportRoomApi } from '../transport/useSendTransport'
 import { waitForSignalingMessage } from '../signaling/signalingWait'
+import {
+  classifyBweMetrics,
+  mergeRecvSendBwe,
+  parseTransportStats,
+  type NetworkQualityClass,
+} from './webrtcLinkStats'
 
 export type RemoteProducerInfo = {
   producerId: string
@@ -18,6 +24,33 @@ export type RemoteProducerInfo = {
 }
 
 const TIMEOUT_MS = 45_000
+
+/** Coalesce rapid visibility / speaker / pin updates (producer-sync storms). */
+const PREFERRED_LAYERS_DEBOUNCE_MS = 80
+
+/**
+ * Peers with consume priority >= this get +1 spatial layer vs their visibility tier (capped at high).
+ * Lets UI “star” someone without pinning.
+ */
+const PRIORITY_SPATIAL_BOOST_THRESHOLD = 50
+
+function readBwePollMs(): number {
+  try {
+    const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+    const raw = env?.VITE_BWE_POLL_MS
+    if (typeof raw !== 'string' || raw.length === 0) {
+      return 1500
+    }
+    const n = Number(raw)
+    return Number.isFinite(n) && n >= 500 && n <= 10_000 ? n : 1500
+  } catch {
+    return 1500
+  }
+}
+
+const BWE_POLL_MS = readBwePollMs()
+/** Require this many consecutive identical classifications before changing applied level (reduces flapping). */
+const BWE_LEVEL_HYSTERESIS_COUNT = 2
 
 function isTransportCreatedRecv(
   data: unknown,
@@ -169,8 +202,188 @@ export function useRemoteMedia() {
   /** In-flight consume per producerId (sync vs new-producer overlap). */
   const consumingProducerIds = new Set<string>()
   const consumersByProducerId = new Map<string, Consumer>()
+  const producerInfoById = new Map<string, RemoteProducerInfo>()
+  const peerVisibility = shallowRef(new Map<string, boolean>())
+  const peerPriority = shallowRef(new Map<string, number>())
+  const pinnedPeerId = shallowRef<string | null>(null)
+  const activeSpeakerPeerId = shallowRef<string | null>(null)
+  /** Last spatialLayer sent over signaling per recv consumer id (skip duplicates). */
+  const lastSentSpatialByConsumerId = new Map<string, 0 | 1 | 2>()
+  let signalingRoom: SendTransportRoomApi | null = null
+  let preferredLayersDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let unsubscribeNewProducer: (() => void) | null = null
   let unsubscribeProducerSync: (() => void) | null = null
+
+  /** Stats-derived quality; overridden when `networkQualityOverride !== 'auto'`. */
+  const networkQualityFromStats = shallowRef<NetworkQualityClass>('good')
+  const networkQualityOverride = shallowRef<'auto' | NetworkQualityClass>('auto')
+  let sendTransportStatsRef: ShallowRef<Transport | null> | null = null
+  let bwePollTimer: ReturnType<typeof setInterval> | null = null
+  let bweHysteresisCandidate: NetworkQualityClass | null = null
+  let bweHysteresisStreak = 0
+
+  const networkQuality = computed<NetworkQualityClass>(() =>
+    networkQualityOverride.value === 'auto' ? networkQualityFromStats.value : networkQualityOverride.value,
+  )
+
+  function effectiveNetworkQuality(): NetworkQualityClass {
+    return networkQualityOverride.value === 'auto' ? networkQualityFromStats.value : networkQualityOverride.value
+  }
+
+  function applyNetworkCapToSpatialLayer(layer: 0 | 1 | 2): 0 | 1 | 2 {
+    const n = effectiveNetworkQuality()
+    if (n === 'poor') {
+      return 0
+    }
+    if (n === 'medium') {
+      return Math.min(layer, 1) as 0 | 1 | 2
+    }
+    return layer
+  }
+
+  function registerSendTransportForStats(ref: ShallowRef<Transport | null>): void {
+    sendTransportStatsRef = ref
+  }
+
+  function setNetworkQualityOverride(level: 'auto' | NetworkQualityClass): void {
+    networkQualityOverride.value = level
+    schedulePreferredLayersUpdate()
+  }
+
+  function stopBwePolling(): void {
+    if (bwePollTimer !== null) {
+      clearInterval(bwePollTimer)
+      bwePollTimer = null
+    }
+    bweHysteresisCandidate = null
+    bweHysteresisStreak = 0
+  }
+
+  function commitNetworkQualityFromStats(next: NetworkQualityClass): void {
+    if (networkQualityFromStats.value === next) {
+      bweHysteresisCandidate = null
+      bweHysteresisStreak = 0
+      return
+    }
+    if (bweHysteresisCandidate === next) {
+      bweHysteresisStreak += 1
+    } else {
+      bweHysteresisCandidate = next
+      bweHysteresisStreak = 1
+    }
+    if (bweHysteresisStreak >= BWE_LEVEL_HYSTERESIS_COUNT) {
+      networkQualityFromStats.value = next
+      bweHysteresisCandidate = null
+      bweHysteresisStreak = 0
+      if (networkQualityOverride.value === 'auto') {
+        schedulePreferredLayersUpdate()
+      }
+    }
+  }
+
+  async function sampleBwe(): Promise<void> {
+    const recv = recvTransport.value
+    if (!recv || recv.closed || recv.connectionState !== 'connected') {
+      return
+    }
+    try {
+      const recvReport = await recv.getStats()
+      const recvParsed = parseTransportStats(recvReport)
+      const sendT = sendTransportStatsRef?.value
+      let merged = mergeRecvSendBwe(recvParsed, undefined)
+      if (sendT && !sendT.closed && sendT.connectionState === 'connected') {
+        const sendReport = await sendT.getStats()
+        merged = mergeRecvSendBwe(recvParsed, parseTransportStats(sendReport))
+      }
+      const raw = classifyBweMetrics(merged)
+      commitNetworkQualityFromStats(raw)
+    } catch {
+      /* ignore transient getStats errors */
+    }
+  }
+
+  function startBwePolling(): void {
+    stopBwePolling()
+    const recv = recvTransport.value
+    if (!recv || recv.closed || recv.connectionState !== 'connected') {
+      return
+    }
+    bwePollTimer = setInterval(() => {
+      void sampleBwe()
+    }, BWE_POLL_MS)
+    void sampleBwe()
+  }
+
+  function onRecvConnectionStateChange(state: ConnectionState): void {
+    if (state === 'connected') {
+      startBwePolling()
+    }
+    // Do not stop on 'disconnected': transient ICE; polling tolerates getStats errors until failed/closed.
+    if (state === 'failed' || state === 'closed') {
+      stopBwePolling()
+    }
+  }
+
+  function baseSpatialLayerForPeer(peerId: string): 0 | 1 | 2 {
+    // Aligns with producer simulcast encodings: 0 = low, 1 = mid, 2 = high.
+    if (pinnedPeerId.value === peerId) return 2
+    if (activeSpeakerPeerId.value === peerId) return 2
+    const visible = peerVisibility.value.get(peerId) ?? true
+    if (visible) return 1
+    return 0
+  }
+
+  function targetSpatialLayerForPeer(peerId: string): 0 | 1 | 2 {
+    const base = baseSpatialLayerForPeer(peerId)
+    const p = peerPriority.value.get(peerId) ?? 0
+    const boost = p >= PRIORITY_SPATIAL_BOOST_THRESHOLD ? 1 : 0
+    const desired = Math.min(2, base + boost) as 0 | 1 | 2
+    return applyNetworkCapToSpatialLayer(desired)
+  }
+
+  function flushPreferredLayersToServer(): void {
+    const room = signalingRoom
+    if (!room) return
+
+    for (const [producerId, consumer] of consumersByProducerId.entries()) {
+      if (consumer.closed || consumer.kind !== 'video') continue
+      const info = producerInfoById.get(producerId)
+      if (!info) continue
+
+      const spatialLayer = targetSpatialLayerForPeer(info.peerId)
+      if (lastSentSpatialByConsumerId.get(consumer.id) === spatialLayer) {
+        continue
+      }
+
+      try {
+        room.sendJson({
+          type: 'set-consumer-preferred-layers',
+          payload: { consumerId: consumer.id, spatialLayer },
+        })
+        lastSentSpatialByConsumerId.set(consumer.id, spatialLayer)
+        console.log('[layers] requested', {
+          consumerId: consumer.id,
+          peerId: info.peerId,
+          producerId,
+          spatialLayer,
+        })
+      } catch (e) {
+        lastSentSpatialByConsumerId.delete(consumer.id)
+        console.error('[layers] send failed', { consumerId: consumer.id, producerId }, e)
+      }
+    }
+  }
+
+  function schedulePreferredLayersUpdate(): void {
+    if (!signalingRoom) return
+    if (preferredLayersDebounceTimer) {
+      clearTimeout(preferredLayersDebounceTimer)
+    }
+    preferredLayersDebounceTimer = setTimeout(() => {
+      preferredLayersDebounceTimer = null
+      flushPreferredLayersToServer()
+    }, PREFERRED_LAYERS_DEBOUNCE_MS)
+  }
 
   function bumpRemotePeerPlayRev(peerId: string): void {
     const pr = new Map(remotePeerPlayRevs.value)
@@ -269,6 +482,7 @@ export function useRemoteMedia() {
 
     transport.on('connectionstatechange', (state: ConnectionState) => {
       console.log('[recvTransport] connectionState:', state, { id: transport.id })
+      onRecvConnectionStateChange(state)
       if (state === 'failed') {
         console.error('[ICE] recv transport FAILED', { id: transport.id })
       }
@@ -297,6 +511,9 @@ export function useRemoteMedia() {
     })
 
     recvTransport.value = transport
+    if (transport.connectionState === 'connected') {
+      onRecvConnectionStateChange('connected')
+    }
     return transport
   }
 
@@ -320,6 +537,7 @@ export function useRemoteMedia() {
     consumedProducerIds.add(producerId)
 
     try {
+      producerInfoById.set(producerId, info)
       if (import.meta.env.DEV) {
         console.log('[consume] request', { producerId, peerId, kind })
       }
@@ -358,6 +576,7 @@ export function useRemoteMedia() {
         })
       }
 
+      // Audio must never be paused; video remains visible but quality is adapted via preferred layers.
       await consumer.resume()
 
       if (import.meta.env.DEV) {
@@ -369,6 +588,9 @@ export function useRemoteMedia() {
 
       consumersByProducerId.set(producerId, consumer)
       upsertRemoteTrack(peerId, consumer.track)
+      if (consumer.kind === 'video') {
+        schedulePreferredLayersUpdate()
+      }
     } catch (err) {
       consumedProducerIds.delete(producerId)
       throw err
@@ -404,11 +626,14 @@ export function useRemoteMedia() {
       if (!isNewProducer(data)) {
         return
       }
-      void consumeProducer(device, room, {
+      const info: RemoteProducerInfo = {
         producerId: data.payload.producerId,
         peerId: data.payload.peerId,
         kind: data.payload.kind,
-      }).catch((e) => {
+      }
+      producerInfoById.set(info.producerId, info)
+
+      void consumeProducer(device, room, info).catch((e) => {
         console.error('consume after new-producer failed', e)
       })
     })
@@ -433,12 +658,16 @@ export function useRemoteMedia() {
       console.log('[syncExistingProducers]', { count: list.length })
     }
     for (const item of list) {
+      producerInfoById.set(item.producerId, item)
+    }
+    for (const item of list) {
       try {
         await consumeProducer(device, room, item)
       } catch (e) {
         console.error('[syncExistingProducers] consume failed', item, e)
       }
     }
+    schedulePreferredLayersUpdate()
   }
 
   async function setupReceivePath(
@@ -446,6 +675,7 @@ export function useRemoteMedia() {
     room: SendTransportRoomApi,
     existing: RemoteProducerInfo[],
   ): Promise<void> {
+    signalingRoom = room
     await ensureRecvTransport(device, room)
     startNewProducerListener(device, room)
     unsubscribeProducerSync?.()
@@ -482,9 +712,41 @@ export function useRemoteMedia() {
       )
     }
     await syncExistingProducers(device, room, merged)
+    schedulePreferredLayersUpdate()
+  }
+
+  function setPeerVisible(peerId: string, visible: boolean): void {
+    const next = new Map(peerVisibility.value)
+    next.set(peerId, visible)
+    peerVisibility.value = next
+    schedulePreferredLayersUpdate()
+  }
+
+  function setPeerConsumePriority(peerId: string, priority: number): void {
+    const next = new Map(peerPriority.value)
+    next.set(peerId, Number.isFinite(priority) ? priority : 0)
+    peerPriority.value = next
+    schedulePreferredLayersUpdate()
+  }
+
+  function setPinnedPeer(peerId: string | null): void {
+    pinnedPeerId.value = peerId
+    schedulePreferredLayersUpdate()
+  }
+
+  function setActiveSpeaker(peerId: string | null): void {
+    if (activeSpeakerPeerId.value !== peerId) {
+      console.log('[speaker] active speaker changed', { peerId })
+    }
+    activeSpeakerPeerId.value = peerId
+    schedulePreferredLayersUpdate()
   }
 
   function stopRemoteMedia(): void {
+    stopBwePolling()
+    sendTransportStatsRef = null
+    networkQualityOverride.value = 'auto'
+    networkQualityFromStats.value = 'good'
     unsubscribeNewProducer?.()
     unsubscribeNewProducer = null
     unsubscribeProducerSync?.()
@@ -495,6 +757,7 @@ export function useRemoteMedia() {
       }
     }
     consumersByProducerId.clear()
+    producerInfoById.clear()
     for (const stream of streamsByPeerId.values()) {
       for (const track of stream.getTracks()) {
         track.stop()
@@ -505,6 +768,14 @@ export function useRemoteMedia() {
     remotePeerPlayRevs.value = new Map()
     consumedProducerIds.clear()
     consumingProducerIds.clear()
+    lastSentSpatialByConsumerId.clear()
+    if (preferredLayersDebounceTimer) {
+      clearTimeout(preferredLayersDebounceTimer)
+      preferredLayersDebounceTimer = null
+    }
+    pinnedPeerId.value = null
+    activeSpeakerPeerId.value = null
+    signalingRoom = null
     const t = recvTransport.value
     if (t && !t.closed) {
       t.close()
@@ -521,11 +792,20 @@ export function useRemoteMedia() {
     remotePeerStreams,
     remotePeerPlayRevs,
     remoteStreams,
+    activeSpeakerPeerId,
+    networkQuality,
+    networkQualityFromStats,
+    registerSendTransportForStats,
+    setNetworkQualityOverride,
     ensureRecvTransport,
     consumeProducer,
     startNewProducerListener,
     syncExistingProducers,
     setupReceivePath,
+    setPeerVisible,
+    setPeerConsumePriority,
+    setPinnedPeer,
+    setActiveSpeaker,
     stopRemoteMedia,
   }
 }

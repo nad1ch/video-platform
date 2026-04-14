@@ -3,7 +3,6 @@ import { computed, onScopeDispose, ref, watch } from 'vue'
 import { gridSizeTierFromParticipantCount } from './media/gridTier'
 import { useCallSessionStore } from './stores/callSession'
 import { playAllPageAudio } from './audio/audioPlaybackUnlock'
-import { useActiveSpeaker } from './audio/useActiveSpeaker'
 import { useLocalMedia } from './media/useLocalMedia'
 import { useMediasoupDevice } from './media/useMediasoupDevice'
 import { useRemoteMedia } from './media/useRemoteMedia'
@@ -57,6 +56,29 @@ function stringValue(v: unknown): string {
   return String(v)
 }
 
+/** `undefined` = not this message; `null` = silence (clear highlight / layers). */
+function parseActiveSpeakerFromServer(data: unknown): string | null | undefined {
+  if (!data || typeof data !== 'object') {
+    return undefined
+  }
+  const m = data as { type?: string; payload?: unknown }
+  if (m.type !== 'active-speaker') {
+    return undefined
+  }
+  const p = m.payload
+  if (!p || typeof p !== 'object') {
+    return undefined
+  }
+  const peerId = (p as { peerId?: unknown }).peerId
+  if (peerId === null) {
+    return null
+  }
+  if (typeof peerId === 'string') {
+    return peerId
+  }
+  return undefined
+}
+
 export function useCallEngine(options?: CallEngineOptions) {
   if (getActivePinia() === undefined) {
     throw new Error(
@@ -80,7 +102,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   } = useRoomConnection(options?.signalingUrl)
 
   const { device, loadDevice, reset: deviceReset } = useMediasoupDevice()
-  const { createSendTransport, closeSendTransport, publishLocalMedia } = useSendTransport()
+  const { createSendTransport, closeSendTransport, publishLocalMedia, sendTransport } = useSendTransport()
   const {
     localStream,
     localPlayRev,
@@ -91,13 +113,24 @@ export function useCallEngine(options?: CallEngineOptions) {
     toggleMic,
     toggleCam,
   } = useLocalMedia()
-  const { remotePeerStreams, remotePeerPlayRevs, setupReceivePath, stopRemoteMedia } = useRemoteMedia()
+  const {
+    remotePeerStreams,
+    remotePeerPlayRevs,
+    activeSpeakerPeerId,
+    networkQuality,
+    setupReceivePath,
+    stopRemoteMedia,
+    setActiveSpeaker,
+    registerSendTransportForStats,
+    setNetworkQualityOverride,
+  } = useRemoteMedia()
 
   const roomApi = { sendJson, addMessageListener, drainPendingNewProducers }
 
   const joining = ref(false)
   const joinError = ref<string | null>(null)
   let displayNameDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  let unsubActiveSpeaker: (() => void) | null = null
 
   const tiles = computed<CallTile[]>(() => {
     const selfId = selfPeerId.value
@@ -136,18 +169,6 @@ export function useCallEngine(options?: CallEngineOptions) {
 
     return list
   })
-
-  const { activeSpeakerPeerId } = useActiveSpeaker(
-    computed(() =>
-      tiles.value.map((t) => ({
-        peerId: t.peerId,
-        stream: t.stream,
-        audioEnabled: t.audioEnabled,
-        excludeFromLevelAnalysis: t.isLocal,
-      })),
-    ),
-    computed(() => inCall.value),
-  )
 
   const sizeTier = computed<'sm' | 'md' | 'lg'>(() =>
     gridSizeTierFromParticipantCount(tiles.value.length),
@@ -217,6 +238,8 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   function teardownMedia(): void {
+    unsubActiveSpeaker?.()
+    unsubActiveSpeaker = null
     stopRemoteMedia()
     stopLocalMedia()
     closeSendTransport()
@@ -254,7 +277,18 @@ export function useCallEngine(options?: CallEngineOptions) {
 
       const existing = lastRoomState.value?.existingProducers ?? []
       await setupReceivePath(d, roomApi, existing)
+
+      unsubActiveSpeaker?.()
+      unsubActiveSpeaker = addMessageListener((data) => {
+        const v = parseActiveSpeakerFromServer(data)
+        if (v === undefined) {
+          return
+        }
+        setActiveSpeaker(v)
+      })
+
       await createSendTransport(d, roomApi)
+      registerSendTransportForStats(sendTransport)
 
       const stream = await startLocalMedia()
       if (!localStream.value || stream.getTracks().length === 0) {
@@ -288,6 +322,8 @@ export function useCallEngine(options?: CallEngineOptions) {
     sizeTier,
     gridModifier,
     activeSpeakerPeerId,
+    networkQuality,
+    setNetworkQualityOverride,
     micEnabled,
     camEnabled,
     toggleMic,

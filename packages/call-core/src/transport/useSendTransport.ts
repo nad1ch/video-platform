@@ -2,6 +2,7 @@ import type { Device } from 'mediasoup-client'
 import type {
   ConnectionState,
   DtlsParameters,
+  RtpEncodingParameters,
   Transport,
   TransportOptions,
 } from 'mediasoup-client/types'
@@ -78,6 +79,19 @@ export type SendTransportRoomApi = {
 }
 
 const CONNECT_TIMEOUT_MS = 45_000
+
+/** Video only. Ordered low → high; maps to consumer `spatialLayer` 0…2. */
+const OUTBOUND_VIDEO_SIMULCAST_ENCODINGS: RtpEncodingParameters[] = [
+  { maxBitrate: 150_000, scaleResolutionDownBy: 4 },
+  { maxBitrate: 400_000, scaleResolutionDownBy: 2 },
+  { maxBitrate: 1_200_000 },
+]
+
+/** Hint for encoder ramp-up (kbps); does not replace per-layer `maxBitrate`. */
+const OUTBOUND_VIDEO_GOOGLE_START_BITRATE_KBPS = 320
+
+/** Mild Opus cap — stable voice, not aggressive throttling. */
+const OUTBOUND_AUDIO_OPUS_MAX_AVG_BITRATE_BPS = 96_000
 
 export function useSendTransport() {
   const sendTransport = shallowRef<Transport | null>(null)
@@ -180,7 +194,33 @@ export function useSendTransport() {
       if (track.kind !== 'audio' && track.kind !== 'video') {
         continue
       }
-      await transport.produce({ track })
+      if (track.kind === 'video') {
+        if (import.meta.env.DEV) {
+          console.log('[produce] video simulcast encodings', {
+            trackId: track.id,
+            encodings: OUTBOUND_VIDEO_SIMULCAST_ENCODINGS.map((e) => ({
+              maxBitrate: e.maxBitrate,
+              scaleResolutionDownBy: e.scaleResolutionDownBy,
+            })),
+          })
+        }
+        await transport.produce({
+          track,
+          encodings: OUTBOUND_VIDEO_SIMULCAST_ENCODINGS,
+          codecOptions: {
+            videoGoogleStartBitrate: OUTBOUND_VIDEO_GOOGLE_START_BITRATE_KBPS,
+          },
+        })
+      } else {
+        await transport.produce({
+          track,
+          codecOptions: {
+            opusDtx: true,
+            opusFec: true,
+            opusMaxAverageBitrate: OUTBOUND_AUDIO_OPUS_MAX_AVG_BITRATE_BPS,
+          },
+        })
+      }
     }
   }
 

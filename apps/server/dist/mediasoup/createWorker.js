@@ -6,13 +6,35 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createMediasoupWorker = createMediasoupWorker;
 const mediasoup_1 = require("mediasoup");
 const pino_1 = __importDefault(require("pino"));
+const WORKER_LOG_LEVELS = ['debug', 'warn', 'error', 'none'];
+function resolveMediasoupWorkerLogLevel() {
+    const raw = process.env.MEDIASOUP_WORKER_LOG_LEVEL?.trim().toLowerCase();
+    if (!raw) {
+        return undefined;
+    }
+    return WORKER_LOG_LEVELS.includes(raw) ? raw : undefined;
+}
+const PINO_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'];
+function resolvePinoLevel() {
+    const raw = process.env.SERVER_PINO_LEVEL?.trim().toLowerCase();
+    if (!raw) {
+        return undefined;
+    }
+    return PINO_LEVELS.includes(raw) ? raw : undefined;
+}
 async function createMediasoupWorker(options) {
-    const log = (0, pino_1.default)({ name: 'mediasoup-worker' });
+    const pinoLevel = resolvePinoLevel();
+    const log = (0, pino_1.default)({
+        name: 'mediasoup-worker',
+        ...(pinoLevel ? { level: pinoLevel } : {}),
+    });
+    const workerLogLevel = resolveMediasoupWorkerLogLevel();
     let worker;
     try {
         worker = await (0, mediasoup_1.createWorker)({
             rtcMinPort: 40000,
             rtcMaxPort: 49999,
+            ...(workerLogLevel !== undefined ? { logLevel: workerLogLevel } : {}),
         });
     }
     catch (err) {
