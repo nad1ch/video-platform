@@ -28,11 +28,22 @@ const TIMEOUT_MS = 45_000
 /** Coalesce rapid visibility / speaker / pin updates (producer-sync storms). */
 const PREFERRED_LAYERS_DEBOUNCE_MS = 80
 
-/**
- * Peers with consume priority >= this get +1 spatial layer vs their visibility tier (capped at high).
- * Lets UI “star” someone without pinning.
- */
-const PRIORITY_SPATIAL_BOOST_THRESHOLD = 50
+/** Min ms between spatial layer *upgrades* per consumer (downgrades apply immediately). Env clamp 1500–2500. */
+function readSpatialLayerCooldownMs(): number {
+  try {
+    const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+    const raw = env?.VITE_SPATIAL_LAYER_COOLDOWN_MS
+    if (typeof raw !== 'string' || raw.length === 0) {
+      return 2000
+    }
+    const n = Number(raw)
+    return Number.isFinite(n) && n >= 1500 && n <= 2500 ? n : 2000
+  } catch {
+    return 2000
+  }
+}
+
+const SPATIAL_LAYER_COOLDOWN_MS = readSpatialLayerCooldownMs()
 
 function readBwePollMs(): number {
   try {
@@ -209,6 +220,9 @@ export function useRemoteMedia() {
   const activeSpeakerPeerId = shallowRef<string | null>(null)
   /** Last spatialLayer sent over signaling per recv consumer id (skip duplicates). */
   const lastSentSpatialByConsumerId = new Map<string, 0 | 1 | 2>()
+  /** Last layer applied after cooldown gate (successful send updates together with lastSent). */
+  const lastAppliedLayerByConsumerId = new Map<string, 0 | 1 | 2>()
+  const lastAppliedAtByConsumerId = new Map<string, number>()
   let signalingRoom: SendTransportRoomApi | null = null
   let preferredLayersDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let unsubscribeNewProducer: (() => void) | null = null
@@ -230,15 +244,12 @@ export function useRemoteMedia() {
     return networkQualityOverride.value === 'auto' ? networkQualityFromStats.value : networkQualityOverride.value
   }
 
-  function applyNetworkCapToSpatialLayer(layer: 0 | 1 | 2): 0 | 1 | 2 {
+  /** Max spatial index allowed by BWE; does not raise layer — combine with `min(base, cap)`. */
+  function bweSpatialCap(): 0 | 1 | 2 {
     const n = effectiveNetworkQuality()
-    if (n === 'poor') {
-      return 0
-    }
-    if (n === 'medium') {
-      return Math.min(layer, 1) as 0 | 1 | 2
-    }
-    return layer
+    if (n === 'poor') return 0
+    if (n === 'medium') return 1
+    return 2
   }
 
   function registerSendTransportForStats(ref: ShallowRef<Transport | null>): void {
@@ -324,6 +335,7 @@ export function useRemoteMedia() {
     }
   }
 
+  /** Priority: pinned > active speaker > visibility. BWE applied separately as cap only. */
   function baseSpatialLayerForPeer(peerId: string): 0 | 1 | 2 {
     // Aligns with producer simulcast encodings: 0 = low, 1 = mid, 2 = high.
     if (pinnedPeerId.value === peerId) return 2
@@ -335,10 +347,24 @@ export function useRemoteMedia() {
 
   function targetSpatialLayerForPeer(peerId: string): 0 | 1 | 2 {
     const base = baseSpatialLayerForPeer(peerId)
-    const p = peerPriority.value.get(peerId) ?? 0
-    const boost = p >= PRIORITY_SPATIAL_BOOST_THRESHOLD ? 1 : 0
-    const desired = Math.min(2, base + boost) as 0 | 1 | 2
-    return applyNetworkCapToSpatialLayer(desired)
+    const cap = bweSpatialCap()
+    return Math.min(base, cap) as 0 | 1 | 2
+  }
+
+  /**
+   * Ignore upgrade/lateral layer changes inside cooldown since last successful apply.
+   * Downgrades always apply immediately (BWE / pin / visibility).
+   */
+  function spatialLayerAfterCooldown(consumerId: string, desired: 0 | 1 | 2): 0 | 1 | 2 {
+    const prev = lastAppliedLayerByConsumerId.get(consumerId)
+    if (prev === undefined) return desired
+    if (desired === prev) return desired
+    if (desired < prev) return desired
+    const at = lastAppliedAtByConsumerId.get(consumerId)
+    if (at !== undefined && Date.now() - at < SPATIAL_LAYER_COOLDOWN_MS) {
+      return prev
+    }
+    return desired
   }
 
   function flushPreferredLayersToServer(): void {
@@ -350,7 +376,8 @@ export function useRemoteMedia() {
       const info = producerInfoById.get(producerId)
       if (!info) continue
 
-      const spatialLayer = targetSpatialLayerForPeer(info.peerId)
+      const rawTarget = targetSpatialLayerForPeer(info.peerId)
+      const spatialLayer = spatialLayerAfterCooldown(consumer.id, rawTarget)
       if (lastSentSpatialByConsumerId.get(consumer.id) === spatialLayer) {
         continue
       }
@@ -361,6 +388,8 @@ export function useRemoteMedia() {
           payload: { consumerId: consumer.id, spatialLayer },
         })
         lastSentSpatialByConsumerId.set(consumer.id, spatialLayer)
+        lastAppliedLayerByConsumerId.set(consumer.id, spatialLayer)
+        lastAppliedAtByConsumerId.set(consumer.id, Date.now())
         console.log('[layers] requested', {
           consumerId: consumer.id,
           peerId: info.peerId,
@@ -769,6 +798,8 @@ export function useRemoteMedia() {
     consumedProducerIds.clear()
     consumingProducerIds.clear()
     lastSentSpatialByConsumerId.clear()
+    lastAppliedLayerByConsumerId.clear()
+    lastAppliedAtByConsumerId.clear()
     if (preferredLayersDebounceTimer) {
       clearTimeout(preferredLayersDebounceTimer)
       preferredLayersDebounceTimer = null
