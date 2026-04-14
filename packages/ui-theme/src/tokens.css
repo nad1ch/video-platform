@@ -1,10 +1,17 @@
 /**
  * StreamAssist shared design tokens.
- * Canonical palette aligned with the eat-first-overlay / stream HUD family (purple + deep slate).
+ * Canonical palette: stream HUD / eat-first family (violet + deep slate) + shared app chrome.
  * Import once at app bootstrap; map app-specific aliases in each shell (e.g. style.css --accent → --sa-color-primary).
  */
 :root {
   --sa-color-bg-deep: #0b0f1a;
+  /** Eat-first / overlay main void (slightly deeper than app shell). */
+  --sa-color-bg-hud-deep: #0b0714;
+  --sa-color-bg-hud-void: #06040f;
+  /** Light lobby / panels (eat-first light theme base). */
+  --sa-color-bg-hud-light: #e4dcf5;
+  --sa-color-bg-hud-light-alt: #ddd6f0;
+
   --sa-color-surface: #111827;
   --sa-color-surface-raised: #1f2937;
   --sa-color-border: #2e303a;
@@ -12,6 +19,10 @@
   --sa-color-primary: #a855f7;
   --sa-color-primary-soft: rgba(168, 85, 247, 0.14);
   --sa-color-primary-border: rgba(168, 85, 247, 0.5);
+  /** Deeper violets for light-theme headings and chrome. */
+  --sa-color-violet-900: #4c1d95;
+  --sa-color-violet-800: #5b21b6;
+  --sa-color-ink-hud: #12081f;
 
   --sa-color-success: #22c55e;
   --sa-color-warning: #eab308;
@@ -27,7 +38,35 @@
 
   --sa-font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --sa-font-mono: ui-monospace, Consolas, monospace;
+  /** HUD / eat-first typography (Plus Jakarta + Orbitron). */
+  --sa-font-hud-sans: 'Plus Jakarta Sans', var(--sa-font-sans);
+  --sa-font-hud-display: 'Orbitron', system-ui, sans-serif;
 
   --sa-shadow-elevated:
     rgba(0, 0, 0, 0.35) 0 12px 24px -4px, rgba(0, 0, 0, 0.22) 0 6px 12px -3px;
+  /** Card / panel elevation (alias for chrome pages). */
+  --sa-shadow-card: var(--sa-shadow-elevated);
+
+  /**
+   * Semantic aliases — StreamAssist app shell (same visual language as eat-first HUD).
+   * Use these in global layout/components; eat-first scoped vars stay under `.eat-first-root`.
+   */
+  --sa-color-bg-main: var(--sa-color-bg-hud-deep);
+  /** Solid shell background; eat-first chrome adds its own `--bg-body` under `.eat-first-root`. */
+  --sa-color-bg-body: var(--sa-color-bg-main);
+  --sa-color-bg-card: var(--sa-color-surface);
+  --sa-color-text-body: var(--sa-color-text-muted);
+  --sa-color-text-main: var(--sa-color-text-strong);
+  --sa-font-main: var(--sa-font-hud-sans);
+  --sa-font-display: var(--sa-font-hud-display);
+
+  /** Spacing scale (rem). */
+  --sa-space-1: 0.25rem;
+  --sa-space-2: 0.5rem;
+  --sa-space-3: 0.75rem;
+  --sa-space-4: 1rem;
+  --sa-space-5: 1.25rem;
+  --sa-space-6: 1.5rem;
+  --sa-space-8: 2rem;
+  --sa-space-10: 2.5rem;
 }

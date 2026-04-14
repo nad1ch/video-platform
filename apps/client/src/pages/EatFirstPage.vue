@@ -1,63 +1,69 @@
 <script setup lang="ts">
-import EatFirstGame from '@/features/eat-first/EatFirstGame.vue'
-import { RouterLink } from 'vue-router'
+import { computed, defineAsyncComponent, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import '@/eat-first/styles/motion.css'
+import { bootstrapEatFirstAuthOnce } from '@/eat-first/bootstrapEatFirst'
+import { adminControlTransitionInstant } from '@/eat-first/router.js'
+import { useSeoCanonical } from '@/eat-first/composables/useSeoCanonical.js'
+import { eatViewFromRoute } from '@/eat-first/eatFirstRouteUtils.js'
+
+const JoinPanel = defineAsyncComponent(() => import('@/eat-first/pages/JoinPage.vue'))
+const AdminPanel = defineAsyncComponent(() => import('@/eat-first/pages/AdminGatePage.vue'))
+const ControlPanel = defineAsyncComponent(() => import('@/eat-first/pages/ControlPage.vue'))
+const OverlayPanel = defineAsyncComponent(() => import('@/eat-first/pages/OverlayPage.vue'))
+
+const panelByView = {
+  join: JoinPanel,
+  admin: AdminPanel,
+  control: ControlPanel,
+  overlay: OverlayPanel,
+} as const
+
+useSeoCanonical()
+
+const route = useRoute()
+
+const currentView = computed(() => eatViewFromRoute(route))
+
+const currentPanel = computed(() => {
+  const v = currentView.value
+  return panelByView[v] ?? JoinPanel
+})
+
+/** Не включаємо `player` у ключ: інакше кожна зміна слота в URL повністю перемонтовує ControlPage. */
+const routeViewKey = computed(() => {
+  if (currentView.value === 'control') {
+    const q = route.query
+    return ['control', String(q.game ?? ''), String(q.host ?? '')].join('|')
+  }
+  return route.fullPath
+})
+
+const routeTransition = computed(() => {
+  if (currentView.value === 'overlay') return 'route-fade'
+  if (adminControlTransitionInstant.value) return 'route-none'
+  return 'route-slide'
+})
+
+onMounted(() => {
+  void bootstrapEatFirstAuthOnce()
+})
 </script>
 
 <template>
-  <div class="eat-page">
-    <nav class="eat-page__nav" aria-label="StreamAssist navigation">
-      <RouterLink class="eat-page__link" to="/">← Home</RouterLink>
-      <RouterLink class="eat-page__link" to="/wordle">Wordle</RouterLink>
-      <RouterLink class="eat-page__link" to="/call">Call</RouterLink>
-    </nav>
-    <div class="eat-page__body">
-      <EatFirstGame />
-    </div>
+  <div class="eat-first-inner">
+    <Transition :name="routeTransition" mode="out-in">
+      <component :is="currentPanel" :key="routeViewKey" />
+    </Transition>
   </div>
 </template>
 
 <style scoped>
-.eat-page {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  background: var(--sa-color-bg-deep, var(--bg));
-  display: flex;
-  flex-direction: column;
-  overflow: auto;
-}
-
-.eat-page__nav {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
-  align-items: center;
-  padding: 0.65rem 0.75rem;
-  background: color-mix(in srgb, var(--sa-color-bg-deep, var(--bg)) 92%, transparent);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--sa-color-border, var(--border));
-}
-
-.eat-page__link {
-  font-size: 0.88rem;
-  color: var(--sa-color-text-strong, var(--text-h));
-  text-decoration: none;
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--sa-radius-sm, 8px);
-  background: color-mix(in srgb, var(--sa-color-surface, var(--code-bg)) 85%, transparent);
-  border: 1px solid var(--sa-color-border, var(--border));
-}
-
-.eat-page__link:hover {
-  border-color: var(--sa-color-primary-border, var(--accent-border));
-  color: var(--sa-color-primary, var(--accent));
-}
-
-.eat-page__body {
+.eat-first-inner {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
 }
 </style>

@@ -1,0 +1,20 @@
+.eat-first-root *,
+.eat-first-root *::before,
+.eat-first-root *::after {
+  box-sizing: border-box;
+}
+
+.eat-first-root {
+  margin: 0;
+  min-height: 100%;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--text-body);
+  background: var(--bg-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.eat-first-root a {
+  color: inherit;
+}

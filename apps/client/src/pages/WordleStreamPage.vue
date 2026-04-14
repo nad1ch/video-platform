@@ -1,9 +1,71 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
+import AppContainer from '@/components/ui/AppContainer.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import {
+  MAX_ATTEMPTS,
+  WORD_LENGTH_OPTIONS,
+  computeFeedback,
+  isAllowedGuess,
+  normalizeWord,
+  randomWord,
+  type Feedback,
+  type LocalGuessRow,
+  type WordLength,
+} from '@/wordle/wordleLogic'
 
 const TWITCH_CHANNEL_STORAGE_KEY = 'streamassist_wordle_twitch_channel'
+const WORDLE_WORD_LEN_KEY = 'streamassist_wordle_word_len'
+const WORDLE_LOCAL_STATS_KEY = 'streamassist_wordle_local_stats'
 const DEMO_TWITCH_CHANNEL = 'nad1ch'
+
+type LocalWinStats = { won: number; lost: number }
+
+function loadWordLength(): WordLength {
+  try {
+    const n = Number(localStorage.getItem(WORDLE_WORD_LEN_KEY))
+    if (n === 5 || n === 6 || n === 7) {
+      return n
+    }
+  } catch {
+    /* ignore */
+  }
+  return 5
+}
+
+function persistWordLength(len: WordLength): void {
+  try {
+    localStorage.setItem(WORDLE_WORD_LEN_KEY, String(len))
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadLocalStats(): LocalWinStats {
+  try {
+    const raw = localStorage.getItem(WORDLE_LOCAL_STATS_KEY)
+    if (!raw) {
+      return { won: 0, lost: 0 }
+    }
+    const o = JSON.parse(raw) as { won?: unknown; lost?: unknown }
+    return {
+      won: typeof o.won === 'number' && Number.isFinite(o.won) ? o.won : 0,
+      lost: typeof o.lost === 'number' && Number.isFinite(o.lost) ? o.lost : 0,
+    }
+  } catch {
+    return { won: 0, lost: 0 }
+  }
+}
+
+function persistLocalStats(s: LocalWinStats): void {
+  try {
+    localStorage.setItem(WORDLE_LOCAL_STATS_KEY, JSON.stringify(s))
+  } catch {
+    /* ignore */
+  }
+}
 
 function normalizeTwitchLogin(raw: string | null | undefined): string | null {
   if (raw == null || typeof raw !== 'string') {
@@ -28,10 +90,8 @@ function readStoredTwitchChannel(): string | null {
 }
 
 const route = useRoute()
-const router = useRouter()
 
 const wordlePublicConfig = shallowRef<WordlePublicConfig | null>(null)
-const wordlePublicConfigStatus = ref<'idle' | 'ok' | 'error'>('idle')
 
 function channelFromQuery(): string | null {
   const q = route.query.channel
@@ -50,8 +110,6 @@ function persistQueryChannelToStorage(): void {
     /* private mode / quota */
   }
 }
-
-type Feedback = 'correct' | 'present' | 'absent'
 
 type GuessRow = { guess: string; feedback: Feedback[] }
 
@@ -118,8 +176,6 @@ const gameState = shallowRef<GameStatePayload | null>(null)
 const leaderboard = ref<LeaderboardEntry[]>([])
 const chatLines = ref<ChatLine[]>([])
 const sessionUser = shallowRef<SessionUser | null>(null)
-const isAdmin = ref(false)
-const adminRouteConfigured = ref(false)
 const guessInput = ref('')
 const wsStatus = ref<'idle' | 'open' | 'closed' | 'error'>('idle')
 const lastError = ref<string | null>(null)
@@ -150,61 +206,6 @@ const effectiveTwitchChannel = computed(() => {
   return DEMO_TWITCH_CHANNEL
 })
 
-const twitchChannelSource = computed<'query' | 'saved' | 'env' | 'demo'>(() => {
-  void route.query.channel
-  if (channelFromQuery()) {
-    return 'query'
-  }
-  if (readStoredTwitchChannel()) {
-    return 'saved'
-  }
-  if (normalizeTwitchLogin(import.meta.env.VITE_TWITCH_CHANNEL as string | undefined)) {
-    return 'env'
-  }
-  return 'demo'
-})
-
-const twitchChannelSourceLabel = computed(() => {
-  switch (twitchChannelSource.value) {
-    case 'query':
-      return 'from link'
-    case 'saved':
-      return 'saved'
-    case 'env':
-      return 'from env'
-    default:
-      return 'demo default'
-  }
-})
-
-const shareWordleUrl = computed(() => {
-  const ch = effectiveTwitchChannel.value
-  const u = new URL('/wordle', window.location.origin)
-  u.searchParams.set('channel', ch)
-  return u.toString()
-})
-
-const serverIngestChannel = computed(() => wordlePublicConfig.value?.ingestChannel ?? null)
-
-const channelMismatch = computed(() => {
-  const s = serverIngestChannel.value
-  const e = effectiveTwitchChannel.value
-  if (!s || wordlePublicConfigStatus.value !== 'ok') {
-    return false
-  }
-  return s.toLowerCase() !== e.toLowerCase()
-})
-
-const serverIngestDisabled = computed(
-  () => wordlePublicConfigStatus.value === 'ok' && serverIngestChannel.value === null,
-)
-
-const ircCooldownSecondsLabel = computed(() => {
-  const ms = wordlePublicConfig.value?.chatGuessCooldownMs ?? 1500
-  const s = ms / 1000
-  return Number.isInteger(s) ? String(s) : s.toFixed(1)
-})
-
 function formatCooldownHint(ms: number): string {
   const s = ms / 1000
   const label = Number.isInteger(s) ? String(s) : s.toFixed(1)
@@ -221,61 +222,19 @@ async function fetchWordlePublicConfig(): Promise<void> {
   try {
     const res = await fetch('/api/wordle/public-config')
     if (!res.ok) {
-      wordlePublicConfigStatus.value = 'error'
       return
     }
     const j = (await res.json()) as WordlePublicConfig
     if (typeof j.chatGuessCooldownMs !== 'number' || !Number.isFinite(j.chatGuessCooldownMs)) {
-      wordlePublicConfigStatus.value = 'error'
       return
     }
     wordlePublicConfig.value = {
       ingestChannel: typeof j.ingestChannel === 'string' ? j.ingestChannel : null,
       chatGuessCooldownMs: j.chatGuessCooldownMs,
     }
-    wordlePublicConfigStatus.value = 'ok'
   } catch {
     wordlePublicConfig.value = null
-    wordlePublicConfigStatus.value = 'error'
   }
-}
-
-const channelEditorOpen = ref(false)
-const channelDraft = ref('')
-
-function openChannelEditor(): void {
-  channelDraft.value = effectiveTwitchChannel.value
-  channelEditorOpen.value = true
-}
-
-function closeChannelEditor(): void {
-  channelEditorOpen.value = false
-}
-
-function applyTwitchChannel(): void {
-  lastError.value = null
-  const n = normalizeTwitchLogin(channelDraft.value)
-  if (!n) {
-    lastError.value = 'Invalid Twitch channel (2–25 chars: letters, numbers, underscore).'
-    return
-  }
-  try {
-    localStorage.setItem(TWITCH_CHANNEL_STORAGE_KEY, n)
-  } catch {
-    lastError.value = 'Could not save channel (browser storage blocked).'
-    return
-  }
-  closeChannelEditor()
-  void router.replace({ path: '/wordle', query: { channel: n } })
-}
-
-function clearSavedTwitchChannel(): void {
-  try {
-    localStorage.removeItem(TWITCH_CHANNEL_STORAGE_KEY)
-  } catch {
-    /* ignore */
-  }
-  void router.replace({ path: '/wordle', query: {} })
 }
 
 function wordleWsUrl(): string {
@@ -322,11 +281,109 @@ watch(
   },
 )
 
-const chatEmbedParentHost = computed(() => location.hostname)
+/** Локальна гра (український Wordle); співпадає з MAX_ATTEMPTS у wordleLogic. */
+const WORDLE_MAX_ATTEMPTS = MAX_ATTEMPTS
 
-const sortedPlayers = computed(() => {
-  const list = gameState.value?.players ?? []
-  return [...list].sort((a, b) => a.displayName.localeCompare(b.displayName))
+/** Рядки клавіатури: усі 33 літери української абетки. */
+const KBD_ROW1 = ['А', 'Б', 'В', 'Г', 'Ґ', 'Д', 'Е', 'Є', 'Ж', 'З', 'И'] as const
+const KBD_ROW2 = ['І', 'Ї', 'Й', 'К', 'Л', 'М', 'Н', 'О', 'П', 'Р', 'С'] as const
+const KBD_ROW3 = ['Т', 'У', 'Ф', 'Х', 'Ц', 'Ч', 'Ш', 'Щ', 'Ь', 'Ю', 'Я'] as const
+
+const CONFETTI_PIECES = 32
+
+function confettiStyle(i: number): Record<string, string> {
+  const seed = i * 1103
+  const cx = `${((seed % 160) - 80).toFixed(0)}px`
+  const dx = `${(((seed * 7) % 200) - 100).toFixed(0)}px`
+  const hue = String((seed * 13) % 360)
+  const delay = `${((i * 17) % 450) / 1000}s`
+  const dur = `${1.4 + ((seed % 80) / 100)}s`
+  return {
+    '--cf-cx': cx,
+    '--cf-dx': dx,
+    '--cf-hue': hue,
+    '--cf-delay': delay,
+    '--cf-dur': dur,
+  }
+}
+
+const guessFieldId = 'wordle-guess-sr'
+
+const wordLength = ref<WordLength>(loadWordLength())
+const secretWord = ref(randomWord(wordLength.value))
+const localGuesses = ref<LocalGuessRow[]>([])
+const gameStatus = ref<'playing' | 'won' | 'lost'>('playing')
+const localRoundId = ref(0)
+const localStats = ref<LocalWinStats>(loadLocalStats())
+/** Для стріму: тимчасово показати загадане слово. */
+const secretPeekVisible = ref(false)
+
+const localBoardLocked = computed(
+  () => gameStatus.value !== 'playing' || localGuesses.value.length >= MAX_ATTEMPTS,
+)
+
+const leaderboardSelfName = computed(() => sessionUser.value?.display_name ?? 'Гість')
+
+const leaderboardStatusLabel = computed(() => {
+  switch (gameStatus.value) {
+    case 'won':
+      return 'Перемога'
+    case 'lost':
+      return 'Програш'
+    default:
+      return 'Грає'
+  }
+})
+
+type BoardCell = {
+  letter: string
+  feedback: Feedback | null
+  /** Відправлений ряд — показуємо кольори фідбеку */
+  locked: boolean
+  rowIndex: number
+  colIndex: number
+}
+
+const wordleGridRows = computed((): BoardCell[][] => {
+  const len = wordLength.value
+  const submitted = localGuesses.value
+  const canType = gameStatus.value === 'playing' && submitted.length < MAX_ATTEMPTS
+  const draftNorm = canType ? normalizeWord(guessInput.value) : ''
+  const draftChars = [...draftNorm].slice(0, len)
+
+  const rows: BoardCell[][] = []
+  for (let r = 0; r < MAX_ATTEMPTS; r++) {
+    const cells: BoardCell[] = []
+    if (r < submitted.length) {
+      const row = submitted[r]!
+      const letters = [...row.word]
+      for (let c = 0; c < len; c++) {
+        cells.push({
+          letter: letters[c] ?? '',
+          feedback: row.result[c] ?? null,
+          locked: true,
+          rowIndex: r,
+          colIndex: c,
+        })
+      }
+    } else if (r === submitted.length && canType) {
+      for (let c = 0; c < len; c++) {
+        cells.push({
+          letter: draftChars[c] ?? '',
+          feedback: null,
+          locked: false,
+          rowIndex: r,
+          colIndex: c,
+        })
+      }
+    } else {
+      for (let c = 0; c < len; c++) {
+        cells.push({ letter: '', feedback: null, locked: false, rowIndex: r, colIndex: c })
+      }
+    }
+    rows.push(cells)
+  }
+  return rows
 })
 
 function connectWs(): void {
@@ -365,10 +422,8 @@ function connectWs(): void {
         leaderboard.value = entries
       }
     } else if (t === Ws.session && p && typeof p === 'object') {
-      const o = p as { user?: SessionUser | null; isAdmin?: boolean; adminRouteConfigured?: boolean }
+      const o = p as { user?: SessionUser | null }
       sessionUser.value = o.user ?? null
-      isAdmin.value = Boolean(o.isAdmin)
-      adminRouteConfigured.value = Boolean(o.adminRouteConfigured)
     } else if (t === Ws.twitchChat && p && typeof p === 'object') {
       const line = p as ChatLine & { guessFeedback?: Feedback[] }
       chatLines.value = [...chatLines.value.slice(-120), line]
@@ -395,33 +450,86 @@ async function refreshMe(): Promise<void> {
   }
 }
 
+function kbdAppendLetter(ch: string): void {
+  lastError.value = null
+  if (localBoardLocked.value) {
+    return
+  }
+  const cur = [...normalizeWord(guessInput.value)]
+  if (cur.length >= wordLength.value) {
+    return
+  }
+  guessInput.value = guessInput.value + ch
+}
+
+function kbdBackspace(): void {
+  if (localBoardLocked.value) {
+    return
+  }
+  const chars = [...guessInput.value]
+  chars.pop()
+  guessInput.value = chars.join('')
+}
+
 function submitGuess(): void {
   lastError.value = null
-  const g = gameState.value
-  if (!g || !ws || ws.readyState !== WebSocket.OPEN) {
+  if (gameStatus.value !== 'playing') {
     return
   }
-  const word = guessInput.value.trim()
-  if (!word) {
+  const guess = normalizeWord(guessInput.value)
+  const len = wordLength.value
+  if (guess.length !== len) {
     return
   }
-  ws.send(JSON.stringify({ type: Ws.clientGuess, word, gameId: g.gameId }))
+  if (!isAllowedGuess(guess, len)) {
+    lastError.value = 'Слова немає в словнику.'
+    return
+  }
+  const feedback = computeFeedback(secretWord.value, guess)
+  localGuesses.value = [...localGuesses.value, { word: guess, result: feedback }]
+  if (guess === secretWord.value) {
+    gameStatus.value = 'won'
+    secretPeekVisible.value = false
+  } else if (localGuesses.value.length >= MAX_ATTEMPTS) {
+    gameStatus.value = 'lost'
+    secretPeekVisible.value = false
+  }
   guessInput.value = ''
 }
 
-function nextWord(): void {
+/** Нове загадане слово тієї ж довжини (після раунду або з кнопки). */
+function newRoundSameLength(): void {
   lastError.value = null
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
+  secretPeekVisible.value = false
+  secretWord.value = randomWord(wordLength.value)
+  localGuesses.value = []
+  guessInput.value = ''
+  gameStatus.value = 'playing'
+  localRoundId.value += 1
+}
+
+function setWordLength(len: WordLength): void {
+  if (wordLength.value === len) {
     return
   }
-  ws.send(JSON.stringify({ type: Ws.clientNextWord }))
+  lastError.value = null
+  secretPeekVisible.value = false
+  wordLength.value = len
+  persistWordLength(len)
+  secretWord.value = randomWord(len)
+  localGuesses.value = []
+  guessInput.value = ''
+  gameStatus.value = 'playing'
+  localRoundId.value += 1
+}
+
+function toggleSecretPeek(): void {
+  secretPeekVisible.value = !secretPeekVisible.value
 }
 
 async function logout(): Promise<void> {
   await fetch('/api/wordle/logout', { method: 'POST', credentials: 'include' })
   sessionUser.value = null
-  isAdmin.value = false
-  adminRouteConfigured.value = false
   connectWs()
 }
 
@@ -432,283 +540,428 @@ function login(): void {
   }
 }
 
+function onWindowKeydown(e: KeyboardEvent): void {
+  if (localBoardLocked.value) {
+    return
+  }
+  const el = e.target
+  if (el instanceof HTMLElement) {
+    if (el.closest('iframe')) {
+      return
+    }
+    if (el.isContentEditable) {
+      return
+    }
+    const tag = el.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      return
+    }
+    if (tag === 'A') {
+      return
+    }
+    if (tag === 'BUTTON' && !el.closest('.wordle-page__kbd')) {
+      return
+    }
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) {
+    return
+  }
+  if (e.key === 'Backspace') {
+    e.preventDefault()
+    kbdBackspace()
+    return
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    submitGuess()
+    return
+  }
+  if (e.key.length === 1 && /\p{Script=Cyrillic}/u.test(e.key)) {
+    e.preventDefault()
+    kbdAppendLetter(normalizeWord(e.key))
+    return
+  }
+}
+
+/** WS оновлює стан сервера для майбутнього мультиплеєра; локальна гра їх не читає. */
+watch(
+  [gameState, leaderboard],
+  ([gs, lb]) => {
+    void gs
+    void lb
+  },
+  { deep: true },
+)
+
+watch(gameStatus, (next, prev) => {
+  if (prev !== 'playing') {
+    return
+  }
+  if (next === 'won') {
+    const s = { ...localStats.value, won: localStats.value.won + 1 }
+    localStats.value = s
+    persistLocalStats(s)
+  } else if (next === 'lost') {
+    const s = { ...localStats.value, lost: localStats.value.lost + 1 }
+    localStats.value = s
+    persistLocalStats(s)
+  }
+})
+
 onMounted(() => {
   persistQueryChannelToStorage()
   void fetchWordlePublicConfig()
   void refreshMe()
   connectWs()
+  window.addEventListener('keydown', onWindowKeydown)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', onWindowKeydown)
   ws?.close()
   ws = null
 })
 </script>
 
 <template>
-  <div class="wordle-page">
-    <header class="wordle-page__header">
-      <div class="wordle-page__brand">
-        <h1 class="wordle-page__title">Stream Wordle</h1>
-        <p class="wordle-page__sub">Guess in Twitch chat — this page is the live board.</p>
-      </div>
-      <div class="wordle-page__auth">
-        <RouterLink to="/" class="wordle-page__link">← Home</RouterLink>
-        <RouterLink to="/call" class="wordle-page__link">Call</RouterLink>
-        <template v-if="sessionUser">
-          <img
-            class="wordle-page__avatar"
-            :src="sessionUser.profile_image_url"
-            :alt="sessionUser.display_name"
-            width="32"
-            height="32"
-          />
-          <span class="wordle-page__name">{{ sessionUser.display_name }}</span>
-          <button type="button" class="wordle-page__btn wordle-page__btn--ghost" @click="logout">Log out</button>
-        </template>
-        <button
-          v-else-if="twitchAuthUrl"
-          type="button"
-          class="wordle-page__btn wordle-page__btn--accent"
-          @click="login"
-        >
-          Login with Twitch
-        </button>
-        <span v-else class="wordle-page__hint">Set VITE_TWITCH_CLIENT_ID and VITE_TWITCH_OAUTH_REDIRECT_URI</span>
-      </div>
-    </header>
-
-    <p v-if="lastError" class="wordle-page__banner">{{ lastError }}</p>
-    <p v-if="channelMismatch" class="wordle-page__banner wordle-page__banner--warn">
-      Chat embed ({{ effectiveTwitchChannel }}) ≠ server IRC ({{ serverIngestChannel }}). Only messages on the
-      <strong>server</strong> channel count as guesses.
-    </p>
-    <p v-else-if="serverIngestDisabled" class="wordle-page__banner wordle-page__banner--warn">
-      Server is not ingesting Twitch chat (set <code class="wordle-page__code">TWITCH_CHANNEL</code> in
-      production). The embed is visual only until IRC is enabled.
-    </p>
-    <p class="wordle-page__meta">
-      WS: {{ wsStatus }} · Round #{{ gameState?.gameId?.slice(0, 8) ?? '…' }}
-    </p>
-    <div class="wordle-page__channel-bar">
-      <p class="wordle-page__channel-line">
-        <span v-if="twitchChannelSource === 'demo'" class="wordle-page__demo-pill">Demo mode</span>
-        Embed chat:
-        <strong>{{ effectiveTwitchChannel }}</strong>
-        <span class="wordle-page__channel-tag">({{ twitchChannelSourceLabel }})</span>
-      </p>
-      <div class="wordle-page__channel-actions">
-        <button type="button" class="wordle-page__btn wordle-page__btn--ghost" @click="openChannelEditor">
-          Change
-        </button>
-        <button
-          v-if="twitchChannelSource === 'saved'"
-          type="button"
-          class="wordle-page__btn wordle-page__btn--ghost"
-          @click="clearSavedTwitchChannel"
-        >
-          Clear saved
-        </button>
-      </div>
-    </div>
-    <div v-if="channelEditorOpen" class="wordle-page__channel-form">
-      <label class="wordle-page__channel-label" for="wordle-ch-input">Twitch channel</label>
-      <div class="wordle-page__channel-fields">
-        <input
-          id="wordle-ch-input"
-          v-model="channelDraft"
-          class="wordle-page__input wordle-page__input--channel"
-          type="text"
-          maxlength="25"
-          autocomplete="off"
-          placeholder="channel_login"
-          @keydown.enter.prevent="applyTwitchChannel"
-        />
-        <button type="button" class="wordle-page__btn wordle-page__btn--accent" @click="applyTwitchChannel">
-          Connect
-        </button>
-        <button type="button" class="wordle-page__btn wordle-page__btn--ghost" @click="closeChannelEditor">
-          Cancel
-        </button>
-      </div>
-      <p class="wordle-page__hint wordle-page__hint--channel">
-        Share:
-        <code class="wordle-page__code">{{ shareWordleUrl }}</code>
-      </p>
-    </div>
-    <p v-if="wordlePublicConfigStatus === 'ok' && serverIngestChannel" class="wordle-page__channels-sync">
-      <span>Chat embed: <strong>{{ effectiveTwitchChannel }}</strong></span>
-      <span class="wordle-page__channels-sync-sep">·</span>
-      <span>
-        Server IRC:
-        <strong>{{ serverIngestChannel }}</strong>
-        <span v-if="!channelMismatch" class="wordle-page__sync-ok">match</span>
-      </span>
-    </p>
-    <p v-else-if="wordlePublicConfigStatus === 'error'" class="wordle-page__hint wordle-page__hint--irc">
-      Could not load server channel config — check API <code class="wordle-page__code">/api/wordle/public-config</code>.
-    </p>
-    <p v-if="wsStatus === 'closed' || wsStatus === 'error'" class="wordle-page__hint wordle-page__hint--ws">
-      If WebSocket stays closed: run the client with Vite dev (proxy /wordle-ws → API) or set
-      VITE_WORDLE_WS_URL in production.
-    </p>
-
-    <div class="wordle-page__grid">
-      <aside class="wordle-page__panel wordle-page__panel--leader">
-        <h2>Leaderboard</h2>
-        <ol class="wordle-page__leader">
-          <li v-for="e in leaderboard" :key="e.userId" class="wordle-page__leader-row">
-            <span class="wordle-page__pos">{{ e.position }}</span>
-            <span class="wordle-page__who">{{ e.displayName }}</span>
-            <span class="wordle-page__stat">{{ e.attempts }} tries</span>
-            <span v-if="e.guessed" class="wordle-page__badge">✓</span>
-          </li>
-        </ol>
-      </aside>
-
-      <main class="wordle-page__panel wordle-page__panel--board">
-        <div class="wordle-page__board-head">
-          <h2>Board</h2>
-          <span v-if="gameState">Word length: {{ gameState.wordLength }}</span>
-          <button
-            v-if="adminRouteConfigured"
-            type="button"
-            class="wordle-page__btn wordle-page__btn--accent"
-            :disabled="!isAdmin"
-            :title="isAdmin ? '' : 'Sign in with the Twitch account matching TWITCH_ADMIN_USER_ID'"
-            @click="nextWord"
+  <div class="page-route">
+    <AppContainer wide class="wordle-page" :class="`wordle-page--len${wordLength}`">
+      <header class="wordle-page__topbar">
+        <div class="wordle-page__topbar-main">
+          <span class="wordle-page__eyebrow">Wordle UA</span>
+          <span class="wordle-page__pill">Раунд #{{ localRoundId + 1 }} · {{ wordLength }} літер</span>
+          <span class="wordle-page__pill"
+            >Спроби: {{ localGuesses.length }} / {{ WORDLE_MAX_ATTEMPTS }}</span
           >
-            Next word
-          </button>
-          <span v-else class="wordle-page__admin-hint">Next word: set TWITCH_ADMIN_USER_ID on the server.</span>
         </div>
+        <div v-if="sessionUser || twitchAuthUrl" class="wordle-page__topbar-auth">
+          <template v-if="sessionUser">
+            <img
+              class="wordle-page__avatar"
+              :src="sessionUser.profile_image_url"
+              :alt="sessionUser.display_name"
+              width="28"
+              height="28"
+            />
+            <span class="wordle-page__name">{{ sessionUser.display_name }}</span>
+            <AppButton variant="ghost" @click="logout">Вийти</AppButton>
+          </template>
+          <AppButton v-else variant="primary" @click="login">Увійти через Twitch</AppButton>
+        </div>
+      </header>
 
-        <div v-if="!gameState" class="wordle-page__empty">Connecting…</div>
-        <div v-else class="wordle-page__players">
-          <section v-for="pl in sortedPlayers" :key="pl.userId" class="wordle-page__player">
-            <header class="wordle-page__player-head">
-              <strong>{{ pl.displayName }}</strong>
-              <span>{{ pl.attempts }} / 6 · {{ pl.guessed ? 'Solved' : 'Playing' }}</span>
-            </header>
-            <div class="wordle-page__rows">
+      <p v-if="lastError" class="wordle-page__banner">{{ lastError }}</p>
+
+      <div class="wordle-page__grid">
+        <AppCard class="wordle-page__stack wordle-page__stack--side wordle-page__stack--leader">
+          <h2 class="wordle-page__card-title">Таблиця (ви)</h2>
+          <div class="wordle-page__stats-block" aria-label="Локальна статистика">
+            <p class="wordle-page__stats-line">
+              Вгадано: <strong>{{ localStats.won }}</strong>
+            </p>
+            <p class="wordle-page__stats-line">
+              Не вгадано: <strong>{{ localStats.lost }}</strong>
+            </p>
+          </div>
+          <div class="wordle-page__len-bar" role="group" aria-label="Довжина слова">
+            <span class="wordle-page__len-label">Букви</span>
+            <div class="wordle-page__len-buttons">
+              <AppButton
+                v-for="n in WORD_LENGTH_OPTIONS"
+                :key="n"
+                type="button"
+                :variant="wordLength === n ? 'primary' : 'ghost'"
+                class="wordle-page__len-btn"
+                @click="setWordLength(n)"
+              >
+                {{ n }}
+              </AppButton>
+            </div>
+          </div>
+          <ol class="wordle-page__leader">
+            <li class="wordle-page__leader-row wordle-page__leader-row--solo">
+              <span class="wordle-page__who">{{ leaderboardSelfName }}</span>
+              <span class="wordle-page__stat"
+                >Спроби: {{ localGuesses.length }} / {{ WORDLE_MAX_ATTEMPTS }}</span
+              >
+              <span class="wordle-page__status-pill">{{ leaderboardStatusLabel }}</span>
+            </li>
+          </ol>
+        </AppCard>
+
+        <AppCard class="wordle-page__stack wordle-page__stack--game">
+          <div class="wordle-page__game" :style="{ '--wordle-len': String(wordLength) }">
+            <div
+              class="wordle-page__wordle-board"
+              :style="{ '--wordle-len': String(wordLength) }"
+              role="grid"
+              :aria-rowcount="WORDLE_MAX_ATTEMPTS"
+              :aria-colcount="wordLength"
+            >
               <div
-                v-for="(row, ri) in pl.rows"
-                :key="`${gameState?.gameId}-${pl.userId}-${ri}-${row.guess}`"
-                class="wordle-page__row"
+                v-for="(row, ri) in wordleGridRows"
+                :key="`local-${localRoundId}-r-${ri}`"
+                class="wordle-page__row wordle-page__row--tile"
+                role="row"
               >
                 <span
-                  v-for="(ch, ci) in [...row.guess]"
-                  :key="ci"
-                  class="wordle-page__cell wordle-page__cell--reveal"
-                  :data-f="row.feedback[ci]"
-                  :style="{ animationDelay: `${ci * 0.18}s` }"
+                  v-for="cell in row"
+                  :key="`tile-${localRoundId}-${cell.rowIndex}-${cell.colIndex}`"
+                  class="wordle-page__cell wordle-page__cell--tile"
+                  :class="{
+                    'wordle-page__cell--empty': !cell.locked && !cell.letter,
+                    'wordle-page__cell--draft': !cell.locked && Boolean(cell.letter),
+                  }"
+                  :data-f="cell.feedback ?? undefined"
+                  role="gridcell"
                 >
-                  {{ ch }}
+                  {{ cell.letter }}
                 </span>
               </div>
             </div>
-          </section>
-        </div>
 
-        <form class="wordle-page__form" @submit.prevent="submitGuess">
-          <input
-            v-model="guessInput"
-            class="wordle-page__input"
-            type="text"
-            :maxlength="gameState?.wordLength ?? 32"
-            :placeholder="sessionUser ? 'Type guess + Enter (optional)' : 'Log in to guess from web'"
-            :disabled="!sessionUser || !gameState"
-            autocomplete="off"
-          />
-          <button
-            type="submit"
-            class="wordle-page__btn"
-            :disabled="!sessionUser || !gameState || !guessInput.trim()"
-          >
-            Send
-          </button>
-        </form>
-      </main>
+            <div
+              v-if="gameStatus === 'won'"
+              :key="`win-${localRoundId}`"
+              class="wordle-page__game-panel-width wordle-page__celebrate"
+              aria-live="polite"
+            >
+              <div class="wordle-page__confetti" aria-hidden="true">
+                <span
+                  v-for="n in CONFETTI_PIECES"
+                  :key="`cf-${localRoundId}-${n}`"
+                  class="wordle-page__confetti-bit"
+                  :style="confettiStyle(n)"
+                />
+              </div>
+              <p class="wordle-page__celebrate-title">Ви вгадали!</p>
+              <AppButton variant="primary" type="button" class="wordle-page__celebrate-btn" @click="newRoundSameLength">
+                Нове слово
+              </AppButton>
+            </div>
 
-      <aside class="wordle-page__panel wordle-page__panel--chat">
-        <h2 class="wordle-page__chat-title">Twitch</h2>
-        <p class="wordle-page__cooldown-hint">
-          IRC guess cooldown: <strong>{{ ircCooldownSecondsLabel }}s</strong> per chatter
-        </p>
-        <div class="wordle-page__iframe-wrap">
-          <iframe
-            :key="effectiveTwitchChannel"
-            :src="chatIframeSrc"
-            title="Twitch chat"
-            class="wordle-page__iframe"
-          />
-        </div>
-        <p class="wordle-page__hint wordle-page__hint--embed">
-          Twitch embed must allow parent: {{ chatEmbedParentHost }}
-        </p>
-        <h3 class="wordle-page__h3">Guess highlights</h3>
-        <ul class="wordle-page__relay">
-          <li
-            v-for="(c, i) in chatLines.slice(-40)"
-            :key="i"
-            class="wordle-page__relay-line"
-            :data-h="c.validGuess"
-            :data-rl="c.rateLimited === true"
-          >
-            <strong>{{ c.displayName }}:</strong> {{ c.text }}
-            <span v-if="c.validGuess && c.guessFeedback?.length" class="wordle-page__relay-emojis">{{
-              feedbackToEmojis(c.guessFeedback)
-            }}</span>
-            <span v-if="c.rateLimited" class="wordle-page__relay-tag">{{
-              formatCooldownHint(c.cooldownMs ?? wordlePublicConfig?.chatGuessCooldownMs ?? 1500)
-            }}</span>
-          </li>
-        </ul>
-      </aside>
-    </div>
+            <div
+              v-else-if="gameStatus === 'lost'"
+              class="wordle-page__game-panel-width wordle-page__end-panel wordle-page__end-panel--lost"
+            >
+              <p class="wordle-page__end-panel-text">
+                Слово було: <strong class="wordle-page__secret">{{ secretWord }}</strong>
+              </p>
+              <AppButton variant="primary" type="button" @click="newRoundSameLength">Нове слово</AppButton>
+            </div>
+
+            <div v-if="gameStatus === 'playing'" class="wordle-page__game-panel-width wordle-page__peek-bar">
+              <AppButton type="button" variant="ghost" class="wordle-page__peek-btn" @click="toggleSecretPeek">
+                {{ secretPeekVisible ? 'Сховати слово' : 'Показати слово' }}
+              </AppButton>
+              <span
+                v-if="secretPeekVisible"
+                class="wordle-page__peek-word"
+                aria-live="polite"
+                >{{ secretWord }}</span
+              >
+            </div>
+
+            <div
+              v-if="gameStatus === 'playing'"
+              class="wordle-page__kbd"
+              :style="{ '--wordle-len': String(wordLength) }"
+              aria-label="Екранна клавіатура"
+            >
+              <div class="wordle-page__kbd-row">
+                <AppButton
+                  v-for="ch in KBD_ROW1"
+                  :key="ch"
+                  type="button"
+                  variant="ghost"
+                  class="wordle-page__kbd-key"
+                  :disabled="localBoardLocked"
+                  @click="kbdAppendLetter(ch)"
+                >
+                  {{ ch }}
+                </AppButton>
+              </div>
+              <div class="wordle-page__kbd-row wordle-page__kbd-row--mid">
+                <AppButton
+                  v-for="ch in KBD_ROW2"
+                  :key="ch"
+                  type="button"
+                  variant="ghost"
+                  class="wordle-page__kbd-key"
+                  :disabled="localBoardLocked"
+                  @click="kbdAppendLetter(ch)"
+                >
+                  {{ ch }}
+                </AppButton>
+              </div>
+              <div class="wordle-page__kbd-row">
+                <AppButton
+                  v-for="ch in KBD_ROW3"
+                  :key="ch"
+                  type="button"
+                  variant="ghost"
+                  class="wordle-page__kbd-key"
+                  :disabled="localBoardLocked"
+                  @click="kbdAppendLetter(ch)"
+                >
+                  {{ ch }}
+                </AppButton>
+              </div>
+              <div class="wordle-page__kbd-row wordle-page__kbd-row--actions">
+                <AppButton
+                  type="button"
+                  variant="secondary"
+                  class="wordle-page__kbd-action"
+                  :disabled="localBoardLocked || normalizeWord(guessInput).length !== wordLength"
+                  @click="submitGuess"
+                >
+                  Enter
+                </AppButton>
+                <AppButton
+                  type="button"
+                  variant="ghost"
+                  class="wordle-page__kbd-action"
+                  :disabled="localBoardLocked"
+                  @click="kbdBackspace"
+                >
+                  ⌫
+                </AppButton>
+              </div>
+            </div>
+
+            <form class="wordle-page__sr-form" @submit.prevent="submitGuess">
+              <label class="wordle-page__sr-only" :for="guessFieldId">Введіть слово</label>
+              <input
+                :id="guessFieldId"
+                v-model="guessInput"
+                class="wordle-page__sr-only"
+                type="text"
+                inputmode="text"
+                autocapitalize="off"
+                spellcheck="false"
+                :maxlength="wordLength"
+                :disabled="localBoardLocked"
+                autocomplete="off"
+                lang="uk"
+              />
+            </form>
+
+            <div v-if="gameStatus === 'playing'" class="wordle-page__round-actions">
+              <AppButton type="button" variant="ghost" @click="newRoundSameLength">Інше загадане</AppButton>
+            </div>
+          </div>
+        </AppCard>
+
+        <AppCard class="wordle-page__stack wordle-page__stack--side wordle-page__stack--chat">
+          <h2 class="wordle-page__card-title wordle-page__card-title--chat">Чат</h2>
+          <div class="wordle-page__iframe-wrap">
+            <iframe
+              :key="effectiveTwitchChannel"
+              :src="chatIframeSrc"
+              title="Twitch chat"
+              class="wordle-page__iframe"
+            />
+          </div>
+          <ul class="wordle-page__relay" aria-label="Останні повідомлення з чату">
+            <li
+              v-for="(c, i) in chatLines.slice(-40)"
+              :key="i"
+              class="wordle-page__relay-line"
+              :data-h="c.validGuess"
+              :data-rl="c.rateLimited === true"
+            >
+              <strong>{{ c.displayName }}:</strong> {{ c.text }}
+              <span v-if="c.validGuess && c.guessFeedback?.length" class="wordle-page__relay-emojis">{{
+                feedbackToEmojis(c.guessFeedback)
+              }}</span>
+              <span v-if="c.rateLimited" class="wordle-page__relay-tag">{{
+                formatCooldownHint(c.cooldownMs ?? wordlePublicConfig?.chatGuessCooldownMs ?? 1500)
+              }}</span>
+            </li>
+          </ul>
+        </AppCard>
+      </div>
+    </AppContainer>
   </div>
 </template>
 
 <style scoped>
-.wordle-page {
-  min-height: 100vh;
-  padding: 1rem 1.25rem 2rem;
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-.wordle-page__header {
+.page-route {
+  flex: 1 1 auto;
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
 }
 
-.wordle-page__title {
-  margin: 0;
-  font-size: 1.35rem;
-  color: var(--text-h);
+.wordle-page {
+  --wordle-cell: 78px;
+  --wordle-gap: 10px;
+  flex: 1 1 auto;
+  padding-block: var(--sa-space-3) var(--sa-space-6);
+  padding-inline: 0;
+  font-family: var(--sa-font-main);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: var(--sa-space-3);
 }
 
-.wordle-page__sub {
-  margin: 0.25rem 0 0;
-  font-size: 0.9rem;
-  color: var(--text);
+.wordle-page--len6 {
+  --wordle-cell: 66px;
 }
 
-.wordle-page__auth {
+.wordle-page--len7 {
+  --wordle-cell: 56px;
+}
+
+.wordle-page__topbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  gap: var(--sa-space-3);
+  padding: var(--sa-space-2) 0;
+  border-bottom: 1px solid var(--sa-color-border);
 }
 
-.wordle-page__link {
-  color: var(--accent);
-  text-decoration: none;
-  margin-right: 0.5rem;
+.wordle-page__topbar-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sa-space-2);
+  min-width: 0;
+}
+
+.wordle-page__topbar-auth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sa-space-2);
+}
+
+.wordle-page__eyebrow {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sa-color-text-muted);
+}
+
+.wordle-page__pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--sa-radius-sm);
+  border: 1px solid var(--sa-color-border);
+  background: color-mix(in srgb, var(--sa-color-surface-raised) 85%, transparent);
+  color: var(--sa-color-text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.wordle-page__pill--dim {
+  color: var(--sa-color-text-muted);
+  font-weight: 500;
 }
 
 .wordle-page__avatar {
@@ -717,120 +970,86 @@ onUnmounted(() => {
 }
 
 .wordle-page__name {
-  font-size: 0.95rem;
-  color: var(--text-h);
-}
-
-.wordle-page__btn {
-  font: inherit;
-  padding: 0.35rem 0.75rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--code-bg);
-  color: var(--text-h);
-  cursor: pointer;
-}
-
-.wordle-page__btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.wordle-page__btn--accent {
-  background: var(--accent-bg);
-  border-color: var(--accent-border);
-  color: var(--text-h);
-}
-
-.wordle-page__btn--ghost {
-  background: transparent;
+  font-size: 0.85rem;
+  color: var(--sa-color-text-main);
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .wordle-page__hint {
-  font-size: 0.85rem;
-  color: var(--text);
-}
-
-.wordle-page__hint--ws {
-  margin: -0.5rem 0 1rem;
-}
-
-.wordle-page__hint--irc {
-  margin: 0 0 1rem;
   font-size: 0.78rem;
-}
-
-.wordle-page__hint--embed {
-  margin-top: 0.35rem;
-  font-size: 0.75rem;
+  color: var(--sa-color-text-body);
 }
 
 .wordle-page__banner {
-  margin: 0 0 0.5rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 8px;
-  background: var(--accent-bg);
-  border: 1px solid var(--accent-border);
-  color: var(--text-h);
-  font-size: 0.9rem;
+  margin: 0;
+  padding: var(--sa-space-2) var(--sa-space-3);
+  border-radius: var(--sa-radius-sm);
+  background: var(--sa-color-primary-soft);
+  border: 1px solid var(--sa-color-primary-border);
+  color: var(--sa-color-text-main);
+  font-size: 0.85rem;
 }
 
 .wordle-page__banner--warn {
-  background: rgba(234, 179, 8, 0.12);
-  border-color: rgba(202, 138, 4, 0.45);
+  background: color-mix(in srgb, var(--sa-color-warning) 14%, var(--sa-color-surface));
+  border-color: color-mix(in srgb, var(--sa-color-warning) 45%, var(--sa-color-border));
+}
+
+.wordle-page__setup {
+  font-size: 0.8rem;
+  color: var(--sa-color-text-body);
+}
+
+.wordle-page__setup summary {
+  cursor: pointer;
+  color: var(--sa-color-text-main);
+  font-weight: 600;
+  padding: var(--sa-space-1) 0;
 }
 
 .wordle-page__demo-pill {
   display: inline-block;
-  margin-right: 0.45rem;
-  padding: 0.12rem 0.45rem;
+  margin-right: var(--sa-space-2);
+  padding: 0.1rem 0.4rem;
   border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.65rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  background: var(--accent-bg);
-  border: 1px solid var(--accent-border);
-  color: var(--text-h);
+  letter-spacing: 0.06em;
+  background: var(--sa-color-primary-soft);
+  border: 1px solid var(--sa-color-primary-border);
+  color: var(--sa-color-text-main);
   vertical-align: middle;
 }
 
 .wordle-page__channels-sync {
-  margin: 0 0 0.65rem;
-  font-size: 0.85rem;
-  color: var(--text);
+  margin: var(--sa-space-2) 0 0;
+  font-size: 0.78rem;
+  color: var(--sa-color-text-body);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem 0.5rem;
+  gap: var(--sa-space-1) var(--sa-space-2);
 }
 
 .wordle-page__channels-sync-sep {
-  color: var(--border);
+  color: var(--sa-color-border);
 }
 
 .wordle-page__sync-ok {
-  margin-left: 0.35rem;
-  font-size: 0.75rem;
-  color: #22c55e;
+  margin-left: var(--sa-space-1);
+  font-size: 0.7rem;
+  color: var(--sa-color-success);
   font-weight: 600;
 }
 
-.wordle-page__chat-title {
-  margin: 0 0 0.25rem;
-}
-
 .wordle-page__cooldown-hint {
-  margin: 0 0 0.5rem;
-  font-size: 0.78rem;
-  color: var(--text);
-}
-
-.wordle-page__meta {
-  margin: 0 0 0.5rem;
-  font-size: 0.8rem;
-  color: var(--text);
-  font-family: var(--mono);
+  margin: 0 0 var(--sa-space-2);
+  font-size: 0.75rem;
+  color: var(--sa-color-text-body);
 }
 
 .wordle-page__channel-bar {
@@ -838,116 +1057,258 @@ onUnmounted(() => {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem 1rem;
-  margin: 0 0 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--social-bg);
+  gap: var(--sa-space-2);
+  margin: var(--sa-space-2) 0;
+  padding: var(--sa-space-2) var(--sa-space-3);
+  border-radius: var(--sa-radius-md);
+  border: 1px solid var(--sa-color-border);
+  background: color-mix(in srgb, var(--sa-color-bg-card) 88%, transparent);
 }
 
 .wordle-page__channel-line {
   margin: 0;
-  font-size: 0.9rem;
-  color: var(--text-h);
+  font-size: 0.85rem;
+  color: var(--sa-color-text-main);
 }
 
 .wordle-page__channel-tag {
-  margin-left: 0.25rem;
-  font-size: 0.8rem;
-  color: var(--text);
+  margin-left: var(--sa-space-1);
+  font-size: 0.75rem;
+  color: var(--sa-color-text-body);
   font-weight: normal;
 }
 
 .wordle-page__channel-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: var(--sa-space-1);
 }
 
 .wordle-page__channel-form {
-  margin: 0 0 1rem;
-  padding: 0.75rem 1rem;
-  border-radius: 10px;
-  border: 1px solid var(--accent-border);
-  background: var(--accent-bg);
+  margin: 0 0 var(--sa-space-3);
+  padding: var(--sa-space-3);
+  border-radius: var(--sa-radius-md);
+  border: 1px solid var(--sa-color-primary-border);
+  background: var(--sa-color-primary-soft);
 }
 
 .wordle-page__channel-label {
   display: block;
-  margin-bottom: 0.35rem;
-  font-size: 0.85rem;
-  color: var(--text-h);
+  margin-bottom: var(--sa-space-1);
+  font-size: 0.8rem;
+  color: var(--sa-color-text-main);
 }
 
 .wordle-page__channel-fields {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--sa-space-2);
   align-items: center;
 }
 
 .wordle-page__input--channel {
   min-width: 10rem;
   max-width: 16rem;
+  font: inherit;
+  padding: 0.4rem 0.55rem;
+  border-radius: var(--sa-radius-sm);
+  border: 1px solid var(--sa-color-border);
+  background: color-mix(in srgb, var(--sa-color-surface-raised) 90%, transparent);
+  color: var(--sa-color-text-main);
 }
 
 .wordle-page__hint--channel {
-  margin: 0.5rem 0 0;
+  margin: var(--sa-space-2) 0 0;
   word-break: break-all;
 }
 
+.wordle-page__hint--irc,
+.wordle-page__hint--ws {
+  margin: var(--sa-space-1) 0 0;
+  font-size: 0.72rem;
+}
+
+.wordle-page__hint--embed {
+  margin-top: var(--sa-space-1);
+  font-size: 0.7rem;
+}
+
 .wordle-page__code {
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  color: var(--text-h);
+  font-family: var(--sa-font-mono);
+  font-size: 0.72rem;
+  color: var(--sa-color-text-main);
 }
 
 .wordle-page__grid {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(200px, 1fr) minmax(280px, 2fr) minmax(220px, 1fr);
-  gap: 1rem;
-  align-items: start;
+  grid-template-columns: minmax(9.5rem, 0.62fr) minmax(17rem, 1.08fr) minmax(9rem, 0.82fr);
+  gap: var(--sa-space-4);
+  align-items: stretch;
+  min-height: min(76vh, 880px);
 }
 
 @media (max-width: 960px) {
   .wordle-page__grid {
     grid-template-columns: 1fr;
+    min-height: 0;
   }
 }
 
-.wordle-page__panel {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0.75rem 1rem;
-  background: var(--social-bg);
+@media (max-width: 520px) {
+  .wordle-page {
+    --wordle-cell: 58px;
+  }
+
+  .wordle-page--len6 {
+    --wordle-cell: 50px;
+  }
+
+  .wordle-page--len7 {
+    --wordle-cell: 44px;
+  }
+
+  .wordle-page__kbd :deep(.wordle-page__kbd-key) {
+    font-size: 0.7rem;
+    padding: 0.32rem 0.2rem;
+    max-width: 2.45rem;
+  }
 }
 
-.wordle-page__panel h2 {
-  margin: 0 0 0.75rem;
-  font-size: 1rem;
-  color: var(--text-h);
+.wordle-page__stack {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.wordle-page__stack--game {
+  justify-content: flex-start;
+}
+
+.wordle-page__grid :deep(.wordle-page__stack--game > p) {
+  flex-shrink: 0;
+}
+
+.wordle-page__grid :deep(.wordle-page__stack--game > .wordle-page__game) {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.wordle-page__grid :deep(.wordle-page__stack) {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.wordle-page__grid :deep(.wordle-page__stack--chat) {
+  gap: var(--sa-space-2);
+}
+
+.wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__card-title),
+.wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__stats-block),
+.wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__len-bar) {
+  flex-shrink: 0;
+}
+
+.wordle-page__card-title {
+  margin: 0 0 var(--sa-space-3);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--sa-color-text-main);
+}
+
+.wordle-page__card-title--chat {
+  margin-bottom: var(--sa-space-2);
+  flex-shrink: 0;
+}
+
+.wordle-page__stats-block {
+  margin: 0 0 var(--sa-space-3);
+  padding: var(--sa-space-2) var(--sa-space-2);
+  border-radius: var(--sa-radius-sm);
+  border: 1px solid var(--sa-color-border);
+  background: color-mix(in srgb, var(--sa-color-surface-raised) 55%, transparent);
+  font-size: 0.8rem;
+  color: var(--sa-color-text-body);
+}
+
+.wordle-page__stats-line {
+  margin: 0.15rem 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.wordle-page__stats-line strong {
+  color: var(--sa-color-text-main);
+  font-weight: 800;
+}
+
+.wordle-page__len-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sa-space-2);
+  margin: 0 0 var(--sa-space-3);
+}
+
+.wordle-page__len-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--sa-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.wordle-page__len-buttons {
+  display: flex;
+  gap: var(--sa-space-1);
+  flex-wrap: wrap;
+}
+
+.wordle-page__len-btn {
+  min-width: 2.5rem;
 }
 
 .wordle-page__leader {
   list-style: none;
   margin: 0;
   padding: 0;
+  overflow: auto;
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .wordle-page__leader-row {
   display: grid;
   grid-template-columns: auto 1fr auto auto;
-  gap: 0.35rem 0.5rem;
+  gap: var(--sa-space-1) var(--sa-space-2);
   align-items: center;
-  padding: 0.35rem 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.9rem;
+  padding: var(--sa-space-2) 0;
+  border-bottom: 1px solid var(--sa-color-border);
+  font-size: 0.82rem;
+}
+
+.wordle-page__leader-row--solo {
+  grid-template-columns: 1fr auto auto;
+  gap: var(--sa-space-2);
+}
+
+.wordle-page__status-pill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--sa-color-border);
+  background: color-mix(in srgb, var(--sa-color-surface-raised) 75%, transparent);
+  color: var(--sa-color-text-body);
+  white-space: nowrap;
 }
 
 .wordle-page__pos {
-  font-weight: 600;
-  color: var(--accent);
+  font-weight: 700;
+  color: var(--sa-color-primary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -955,152 +1316,367 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-h);
+  color: var(--sa-color-text-main);
 }
 
 .wordle-page__stat {
-  font-size: 0.8rem;
-  color: var(--text);
+  font-size: 0.75rem;
+  color: var(--sa-color-text-body);
+  font-variant-numeric: tabular-nums;
 }
 
 .wordle-page__badge {
-  color: #22c55e;
+  color: var(--sa-color-success);
+  font-weight: 700;
 }
 
-.wordle-page__board-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
+.wordle-page__secret {
+  letter-spacing: 0.06em;
+  font-weight: 800;
+  color: var(--sa-color-text-main);
 }
 
-.wordle-page__board-head h2 {
-  margin: 0;
+.wordle-page__play-hint {
+  margin: 0 0 var(--sa-space-3);
+  font-size: 0.78rem;
+  color: var(--sa-color-text-body);
+  text-align: center;
 }
 
 .wordle-page__empty {
-  padding: 2rem;
+  padding: var(--sa-space-8);
   text-align: center;
-  color: var(--text);
+  color: var(--sa-color-text-body);
 }
 
-.wordle-page__players {
+.wordle-page__game {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  align-items: center;
+  gap: var(--sa-space-3);
+  width: 100%;
+  justify-content: center;
+  min-height: 0;
 }
 
-.wordle-page__player-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-  margin-bottom: 0.35rem;
-  color: var(--text);
-}
-
-.wordle-page__rows {
+.wordle-page__wordle-board {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  align-items: center;
+  gap: var(--wordle-gap);
+  width: 100%;
+  max-width: calc(
+    var(--wordle-len, 5) * var(--wordle-cell) + (var(--wordle-len, 5) - 1) * var(--wordle-gap)
+  );
+  margin-inline: auto;
 }
 
 .wordle-page__row {
   display: flex;
-  gap: 0.25rem;
-  perspective: 420px;
+  gap: var(--wordle-gap);
 }
 
-.wordle-page__cell {
+.wordle-page__row--tile {
+  justify-content: center;
+  width: 100%;
+}
+
+.wordle-page__cell--tile {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  font-size: 1rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-h);
-  transform-style: preserve-3d;
-  backface-visibility: hidden;
+  width: var(--wordle-cell);
+  height: var(--wordle-cell);
+  font-size: clamp(1.35rem, 3.8vw, 2rem);
+  font-weight: 700;
+  border-radius: 2px;
+  border: 2px solid var(--sa-color-border);
+  background: transparent;
+  color: var(--sa-color-text-main);
+  box-sizing: border-box;
 }
 
-.wordle-page__cell--reveal {
-  opacity: 0;
-  transform: rotateX(-90deg);
-  animation: wordle-tile-reveal 0.42s ease forwards;
-  animation-fill-mode: backwards;
+.wordle-page__cell--empty {
+  border-color: var(--sa-color-border);
+  background: transparent;
 }
 
-@keyframes wordle-tile-reveal {
-  from {
-    opacity: 0.35;
-    transform: rotateX(-90deg);
-  }
-  to {
-    opacity: 1;
-    transform: rotateX(0);
-  }
+.wordle-page__cell--draft {
+  border-color: color-mix(in srgb, var(--sa-color-border) 70%, var(--sa-color-text-muted));
+  background: color-mix(in srgb, var(--sa-color-surface-raised) 40%, transparent);
 }
 
 .wordle-page__cell[data-f='correct'] {
-  background: #22c55e;
-  border-color: #16a34a;
-  color: #fff;
+  background: var(--sa-color-success);
+  border-color: color-mix(in srgb, var(--sa-color-success) 65%, var(--sa-color-bg-deep));
+  color: var(--sa-color-text-strong);
 }
 
 .wordle-page__cell[data-f='present'] {
-  background: #eab308;
-  border-color: #ca8a04;
-  color: #1a1a1a;
+  background: var(--sa-color-warning);
+  border-color: color-mix(in srgb, var(--sa-color-warning) 55%, var(--sa-color-bg-deep));
+  color: var(--sa-color-bg-deep);
 }
 
 .wordle-page__cell[data-f='absent'] {
-  background: #374151;
-  border-color: #1f2937;
-  color: #f9fafb;
+  background: var(--sa-color-border);
+  border-color: color-mix(in srgb, var(--sa-color-border) 85%, var(--sa-color-text-muted));
+  color: var(--sa-color-text-strong);
 }
 
-.wordle-page__relay-emojis {
-  margin-left: 0.35rem;
-  letter-spacing: 0.08em;
-  font-size: 0.85rem;
+.wordle-page__game-panel-width {
+  width: 100%;
+  max-width: calc(
+    var(--wordle-len, 5) * var(--wordle-cell) + (var(--wordle-len, 5) - 1) * var(--wordle-gap)
+  );
+  margin-inline: auto;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .wordle-page__cell--reveal {
-    animation: none;
+.wordle-page__celebrate {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sa-space-2);
+  min-height: 7.5rem;
+  padding: var(--sa-space-3) var(--sa-space-2);
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--sa-color-success) 35%, var(--sa-color-border));
+  background: color-mix(in srgb, var(--sa-color-success) 12%, var(--sa-color-surface-raised));
+}
+
+.wordle-page__confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.wordle-page__confetti-bit {
+  position: absolute;
+  left: calc(50% + var(--cf-cx, 0px));
+  top: -14px;
+  width: 7px;
+  height: 11px;
+  border-radius: 2px;
+  background: hsl(var(--cf-hue, 200) 82% 58%);
+  opacity: 0.95;
+  animation: wordle-confetti-fall var(--cf-dur, 1.6s) ease-out var(--cf-delay, 0s) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes wordle-confetti-fall {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
     opacity: 1;
-    transform: none;
+  }
+  100% {
+    transform: translate3d(var(--cf-dx, 0px), 150px, 0) rotate(620deg);
+    opacity: 0;
   }
 }
 
-.wordle-page__form {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 1rem;
+@media (prefers-reduced-motion: reduce) {
+  .wordle-page__confetti-bit {
+    animation: none;
+    opacity: 0;
+  }
 }
 
-.wordle-page__input {
-  flex: 1;
-  font: inherit;
-  padding: 0.45rem 0.6rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-h);
+.wordle-page__celebrate-title {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--sa-color-success);
+  text-align: center;
+}
+
+.wordle-page__celebrate-btn {
+  position: relative;
+  z-index: 1;
+}
+
+.wordle-page__end-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sa-space-2);
+  padding: var(--sa-space-3) var(--sa-space-2);
+  border-radius: 10px;
+  border: 1px solid var(--sa-color-border);
+  background: color-mix(in srgb, var(--sa-color-surface-raised) 88%, transparent);
+}
+
+.wordle-page__end-panel-text {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--sa-color-text-body);
+  text-align: center;
+}
+
+.wordle-page__peek-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sa-space-2);
+}
+
+.wordle-page__peek-btn {
+  font-size: 0.78rem;
+  padding: 0.3rem 0.65rem;
+}
+
+.wordle-page__peek-word {
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--sa-color-warning);
+}
+
+.wordle-page__kbd {
+  width: 100%;
+  max-width: min(
+    100%,
+    calc(var(--wordle-len, 5) * var(--wordle-cell) + (var(--wordle-len, 5) - 1) * var(--wordle-gap) + 24px)
+  );
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sa-space-2);
+  align-items: center;
+  min-width: 0;
+}
+
+.wordle-page__kbd-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.wordle-page__kbd-row--mid {
+  padding-inline: min(1.25rem, 3vw);
+}
+
+.wordle-page__kbd :deep(.wordle-page__kbd-key) {
+  min-width: 0;
+  padding: 0.38rem 0.28rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex: 1 1 0;
+  max-width: 2.85rem;
+}
+
+.wordle-page__kbd-row--actions {
+  flex-wrap: wrap;
+  gap: var(--sa-space-2);
+  padding-top: 2px;
+}
+
+.wordle-page__kbd :deep(.wordle-page__kbd-action) {
+  flex: 0 0 auto;
+  min-width: 4.25rem;
+  max-width: 10rem;
+  padding: 0.42rem 0.75rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wordle-page__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.wordle-page__sr-form {
+  margin: 0;
+  padding: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.wordle-page__round-actions {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-top: var(--sa-space-2);
+}
+
+.wordle-page__others {
+  width: 100%;
+  max-width: 24rem;
+  font-size: 0.8rem;
+  color: var(--sa-color-text-body);
+}
+
+.wordle-page__others summary {
+  cursor: pointer;
+  color: var(--sa-color-text-main);
+  font-weight: 600;
+}
+
+.wordle-page__others-count {
+  font-weight: 500;
+  color: var(--sa-color-text-body);
+}
+
+.wordle-page__others-list {
+  list-style: none;
+  margin: var(--sa-space-2) 0 0;
+  padding: 0;
+}
+
+.wordle-page__others-item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sa-space-2);
+  padding: var(--sa-space-1) 0;
+  border-bottom: 1px solid var(--sa-color-border);
+  font-size: 0.75rem;
+}
+
+.wordle-page__others-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sa-color-text-main);
+}
+
+.wordle-page__others-stat {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--sa-color-text-body);
+}
+
+.wordle-page__relay-emojis {
+  margin-left: var(--sa-space-1);
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
 }
 
 .wordle-page__iframe-wrap {
-  height: 420px;
-  border-radius: 8px;
+  flex: 1 1 0;
+  width: 100%;
+  min-height: 200px;
+  border-radius: var(--sa-radius-sm);
   overflow: hidden;
-  border: 1px solid var(--border);
-  margin-bottom: 0.75rem;
+  border: 1px solid var(--sa-color-border);
 }
 
 .wordle-page__iframe {
@@ -1109,33 +1685,31 @@ onUnmounted(() => {
   border: 0;
 }
 
-.wordle-page__h3 {
-  margin: 0.5rem 0 0.35rem;
-  font-size: 0.85rem;
-  color: var(--text-h);
-}
-
 .wordle-page__relay {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 200px;
+  flex: 0 0 auto;
+  max-height: min(22vh, 200px);
   overflow: auto;
-  font-size: 0.8rem;
+  font-size: 0.68rem;
+  min-height: 0;
+  border-top: 1px solid var(--sa-color-border);
+  padding-top: var(--sa-space-2);
 }
 
 .wordle-page__relay-line {
   padding: 0.2rem 0;
-  border-bottom: 1px solid var(--border);
-  color: var(--text);
+  border-bottom: 1px solid var(--sa-color-border);
+  color: var(--sa-color-text-body);
 }
 
 .wordle-page__relay-line[data-h='true'] {
-  background: var(--accent-bg);
-  color: var(--text-h);
-  margin: 0 -0.5rem;
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
+  background: var(--sa-color-primary-soft);
+  color: var(--sa-color-text-main);
+  margin: 0 calc(-1 * var(--sa-space-2));
+  padding-left: var(--sa-space-2);
+  padding-right: var(--sa-space-2);
 }
 
 .wordle-page__relay-line[data-rl='true'] {
@@ -1143,15 +1717,15 @@ onUnmounted(() => {
 }
 
 .wordle-page__relay-tag {
-  margin-left: 0.35rem;
-  font-size: 0.7rem;
+  margin-left: var(--sa-space-1);
+  font-size: 0.65rem;
   text-transform: uppercase;
-  color: var(--text);
+  color: var(--sa-color-text-muted);
 }
 
 .wordle-page__admin-hint {
-  font-size: 0.85rem;
-  color: var(--text);
-  max-width: 14rem;
+  font-size: 0.75rem;
+  color: var(--sa-color-text-body);
+  margin: var(--sa-space-2) 0 0;
 }
 </style>

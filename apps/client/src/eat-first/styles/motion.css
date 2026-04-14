@@ -1,0 +1,153 @@
+/**
+ * Спільні анімації (перевикористання). Поважаємо зменшення руху в ОС.
+ */
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ui-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ui-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.eat-first-root {
+  --motion-duration: 0.45s;
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.anim-fade-in {
+  animation: ui-fade-in var(--motion-duration) var(--motion-ease) both;
+}
+
+.anim-slide-up {
+  animation: ui-slide-up var(--motion-duration) var(--motion-ease) both;
+}
+
+.anim-stagger > * {
+  animation: ui-slide-up var(--motion-duration) var(--motion-ease) both;
+  animation-delay: calc(var(--stagger-index, 0) * 55ms);
+}
+
+.anim-scale-in {
+  animation: ui-scale-in 0.35s var(--motion-ease) both;
+}
+
+/* Переходи між маршрутами (App.vue → RouterView) */
+.route-slide-enter-active,
+.route-slide-leave-active {
+  transition:
+    opacity 0.38s var(--motion-ease),
+    transform 0.42s var(--motion-ease);
+}
+
+.route-slide-enter-from {
+  opacity: 0;
+  transform: translateY(14px) scale(0.988);
+}
+
+.route-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.99);
+}
+
+.route-none-enter-active,
+.route-none-leave-active {
+  transition: none;
+}
+
+.route-none-enter-from,
+.route-none-leave-to {
+  opacity: 1;
+  transform: none;
+}
+
+.route-fade-enter-active,
+.route-fade-leave-active {
+  transition: opacity 0.28s var(--motion-ease);
+}
+
+.route-fade-enter-from,
+.route-fade-leave-to {
+  opacity: 0;
+}
+
+/* Повноекранний лоадер (ui/molecules/AppPageLoader.vue → Teleport body) */
+.page-loader-fade-enter-active,
+.page-loader-fade-leave-active {
+  transition: opacity 0.32s var(--motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.page-loader-fade-enter-from,
+.page-loader-fade-leave-to {
+  opacity: 0;
+}
+
+/* Фліп характеристик на оверлеї (OverlayPlayerCard) */
+.opc-flip-enter-active {
+  animation: opcFlipIn 0.5s var(--motion-ease) both;
+}
+
+.opc-flip-leave-active {
+  animation: opcFlipOut 0.32s ease-in both;
+}
+
+@keyframes opcFlipIn {
+  0% {
+    opacity: 0;
+    transform: perspective(640px) rotateX(-18deg) translateZ(-12px) scale(0.9);
+    filter: blur(6px);
+  }
+  55% {
+    filter: blur(0);
+    transform: perspective(640px) rotateX(6deg) translateZ(0) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(640px) rotateX(0deg) scale(1);
+  }
+}
+
+@keyframes opcFlipOut {
+  0% {
+    opacity: 1;
+    transform: perspective(640px) rotateX(0deg) scale(1);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: perspective(640px) rotateX(14deg) translateY(-8px) scale(0.88);
+    filter: blur(5px);
+  }
+}

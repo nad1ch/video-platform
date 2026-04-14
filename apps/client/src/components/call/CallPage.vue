@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useCallEngine } from 'call-core'
 import ParticipantTile from './ParticipantTile.vue'
+import AppContainer from '@/components/ui/AppContainer.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 
 const {
   session,
@@ -21,7 +23,8 @@ const {
 </script>
 
 <template>
-  <div class="call-page" :class="{ 'call-page--prejoin': !session.inCall }">
+  <div class="page-route">
+    <AppContainer class="call-page" :class="{ 'call-page--prejoin': !session.inCall }">
     <div class="call-page__shell">
       <header class="call-page__header">
         <h1 class="call-page__title">Video call</h1>
@@ -41,35 +44,28 @@ const {
         </label>
         <p v-if="joinError" class="call-page__error" role="alert">{{ joinError }}</p>
         <p class="call-page__meta">WS: {{ wsStatus }}</p>
-        <button
-          type="button"
-          class="call-page__btn call-page__btn--primary"
-          :disabled="joining"
-          @click="joinCall"
-        >
+        <AppButton variant="primary" :disabled="joining" @click="joinCall">
           {{ joining ? 'Joining…' : 'Join call' }}
-        </button>
+        </AppButton>
       </section>
 
       <section v-else class="call-page__active">
         <div class="call-page__toolbar">
-          <button type="button" class="call-page__btn" @click="leaveCall">Leave</button>
-          <button
-            type="button"
-            class="call-page__btn"
+          <AppButton variant="secondary" @click="leaveCall">Leave</AppButton>
+          <AppButton
+            variant="secondary"
             :class="{ 'call-page__btn--muted': !micEnabled }"
             @click="toggleMic"
           >
             {{ micEnabled ? 'Mute mic' : 'Unmute' }}
-          </button>
-          <button
-            type="button"
-            class="call-page__btn"
+          </AppButton>
+          <AppButton
+            variant="secondary"
             :class="{ 'call-page__btn--muted': !camEnabled }"
             @click="toggleCam"
           >
             {{ camEnabled ? 'Camera off' : 'Camera on' }}
-          </button>
+          </AppButton>
         </div>
 
         <div class="call-page__grid" :class="gridModifier">
@@ -88,17 +84,27 @@ const {
         </div>
       </section>
     </div>
+    </AppContainer>
   </div>
 </template>
 
 <style scoped>
+.page-route {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
+
 .call-page {
-  min-height: 100vh;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  background: var(--bg);
-  color: var(--text);
+  background: transparent;
+  color: var(--sa-color-text-body);
+  padding-block: 0 var(--sa-space-6);
 }
 
 .call-page__shell {
@@ -128,8 +134,9 @@ const {
 
 .call-page__title {
   margin: 0 0 0.35rem;
+  font-family: var(--sa-font-display);
   font-size: 1.35rem;
-  color: var(--text-h);
+  color: var(--sa-color-text-main);
 }
 
 .call-page__hint {
@@ -155,10 +162,10 @@ const {
 
 .call-page__field input {
   padding: 0.5rem 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--text-h);
+  border: 1px solid var(--sa-color-border);
+  border-radius: var(--sa-radius-sm);
+  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  color: var(--sa-color-text-main);
   font: inherit;
 }
 
@@ -172,28 +179,7 @@ const {
   margin: 0;
   font-size: 0.8rem;
   opacity: 0.7;
-  font-family: var(--mono, monospace);
-}
-
-.call-page__btn {
-  padding: 0.55rem 1rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--code-bg);
-  color: var(--text-h);
-  font: inherit;
-  cursor: pointer;
-}
-
-.call-page__btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.call-page__btn--primary {
-  background: var(--accent);
-  color: #fff;
-  border-color: transparent;
+  font-family: var(--sa-font-mono, monospace);
 }
 
 .call-page__btn--muted {

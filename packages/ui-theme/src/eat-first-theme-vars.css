@@ -1,0 +1,296 @@
+/**
+ * Eat-first / stream HUD semantic tokens (dark + light).
+ * Component CSS keeps using --bg-card, --text-body, etc.; primitives come from :root --sa-*.
+ */
+.eat-first-root,
+.eat-first-root[data-theme='dark'] {
+  --font-body: var(--sa-font-hud-sans);
+  --font-display: var(--sa-font-hud-display);
+
+  color-scheme: dark;
+
+  --bg-main: var(--sa-color-bg-hud-deep);
+  --bg-body: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(88, 28, 135, 0.35), transparent), var(--bg-main);
+  --bg-body-alt: radial-gradient(ellipse 100% 60% at 50% -10%, rgba(55, 25, 95, 0.35), transparent),
+    var(--sa-color-bg-hud-void);
+
+  --bg-card: rgba(10, 8, 22, 0.9);
+  --bg-card-solid: rgba(10, 8, 22, 0.95);
+  /** Панелі випадаючих списків: майже непрозорі; z нижче модалок (12000+). */
+  --bg-dropdown: #14111f;
+  --z-dropdown: 11950;
+  --bg-card-soft: rgba(10, 8, 22, 0.75);
+  --bg-elevated: rgba(12, 10, 26, 0.75);
+  --bg-input: rgba(8, 6, 20, 0.92);
+  --bg-input-soft: rgba(8, 6, 20, 0.85);
+  --bg-muted: rgba(0, 0, 0, 0.22);
+  --bg-muted-strong: rgba(0, 0, 0, 0.4);
+  --bg-summary-bar: rgba(3, 2, 12, 0.98);
+  --bg-generate: rgba(4, 3, 14, 0.52);
+  --bg-obs-hint: rgba(8, 12, 28, 0.9);
+  --bg-code: rgba(0, 0, 0, 0.45);
+  --bg-toast: rgba(20, 83, 45, 0.95);
+
+  --text-main: #ffffff;
+  --text-body: #e2e8f0;
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --text-muted: rgba(196, 181, 253, 0.45);
+  --text-muted-soft: rgba(196, 181, 253, 0.42);
+  --text-title: #faf5ff;
+  --text-heading: #ede9fe;
+  --text-code: #cbd5e1;
+  --text-cyan: rgba(125, 211, 252, 0.75);
+  --text-cyan-body: rgba(203, 213, 225, 0.88);
+  --text-cyan-strong: #e0f2fe;
+  --text-highlight: #fde047;
+
+  --border: color-mix(in srgb, var(--sa-color-primary) 20%, transparent);
+  --border-strong: var(--sa-color-primary-border);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-input: rgba(255, 255, 255, 0.1);
+  --border-panel: rgba(124, 58, 237, 0.15);
+  --border-teal: rgba(45, 212, 191, 0.38);
+  --border-cyan: rgba(56, 189, 248, 0.22);
+  --border-cyan-strong: rgba(56, 189, 248, 0.35);
+
+  --accent: rgba(168, 85, 247, 0.45);
+  --accent-fill: rgba(88, 28, 135, 0.4);
+  --accent-fill-soft: rgba(88, 28, 135, 0.25);
+  --accent-glow: rgba(168, 85, 247, 0.12);
+  --accent-glow-strong: rgba(168, 85, 247, 0.35);
+  --shadow-elevated: rgba(0, 0, 0, 0.35);
+  --shadow-deep: rgba(0, 0, 0, 0.45);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.35), 0 12px 40px rgba(0, 0, 0, 0.25);
+  --glow-vote: rgba(56, 189, 248, 0.14);
+  --glow-vote-inner: rgba(56, 189, 248, 0.1);
+  --glow-vote-inner-2: rgba(168, 85, 247, 0.07);
+  --glow-purple-lg: rgba(168, 85, 247, 0.18);
+  --glow-cyan-lg: rgba(56, 189, 248, 0.22);
+  --glow-green-lg: rgba(74, 222, 128, 0.2);
+  --glow-amber-lg: rgba(251, 191, 36, 0.2);
+
+  --danger-bg: rgba(40, 10, 14, 0.2);
+  --danger-border: rgba(248, 113, 113, 0.28);
+  --danger-glow: rgba(220, 38, 38, 0.12);
+  --error-bg: rgba(80, 20, 30, 0.4);
+  --error-border: rgba(248, 113, 113, 0.35);
+  --error-text: #fecaca;
+
+  --btn-neon-border: rgba(168, 85, 247, 0.55);
+  --btn-neon-top: rgba(139, 92, 246, 0.38);
+  --btn-neon-bot: rgba(88, 28, 135, 0.52);
+  --btn-soft-bg: rgba(0, 0, 0, 0.35);
+  --btn-soft-border: rgba(255, 255, 255, 0.12);
+
+  --trait-border: rgba(168, 85, 247, 0.16);
+  --trait-player-border: rgba(255, 255, 255, 0.08);
+  --reveal-border: rgba(71, 85, 105, 0.55);
+  --reveal-bg: rgba(15, 23, 42, 0.65);
+
+  --join-step-border: rgba(255, 255, 255, 0.05);
+  --cta-border: rgba(255, 255, 255, 0.08);
+  --cta-bg: rgba(12, 8, 24, 0.75);
+  --pcard-bg: rgba(10, 6, 22, 0.88);
+
+  --bg-editor-calm: rgba(8, 10, 18, 0.55);
+  --border-editor-calm: rgba(51, 65, 85, 0.35);
+  --focus-ring: rgba(71, 85, 105, 0.35);
+
+  --reveal-on-border: rgba(74, 222, 128, 0.55);
+  --reveal-on-bg: rgba(22, 101, 52, 0.42);
+  --reveal-on-text: #bbf7d0;
+  --reveal-on-glow: rgba(74, 222, 128, 0.28);
+  --reveal-off-border: rgba(248, 113, 113, 0.45);
+  --reveal-off-bg: rgba(60, 22, 28, 0.55);
+  --reveal-off-text: #fecaca;
+  --reveal-off-glow: rgba(248, 113, 113, 0.15);
+
+  --panel-desk-shadow: none;
+  --editor-trait-label: var(--text-muted);
+  --trait-mini-label: rgba(196, 181, 253, 0.55);
+  --active-card-surface-bg: rgba(88, 28, 135, 0.12);
+  --active-card-surface-border: rgba(167, 139, 250, 0.25);
+  --active-card-heading: #e9d5ff;
+  --active-card-meta: rgba(196, 181, 253, 0.65);
+  --active-card-title-text: #f5f3ff;
+  --active-card-desc: #cbd5e1;
+  --active-card-used: #c4b5fd;
+  --active-card-pending: #fde68a;
+  --card-request-bg: rgba(88, 28, 135, 0.22);
+  --card-request-border: rgba(168, 85, 247, 0.45);
+  --card-request-text: #e9d5ff;
+  --confirm-card-border: rgba(168, 85, 247, 0.55);
+  --confirm-card-bg-top: rgba(139, 92, 246, 0.45);
+  --confirm-card-bg-bot: rgba(88, 28, 135, 0.55);
+  --btn-elim-out-bg: rgba(80, 20, 30, 0.35);
+  --btn-elim-out-border: rgba(248, 113, 113, 0.35);
+  --btn-elim-out-text: #fecaca;
+  --btn-elim-on-bg: rgba(22, 101, 52, 0.3);
+  --btn-elim-on-border: rgba(74, 222, 128, 0.4);
+  --btn-elim-on-text: #bbf7d0;
+  --btn-hand-border: rgba(251, 191, 36, 0.35);
+  --btn-hand-border-hover: rgba(251, 191, 36, 0.55);
+  --btn-hand-bg: rgba(60, 40, 8, 0.4);
+  --btn-hand-text: #fef3c7;
+  --btn-hand-up-border: rgba(74, 222, 128, 0.45);
+  --btn-hand-up-bg: rgba(22, 101, 52, 0.35);
+  --btn-hand-up-text: #bbf7d0;
+  --btn-primary-solid-bg: rgba(109, 40, 217, 0.85);
+  --btn-primary-solid-hover: rgba(139, 92, 246, 0.95);
+  --btn-primary-solid-text: #faf5ff;
+  --btn-primary-solid-border: rgba(196, 181, 253, 0.45);
+  --btn-request-border: rgba(167, 139, 250, 0.45);
+  --btn-request-bg: rgba(88, 28, 135, 0.35);
+  --btn-request-text: #ffffff;
+
+  --logo-pad-bg: linear-gradient(145deg, #0a0614 0%, #12081f 100%);
+  --scrollbar-track: rgba(8, 6, 20, 0.55);
+  --scrollbar-thumb: rgba(139, 92, 246, 0.5);
+  --scrollbar-thumb-hover: rgba(192, 132, 252, 0.62);
+}
+
+.eat-first-root[data-theme='light'] {
+  --font-body: var(--sa-font-hud-sans);
+  --font-display: var(--sa-font-hud-display);
+
+  color-scheme: light;
+
+  --bg-main: var(--sa-color-bg-hud-light);
+  --bg-body: radial-gradient(ellipse 120% 85% at 50% -18%, rgba(91, 33, 168, 0.22), transparent),
+    radial-gradient(ellipse 90% 50% at 100% 0%, rgba(124, 58, 237, 0.12), transparent), var(--bg-main);
+  --bg-body-alt: radial-gradient(ellipse 100% 55% at 50% -10%, rgba(76, 29, 149, 0.16), transparent),
+    var(--sa-color-bg-hud-light-alt);
+
+  --bg-card: #f3effb;
+  --bg-card-solid: #fffcff;
+  --bg-dropdown: #ffffff;
+  --z-dropdown: 11950;
+  --bg-card-soft: #ebe4f7;
+  --bg-elevated: #f6f2fd;
+  --bg-input: #fffcff;
+  --bg-input-soft: #e2daf0;
+  --bg-muted: rgba(49, 21, 92, 0.14);
+  --bg-muted-strong: rgba(49, 21, 92, 0.2);
+  --bg-summary-bar: #f3effb;
+  --bg-generate: #e8e0f4;
+  --bg-obs-hint: #e4dcf5;
+  --bg-code: #e8e0f4;
+  --bg-toast: rgba(22, 101, 52, 0.92);
+
+  --text-main: var(--sa-color-ink-hud);
+  --text-body: #1f0f33;
+  --text-secondary: rgba(18, 8, 31, 0.82);
+  --text-muted: rgba(49, 21, 92, 0.72);
+  --text-muted-soft: rgba(49, 21, 92, 0.55);
+  --text-title: var(--sa-color-ink-hud);
+  --text-heading: var(--sa-color-violet-900);
+  --text-code: #3b0764;
+  --text-cyan: rgba(107, 33, 168, 0.88);
+  --text-cyan-body: rgba(45, 27, 66, 0.88);
+  --text-cyan-strong: #6d28d9;
+  --text-highlight: #b45309;
+
+  --border: color-mix(in srgb, var(--sa-color-violet-800) 22%, transparent);
+  --border-strong: var(--sa-color-primary-border);
+  --border-subtle: rgba(49, 21, 92, 0.16);
+  --border-input: rgba(49, 21, 92, 0.32);
+  --border-panel: rgba(91, 33, 182, 0.42);
+  --border-teal: rgba(13, 148, 136, 0.45);
+  --border-cyan: rgba(167, 139, 250, 0.32);
+  --border-cyan-strong: rgba(139, 92, 246, 0.45);
+
+  --accent: rgba(139, 92, 246, 0.38);
+  --accent-fill: rgba(139, 92, 246, 0.26);
+  --accent-fill-soft: rgba(167, 139, 250, 0.18);
+  --accent-glow: rgba(168, 85, 247, 0.12);
+  --accent-glow-strong: rgba(168, 85, 247, 0.28);
+  --shadow-elevated: rgba(30, 10, 60, 0.12);
+  --shadow-deep: rgba(30, 10, 60, 0.2);
+  --shadow-card: 0 1px 3px rgba(30, 10, 60, 0.1), 0 8px 24px rgba(49, 21, 92, 0.12);
+  --glow-vote: rgba(192, 132, 252, 0.14);
+  --glow-vote-inner: rgba(167, 139, 250, 0.12);
+  --glow-vote-inner-2: rgba(168, 85, 247, 0.08);
+  --glow-purple-lg: rgba(168, 85, 247, 0.18);
+  --glow-cyan-lg: rgba(192, 132, 252, 0.16);
+  --glow-green-lg: rgba(22, 163, 74, 0.18);
+  --glow-amber-lg: rgba(217, 119, 6, 0.18);
+
+  --danger-bg: rgba(254, 226, 226, 0.5);
+  --danger-border: rgba(248, 113, 113, 0.45);
+  --danger-glow: rgba(248, 113, 113, 0.12);
+  --error-bg: rgba(254, 226, 226, 0.75);
+  --error-border: rgba(239, 68, 68, 0.35);
+  --error-text: #991b1b;
+
+  --btn-neon-border: rgba(139, 92, 246, 0.48);
+  --btn-neon-top: rgba(192, 132, 252, 0.32);
+  --btn-neon-bot: rgba(124, 58, 237, 0.28);
+  --btn-soft-bg: rgba(245, 243, 255, 0.96);
+  --btn-soft-border: rgba(91, 33, 168, 0.14);
+
+  --trait-border: rgba(167, 139, 250, 0.22);
+  --trait-player-border: rgba(91, 33, 168, 0.12);
+  --reveal-border: rgba(91, 33, 168, 0.28);
+  --reveal-bg: #f5f3ff;
+
+  --join-step-border: rgba(49, 21, 92, 0.18);
+  --cta-border: rgba(76, 29, 149, 0.35);
+  --cta-bg: #fffcff;
+  --pcard-bg: #f3effb;
+
+  --bg-editor-calm: rgba(250, 245, 255, 0.94);
+  --border-editor-calm: rgba(167, 139, 250, 0.35);
+  --focus-ring: rgba(139, 92, 246, 0.28);
+
+  --reveal-on-border: rgba(22, 163, 74, 0.65);
+  --reveal-on-bg: #86efac;
+  --reveal-on-text: #052e16;
+  --reveal-on-glow: rgba(22, 163, 74, 0.2);
+  --reveal-off-border: rgba(220, 38, 38, 0.55);
+  --reveal-off-bg: #fecaca;
+  --reveal-off-text: #450a0a;
+  --reveal-off-glow: rgba(239, 68, 68, 0.15);
+
+  --panel-desk-shadow: var(--shadow-card);
+  --editor-trait-label: rgba(91, 33, 168, 0.68);
+  --trait-mini-label: rgba(91, 33, 168, 0.55);
+  --active-card-surface-bg: #e9e5ff;
+  --active-card-surface-border: rgba(91, 33, 182, 0.32);
+  --active-card-heading: #4c1d95;
+  --active-card-meta: #5b21b6;
+  --active-card-title-text: #3730a3;
+  --active-card-desc: #3d2a52;
+  --active-card-used: #5b21b6;
+  --active-card-pending: #92400e;
+  --card-request-bg: #ddd6fe;
+  --card-request-border: rgba(91, 33, 182, 0.45);
+  --card-request-text: #312e81;
+  --confirm-card-border: rgba(91, 33, 182, 0.55);
+  --confirm-card-bg-top: #7c3aed;
+  --confirm-card-bg-bot: #5b21b6;
+  --btn-elim-out-bg: #fecaca;
+  --btn-elim-out-border: #dc2626;
+  --btn-elim-out-text: #7f1d1d;
+  --btn-elim-on-bg: #bbf7d0;
+  --btn-elim-on-border: #16a34a;
+  --btn-elim-on-text: #14532d;
+  --btn-hand-border: #d97706;
+  --btn-hand-border-hover: #b45309;
+  --btn-hand-bg: #fef3c7;
+  --btn-hand-text: #78350f;
+  --btn-hand-up-border: #16a34a;
+  --btn-hand-up-bg: #bbf7d0;
+  --btn-hand-up-text: #14532d;
+  --btn-primary-solid-bg: #5b21b6;
+  --btn-primary-solid-hover: #6d28d9;
+  --btn-primary-solid-text: #ffffff;
+  --btn-primary-solid-border: #4c1d95;
+  --btn-request-border: rgba(91, 33, 182, 0.55);
+  --btn-request-bg: #6d28d9;
+  --btn-request-text: #ffffff;
+
+  --logo-pad-bg: linear-gradient(145deg, #faf5ff 0%, #ede9fe 50%, #f5f3ff 100%);
+  --scrollbar-track: rgba(91, 33, 168, 0.07);
+  --scrollbar-thumb: rgba(139, 92, 246, 0.4);
+  --scrollbar-thumb-hover: rgba(124, 58, 237, 0.52);
+}

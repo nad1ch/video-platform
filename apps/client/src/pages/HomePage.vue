@@ -1,92 +1,133 @@
 <script setup lang="ts">
+import AppContainer from '@/components/ui/AppContainer.vue'
+import AppCard from '@/components/ui/AppCard.vue'
 import { RouterLink } from 'vue-router'
 </script>
 
 <template>
-  <div class="home">
-    <h1 class="home__title">StreamAssist</h1>
-    <p class="home__tag">Interactive tools for streams</p>
-    <div class="home__cards">
-      <div class="home__card home__card--disabled" aria-disabled="true">
-        <h2 class="home__card-title">Video call</h2>
-        <p class="home__card-text">Coming soon</p>
-      </div>
-      <RouterLink to="/wordle" class="home__card home__card--link">
-        <h2 class="home__card-title">Stream Wordle</h2>
-        <p class="home__card-text">Play with Twitch chat</p>
-      </RouterLink>
-      <RouterLink to="/eat" class="home__card home__card--link">
-        <h2 class="home__card-title">Eat First</h2>
-        <p class="home__card-text">Stream voting game (overlay)</p>
-      </RouterLink>
-    </div>
+  <div class="page-route">
+    <AppContainer class="home">
+      <header class="home__hero">
+        <h1 class="home__title">StreamAssist</h1>
+        <p class="home__tag">Interactive tools for streams</p>
+      </header>
+      <ul class="home__cards">
+        <li class="home__cards-item">
+          <AppCard muted>
+            <h2 class="home__card-title">Video call</h2>
+            <p class="home__card-text">Coming soon</p>
+          </AppCard>
+        </li>
+        <li class="home__cards-item">
+          <RouterLink :to="{ name: 'wordle' }" class="home__card-link">
+            <AppCard interactive>
+              <h2 class="home__card-title">Stream Wordle</h2>
+              <p class="home__card-text">Play with Twitch chat</p>
+            </AppCard>
+          </RouterLink>
+        </li>
+        <li class="home__cards-item home__cards-item--eat">
+          <AppCard muted>
+            <h2 class="home__card-title">Eat First</h2>
+            <p class="home__card-text">Coming soon</p>
+          </AppCard>
+        </li>
+      </ul>
+    </AppContainer>
   </div>
 </template>
 
 <style scoped>
-.home {
+.page-route {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
+
+.home {
   align-items: center;
-  margin-top: clamp(4rem, 15vh, 7.5rem);
-  padding: 0 1rem 3rem;
+  text-align: center;
+  padding-bottom: var(--sa-space-10);
+}
+
+.home__hero {
+  max-width: 36rem;
+  margin-top: clamp(2.5rem, 10vh, 5rem);
 }
 
 .home__title {
   margin: 0;
-  font-size: clamp(1.75rem, 4vw, 2.25rem);
-  color: var(--text-h);
+  font-family: var(--font-display, var(--sa-font-display));
+  font-size: clamp(1.75rem, 4vw, 2.35rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-title, var(--sa-color-text-main));
 }
 
 .home__tag {
-  margin: 0.5rem 0 0;
+  margin: var(--sa-space-3) 0 0;
   font-size: 1rem;
-  color: var(--text);
+  line-height: 1.45;
+  color: var(--text-body, var(--sa-color-text-body));
 }
 
 .home__cards {
-  display: flex;
-  flex-wrap: wrap;
+  list-style: none;
+  margin: var(--sa-space-8) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 260px));
   justify-content: center;
-  gap: 1.25rem;
-  margin-top: 2.5rem;
+  align-items: stretch;
+  gap: var(--sa-space-5);
+  width: 100%;
+  max-width: 36rem;
+  box-sizing: border-box;
 }
 
-.home__card {
-  width: min(100%, 260px);
-  padding: 1.25rem 1.35rem;
-  border-radius: 16px;
-  border: 1px solid var(--border);
-  background: var(--social-bg);
-  color: var(--text-h);
-  box-shadow: var(--shadow);
-  transition: transform 0.2s ease, border-color 0.2s ease;
+.home__cards-item {
+  margin: 0;
+  min-width: 0;
 }
 
-.home__card--link {
+.home__card-link {
   text-decoration: none;
   color: inherit;
   display: block;
 }
 
-.home__card--link:hover {
-  transform: translateY(-4px);
-  border-color: var(--accent-border);
+.home__card-link:focus-visible {
+  outline: 2px solid var(--sa-color-primary);
+  outline-offset: 3px;
+  border-radius: var(--sa-radius-lg);
 }
 
-.home__card--disabled {
-  opacity: 0.5;
-  pointer-events: none;
+@media (max-width: 600px) {
+  .home__cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.home__cards-item--eat {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: min(100%, 260px);
 }
 
 .home__card-title {
-  margin: 0 0 0.35rem;
+  margin: 0 0 var(--sa-space-2);
+  font-family: var(--font-body, var(--sa-font-main));
   font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-title, var(--sa-color-text-main));
 }
 
 .home__card-text {
   margin: 0;
   font-size: 0.95rem;
-  color: var(--text);
+  line-height: 1.4;
+  color: var(--text-body, var(--sa-color-text-body));
 }
 </style>

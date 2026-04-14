@@ -13,11 +13,11 @@ const showSignalingDebug = computed(() => import.meta.env.DEV && route.path === 
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-root">
     <RouterView />
-    <details v-if="SignalingDebugPanel && showSignalingDebug" class="app-shell__debug">
+    <details v-if="SignalingDebugPanel && showSignalingDebug" class="app-root__debug">
       <summary>Signaling debug</summary>
-      <div class="app-shell__debug-body">
+      <div class="app-root__debug-body">
         <component :is="SignalingDebugPanel" />
       </div>
     </details>
@@ -25,16 +25,19 @@ const showSignalingDebug = computed(() => import.meta.env.DEV && route.path === 
 </template>
 
 <style scoped>
-.app-shell {
+.app-root {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-body, var(--sa-font-main, var(--sans)));
 }
 
-.app-shell__debug {
+.app-root__debug {
   margin: 0 1rem 2rem;
   font-size: 0.85rem;
 }
 
-.app-shell__debug-body {
+.app-root__debug-body {
   margin-top: 0.5rem;
 }
 </style>

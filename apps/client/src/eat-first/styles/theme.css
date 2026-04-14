@@ -1,0 +1,854 @@
+/**
+ * Eat-first layout, components, and density tokens under `.eat-first-root`.
+ * Dark/light semantic colors: `packages/ui-theme/src/eat-first-theme-vars.css` (imported via `ui-theme` in main).
+ */
+
+/**
+ * Пресети розмірів кнопок керування (однакові відступи / висота / шрифт).
+ * Кольори й варіанти (primary, danger…) задаються окремими класами або модифікаторами.
+ */
+.eat-first-root {
+  --ui-control-compact-radius: 8px;
+  --ui-control-compact-pad-y: 0.3rem;
+  --ui-control-compact-pad-x: 0.55rem;
+  --ui-control-compact-font: 0.62rem;
+  --ui-control-compact-weight: 700;
+  --ui-control-compact-min-h: 1.9rem;
+  --ui-control-compact-gap: 0.28rem;
+  --ui-control-compact-line: 1.2;
+
+  --ui-control-xl-radius: 11px;
+  --ui-control-xl-pad-y: 0.55rem;
+  --ui-control-xl-pad-x: 0.75rem;
+  --ui-control-xl-font: 0.82rem;
+  --ui-control-xl-weight: 800;
+  --ui-control-xl-letter: 0.04em;
+  --ui-control-xl-border: 2px solid transparent;
+  --ui-control-xl-min-w: 5.5rem;
+
+  /* Іконки в ряду таймера (пауза / play / reset) */
+  --ui-control-ghost-min-w: 2.75rem;
+  --ui-control-ghost-pad-x: 0.5rem;
+  --ui-control-ghost-font: 0.95rem;
+
+  /* Кнопка Next біля таймера */
+  --ui-control-next-font: 0.72rem;
+
+  /* Таймер: пресет між компактом і XL */
+  --ui-control-dur-radius: 10px;
+  --ui-control-dur-pad-y: 0.42rem;
+  --ui-control-dur-pad-x: 0.55rem;
+  --ui-control-dur-font: 0.78rem;
+  --ui-control-dur-weight: 800;
+  --ui-control-dur-min-w: 3.2rem;
+
+  /**
+   * Дизайн-система: відступи, радіуси, типографіка ролей, контейнери.
+   * У компонентах посилайся на змінні замість «магічних» чисел.
+   */
+  --ui-space-1: 0.15rem;
+  --ui-space-2: 0.28rem;
+  --ui-space-3: 0.35rem;
+  --ui-space-4: 0.4rem;
+  --ui-space-5: 0.45rem;
+  --ui-space-6: 0.5rem;
+  --ui-space-7: 0.55rem;
+  --ui-space-8: 0.62rem;
+  --ui-space-9: 0.65rem;
+  --ui-space-10: 0.75rem;
+  --ui-space-11: 0.85rem;
+  --ui-space-12: 1rem;
+
+  --ui-radius-sm: 6px;
+  --ui-radius-md: 8px;
+  --ui-radius-lg: 10px;
+  --ui-radius-panel: 14px;
+
+  --ui-type-overline-size: 0.48rem;
+  --ui-type-overline-weight: 800;
+  --ui-type-overline-track: 0.12em;
+
+  --ui-type-panel-title-size: 0.52rem;
+  --ui-type-panel-title-weight: 900;
+  --ui-type-panel-title-track: 0.14em;
+
+  --ui-type-caption-size: 0.58rem;
+  --ui-type-caption-weight: 700;
+
+  --ui-type-summary-size-min: 0.5rem;
+  --ui-type-summary-size-pref: 0.54rem;
+  --ui-type-summary-size-max: 0.58rem;
+
+  --ui-container-panel-pad-x: 0.75rem;
+  --ui-container-panel-pad-y: 0.65rem;
+  --ui-container-panel-pad-bottom: 0.75rem;
+  --ui-container-panel-radius: var(--ui-radius-panel);
+  --ui-container-split-gap: 0.75rem;
+  --ui-container-split-columns: repeat(3, minmax(0, 1fr));
+  --ui-container-inset-gap: 0.35rem;
+
+  --ui-shell-host-pad-y: 0.4rem;
+  --ui-shell-host-pad-x: 0.85rem;
+  --ui-shell-host-pad-bottom: 0.35rem;
+
+  --ui-summary-bar-pad-y: 0.32rem;
+  --ui-summary-bar-pad-x: 0.5rem;
+  --ui-summary-bar-radius: var(--ui-radius-md);
+  --ui-summary-bar-margin-y: 0.35rem;
+  --ui-summary-bar-margin-bottom: 0.3rem;
+
+  /** Відстань між блоками «ШОУ» і «ФАЗА» (звужується в @container / @media). */
+  --hcc-show-phase-gap: 1rem;
+}
+
+/** Базовий клас для компактних кнопок поза host-chrome (за потреби додай до <button>). */
+.ui-control-btn--compact {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--ui-control-compact-min-h);
+  padding: var(--ui-control-compact-pad-y) var(--ui-control-compact-pad-x);
+  border-radius: var(--ui-control-compact-radius);
+  font-size: var(--ui-control-compact-font);
+  font-weight: var(--ui-control-compact-weight);
+  line-height: var(--ui-control-compact-line);
+  cursor: pointer;
+  border: 1px solid var(--border-input);
+  background: var(--bg-muted-strong);
+  color: var(--text-body);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ui-control-btn--compact:focus {
+  outline: none;
+}
+
+.ui-control-btn--compact:focus-visible {
+  outline: 2px solid var(--border-cyan-strong);
+  outline-offset: 1px;
+}
+
+/** Пресет картки/панелі (опційно додай до секції). */
+.ui-container-panel {
+  padding: var(--ui-container-panel-pad-y) var(--ui-container-panel-pad-x)
+    var(--ui-container-panel-pad-bottom);
+  border-radius: var(--ui-container-panel-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  box-shadow: 0 2px 12px var(--shadow-elevated);
+}
+
+/** Менші кнопки пульта (голосування / таймер / пресети секунд) на вузьких екранах. */
+@media (max-width: 768px) {
+  .eat-first-root {
+    --ui-control-xl-pad-y: 0.44rem;
+    --ui-control-xl-pad-x: 0.58rem;
+    --ui-control-xl-font: 0.74rem;
+    --ui-control-xl-radius: 9px;
+    --ui-control-xl-min-w: 4.65rem;
+
+    --ui-control-dur-pad-y: 0.34rem;
+    --ui-control-dur-pad-x: 0.46rem;
+    --ui-control-dur-font: 0.7rem;
+    --ui-control-dur-min-w: 2.85rem;
+
+    --ui-control-compact-min-h: 1.72rem;
+    --ui-control-compact-pad-y: 0.26rem;
+    --ui-control-compact-font: 0.58rem;
+
+    --ui-control-ghost-min-w: 2.4rem;
+    --ui-control-ghost-pad-x: 0.42rem;
+    --ui-control-ghost-font: 0.88rem;
+    --ui-control-next-font: 0.66rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .eat-first-root {
+    --hcc-show-phase-gap: 0.55rem;
+    --ui-container-split-gap: 0.55rem;
+    --ui-control-compact-pad-x: 0.42rem;
+
+    --ui-control-xl-pad-y: 0.34rem;
+    --ui-control-xl-pad-x: 0.46rem;
+    --ui-control-xl-font: 0.66rem;
+    --ui-control-xl-radius: 8px;
+    --ui-control-xl-min-w: 3.85rem;
+
+    --ui-control-dur-pad-y: 0.26rem;
+    --ui-control-dur-pad-x: 0.36rem;
+    --ui-control-dur-font: 0.62rem;
+    --ui-control-dur-min-w: 2.45rem;
+
+    --ui-control-compact-min-h: 1.52rem;
+    --ui-control-compact-pad-y: 0.22rem;
+    --ui-control-compact-font: 0.52rem;
+
+    --ui-control-ghost-min-w: 2.05rem;
+    --ui-control-ghost-pad-x: 0.36rem;
+    --ui-control-ghost-font: 0.82rem;
+    --ui-control-next-font: 0.58rem;
+  }
+}
+
+
+/**
+ * Theme transitions + scrollbar: scoped to the /eat page root so Wordle/Call are unaffected.
+ * Semantic colors live in packages/ui-theme (eat-first-theme-vars.css), loaded via `ui-theme` in main.
+ */
+.eat-page.eat-first-root,
+.eat-page.eat-first-root *,
+.eat-page.eat-first-root *::before,
+.eat-page.eat-first-root *::after {
+  transition:
+    background 0.25s ease,
+    background-color 0.25s ease,
+    color 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.eat-page.eat-first-root {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
+}
+
+.eat-page.eat-first-root::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.eat-page.eat-first-root::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+.eat-page.eat-first-root::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.eat-page.eat-first-root::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+.theme-toggle {
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-main);
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.theme-toggle:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+
+.app-shell-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0.5rem 1rem;
+  background: var(--bg-card-solid);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 4px 20px var(--shadow-elevated);
+}
+
+.app-shell-header__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.app-shell-header__start {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app-shell-header__start .app-shell-brand {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell-header__end {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+/**
+ * Вузьке вікно: перенос рядка + можливість стискання блоку дій,
+ * щоб наїзд на навігацію й бренд не ламав шапку.
+ */
+@media (max-width: 900px) {
+  .app-shell-header__top {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    row-gap: 0.4rem;
+    column-gap: 0.5rem;
+  }
+
+  .app-shell-header__start {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .app-shell-header__end {
+    flex-shrink: 1;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 0.35rem;
+    column-gap: 0.45rem;
+  }
+
+  .app-shell-brand {
+    font-size: clamp(0.52rem, 2.6vw, 0.72rem);
+    letter-spacing: 0.08em;
+  }
+
+  .app-shell-mini-brand {
+    max-width: min(100%, 10.5rem);
+    min-width: 0;
+  }
+
+  .app-shell-mini-brand__nick {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 6.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-shell-mini-brand__nick {
+    max-width: 5.25rem;
+  }
+}
+
+.app-shell-mini-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  line-height: 1;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 12px;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+
+.app-shell-mini-brand:hover {
+  opacity: 0.9;
+}
+
+.app-shell-mini-brand:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 3px;
+}
+
+.app-shell-mini-brand:active {
+  transform: scale(0.98);
+}
+
+.app-shell-mini-brand picture {
+  display: contents;
+}
+
+.app-shell-mini-brand__logo {
+  display: block;
+  width: 2rem;
+  height: 2rem;
+  object-fit: contain;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--logo-pad-bg);
+  box-sizing: border-box;
+}
+
+.app-shell-mini-brand__nick {
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-heading);
+}
+
+.eat-first-root[data-theme='light'] .app-shell-mini-brand__logo {
+  box-shadow: 0 1px 10px rgba(91, 33, 168, 0.12);
+}
+
+/* Пульт: одна нижня межа для всього блоку (без другої смуги під рядком бренду) */
+.app-shell-header--host {
+  padding: var(--ui-shell-host-pad-y) var(--ui-shell-host-pad-x) var(--ui-shell-host-pad-bottom);
+  border-bottom: 1px solid var(--border-subtle);
+  box-shadow: 0 6px 24px var(--shadow-elevated);
+}
+
+/* Акцент голосування без зміни border-bottom-color (Lighthouse: некомпозитні анімації межі). */
+.app-shell-header--host.app-shell-header--vote-on {
+  box-shadow:
+    0 6px 24px var(--shadow-elevated),
+    inset 0 -1px 0 0 rgba(56, 189, 248, 0.38);
+}
+
+/**
+ * Пульт у шапці: на вузьких/низьких вікнах обмежуємо висоту й даємо внутрішній скрол,
+ * щоб основний контент сторінки лишався видимим під sticky header.
+ */
+.app-shell-header__host-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (max-width: 1000px), (max-height: 820px) {
+  .app-shell-header__host-stack {
+    max-height: min(
+      46vh,
+      calc(100dvh - 5.25rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))
+    );
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    padding-bottom: var(--ui-space-1);
+  }
+
+  .app-shell-header__host-stack::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .app-shell-header__host-stack::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 999px;
+  }
+
+  .app-shell-header--host {
+    --ui-summary-bar-margin-y: 0.2rem;
+    --ui-summary-bar-margin-bottom: 0.18rem;
+    --ui-summary-bar-pad-y: 0.24rem;
+    --ui-shell-host-pad-y: 0.28rem;
+    --ui-shell-host-pad-bottom: 0.22rem;
+    --ui-shell-host-pad-x: 0.65rem;
+    --ui-container-panel-pad-y: 0.42rem;
+    --ui-container-panel-pad-bottom: 0.48rem;
+    --ui-container-panel-pad-x: 0.55rem;
+    --ui-space-8: 0.42rem;
+    --ui-space-7: 0.38rem;
+    --hcc-show-phase-gap: 0.5rem;
+    --ui-container-split-gap: 0.5rem;
+  }
+}
+
+@media (max-width: 600px), (max-height: 700px) {
+  .app-shell-header__host-stack {
+    max-height: min(
+      42vh,
+      calc(100dvh - 4.85rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))
+    );
+  }
+}
+
+/**
+ * Рядок стану шоу (ведучий): текст по центру, якщо вміщується;
+ * довгий рядок — горизонтальний скрол (внутрішній span зберігає nowrap).
+ */
+.app-shell-host-summary {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  margin: var(--ui-summary-bar-margin-y) 0 var(--ui-summary-bar-margin-bottom);
+  padding: var(--ui-summary-bar-pad-y) var(--ui-summary-bar-pad-x);
+  border-radius: var(--ui-summary-bar-radius);
+  background: var(--bg-muted-strong);
+  border: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.app-shell-host-summary__inner {
+  display: inline-block;
+  max-width: 100%;
+  font-size: clamp(
+    var(--ui-type-summary-size-min),
+    calc(var(--ui-type-summary-size-pref) + 0.2vw),
+    var(--ui-type-summary-size-max)
+  );
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  color: var(--text-body);
+  font-family: var(--font-display);
+  white-space: nowrap;
+  text-align: center;
+}
+
+.app-shell-host-summary::-webkit-scrollbar {
+  height: 4px;
+}
+
+.app-shell-host-summary::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+}
+
+.app-shell-brand {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: var(--font-display);
+  color: var(--text-muted);
+}
+
+.app-shell-brand--with-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+  text-decoration: none;
+  color: inherit;
+}
+
+.app-shell-brand--with-mark:hover {
+  opacity: 0.92;
+}
+
+.app-shell-brand--with-mark:focus-visible {
+  outline: 2px solid var(--border-cyan-strong, rgba(94, 231, 223, 0.55));
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+.app-shell-brand__mark {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: contain;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--sa-color-bg-deep, #0a0614) 88%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-subtle, var(--sa-color-border)) 90%, transparent);
+}
+
+.app-shell-brand__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  font-family: var(--font-display);
+  color: var(--text-heading, var(--sa-color-text-main));
+}
+
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-shell-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  align-items: stretch;
+}
+
+.app-shell-main__viewport {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  align-items: stretch;
+}
+
+/* Мінімальна висота зони сторінки до підвантаження lazy-route — менший стрибок футера (CLS). */
+.app-shell-main__viewport--chrome {
+  min-height: min(64vh, 680px);
+}
+
+/* Маршрутні сторінки тягнуться на всю ширину під шапкою (інакше flex може стискати до контенту). */
+.app-shell-main__viewport > * {
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Футер: бренд nad1ch (не показується на /overlay — див. AppShellLayout.vue) */
+.app-site-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding: 0.85rem 1.25rem 1.1rem;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-card-soft);
+  /* Стабільна мінімальна висота; один рядок нижче за двоколонковий варіант. */
+  min-height: 4.35rem;
+  box-sizing: border-box;
+  contain: layout style;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.app-site-footer__inner {
+  width: 100%;
+  max-width: min(1200px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  column-gap: 1rem;
+  row-gap: 0.45rem;
+  text-align: center;
+}
+
+.app-site-footer__brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.85rem;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 14px;
+  transition: opacity 0.15s ease;
+}
+
+.app-site-footer__brand-link:hover {
+  opacity: 0.9;
+}
+
+.app-site-footer__brand-link:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 3px;
+}
+
+.app-site-footer__logo-wrap {
+  flex-shrink: 0;
+  /* Фіксований бокс до завантаження картинки — зменшує CLS (Lighthouse). */
+  width: 52px;
+  height: 52px;
+  padding: 4px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  background: var(--logo-pad-bg);
+  border: 1px solid var(--border-subtle);
+  line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-site-footer__logo-wrap picture {
+  display: contents;
+}
+
+.app-site-footer__logo {
+  display: block;
+  width: 44px;
+  height: 44px;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.app-site-footer__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.app-site-footer__nick {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-heading);
+  line-height: 1.2;
+  /* px замість em: після swap шрифту висота рядка не «стрибає» так само. */
+  min-height: 18px;
+}
+
+.app-site-footer__copy {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  max-width: min(42rem, 100%);
+  text-align: center;
+  min-height: calc(0.68rem * 1.45);
+}
+
+.eat-first-root[data-theme='light'] .app-site-footer__logo-wrap {
+  box-shadow: 0 2px 14px rgba(91, 33, 168, 0.12);
+}
+
+/* --- Чекбокси в стилі шоу: фіолетова рамка / неон як у кнопок --- */
+.ui-checkbox {
+  --ui-check-size: 1.125rem;
+  --ui-check-radius: var(--ui-radius-md, 8px);
+  --ui-check-border: var(--border-strong);
+  --ui-check-bg: var(--bg-input-soft, rgba(8, 6, 20, 0.85));
+  --ui-check-on-bg: linear-gradient(165deg, var(--btn-neon-top), var(--btn-neon-bot));
+  --ui-check-on-border: var(--btn-neon-border);
+  --ui-check-mark: #faf5ff;
+  --ui-check-glow: var(--accent-glow-strong);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ui-check-size);
+  height: var(--ui-check-size);
+  flex-shrink: 0;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.ui-checkbox--text {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  width: auto;
+  height: auto;
+}
+
+/* Область кліку лише на квадраті (рядок з текстом не перекривається). */
+.ui-checkbox__hit {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--ui-check-size);
+  height: var(--ui-check-size);
+  flex-shrink: 0;
+}
+
+.ui-checkbox__hit input {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.ui-checkbox__hit .ui-checkbox__box {
+  grid-area: 1 / 1;
+  pointer-events: none;
+}
+
+.ui-checkbox:not(.ui-checkbox--text) input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.ui-checkbox__box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ui-check-size);
+  height: var(--ui-check-size);
+  box-sizing: border-box;
+  border-radius: var(--ui-check-radius);
+  border: 1.5px solid var(--ui-check-border);
+  background: var(--ui-check-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.14s ease;
+  pointer-events: none;
+}
+
+.ui-checkbox input:hover + .ui-checkbox__box {
+  border-color: var(--btn-neon-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 12px var(--ui-check-glow);
+}
+
+.ui-checkbox input:focus-visible + .ui-checkbox__box {
+  outline: 2px solid var(--accent-glow-strong);
+  outline-offset: 2px;
+}
+
+.ui-checkbox input:checked + .ui-checkbox__box {
+  background-image: var(--ui-check-on-bg);
+  background-color: rgba(88, 28, 135, 0.88);
+  border-color: var(--ui-check-on-border);
+  box-shadow:
+    0 0 14px var(--ui-check-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.ui-checkbox input:checked + .ui-checkbox__box::after {
+  content: '';
+  width: 0.28rem;
+  height: 0.5rem;
+  border: solid var(--ui-check-mark);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-0.02rem, -0.06rem);
+  border-radius: 1px;
+  filter: drop-shadow(0 0 2px rgba(250, 245, 255, 0.35));
+}
+
+.eat-first-root[data-theme='light'] .ui-checkbox {
+  --ui-check-border: rgba(124, 58, 237, 0.38);
+  --ui-check-bg: rgba(255, 255, 255, 0.88);
+  --ui-check-on-bg: linear-gradient(165deg, rgba(139, 92, 246, 0.55), rgba(88, 28, 135, 0.62));
+  --ui-check-on-border: rgba(124, 58, 237, 0.65);
+  --ui-check-mark: #faf5ff;
+  --ui-check-glow: rgba(124, 58, 237, 0.2);
+}
+
+.ui-checkbox--lg {
+  --ui-check-size: 1.2rem;
+  --ui-check-radius: 6px;
+}
