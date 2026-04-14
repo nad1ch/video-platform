@@ -8,6 +8,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/wordle-ws': {
+        target: 'ws://localhost:3000',
+        ws: true,
+      },
+    },
+  },
   build: {
     // Avoid Lightning CSS native `.node` bindings on Linux CI (e.g. Cloudflare Pages).
     // Requires `esbuild` in devDependencies (Vite 8 does not ship it for this path).

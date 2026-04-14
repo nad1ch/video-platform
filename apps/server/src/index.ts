@@ -1,9 +1,13 @@
+import cookieParser from 'cookie-parser'
 import express from 'express'
 import http from 'http'
 import { WebSocketServer } from 'ws'
 import { createMediasoupWorker } from './mediasoup/createWorker'
 import { RoomManager } from './rooms/RoomManager'
 import { attachSocketServer } from './signaling/socketServer'
+import { mountTwitchWordleAuth } from './wordle/twitchAuthRouter'
+import { startTwitchChatIngest, stopTwitchChatIngest } from './wordle/tmiChat'
+import { attachWordleSocketServer } from './wordle/wordleSocket'
 
 async function bootstrap(): Promise<void> {
   let shuttingDown = false
@@ -14,10 +18,53 @@ async function bootstrap(): Promise<void> {
   const roomManager = new RoomManager(worker)
 
   const app = express()
-  const server = http.createServer(app)
-  const wss = new WebSocketServer({ server })
+  const allowedOrigin = process.env.WORDLE_CLIENT_ORIGIN ?? 'http://localhost:5173'
 
-  attachSocketServer(wss, roomManager)
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+    if (req.method === 'OPTIONS') {
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+      res.status(204).end()
+      return
+    }
+    next()
+  })
+
+  app.use(cookieParser())
+  app.use(express.json())
+
+  const server = http.createServer(app)
+
+  const wssSignaling = new WebSocketServer({ noServer: true })
+  const wssWordle = new WebSocketServer({ noServer: true })
+
+  attachSocketServer(wssSignaling, roomManager)
+  attachWordleSocketServer(wssWordle)
+
+  server.on('upgrade', (request, socket, head) => {
+    const host = request.headers.host ?? 'localhost'
+    const pathname = new URL(request.url ?? '/', `http://${host}`).pathname
+
+    if (pathname === '/wordle-ws') {
+      wssWordle.handleUpgrade(request, socket, head, (ws) => {
+        wssWordle.emit('connection', ws, request)
+      })
+      return
+    }
+
+    if (pathname === '/ws' || pathname === '/') {
+      wssSignaling.handleUpgrade(request, socket, head, (ws) => {
+        wssSignaling.emit('connection', ws, request)
+      })
+      return
+    }
+
+    socket.destroy()
+  })
+
+  mountTwitchWordleAuth(app)
 
   app.get('/health', (_req, res) => {
     res.json({
@@ -26,6 +73,8 @@ async function bootstrap(): Promise<void> {
     })
   })
 
+  startTwitchChatIngest()
+
   const shutdown = (): void => {
     if (shuttingDown) {
       return
@@ -33,26 +82,36 @@ async function bootstrap(): Promise<void> {
     shuttingDown = true
     console.info('Server shutting down…')
 
+    stopTwitchChatIngest()
+
     try {
       roomManager.disposeAllRooms()
     } catch (err) {
       console.error('disposeAllRooms failed', err)
     }
 
-    wss.close((wssErr) => {
-      if (wssErr) {
-        console.error('WebSocketServer close error', wssErr)
-      }
-      server.close((httpErr) => {
-        if (httpErr) {
-          console.error('HTTP server close error', httpErr)
+    const closeWss = (w: WebSocketServer, name: string, cb: () => void): void => {
+      w.close((wssErr) => {
+        if (wssErr) {
+          console.error(`WebSocketServer ${name} close error`, wssErr)
         }
-        try {
-          worker.close()
-        } catch (err) {
-          console.error('worker.close failed', err)
-        }
-        process.exit(0)
+        cb()
+      })
+    }
+
+    closeWss(wssWordle, 'wordle', () => {
+      closeWss(wssSignaling, 'signaling', () => {
+        server.close((httpErr) => {
+          if (httpErr) {
+            console.error('HTTP server close error', httpErr)
+          }
+          try {
+            worker.close()
+          } catch (err) {
+            console.error('worker.close failed', err)
+          }
+          process.exit(0)
+        })
       })
     })
   }
@@ -66,7 +125,6 @@ async function bootstrap(): Promise<void> {
   server.listen(port, host, () => {
     console.log(`Server listening on http://${host}:${port}`)
   })
-
 }
 
 bootstrap().catch((err) => {

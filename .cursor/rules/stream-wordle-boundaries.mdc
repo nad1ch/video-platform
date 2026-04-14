@@ -1,0 +1,15 @@
+---
+description: Boundaries for Stream Wordle / Twitch work — avoid damaging the monorepo
+globs:
+  - apps/server/src/wordle/**
+  - apps/client/src/pages/Wordle*.vue
+---
+
+# CRITICAL (Stream Wordle / Twitch)
+
+- **DO NOT** modify, delete, or “clean” `node_modules` or lockfiles. Restore deps only with `npm install` at the repo root.
+- **DO NOT** remove or bulk-edit unrelated dependencies; never treat `node_modules` as project source.
+- **DO NOT** refactor mediasoup signaling, `packages/call-core`, or `apps/server/src/signaling/**` unless the task explicitly requires it.
+- **ONLY** change Wordle/Twitch code under `apps/server/src/wordle/**` and `apps/client/src/pages/Wordle*.vue` (plus minimal wiring if the user explicitly allows `index.ts` / `router` / `vite.config` for the same feature).
+
+When adding WebSocket frames for Wordle, use the `wordle:*` namespace (see `apps/server/src/wordle/wsProtocol.ts`).

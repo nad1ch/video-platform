@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import type { Component } from 'vue'
-import CallPage from './components/call/CallPage.vue'
+import { RouterView, useRoute } from 'vue-router'
+
+const route = useRoute()
 
 const SignalingDebugPanel: Component | null = import.meta.env.DEV
   ? defineAsyncComponent(() => import('./dev/SignalingDebugPanel.vue'))
   : null
+
+const showSignalingDebug = computed(() => import.meta.env.DEV && route.path === '/')
 </script>
 
 <template>
   <div class="app-shell">
-    <CallPage />
-    <details v-if="SignalingDebugPanel" class="app-shell__debug">
+    <RouterView />
+    <details v-if="SignalingDebugPanel && showSignalingDebug" class="app-shell__debug">
       <summary>Signaling debug</summary>
       <div class="app-shell__debug-body">
         <component :is="SignalingDebugPanel" />
