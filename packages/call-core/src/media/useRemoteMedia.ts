@@ -220,6 +220,8 @@ export function useRemoteMedia() {
   const activeSpeakerPeerId = shallowRef<string | null>(null)
   /** Last spatialLayer sent over signaling per recv consumer id (skip duplicates). */
   const lastSentSpatialByConsumerId = new Map<string, 0 | 1 | 2>()
+  /** Last temporalLayer sent (VP8 simulcast); 0 = lowest FPS tier when supported. */
+  const lastSentTemporalByConsumerId = new Map<string, number>()
   /** Last layer applied after cooldown gate (successful send updates together with lastSent). */
   const lastAppliedLayerByConsumerId = new Map<string, 0 | 1 | 2>()
   const lastAppliedAtByConsumerId = new Map<string, number>()
@@ -335,14 +337,39 @@ export function useRemoteMedia() {
     }
   }
 
-  /** Priority: pinned > active speaker > visibility. BWE applied separately as cap only. */
+  /** Distinct remote peers that have a video producer (for small-room layer policy). */
+  function remoteVideoPeerCount(): number {
+    const ids = new Set<string>()
+    for (const info of producerInfoById.values()) {
+      if (info.kind === 'video') {
+        ids.add(info.peerId)
+      }
+    }
+    return ids.size
+  }
+
+  /**
+   * Priority: pinned > active speaker > visibility. BWE applied separately as cap only.
+   *
+   * Small rooms (≤4 remote video peers): default to low/mid only — avoids pulling mid (L1) for
+   * every visible tile (common 1:1 / trio jank). Larger rooms switch back to richer defaults so
+   * grids stay readable. Many tiles (8+) may still need viewport-driven `setPeerVisible` / pausing
+   * off-screen video consumers — layers alone don’t cap total decode cost.
+   * For >4 remote video peers, layer signaling omits temporal (same as pre-optimization).
+   */
   function baseSpatialLayerForPeer(peerId: string): 0 | 1 | 2 {
-    // Aligns with producer simulcast encodings: 0 = low, 1 = mid, 2 = high.
-    if (pinnedPeerId.value === peerId) return 2
-    if (activeSpeakerPeerId.value === peerId) return 2
+    const smallRoom = remoteVideoPeerCount() <= 4
+    if (pinnedPeerId.value === peerId) {
+      return 2
+    }
+    if (activeSpeakerPeerId.value === peerId) {
+      return smallRoom ? 1 : 2
+    }
     const visible = peerVisibility.value.get(peerId) ?? true
-    if (visible) return 1
-    return 0
+    if (!visible) {
+      return 0
+    }
+    return smallRoom ? 0 : 1
   }
 
   function targetSpatialLayerForPeer(peerId: string): 0 | 1 | 2 {
@@ -378,26 +405,49 @@ export function useRemoteMedia() {
 
       const rawTarget = targetSpatialLayerForPeer(info.peerId)
       const spatialLayer = spatialLayerAfterCooldown(consumer.id, rawTarget)
-      if (lastSentSpatialByConsumerId.get(consumer.id) === spatialLayer) {
+      /** Large rooms: same signaling as pre-optimization (spatial only). Small rooms: add temporal 0. */
+      const wantTemporal = remoteVideoPeerCount() <= 4 ? 0 : undefined
+      const prevS = lastSentSpatialByConsumerId.get(consumer.id)
+      const prevT = lastSentTemporalByConsumerId.get(consumer.id)
+      const temporalMatches =
+        wantTemporal === undefined ? prevT === undefined : prevT === wantTemporal
+      if (prevS === spatialLayer && temporalMatches) {
         continue
       }
 
       try {
+        const payload: {
+          consumerId: string
+          spatialLayer: number
+          temporalLayer?: number
+        } = { consumerId: consumer.id, spatialLayer }
+        if (wantTemporal !== undefined) {
+          payload.temporalLayer = wantTemporal
+        }
         room.sendJson({
           type: 'set-consumer-preferred-layers',
-          payload: { consumerId: consumer.id, spatialLayer },
+          payload,
         })
         lastSentSpatialByConsumerId.set(consumer.id, spatialLayer)
+        if (wantTemporal !== undefined) {
+          lastSentTemporalByConsumerId.set(consumer.id, wantTemporal)
+        } else {
+          lastSentTemporalByConsumerId.delete(consumer.id)
+        }
         lastAppliedLayerByConsumerId.set(consumer.id, spatialLayer)
         lastAppliedAtByConsumerId.set(consumer.id, Date.now())
-        console.log('[layers] requested', {
-          consumerId: consumer.id,
-          peerId: info.peerId,
-          producerId,
-          spatialLayer,
-        })
+        if (import.meta.env.DEV) {
+          console.log('[layers] requested', {
+            consumerId: consumer.id,
+            peerId: info.peerId,
+            producerId,
+            spatialLayer,
+            temporalLayer: wantTemporal,
+          })
+        }
       } catch (e) {
         lastSentSpatialByConsumerId.delete(consumer.id)
+        lastSentTemporalByConsumerId.delete(consumer.id)
         console.error('[layers] send failed', { consumerId: consumer.id, producerId }, e)
       }
     }
@@ -798,6 +848,7 @@ export function useRemoteMedia() {
     consumedProducerIds.clear()
     consumingProducerIds.clear()
     lastSentSpatialByConsumerId.clear()
+    lastSentTemporalByConsumerId.clear()
     lastAppliedLayerByConsumerId.clear()
     lastAppliedAtByConsumerId.clear()
     if (preferredLayersDebounceTimer) {
