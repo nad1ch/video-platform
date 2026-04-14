@@ -1348,8 +1348,17 @@ onUnmounted(() => {
     height: 100%;
   }
 
+  /* Не центрувати сітку по вертикалі на високій колонці: при зумі вміст вищий за слот —
+     flex `center` розкидає overflow вгору/вниз і верх «вилазить» на рядок раунду над сіткою. */
+  .wordle-page__grid :deep(.wordle-page__stack--game) {
+    overflow-x: clip;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
   .wordle-page__grid :deep(.wordle-page__stack--game > .wordle-page__game) {
     flex: 1 1 0;
+    justify-content: flex-start;
   }
 }
 

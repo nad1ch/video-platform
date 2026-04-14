@@ -8,5 +8,7 @@ declare module 'vue-router' {
     appTitle?: string
     /** Який текст показувати у футері (`app.footerLine*` у i18n). */
     footerContext?: 'home' | 'wordle' | 'call' | 'eat'
+    /** Потрібна сесія StreamAssist OAuth (cookie JWT). */
+    requiresAuth?: boolean
   }
 }

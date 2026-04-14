@@ -10,6 +10,7 @@ const ws_1 = require("ws");
 const createWorker_1 = require("./mediasoup/createWorker");
 const RoomManager_1 = require("./rooms/RoomManager");
 const socketServer_1 = require("./signaling/socketServer");
+const oauthRouter_1 = require("./auth/oauthRouter");
 const twitchAuthRouter_1 = require("./wordle/twitchAuthRouter");
 const tmiChat_1 = require("./wordle/tmiChat");
 const wordleSocket_1 = require("./wordle/wordleSocket");
@@ -56,6 +57,7 @@ async function bootstrap() {
         }
         socket.destroy();
     });
+    (0, oauthRouter_1.mountAppOAuth)(app);
     (0, twitchAuthRouter_1.mountTwitchWordleAuth)(app);
     app.get('/health', (_req, res) => {
         res.json({

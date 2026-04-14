@@ -4,6 +4,7 @@ import {
   type RouteLocationGeneric,
   type RouterScrollBehavior,
 } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
 import { registerEatFirstRouterGuards } from '@/eat-first/router.js'
 
 export const router = createRouter({
@@ -22,7 +23,7 @@ export const router = createRouter({
         {
           path: 'call',
           name: 'call',
-          meta: { appTitleKey: 'routes.call', footerContext: 'call' },
+          meta: { appTitleKey: 'routes.call', footerContext: 'call', requiresAuth: true },
           component: () => import('./components/call/CallPage.vue'),
         },
         {
@@ -81,3 +82,31 @@ export const router = createRouter({
 })
 
 registerEatFirstRouterGuards(router)
+
+function eatViewNeedsStreamAuth(query: Record<string, unknown>): boolean {
+  const v = query.view
+  const s = Array.isArray(v) ? v[0] : v
+  return s === 'admin' || s === 'control'
+}
+
+router.beforeEach(async (to) => {
+  const needMeta = Boolean(to.meta.requiresAuth)
+  const needEatStaff = to.name === 'eat' && eatViewNeedsStreamAuth(to.query as Record<string, unknown>)
+  if (!needMeta && !needEatStaff) {
+    return true
+  }
+
+  const { ensureAuthLoaded, isAuthenticated } = useAuth()
+  await ensureAuthLoaded()
+  if (isAuthenticated.value) {
+    return true
+  }
+
+  return {
+    name: 'home',
+    query: {
+      needLogin: '1',
+      authRedirect: to.fullPath,
+    },
+  }
+})

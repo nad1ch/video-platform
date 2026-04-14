@@ -84,7 +84,6 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     payload: z.object({
       consumerId: z.string().min(1),
       spatialLayer: z.number().int().min(0).max(2),
-      temporalLayer: z.number().int().min(0).max(4).optional(),
     }),
   }),
   /** App-level keepalive so proxies / CDNs do not close idle signaling (background tabs). */
@@ -625,7 +624,6 @@ export async function handleSetConsumerPreferredLayers(
   socket: WsSocket,
   consumerId: string,
   spatialLayer: number,
-  temporalLayer: number | undefined,
   deps: SignalingDeps,
 ): Promise<void> {
   const peer = getPeerForSocket(socket, deps)
@@ -639,17 +637,14 @@ export async function handleSetConsumerPreferredLayers(
   }
 
   try {
-    if (temporalLayer === undefined) {
-      await consumer.setPreferredLayers({ spatialLayer })
-    } else {
-      await consumer.setPreferredLayers({ spatialLayer, temporalLayer })
-    }
+    // Spatial simulcast only — do not pass temporalLayer (forces low temporal FPS on some codecs).
+    await consumer.setPreferredLayers({ spatialLayer })
     if (process.env.NODE_ENV !== 'production') {
-      console.log('[layers] server setPreferredLayers', { consumerId, spatialLayer, temporalLayer })
+      console.log('[layers] server setPreferredLayers', { consumerId, spatialLayer })
     }
   } catch (err) {
     if (process.env.NODE_ENV !== 'production') {
-      console.warn('[layers] server setPreferredLayers failed', { consumerId, spatialLayer, temporalLayer, err })
+      console.warn('[layers] server setPreferredLayers failed', { consumerId, spatialLayer, err })
     } else {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[layers] setPreferredLayers failed', consumerId, spatialLayer, msg)

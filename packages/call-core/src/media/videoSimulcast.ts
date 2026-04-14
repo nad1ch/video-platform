@@ -10,7 +10,7 @@ export const VP8_SIMULCAST_ENCODINGS: RtpEncodingParameters[] = [
   { rid: 'r2', maxBitrate: 3_500_000, scaleResolutionDownBy: 1 },
 ]
 
-/** Maps UI grid tier → mediasoup simulcast spatialLayer (for future server-side layer pick). */
+/** Maps UI grid tier → mediasoup simulcast spatialLayer (unused in-app; real policy is in `useRemoteMedia`). */
 export function spatialLayerForGridSizeTier(tier: 'sm' | 'md' | 'lg'): number {
   if (tier === 'sm') {
     return 0

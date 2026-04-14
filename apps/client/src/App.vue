@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, onMounted } from 'vue'
 import type { Component } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
+
+onMounted(() => {
+  void useAuth().refresh()
+})
 
 const SignalingDebugPanel: Component | null = import.meta.env.DEV
   ? defineAsyncComponent(() => import('./dev/SignalingDebugPanel.vue'))

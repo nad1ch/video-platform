@@ -1,11 +1,48 @@
 <script setup lang="ts">
+import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppCard from '@/components/ui/AppCard.vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { STREAM_APP_BRAND_NAME } from '@/eat-first/constants/brand.js'
+import { useAuth } from '@/composables/useAuth'
+import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
+const { isAuthenticated, refresh } = useAuth()
+const { openStreamAuthModal } = useStreamAuthModal()
+
+const needLoginBanner = computed(() => route.query.needLogin === '1')
+const authRedirectTarget = computed(() => {
+  const r = route.query.authRedirect
+  return typeof r === 'string' && r.startsWith('/') && !r.startsWith('//') ? r : '/call'
+})
+
+onMounted(() => {
+  void refresh()
+})
+
+watch(
+  () => route.query.needLogin,
+  (need) => {
+    if (need === '1') {
+      openStreamAuthModal(authRedirectTarget.value)
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [route.query.needLogin, isAuthenticated.value, route.query.authRedirect] as const,
+  ([need, authed, redir]) => {
+    if (need === '1' && authed && typeof redir === 'string' && redir.startsWith('/')) {
+      router.replace(redir)
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -15,6 +52,12 @@ const { t } = useI18n()
         <h1 class="home__title">{{ STREAM_APP_BRAND_NAME }}</h1>
         <p class="home__tag">{{ t('home.tagline') }}</p>
       </header>
+
+      <p v-if="needLoginBanner" class="home__auth-banner" role="status">
+        {{ t('app.authNeedLogin') }}
+        {{ t('app.authNeedLoginHeaderHint') }}
+      </p>
+
       <ul class="home__cards">
         <li class="home__cards-item">
           <RouterLink :to="{ name: 'call' }" class="home__card-link">
@@ -79,6 +122,17 @@ const { t } = useI18n()
   font-size: 1rem;
   line-height: 1.45;
   color: var(--text-body, var(--sa-color-text-body));
+}
+
+.home__auth-banner {
+  margin: var(--sa-space-4) 0 0;
+  max-width: 36rem;
+  padding: var(--sa-space-3);
+  border-radius: var(--sa-radius-md);
+  border: 1px solid var(--sa-color-primary-border);
+  background: color-mix(in srgb, var(--sa-color-primary) 12%, var(--sa-color-surface));
+  color: var(--sa-color-text-main);
+  font-size: 0.92rem;
 }
 
 .home__cards {

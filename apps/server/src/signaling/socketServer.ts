@@ -115,8 +115,8 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'set-consumer-preferred-layers': {
-              const { consumerId, spatialLayer, temporalLayer } = parsed.data.payload
-              await handleSetConsumerPreferredLayers(socket, consumerId, spatialLayer, temporalLayer, deps)
+              const { consumerId, spatialLayer } = parsed.data.payload
+              await handleSetConsumerPreferredLayers(socket, consumerId, spatialLayer, deps)
               break
             }
             default:

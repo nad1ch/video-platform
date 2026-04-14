@@ -77,7 +77,6 @@ exports.clientMessageSchema = zod_1.z.discriminatedUnion('type', [
         payload: zod_1.z.object({
             consumerId: zod_1.z.string().min(1),
             spatialLayer: zod_1.z.number().int().min(0).max(2),
-            temporalLayer: zod_1.z.number().int().min(0).max(4).optional(),
         }),
     }),
     /** App-level keepalive so proxies / CDNs do not close idle signaling (background tabs). */
@@ -462,7 +461,7 @@ async function handleConsume(socket, transportId, producerId, rtpCapabilities, d
  * Simulcast / SVC layer selection runs on the mediasoup worker Consumer.
  * mediasoup-client browserside Consumer has no setPreferredLayers — the client must signal here.
  */
-async function handleSetConsumerPreferredLayers(socket, consumerId, spatialLayer, temporalLayer, deps) {
+async function handleSetConsumerPreferredLayers(socket, consumerId, spatialLayer, deps) {
     const peer = getPeerForSocket(socket, deps);
     if (!peer) {
         return;
@@ -472,19 +471,15 @@ async function handleSetConsumerPreferredLayers(socket, consumerId, spatialLayer
         return;
     }
     try {
-        if (temporalLayer === undefined) {
-            await consumer.setPreferredLayers({ spatialLayer });
-        }
-        else {
-            await consumer.setPreferredLayers({ spatialLayer, temporalLayer });
-        }
+        // Spatial simulcast only — do not pass temporalLayer (forces low temporal FPS on some codecs).
+        await consumer.setPreferredLayers({ spatialLayer });
         if (process.env.NODE_ENV !== 'production') {
-            console.log('[layers] server setPreferredLayers', { consumerId, spatialLayer, temporalLayer });
+            console.log('[layers] server setPreferredLayers', { consumerId, spatialLayer });
         }
     }
     catch (err) {
         if (process.env.NODE_ENV !== 'production') {
-            console.warn('[layers] server setPreferredLayers failed', { consumerId, spatialLayer, temporalLayer, err });
+            console.warn('[layers] server setPreferredLayers failed', { consumerId, spatialLayer, err });
         }
         else {
             const msg = err instanceof Error ? err.message : String(err);

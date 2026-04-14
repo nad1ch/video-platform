@@ -51,4 +51,6 @@ export type SessionUser = {
   id: string
   display_name: string
   profile_image_url: string
+  /** Set for app OAuth; omitted in older JWTs (Wordle still works). */
+  provider?: 'twitch' | 'google' | 'apple'
 }

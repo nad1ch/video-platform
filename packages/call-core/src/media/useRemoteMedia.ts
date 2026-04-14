@@ -23,6 +23,9 @@ const TIMEOUT_MS = 45_000
 /** Coalesce rapid visibility / speaker / pin updates (producer-sync storms). */
 const PREFERRED_LAYERS_DEBOUNCE_MS = 80
 
+/** While at most this many remote video peers exist, always request highest simulcast layer (no mid/low). */
+const SMALL_ROOM_MAX_REMOTE_VIDEO_PEERS = 2
+
 function isTransportCreatedRecv(
   data: unknown,
 ): data is { type: 'transport-created'; payload: { direction: 'recv'; transportOptions: TransportOptions } } {
@@ -250,11 +253,25 @@ export function useRemoteMedia() {
     }
   }
 
+  function remoteVideoPeerCount(): number {
+    const ids = new Set<string>()
+    for (const info of producerInfoById.values()) {
+      if (info.kind === 'video') {
+        ids.add(info.peerId)
+      }
+    }
+    return ids.size
+  }
+
   /**
-   * Simulcast spatial only (no temporalLayer): pinned & active speaker → high (2),
-   * visible → mid (1), not visible → low (0). Server applies `setPreferredLayers({ spatialLayer })`.
+   * Simulcast spatial only (never temporalLayer on the wire).
+   * Small room (≤2 remote video peers): always high (2) — avoids 1:1 feeling “laggy” from mid layer.
+   * Larger rooms: pinned & active speaker → 2, off-screen → 0, else → 1.
    */
   function spatialLayerForPeer(peerId: string): 0 | 1 | 2 {
+    if (remoteVideoPeerCount() <= SMALL_ROOM_MAX_REMOTE_VIDEO_PEERS) {
+      return 2
+    }
     if (pinnedPeerId.value === peerId) {
       return 2
     }
