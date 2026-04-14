@@ -1,5 +1,10 @@
 <script setup>
 import { useControlOrchestrator } from '../composables/control/useControlOrchestrator.js'
+import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
+import ConfirmDialog from '../ui/molecules/ConfirmDialog.vue'
+import ShowDeskHeader from '../components/showdesk/ShowDeskHeader.vue'
+import ShowPlayersRoster from '../components/showdesk/ShowPlayersRoster.vue'
+import UiMenuSelect from '../ui/molecules/UiMenuSelect.vue'
 
 const {
   route,
@@ -50,6 +55,7 @@ const {
   bulkSelectedSlots,
   bumpHandRaiseSlot,
   characterReadsFemale,
+  characterState,
   cleanupSubs,
   clearBulkSelection,
   clearCardRequest,
@@ -74,8 +80,10 @@ const {
   elimSuggestSlot,
   eliminatedBySlot,
   ensureEditorSlotHasPlayerDoc,
+  fieldConfig,
   fieldMenuOptions,
   focusFirstSlotWhenRosterEmpty,
+  formatGenderDisplay,
   gameId,
   gameIdHasUnsafeChars,
   gameRoom,

@@ -52,6 +52,7 @@ export const fieldConfig = [
 ]
 
 export function resetCharacterState(target = characterState) {
+  if (!target || typeof target !== 'object') target = characterState
   target.eliminated = false
   target.revealLedger = { round: 0, count: 0, maxForRound: 0 }
   target.identityRevealed = false
@@ -82,6 +83,7 @@ function readActiveCard(data) {
 }
 
 export function applyRemoteCharacterData(target, data) {
+  if (!target || typeof target !== 'object') target = characterState
   if (!data || typeof data !== 'object') {
     resetCharacterState(target)
     return
@@ -123,6 +125,7 @@ export function applyRemoteCharacterData(target, data) {
 }
 
 export function snapshotCharacter(target = characterState) {
+  if (!target || typeof target !== 'object') target = characterState
   const dem = Boolean(target.demographicsRevealed)
   const rl = target.revealLedger
   const out = {
@@ -162,6 +165,7 @@ export function snapshotCharacter(target = characterState) {
  * excludeTemplateIds — лише виключення при виборі (наприклад карти інших гравців), без додавання.
  */
 export function assignRandomActiveCard(target = characterState, options = {}) {
+  if (!target || typeof target !== 'object') target = characterState
   const cumulative = options.usedTemplateIds
   const exclude =
     cumulative ?? options.excludeTemplateIds ?? new Set()
