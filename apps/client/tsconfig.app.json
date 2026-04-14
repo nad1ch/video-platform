@@ -6,6 +6,7 @@
     "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
+      "@/*": ["./src/*"],
       "call-core": ["../../packages/call-core/src/index.ts"],
       "call-core/audio": ["../../packages/call-core/src/audio/index.ts"],
       "call-core/media": ["../../packages/call-core/src/media/index.ts"],
@@ -16,5 +17,5 @@
     },
     "erasableSyntaxOnly": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue", "src/env.d.ts"]
 }

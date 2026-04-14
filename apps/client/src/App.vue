@@ -9,7 +9,7 @@ const SignalingDebugPanel: Component | null = import.meta.env.DEV
   ? defineAsyncComponent(() => import('./dev/SignalingDebugPanel.vue'))
   : null
 
-const showSignalingDebug = computed(() => import.meta.env.DEV && route.path === '/')
+const showSignalingDebug = computed(() => import.meta.env.DEV && route.path === '/call')
 </script>
 
 <template>

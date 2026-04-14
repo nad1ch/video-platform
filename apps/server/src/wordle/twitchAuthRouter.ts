@@ -6,6 +6,8 @@ import {
   WORDLE_SESSION_MAX_AGE_SEC,
   signSession,
 } from './sessionJwt'
+import { getWordleIngestChannel } from './tmiChat'
+import { readTwitchChatGuessCooldownMs } from './tmiGuessThrottle'
 
 function requiredEnv(name: string): string {
   const v = process.env[name]
@@ -94,6 +96,13 @@ function setSessionCookie(res: Response, token: string): void {
 }
 
 export function mountTwitchWordleAuth(app: Express): void {
+  app.get('/api/wordle/public-config', (_req: Request, res: Response) => {
+    res.json({
+      ingestChannel: getWordleIngestChannel(),
+      chatGuessCooldownMs: readTwitchChatGuessCooldownMs(),
+    })
+  })
+
   app.get('/api/wordle/auth/callback', async (req: Request, res: Response) => {
     const code = typeof req.query.code === 'string' ? req.query.code : ''
     if (!code) {

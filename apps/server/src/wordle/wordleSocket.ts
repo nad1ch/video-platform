@@ -61,6 +61,9 @@ export function broadcastTwitchChatLine(payload: {
   text: string
   validGuess: boolean
   rateLimited?: boolean
+  cooldownMs?: number
+  /** When a guess was scored — for overlay / emoji strip in clients */
+  guessFeedback?: Array<'correct' | 'present' | 'absent'>
 }): void {
   broadcastWordle({ type: WordleWs.twitchChat, payload })
 }
@@ -140,6 +143,8 @@ export function attachWordleSocketServer(wss: WebSocketServer): void {
           displayName: result.displayName,
           guess: result.guess,
           feedback: result.feedback,
+          word: result.guess,
+          result: result.feedback,
           attempts: result.attempts,
           guessed: result.guessed,
         })

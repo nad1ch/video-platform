@@ -25,35 +25,43 @@ export function isValidGuessShape(guess: string, wordLength: number): boolean {
 }
 
 /**
- * Classic Wordle letter scoring (handles duplicate letters).
- * `answer` and `guess` must be same length; caller normalizes casing.
+ * Wordle scoring (Unicode graphemes). Duplicate letters: each secret occurrence
+ * can satisfy at most one green, then yellows consume remaining pool (e.g. secret
+ * "мамаа" vs guess "aaaaa" → only three cells are correct; other two absent).
  */
 export function computeFeedback(answer: string, guess: string): GuessFeedback[] {
-  const a = [...answer]
-  const g = [...guess]
-  const out: GuessFeedback[] = g.map(() => 'absent')
-  const avail = new Map<string, number>()
+  const secretArr = [...answer]
+  const guessArr = [...guess]
+  const n = secretArr.length
+  if (guessArr.length !== n) {
+    throw new Error('computeFeedback: length mismatch')
+  }
 
-  for (let i = 0; i < a.length; i++) {
-    if (g[i] === a[i]) {
-      out[i] = 'correct'
-    } else {
-      const ch = a[i]!
-      avail.set(ch, (avail.get(ch) ?? 0) + 1)
+  const result: GuessFeedback[] = Array.from({ length: n }, () => 'absent')
+  const letterCount = new Map<string, number>()
+  for (const ch of secretArr) {
+    letterCount.set(ch, (letterCount.get(ch) ?? 0) + 1)
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (guessArr[i] === secretArr[i]) {
+      result[i] = 'correct'
+      const ch = guessArr[i]!
+      letterCount.set(ch, (letterCount.get(ch) ?? 0) - 1)
     }
   }
 
-  for (let i = 0; i < g.length; i++) {
-    if (out[i] === 'correct') {
+  for (let i = 0; i < n; i++) {
+    if (result[i] === 'correct') {
       continue
     }
-    const ch = g[i]!
-    const left = avail.get(ch) ?? 0
+    const ch = guessArr[i]!
+    const left = letterCount.get(ch) ?? 0
     if (left > 0) {
-      out[i] = 'present'
-      avail.set(ch, left - 1)
+      result[i] = 'present'
+      letterCount.set(ch, left - 1)
     }
   }
 
-  return out
+  return result
 }

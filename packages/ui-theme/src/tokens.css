@@ -1,0 +1,33 @@
+/**
+ * StreamAssist shared design tokens.
+ * Canonical palette aligned with the eat-first-overlay / stream HUD family (purple + deep slate).
+ * Import once at app bootstrap; map app-specific aliases in each shell (e.g. style.css --accent → --sa-color-primary).
+ */
+:root {
+  --sa-color-bg-deep: #0b0f1a;
+  --sa-color-surface: #111827;
+  --sa-color-surface-raised: #1f2937;
+  --sa-color-border: #2e303a;
+
+  --sa-color-primary: #a855f7;
+  --sa-color-primary-soft: rgba(168, 85, 247, 0.14);
+  --sa-color-primary-border: rgba(168, 85, 247, 0.5);
+
+  --sa-color-success: #22c55e;
+  --sa-color-warning: #eab308;
+  --sa-color-danger: #ef4444;
+  --sa-color-neutral: #374151;
+
+  --sa-color-text-muted: #9ca3af;
+  --sa-color-text-strong: #f3f4f6;
+
+  --sa-radius-sm: 8px;
+  --sa-radius-md: 12px;
+  --sa-radius-lg: 16px;
+
+  --sa-font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sa-font-mono: ui-monospace, Consolas, monospace;
+
+  --sa-shadow-elevated:
+    rgba(0, 0, 0, 0.35) 0 12px 24px -4px, rgba(0, 0, 0, 0.22) 0 6px 12px -3px;
+}

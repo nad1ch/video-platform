@@ -31,6 +31,7 @@ export default defineConfig({
     // One physical copy of Vue/Pinia for the app + aliased call-core sources (avoids getActivePinia() === undefined / reading '_s').
     dedupe: ['vue', 'pinia'],
     alias: {
+      '@': path.resolve(__dirname, 'src'),
       'call-core/audio': path.resolve(__dirname, '../../packages/call-core/src/audio/index.ts'),
       'call-core/media': path.resolve(__dirname, '../../packages/call-core/src/media/index.ts'),
       'call-core/signaling': path.resolve(__dirname, '../../packages/call-core/src/signaling/index.ts'),

@@ -2,9 +2,16 @@ import tmi from 'tmi.js'
 import { getCurrentGameId, getCurrentWordLength, submitGuess } from './gameStore'
 import { broadcastTwitchChatLine, broadcastUserGuess } from './wordleSocket'
 import { isValidGuessShape, normalizeWord } from './wordleLogic'
-import { tryConsumeTwitchGuessThrottle } from './tmiGuessThrottle'
+import { readTwitchChatGuessCooldownMs, tryConsumeTwitchGuessThrottle } from './tmiGuessThrottle'
 
 let client: tmi.Client | null = null
+
+/** Channel the server IRC client is (or will be) joined to; null if ingest is off. */
+let wordleIngestChannel: string | null = null
+
+export function getWordleIngestChannel(): string | null {
+  return wordleIngestChannel
+}
 
 function displayNameFromTags(tags: tmi.ChatUserstate): string {
   const raw = tags['display-name']
@@ -14,12 +21,24 @@ function displayNameFromTags(tags: tmi.ChatUserstate): string {
   return tags.username ?? 'unknown'
 }
 
+/** Dev-only fallback so local `npm run dev` can demo IRC without .env. Production must set TWITCH_CHANNEL. */
+const DEFAULT_DEV_TWITCH_CHANNEL = 'nad1ch'
+
 export function startTwitchChatIngest(): void {
-  const channel = process.env.TWITCH_CHANNEL?.replace(/^#/, '').trim()
-  if (!channel) {
-    console.warn('[wordle] TWITCH_CHANNEL not set — Twitch chat guesses disabled')
+  wordleIngestChannel = null
+  const fromEnv = process.env.TWITCH_CHANNEL?.replace(/^#/, '').trim()
+  let channel: string
+  if (fromEnv && fromEnv.length > 0) {
+    channel = fromEnv
+  } else if (process.env.NODE_ENV === 'production') {
+    console.warn('[wordle] TWITCH_CHANNEL not set — Twitch chat ingest disabled (set TWITCH_CHANNEL on the server)')
     return
+  } else {
+    channel = DEFAULT_DEV_TWITCH_CHANNEL
+    console.info(`[wordle] TWITCH_CHANNEL unset — dev demo ingest on "${channel}"`)
   }
+
+  wordleIngestChannel = channel
 
   const oauth = process.env.TWITCH_IRC_OAUTH?.trim()
   const username = process.env.TWITCH_IRC_USERNAME?.trim()
@@ -71,6 +90,7 @@ export function startTwitchChatIngest(): void {
         text,
         validGuess: false,
         rateLimited: true,
+        cooldownMs: readTwitchChatGuessCooldownMs(),
       })
       return
     }
@@ -91,6 +111,7 @@ export function startTwitchChatIngest(): void {
       displayName,
       text,
       validGuess: true,
+      guessFeedback: result.feedback,
     })
 
     broadcastUserGuess({
@@ -99,6 +120,8 @@ export function startTwitchChatIngest(): void {
       displayName: result.displayName,
       guess: result.guess,
       feedback: result.feedback,
+      word: result.guess,
+      result: result.feedback,
       attempts: result.attempts,
       guessed: result.guessed,
     })
@@ -118,6 +141,7 @@ export function startTwitchChatIngest(): void {
 }
 
 export function stopTwitchChatIngest(): void {
+  wordleIngestChannel = null
   if (client) {
     void client.disconnect()
     client = null
