@@ -1,10 +1,10 @@
 <script setup>
 /**
- * Повноекранний / сітковий шар відео LiveKit (OBS-friendly).
+ * Повноекранний / сітковий шар відео (mediasoup / call-core, OBS-friendly).
  * camGridOnly: без рамки «дошки» — тільки великі плитки камер (глобальний /overlay).
  */
 import { computed } from 'vue'
-import LiveKitParticipantTile from './LiveKitParticipantTile.vue'
+import OverlayParticipantTile from './OverlayParticipantTile.vue'
 
 const props = defineProps({
   /** 'grid' — сітка слотів; 'solo' — одне відео на весь кадр */
@@ -32,23 +32,23 @@ const soloReady = computed(() => {
 
 <template>
   <div
-    class="lkvl"
+    class="omvl"
     :class="{
-      'lkvl--solo': mode === 'solo',
-      'lkvl--grid': mode === 'grid',
-      'lkvl--cam-only': mode === 'grid' && camGridOnly,
+      'omvl--solo': mode === 'solo',
+      'omvl--grid': mode === 'grid',
+      'omvl--cam-only': mode === 'grid' && camGridOnly,
     }"
     :aria-hidden="mode === 'grid' && camGridOnly ? false : true"
   >
     <template v-if="mode === 'grid'">
       <div
         v-if="camGridOnly"
-        class="lkvl__fill"
-        :class="{ 'lkvl__fill--cinema': cinema }"
+        class="omvl__fill"
+        :class="{ 'omvl__fill--cinema': cinema }"
       >
-        <div class="grid lkvl__grid-fill" :class="{ 'grid--cinema': cinema }">
-          <div v-for="p in players" :key="p.id" class="lkvl__cell lkvl__cell--fill">
-            <LiveKitParticipantTile
+        <div class="grid omvl__grid-fill" :class="{ 'grid--cinema': cinema }">
+          <div v-for="p in players" :key="p.id" class="omvl__cell omvl__cell--fill">
+            <OverlayParticipantTile
               :player="p"
               :get-tile="getTile"
               :get-volume="getVolume"
@@ -60,8 +60,8 @@ const soloReady = computed(() => {
       </div>
       <div v-else class="board-frame" :class="{ 'board-frame--cinema': cinema }">
         <div class="grid" :class="{ 'grid--cinema': cinema }">
-          <div v-for="p in players" :key="p.id" class="lkvl__cell">
-            <LiveKitParticipantTile
+          <div v-for="p in players" :key="p.id" class="omvl__cell">
+            <OverlayParticipantTile
               :player="p"
               :get-tile="getTile"
               :get-volume="getVolume"
@@ -73,8 +73,8 @@ const soloReady = computed(() => {
       </div>
     </template>
     <template v-else>
-      <div v-if="soloReady" class="lkvl__solo-inner">
-        <LiveKitParticipantTile
+      <div v-if="soloReady" class="omvl__solo-inner">
+        <OverlayParticipantTile
           :player="soloPlayer"
           :get-tile="getTile"
           :get-volume="getVolume"
@@ -88,18 +88,17 @@ const soloReady = computed(() => {
 </template>
 
 <style scoped>
-/* Дзеркалимо layout board-frame / grid з OverlayPage — відео збігається з клітинками карток */
-.lkvl {
+.omvl {
   pointer-events: none;
 }
-.lkvl--cam-only {
+.omvl--cam-only {
   pointer-events: auto;
 }
-.lkvl--grid {
+.omvl--grid {
   width: 100%;
   height: 100%;
 }
-.lkvl__fill {
+.omvl__fill {
   width: 100%;
   max-width: none;
   margin: 0;
@@ -107,20 +106,20 @@ const soloReady = computed(() => {
   box-sizing: border-box;
   min-height: min(calc(100vh - 6rem), 900px);
 }
-.lkvl__fill--cinema {
+.omvl__fill--cinema {
   padding-bottom: 0.5rem;
 }
-.lkvl__grid-fill {
+.omvl__grid-fill {
   max-width: none;
   width: 100%;
   min-height: min(78vh, 820px);
   align-content: stretch;
 }
-.lkvl__cell--fill {
+.omvl__cell--fill {
   min-height: min(38vh, 400px);
 }
 @media (min-width: 900px) {
-  .lkvl__cell--fill {
+  .omvl__cell--fill {
     min-height: min(42vh, 480px);
   }
 }
@@ -151,12 +150,12 @@ const soloReady = computed(() => {
   max-width: 1280px;
   padding-bottom: 0.5rem;
 }
-.lkvl__cell {
+.omvl__cell {
   min-height: min(42vh, 320px);
   display: flex;
   align-items: stretch;
 }
-.lkvl__cell :deep(.ptile--layer) {
+.omvl__cell :deep(.ptile--layer) {
   flex: 1;
 }
 @media (min-width: 900px) {
@@ -170,20 +169,20 @@ const soloReady = computed(() => {
   }
 }
 
-.lkvl--solo {
+.omvl--solo {
   position: absolute;
   inset: 0;
   width: 100%;
   min-height: 100%;
 }
-.lkvl__solo-inner {
+.omvl__solo-inner {
   width: 100%;
   height: 100%;
   min-height: 100vh;
   display: flex;
   align-items: stretch;
 }
-.lkvl__solo-inner :deep(.ptile--layer) {
+.omvl__solo-inner :deep(.ptile--layer) {
   flex: 1;
 }
 </style>

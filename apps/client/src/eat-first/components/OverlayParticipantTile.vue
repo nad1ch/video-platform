@@ -1,6 +1,6 @@
 <script setup>
 /**
- * Обгортка: витягує поля з getTile(player) у скрипті, у шаблоні лише готові пропси для ParticipantTile.
+ * Витягує поля з getTile(player) для ParticipantTile (mediasoup / MediaStream).
  */
 import { computed } from 'vue'
 import ParticipantTile from './ParticipantTile.vue'
@@ -17,18 +17,20 @@ const props = defineProps({
 
 const emit = defineEmits(['update:volume'])
 
-const lk = computed(() => props.getTile(props.player))
+const tile = computed(() => props.getTile(props.player))
 
-const participant = computed(() => lk.value?.participant ?? null)
-const identity = computed(() => lk.value?.identity ?? '')
-const label = computed(() => lk.value?.label ?? '')
-const isLocal = computed(() => lk.value?.isLocal ?? false)
-const showVideo = computed(() => lk.value?.showVideo ?? false)
-const isMuted = computed(() => lk.value?.isMuted ?? false)
-const isSpeaking = computed(() => lk.value?.isSpeaking ?? false)
+const mediaStream = computed(() =>
+  tile.value?.mediaStream instanceof MediaStream ? tile.value.mediaStream : null,
+)
+const identity = computed(() => tile.value?.identity ?? '')
+const label = computed(() => tile.value?.label ?? '')
+const isLocal = computed(() => tile.value?.isLocal ?? false)
+const showVideo = computed(() => tile.value?.showVideo ?? false)
+const isMuted = computed(() => tile.value?.isMuted ?? false)
+const isSpeaking = computed(() => tile.value?.isSpeaking ?? false)
 const volume = computed(() => props.getVolume(props.player))
 
-const ready = computed(() => Boolean(lk.value && participant.value))
+const ready = computed(() => Boolean(mediaStream.value))
 </script>
 
 <template>
@@ -38,7 +40,7 @@ const ready = computed(() => Boolean(lk.value && participant.value))
     :solo-fill="soloFill"
     :mosaic-mode="mosaicMode"
     :embed="embed"
-    :participant="participant"
+    :media-stream="mediaStream"
     :identity="identity"
     :label="label"
     :is-local="isLocal"

@@ -717,7 +717,7 @@ async function submitVote(choice) {
   position: relative;
   padding: 0;
   border-radius: 14px;
-  /* Трохи прозоріше — вебка з шару LiveKit проглядає під карткою */
+  /* Трохи прозоріше — вебка з відеошару проглядає під карткою */
   background: rgba(12, 8, 28, 0.78);
   border: 1px solid rgba(168, 85, 247, 0.28);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);

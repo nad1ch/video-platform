@@ -7,9 +7,6 @@ import { setJoinSessionToken } from '../utils/joinSessionToken.js'
 import { useI18n } from 'vue-i18n'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
-/* Тимчасово приховано: «Кімната як у Zoom» на головній join-сторінці
-import LobbyZoomStage from '../components/LobbyZoomStage.vue'
-*/
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
 import { callableApiEnabled } from '../services/callableApi.js'
 import { ensureAnonymousAuth } from '../services/authBootstrap.js'
@@ -381,16 +378,6 @@ function handUpJoin(pid) {
         <code class="obs-hint__code">{{ globalOverlayUrl }}</code>
       </p>
     </section>
-
-    <!-- Тимчасово приховано: блок «Кімната як у Zoom» (LobbyZoomStage + LiveKit лобі-мозаїка)
-    <LobbyZoomStage
-      :game-id="gameId"
-      :players="players"
-      :game-room="gameRoomJoin"
-      :votes="votesJoin"
-      :data-ready="joinLobbyReady"
-    />
-    -->
 
     <section
       id="player-slots"

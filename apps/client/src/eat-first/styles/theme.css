@@ -381,8 +381,9 @@
   height: 2rem;
   object-fit: contain;
   border-radius: 10px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--logo-pad-border, var(--border-subtle));
   background: var(--logo-pad-bg);
+  box-shadow: var(--logo-pad-shadow, none);
   box-sizing: border-box;
 }
 
@@ -393,10 +394,6 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-heading);
-}
-
-.eat-first-root[data-theme='light'] .app-shell-mini-brand__logo {
-  box-shadow: 0 1px 10px rgba(91, 33, 168, 0.12);
 }
 
 /* Пульт: одна нижня межа для всього блоку (без другої смуги під рядком бренду) */
@@ -549,16 +546,6 @@
   border-radius: 10px;
 }
 
-.app-shell-brand__mark {
-  flex-shrink: 0;
-  width: 2.5rem;
-  height: 2.5rem;
-  object-fit: contain;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--sa-color-bg-deep, #0a0614) 88%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-subtle, var(--sa-color-border)) 90%, transparent);
-}
-
 .app-shell-brand__title {
   min-width: 0;
   overflow: hidden;
@@ -667,7 +654,8 @@
   box-sizing: border-box;
   border-radius: 12px;
   background: var(--logo-pad-bg);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--logo-pad-border, var(--border-subtle));
+  box-shadow: var(--logo-pad-shadow, none);
   line-height: 0;
   display: flex;
   align-items: center;
@@ -716,10 +704,6 @@
   max-width: min(42rem, 100%);
   text-align: center;
   min-height: calc(0.68rem * 1.45);
-}
-
-.eat-first-root[data-theme='light'] .app-site-footer__logo-wrap {
-  box-shadow: 0 2px 14px rgba(91, 33, 168, 0.12);
 }
 
 /* --- Чекбокси в стилі шоу: фіолетова рамка / неон як у кнопок --- */

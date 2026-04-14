@@ -2,9 +2,6 @@
 import VoiceVideoGrid from '../VoiceVideoGrid.vue'
 
 defineProps({
-  lkConnectionState: { type: String, required: true },
-  lkError: { type: Object, default: null },
-  lkRoomEnabled: { type: Boolean, default: false },
   overlayReady: { type: Boolean, default: false },
   canPublish: { type: Boolean, default: false },
   spectatorMode: { type: Boolean, default: false },
@@ -17,9 +14,6 @@ defineProps({
 
 <template>
   <VoiceVideoGrid
-    :lk-connection-state="lkConnectionState"
-    :lk-error="lkError"
-    :lk-room-enabled="lkRoomEnabled"
     :overlay-ready="overlayReady"
     :can-publish="canPublish"
     :spectator-mode="spectatorMode"

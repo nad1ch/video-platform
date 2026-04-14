@@ -1,7 +1,5 @@
 <script setup>
 import { computed, onUnmounted, provide, ref, watch } from 'vue'
-import { useLiveKitRoom } from '../composables/useLiveKitRoom.js'
-import { useMediaTracks } from '../composables/useMediaTracks.js'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -13,18 +11,17 @@ import {
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import OverlayVideoLayer from '../components/overlay/OverlayVideoLayer.vue'
 import OverlayUiLayer from '../components/overlay/OverlayUiLayer.vue'
-import { VideoQuality } from 'livekit-client'
-import { getLiveKitSubscribeQualityMode, liveKitConfigured } from '../config/livekit.js'
+import { mediasoupSignalingAvailable } from '../config/mediasoup.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
 import { useMosaicPlayerOrder } from '../composables/useMosaicPlayerOrder.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { getOrCreateDeviceId } from '../utils/deviceId.js'
-import { clampRoundForOverlay } from '../constants/gameRounds.js'
-import { useLiveKitTileMap } from '../composables/useLiveKitTileMap.js'
+import { useEatOverlayMediasoup } from '../composables/useEatOverlayMediasoup.js'
+import { useOverlayMediaTileMap } from '../composables/useOverlayMediaTileMap.js'
 import { useOverlaySpeakerCountdown } from '../composables/useOverlaySpeakerCountdown.js'
 import { useOverlayMosaicOrder } from '../composables/useOverlayMosaicOrder.js'
 import { useOverlayCardViewModels } from '../composables/useOverlayCardViewModels.js'
-import { useOverlayLiveKitBindings } from '../composables/useOverlayLiveKitBindings.js'
+import { useOverlayVolumeBindings } from '../composables/useOverlayVolumeBindings.js'
 import { useOverlayRoomState } from '../composables/useOverlayRoomState.js'
 import { useOverlayVotingState } from '../composables/useOverlayVotingState.js'
 import { useOverlayUiState } from '../composables/useOverlayUiState.js'
@@ -53,8 +50,8 @@ const personalPlayerId = computed(() => {
 
 const isPersonal = computed(() => personalPlayerId.value != null)
 
-/** Унікальний identity для глобального оверлею (spectator), щоб не зіткнутися з іншим учасником у LiveKit. */
-const liveKitIdentity = computed(() => {
+/** Унікальний peer id для глобального оверлею (spectator), щоб не зіткнутися з іншим учасником у кімнаті. */
+const overlayPeerId = computed(() => {
   if (personalPlayerId.value) return normalizePlayerSlotId(personalPlayerId.value)
   const dev = getOrCreateDeviceId().replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)
   return `spectator-${dev || 'browser'}`
@@ -80,7 +77,7 @@ const overlayTokenGateBlocks = computed(() => {
   return urlTok !== st
 })
 
-const liveKitDisplayName = computed(() => {
+const overlayDisplayName = computed(() => {
   if (personalPlayerId.value && singlePlayer.value && typeof singlePlayer.value.name === 'string') {
     return singlePlayer.value.name
   }
@@ -88,16 +85,16 @@ const liveKitDisplayName = computed(() => {
   return 'Spectator'
 })
 
-const liveKitCanPublish = computed(() => {
+const overlayCanPublish = computed(() => {
   if (!personalPlayerId.value) return false
   if (overlayTokenGateBlocks.value) return false
   if (singlePlayer.value?.eliminated === true) return false
   return true
 })
 
-const liveKitEliminatedLocal = computed(() => singlePlayer.value?.eliminated === true)
+const overlayEliminatedLocal = computed(() => singlePlayer.value?.eliminated === true)
 
-const liveKitPlayerNameMap = computed(() => {
+const overlayPlayerLabels = computed(() => {
   const m = {}
   if (isPersonal.value && singlePlayer.value) {
     const id = normalizePlayerSlotId(singlePlayer.value.id)
@@ -233,64 +230,28 @@ watch(
 
 const overlayPageReady = computed(() => gotGameRoomOv.value && gotPrimaryOv.value)
 
-const lkRoomEnabled = computed(
-  () =>
-    liveKitConfigured() &&
-    overlayPageReady.value &&
-    Boolean(String(gameId.value || '').trim()) &&
-    Boolean(String(liveKitIdentity.value || '').trim()),
+const volumeByIdentity = ref({})
+
+const { mediaVolumeForPlayer, setMediaVolumeForPlayer } = useOverlayVolumeBindings(volumeByIdentity)
+
+const ms = useEatOverlayMediasoup({
+  gameId,
+  overlayReady: overlayPageReady,
+  canPublish: overlayCanPublish,
+  identity: overlayPeerId,
+  displayName: overlayDisplayName,
+  playerLabels: overlayPlayerLabels,
+})
+
+provide('eatOverlayVoiceUi', ms.voiceUi)
+
+const mediaLayerEnabled = computed(() => mediasoupSignalingAvailable())
+
+const { speakingIdentities, mediaTileForPlayer } = useOverlayMediaTileMap(
+  ms.orderTilesRef,
+  ms.tileMapRef,
+  mediaLayerEnabled,
 )
-
-const lkVolumeByIdentity = ref({})
-
-const { liveKitVolumeForPlayer, setLiveKitVolumeForPlayer } =
-  useOverlayLiveKitBindings(lkVolumeByIdentity)
-
-const liveKitEliminatedSlots = computed(() => {
-  const s = new Set()
-  for (const p of players.value) {
-    if (p.eliminated === true) s.add(normalizePlayerSlotId(p.id))
-  }
-  return s
-})
-
-const { room: lkRoom, connectionState: lkConnectionState, error: lkRoomError } = useLiveKitRoom({
-  enabled: lkRoomEnabled,
-  roomName: gameId,
-  identity: liveKitIdentity,
-  displayName: liveKitDisplayName,
-  canPublish: liveKitCanPublish,
-})
-
-const lkMaxVideoSlots = computed(() => {
-  if (isPersonal.value) return 4
-  const alive = players.value.filter((p) => p.eliminated !== true).length
-  return Math.min(24, Math.max(1, alive || 12))
-})
-
-const lkSubscriberQualityCap = computed(() => {
-  const q = String(route.query.lk_q ?? '').trim().toLowerCase()
-  if (q === 'low' || q === '360' || q === '360p') return VideoQuality.LOW
-  if (q === 'medium' || q === '480' || q === '480p') return VideoQuality.MEDIUM
-  if (q === 'high' || q === 'off' || q === 'max') return null
-  const env = getLiveKitSubscribeQualityMode()
-  if (env === 'low') return VideoQuality.LOW
-  if (env === 'medium') return VideoQuality.MEDIUM
-  return null
-})
-
-const { tiles: lkTiles, tileMapRef: lkTileMap } = useMediaTracks(lkRoom, {
-  spotlightSlot: activeSpotlightId,
-  speakerSlot: speakerForTimerId,
-  includeLocal: liveKitCanPublish,
-  maxVideo: lkMaxVideoSlots,
-  subscriberMaxQuality: lkSubscriberQualityCap,
-  playerLabels: liveKitPlayerNameMap,
-  volumeByIdentity: lkVolumeByIdentity,
-  eliminatedSlots: liveKitEliminatedSlots,
-})
-
-const { speakingIdentities, liveKitTileForPlayer } = useLiveKitTileMap(lkTiles, lkTileMap)
 
 const { defaultOrderedPlayers: defaultOrderedPlayersForGlobalMosaic } = useOverlayMosaicOrder(
   players,
@@ -309,8 +270,6 @@ const {
 } = useMosaicPlayerOrder(gameId, defaultOrderedPlayersForGlobalMosaic)
 
 const { speakerTimeLeft, speakerTimerTotal } = useOverlaySpeakerCountdown(gameRoom, gameId)
-
-provide('liveKitOverlayRoom', lkRoom)
 
 /** Банер лише при зміні раунду в кімнаті (не прив’язано до фази) */
 const roundBannerVisible = ref(false)
@@ -452,8 +411,8 @@ const { slotNumFromId, soloCardViewModel, globalMosaicCardViewModels } = useOver
   handsClusterMode,
   isHandRaised,
   playersDisplayOrderedForGlobalMosaic,
-  liveKitTileForPlayer,
-  liveKitVolumeForPlayer,
+  mediaTileForPlayer,
+  mediaVolumeForPlayer,
 })
 
 onUnmounted(() => {
@@ -468,18 +427,16 @@ onUnmounted(() => {
 <template>
   <div class="overlay-page">
     <OverlayVideoLayer
-      :lk-connection-state="lkConnectionState"
-      :lk-error="lkRoomError"
-      :lk-room-enabled="lkRoomEnabled"
       :overlay-ready="overlayPageReady"
-      :can-publish="liveKitCanPublish"
+      :can-publish="overlayCanPublish"
       :spectator-mode="!isPersonal"
       :speaker-slot="speakerForTimerId ?? ''"
       :spotlight-unmute-mode="lkSpotlightUnmute"
-      :eliminated-local="liveKitEliminatedLocal"
-      :local-identity="liveKitIdentity"
+      :eliminated-local="overlayEliminatedLocal"
+      :local-identity="overlayPeerId"
     />
     <OverlayUiLayer
+      :media-layer-enabled="mediaLayerEnabled"
       :overlay-page-ready="overlayPageReady"
       :is-personal="isPersonal"
       :overlay-drama="overlayDrama"
@@ -502,9 +459,9 @@ onUnmounted(() => {
       :personal-is-vote-target="personalIsVoteTarget"
       :personal-overlay-vote-tally="personalOverlayVoteTally"
       :solo-card-view-model="soloCardViewModel"
-      :live-kit-tile-for-player="liveKitTileForPlayer"
-      :live-kit-volume-for-player="liveKitVolumeForPlayer"
-      :set-live-kit-volume-for-player="setLiveKitVolumeForPlayer"
+      :media-tile-for-player="mediaTileForPlayer"
+      :media-volume-for-player="mediaVolumeForPlayer"
+      :set-media-volume-for-player="setMediaVolumeForPlayer"
       :global-mosaic-card-view-models="globalMosaicCardViewModels"
       :mosaic-drag-source-id="mosaicDragSourceId"
       :mosaic-drop-target-id="mosaicDropTargetId"

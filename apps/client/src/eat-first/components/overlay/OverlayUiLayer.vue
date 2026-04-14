@@ -3,15 +3,15 @@ import { computed, ref, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppPageLoader from '../../ui/molecules/AppPageLoader.vue'
-import LiveKitVideoLayer from '../LiveKitVideoLayer.vue'
+import OverlayMediaVideoLayer from '../OverlayMediaVideoLayer.vue'
 import ParticipantTile from '../ParticipantTile.vue'
 import OverlayPlayerCard from '../OverlayPlayerCard.vue'
 import OverlayStatusLayer from './OverlayStatusLayer.vue'
 import { discordLikeGridDims } from '../../utils/discordLikeGrid.js'
 import { normalizePlayerSlotId } from '../../utils/playerSlot.js'
-import { liveKitConfigured } from '../../config/livekit.js'
-
 const props = defineProps({
+  /** Mediasoup / VITE_SIGNALING_URL доступні — показувати відеошар. */
+  mediaLayerEnabled: { type: Boolean, required: true },
   overlayPageReady: { type: Boolean, required: true },
   isPersonal: { type: Boolean, required: true },
   overlayDrama: { type: Boolean, required: true },
@@ -34,9 +34,9 @@ const props = defineProps({
   personalIsVoteTarget: { type: Boolean, required: true },
   personalOverlayVoteTally: { type: Object, required: true },
   soloCardViewModel: { type: Object, default: null },
-  liveKitTileForPlayer: { type: Function, required: true },
-  liveKitVolumeForPlayer: { type: Function, required: true },
-  setLiveKitVolumeForPlayer: { type: Function, required: true },
+  mediaTileForPlayer: { type: Function, required: true },
+  mediaVolumeForPlayer: { type: Function, required: true },
+  setMediaVolumeForPlayer: { type: Function, required: true },
   globalMosaicCardViewModels: { type: Array, required: true },
   mosaicDragSourceId: { type: String, default: null },
   mosaicDropTargetId: { type: String, default: null },
@@ -164,15 +164,15 @@ function slotNumForBanner() {
         data-stage="personal"
       >
         <div
-          v-if="liveKitConfigured() && overlayPageReady && singlePlayer"
+          v-if="mediaLayerEnabled && overlayPageReady && singlePlayer"
           class="single-stage-wrap__under"
         >
-          <LiveKitVideoLayer
+          <OverlayMediaVideoLayer
             mode="solo"
             :solo-player="singlePlayer"
-            :get-tile="liveKitTileForPlayer"
-            :get-volume="liveKitVolumeForPlayer"
-            @volume-change="({ player: pl, volume: vol }) => setLiveKitVolumeForPlayer(pl, vol)"
+            :get-tile="mediaTileForPlayer"
+            :get-volume="mediaVolumeForPlayer"
+            @volume-change="({ player: pl, volume: vol }) => setMediaVolumeForPlayer(pl, vol)"
           />
         </div>
         <div class="single-stage single-stage--hud single-stage-wrap__over">
@@ -191,7 +191,7 @@ function slotNumForBanner() {
         data-onb="overlay-content"
         data-stage="global"
       >
-        <template v-if="liveKitConfigured() && overlayPageReady && globalMosaicCardViewModels.length">
+        <template v-if="mediaLayerEnabled && overlayPageReady && globalMosaicCardViewModels.length">
           <div
             v-for="row in globalMosaicCardViewModels"
             :key="row.player.id"
@@ -226,10 +226,10 @@ function slotNumForBanner() {
             </span>
             <div class="mosaic-cell__under">
               <ParticipantTile
-                v-if="row.tile"
+                v-if="row.tile && row.tile.mediaStream"
                 layer
                 mosaic-mode
-                :participant="row.tile.participant"
+                :media-stream="row.tile.mediaStream"
                 :identity="row.tile.identity"
                 :label="row.tile.label"
                 :is-local="row.tile.isLocal"
@@ -237,7 +237,7 @@ function slotNumForBanner() {
                 :is-muted="row.tile.isMuted"
                 :is-speaking="row.tile.isSpeaking"
                 :volume="row.volume"
-                @update:volume="setLiveKitVolumeForPlayer(row.player, $event)"
+                @update:volume="setMediaVolumeForPlayer(row.player, $event)"
               />
             </div>
             <div class="mosaic-cell__over">

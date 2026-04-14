@@ -13,7 +13,6 @@
     "ui-theme": "file:../../packages/ui-theme",
     "call-core": "file:../../packages/call-core",
     "firebase": "^12.11.0",
-    "livekit-client": "^2.18.1",
     "mediasoup-client": "^3.18.7",
     "pinia": "^3.0.4",
     "vue": "^3.5.32",

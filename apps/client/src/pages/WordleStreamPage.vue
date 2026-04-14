@@ -625,7 +625,7 @@ onUnmounted(() => {
 
 <template>
   <div class="page-route">
-    <AppContainer wide class="wordle-page" :class="`wordle-page--len${wordLength}`">
+    <AppContainer wide flush class="wordle-page" :class="`wordle-page--len${wordLength}`">
       <header class="wordle-page__topbar">
         <div class="wordle-page__topbar-main">
           <span class="wordle-page__eyebrow">Wordle UA</span>
@@ -678,6 +678,23 @@ onUnmounted(() => {
               </AppButton>
             </div>
           </div>
+
+          <div
+            v-if="gameStatus === 'playing'"
+            class="wordle-page__side-tools"
+            aria-label="Підказка для стріму та нове загадане слово"
+          >
+            <AppButton type="button" variant="ghost" class="wordle-page__peek-btn wordle-page__peek-btn--block" @click="toggleSecretPeek">
+              {{ secretPeekVisible ? 'Сховати слово' : 'Показати слово' }}
+            </AppButton>
+            <p v-if="secretPeekVisible" class="wordle-page__peek-word wordle-page__peek-word--side" aria-live="polite">
+              {{ secretWord }}
+            </p>
+            <AppButton type="button" variant="ghost" class="wordle-page__side-new-secret" @click="newRoundSameLength">
+              Інше загадане
+            </AppButton>
+          </div>
+
           <ol class="wordle-page__leader">
             <li class="wordle-page__leader-row wordle-page__leader-row--solo">
               <span class="wordle-page__who">{{ leaderboardSelfName }}</span>
@@ -748,18 +765,6 @@ onUnmounted(() => {
                 Слово було: <strong class="wordle-page__secret">{{ secretWord }}</strong>
               </p>
               <AppButton variant="primary" type="button" @click="newRoundSameLength">Нове слово</AppButton>
-            </div>
-
-            <div v-if="gameStatus === 'playing'" class="wordle-page__game-panel-width wordle-page__peek-bar">
-              <AppButton type="button" variant="ghost" class="wordle-page__peek-btn" @click="toggleSecretPeek">
-                {{ secretPeekVisible ? 'Сховати слово' : 'Показати слово' }}
-              </AppButton>
-              <span
-                v-if="secretPeekVisible"
-                class="wordle-page__peek-word"
-                aria-live="polite"
-                >{{ secretWord }}</span
-              >
             </div>
 
             <div
@@ -846,9 +851,6 @@ onUnmounted(() => {
               />
             </form>
 
-            <div v-if="gameStatus === 'playing'" class="wordle-page__round-actions">
-              <AppButton type="button" variant="ghost" @click="newRoundSameLength">Інше загадане</AppButton>
-            </div>
           </div>
         </AppCard>
 
@@ -894,12 +896,21 @@ onUnmounted(() => {
   width: 100%;
 }
 
+/* На вузьких/планшетних екранах не розтягуємо сторінку на всю висоту viewport. */
+@media (max-width: 1100px) {
+  .page-route {
+    flex: 0 1 auto;
+  }
+}
+
 .wordle-page {
   --wordle-cell: 78px;
   --wordle-gap: 10px;
+  --wordle-len-css: 5;
   flex: 1 1 auto;
   padding-block: var(--sa-space-3) var(--sa-space-6);
-  padding-inline: 0;
+  /* AppContainer `flush` прибирає зовнішній padding — відступи лише тут */
+  padding-inline: var(--sa-space-4);
   font-family: var(--sa-font-main);
   display: flex;
   flex-direction: column;
@@ -909,10 +920,12 @@ onUnmounted(() => {
 
 .wordle-page--len6 {
   --wordle-cell: 66px;
+  --wordle-len-css: 6;
 }
 
 .wordle-page--len7 {
   --wordle-cell: 56px;
+  --wordle-len-css: 7;
 }
 
 .wordle-page__topbar {
@@ -1143,36 +1156,124 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(9.5rem, 0.62fr) minmax(17rem, 1.08fr) minmax(9rem, 0.82fr);
   gap: var(--sa-space-4);
   align-items: stretch;
-  min-height: min(76vh, 880px);
 }
 
-@media (max-width: 960px) {
+@media (min-width: 1101px) {
+  .wordle-page__grid {
+    grid-template-columns: minmax(9.5rem, 0.62fr) minmax(17rem, 1.08fr) minmax(9rem, 0.82fr);
+    min-height: min(76vh, 880px);
+  }
+}
+
+@media (max-width: 1100px) {
   .wordle-page__grid {
     grid-template-columns: 1fr;
     min-height: 0;
+    gap: var(--sa-space-3);
+    align-items: stretch;
+  }
+
+  /* Спочатку поле гри, потім налаштування стріму, внизу чат. */
+  .wordle-page__stack--game {
+    order: -1;
+  }
+
+  .wordle-page__stack--leader {
+    order: 0;
+  }
+
+  .wordle-page__stack--chat {
+    order: 1;
+  }
+
+  .wordle-page__game {
+    justify-content: flex-start;
+  }
+
+  .wordle-page__grid :deep(.wordle-page__stack--chat) {
+    flex: 0 1 auto;
+    max-height: none;
+  }
+
+  .wordle-page__iframe-wrap {
+    flex: 0 1 auto;
+    min-height: 11rem;
+    max-height: min(38vh, 22rem);
+    height: min(38vh, 22rem);
+  }
+
+  .wordle-page__relay {
+    max-height: min(18vh, 9rem);
+  }
+
+  .wordle-page__leader {
+    flex: 0 0 auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .wordle-page__grid :deep(.wordle-page__stack--game > .wordle-page__game) {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 960px) {
+  .wordle-page {
+    padding-block: var(--sa-space-2) var(--sa-space-4);
+    padding-inline: var(--sa-space-3);
+    --wordle-gap: 6px;
+    --wordle-cell: min(
+      3.35rem,
+      calc(
+        (
+            100vw - 4.5rem - (var(--wordle-len-css, 5) - 1) * var(--wordle-gap)
+          ) / var(--wordle-len-css, 5)
+      )
+    );
+    overflow-x: clip;
+  }
+
+  .wordle-page__topbar {
+    padding-block: var(--sa-space-1) 0;
+    gap: var(--sa-space-2);
+  }
+
+  .wordle-page__topbar-auth {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 
 @media (max-width: 520px) {
   .wordle-page {
-    --wordle-cell: 58px;
-  }
-
-  .wordle-page--len6 {
-    --wordle-cell: 50px;
-  }
-
-  .wordle-page--len7 {
-    --wordle-cell: 44px;
+    padding-inline: var(--sa-space-2);
+    --wordle-cell: min(
+      2.75rem,
+      calc(
+        (
+            100vw - 3.75rem - (var(--wordle-len-css, 5) - 1) * var(--wordle-gap)
+          ) / var(--wordle-len-css, 5)
+      )
+    );
   }
 
   .wordle-page__kbd :deep(.wordle-page__kbd-key) {
-    font-size: 0.7rem;
-    padding: 0.32rem 0.2rem;
-    max-width: 2.45rem;
+    font-size: 0.65rem;
+    padding: 0.28rem 0.15rem;
+    max-width: 2.2rem;
+  }
+
+  .wordle-page__kbd-row--actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sa-space-2);
+  }
+
+  .wordle-page__kbd :deep(.wordle-page__kbd-action) {
+    width: 100%;
+    max-width: none;
   }
 }
 
@@ -1193,15 +1294,23 @@ onUnmounted(() => {
 }
 
 .wordle-page__grid :deep(.wordle-page__stack--game > .wordle-page__game) {
-  flex: 1 1 0;
   min-height: 0;
 }
 
 .wordle-page__grid :deep(.wordle-page__stack) {
-  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+@media (min-width: 1101px) {
+  .wordle-page__grid :deep(.wordle-page__stack) {
+    height: 100%;
+  }
+
+  .wordle-page__grid :deep(.wordle-page__stack--game > .wordle-page__game) {
+    flex: 1 1 0;
+  }
 }
 
 .wordle-page__grid :deep(.wordle-page__stack--chat) {
@@ -1210,7 +1319,8 @@ onUnmounted(() => {
 
 .wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__card-title),
 .wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__stats-block),
-.wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__len-bar) {
+.wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__len-bar),
+.wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__side-tools) {
   flex-shrink: 0;
 }
 
@@ -1269,6 +1379,40 @@ onUnmounted(() => {
 
 .wordle-page__len-btn {
   min-width: 2.5rem;
+}
+
+.wordle-page__side-tools {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sa-space-2);
+  margin: 0 0 var(--sa-space-3);
+  padding: var(--sa-space-2);
+  border-radius: var(--sa-radius-sm);
+  border: 1px solid var(--sa-color-border);
+  background: color-mix(in srgb, var(--sa-color-surface-raised) 45%, transparent);
+}
+
+.wordle-page__peek-btn--block {
+  width: 100%;
+  justify-content: center;
+  font-size: 0.76rem;
+}
+
+.wordle-page__side-new-secret {
+  width: 100%;
+  justify-content: center;
+  font-size: 0.76rem;
+}
+
+.wordle-page__peek-word--side {
+  margin: 0;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--sa-color-warning);
+  word-break: break-word;
 }
 
 .wordle-page__leader {
@@ -1519,24 +1663,9 @@ onUnmounted(() => {
   text-align: center;
 }
 
-.wordle-page__peek-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sa-space-2);
-}
-
 .wordle-page__peek-btn {
   font-size: 0.78rem;
   padding: 0.3rem 0.65rem;
-}
-
-.wordle-page__peek-word {
-  font-size: 1.2rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: var(--sa-color-warning);
 }
 
 .wordle-page__kbd {
@@ -1609,13 +1738,6 @@ onUnmounted(() => {
   padding: 0;
   height: 0;
   overflow: hidden;
-}
-
-.wordle-page__round-actions {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  margin-top: var(--sa-space-2);
 }
 
 .wordle-page__others {

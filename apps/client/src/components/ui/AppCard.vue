@@ -35,8 +35,20 @@ withDefaults(
 }
 
 .app-card--muted {
-  opacity: 0.52;
+  opacity: 1;
   pointer-events: none;
+  background: color-mix(in srgb, var(--sa-color-bg-card) 88%, var(--sa-color-border));
+  border-color: color-mix(in srgb, var(--sa-color-border) 92%, var(--sa-color-text-main));
+  box-shadow: none;
+  color: var(--sa-color-text-body);
+}
+
+.app-card--muted :deep(h2) {
+  color: var(--sa-color-text-main);
+}
+
+.app-card--muted :deep(p) {
+  color: var(--sa-color-text-body);
 }
 
 .app-card--interactive {

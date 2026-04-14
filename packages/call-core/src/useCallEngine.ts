@@ -1,4 +1,5 @@
 import { getActivePinia, storeToRefs } from 'pinia'
+import type { ComputedRef, Ref } from 'vue'
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import { gridSizeTierFromParticipantCount } from './media/gridTier'
 import { useCallSessionStore } from './stores/callSession'
@@ -13,6 +14,9 @@ import { waitForCondition } from './utils/waitForCondition'
 /** Pinia session store from this package (or a compatible drop-in). */
 export type CallSessionStore = ReturnType<typeof useCallSessionStore>
 
+/** `viewer` = recv-only (e.g. OBS overlay); `participant` = publish camera/mic after join. */
+export type CallEngineRole = 'participant' | 'viewer'
+
 export type CallEngineOptions = {
   /** Overrides `VITE_SIGNALING_URL`. Use a DNS-only host (e.g. media.example.com) if the SPA is behind a CDN proxy. */
   signalingUrl?: string
@@ -21,6 +25,11 @@ export type CallEngineOptions = {
    * Pass your own store when reusing the engine outside this app or with a custom Pinia slice.
    */
   session?: CallSessionStore
+  /**
+   * Read on each `joinCall()` and when computing `tiles`. Use a computed for modes that switch
+   * between publish and recv-only (e.g. Eat overlay spectator vs player).
+   */
+  role?: Ref<CallEngineRole> | ComputedRef<CallEngineRole>
 }
 
 /** One grid tile: dumb UI maps this to `ParticipantTile`. */
@@ -79,6 +88,14 @@ function parseActiveSpeakerFromServer(data: unknown): string | null | undefined 
   return undefined
 }
 
+function readEngineRole(options: CallEngineOptions | undefined): CallEngineRole {
+  const r = options?.role
+  if (r && typeof r === 'object' && 'value' in r) {
+    return (r as Ref<CallEngineRole>).value === 'viewer' ? 'viewer' : 'participant'
+  }
+  return 'participant'
+}
+
 export function useCallEngine(options?: CallEngineOptions) {
   if (getActivePinia() === undefined) {
     throw new Error(
@@ -134,6 +151,34 @@ export function useCallEngine(options?: CallEngineOptions) {
 
   const tiles = computed<CallTile[]>(() => {
     const selfId = selfPeerId.value
+    const mode = readEngineRole(options)
+
+    const remotes = [...remotePeerStreams.value]
+      .filter((e) => e.peerId !== selfId)
+      .sort((a, b) => a.peerId.localeCompare(b.peerId))
+
+    const remoteTiles: CallTile[] = []
+    for (const { peerId, stream } of remotes) {
+      if (!stream) {
+        continue
+      }
+      const a = stream.getAudioTracks()[0]
+      const v = stream.getVideoTracks()[0]
+      remoteTiles.push({
+        peerId,
+        stream,
+        displayName: session.labelFor(peerId),
+        isLocal: false,
+        videoEnabled: v ? v.enabled : false,
+        audioEnabled: a ? a.enabled : true,
+        playRev: remotePeerPlayRevs.value.get(peerId) ?? 0,
+      })
+    }
+
+    if (mode === 'viewer') {
+      return remoteTiles
+    }
+
     const list: CallTile[] = [
       {
         peerId: selfId,
@@ -145,28 +190,7 @@ export function useCallEngine(options?: CallEngineOptions) {
         playRev: localPlayRev.value,
       },
     ]
-
-    const remotes = [...remotePeerStreams.value]
-      .filter((e) => e.peerId !== selfId)
-      .sort((a, b) => a.peerId.localeCompare(b.peerId))
-
-    for (const { peerId, stream } of remotes) {
-      if (!stream) {
-        continue
-      }
-      const a = stream.getAudioTracks()[0]
-      const v = stream.getVideoTracks()[0]
-      list.push({
-        peerId,
-        stream,
-        displayName: session.labelFor(peerId),
-        isLocal: false,
-        videoEnabled: v ? v.enabled : false,
-        audioEnabled: a ? a.enabled : true,
-        playRev: remotePeerPlayRevs.value.get(peerId) ?? 0,
-      })
-    }
-
+    list.push(...remoteTiles)
     return list
   })
 
@@ -287,14 +311,17 @@ export function useCallEngine(options?: CallEngineOptions) {
         setActiveSpeaker(v)
       })
 
-      await createSendTransport(d, roomApi)
-      registerSendTransportForStats(sendTransport)
+      const mode = readEngineRole(options)
+      if (mode === 'participant') {
+        await createSendTransport(d, roomApi)
+        registerSendTransportForStats(sendTransport)
 
-      const stream = await startLocalMedia()
-      if (!localStream.value || stream.getTracks().length === 0) {
-        throw new Error('Camera/microphone not available (no tracks)')
+        const stream = await startLocalMedia()
+        if (!localStream.value || stream.getTracks().length === 0) {
+          throw new Error('Camera/microphone not available (no tracks)')
+        }
+        await publishLocalMedia(stream)
       }
-      await publishLocalMedia(stream)
 
       session.setInCall(true)
       queueMicrotask(() => {

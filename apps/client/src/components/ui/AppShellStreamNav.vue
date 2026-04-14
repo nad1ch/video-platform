@@ -1,13 +1,31 @@
 <script setup lang="ts">
-import { RouterLink } from 'vue-router'
+import { computed } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { eatViewFromRoute } from '@/eat-first/eatFirstRouteUtils.js'
 
+const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
+
+/** На головній дублювати «дім» не потрібно; на інших сторінках — швидкий перехід на лобі. */
+const showHomeLink = computed(() => route.name !== 'home')
+
+/** У Eat на підвидах (не join) показуємо «Назад». */
+const showEatBack = computed(
+  () => route.path.startsWith('/eat') && eatViewFromRoute(route) !== 'join',
+)
+
+function goEatBack() {
+  if (!showEatBack.value) return
+  router.back()
+}
 </script>
 
 <template>
   <nav class="stream-nav" :aria-label="t('app.navAria')">
     <RouterLink
+      v-if="showHomeLink"
       class="stream-nav__icon"
       :to="{ name: 'home' }"
       :aria-label="t('app.navHome')"
@@ -29,22 +47,41 @@ const { t } = useI18n()
         />
       </svg>
     </RouterLink>
+    <button
+      v-if="showEatBack"
+      type="button"
+      class="stream-nav__icon stream-nav__icon--btn"
+      :aria-label="t('app.navBack')"
+      :title="t('app.navBack')"
+      @click="goEatBack"
+    >
+      <svg
+        class="stream-nav__svg"
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke-width="1.75"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+      </svg>
+    </button>
     <div class="stream-nav__links">
       <RouterLink class="stream-nav__link" :to="{ name: 'wordle' }">Wordle</RouterLink>
-      <span
-        class="stream-nav__link stream-nav__link--soon"
-        :title="t('app.navEatDisabledTitle')"
-        :aria-label="t('app.navEatDisabledAria')"
+      <RouterLink
+        class="stream-nav__link"
+        :to="{ name: 'eat', query: { view: 'join' } }"
+        :title="t('game.title')"
+        :aria-label="t('game.title')"
       >
         Eat
-      </span>
-      <span
-        class="stream-nav__link stream-nav__link--soon"
-        :title="t('app.navCallSoonTitle')"
-        :aria-label="t('app.navCallSoonAria')"
-      >
+      </RouterLink>
+      <RouterLink class="stream-nav__link" :to="{ name: 'call' }" :title="t('app.navCallTitle')" :aria-label="t('app.navCallTitle')">
         Call
-      </span>
+      </RouterLink>
     </div>
   </nav>
 </template>
@@ -86,6 +123,11 @@ const { t } = useI18n()
 .stream-nav__icon:focus-visible {
   outline: 2px solid var(--border-cyan-strong, var(--sa-color-primary));
   outline-offset: 2px;
+}
+
+.stream-nav__icon--btn {
+  cursor: pointer;
+  font: inherit;
 }
 
 .stream-nav__svg {
@@ -131,16 +173,4 @@ const { t } = useI18n()
   outline-offset: 2px;
 }
 
-.stream-nav__link--soon {
-  cursor: not-allowed;
-  opacity: 0.45;
-  pointer-events: none;
-  border-style: dashed;
-  color: var(--text-muted, var(--sa-color-text-muted));
-}
-
-.stream-nav__link--soon:hover {
-  border-color: var(--border-subtle, var(--sa-color-border));
-  color: var(--text-muted, var(--sa-color-text-muted));
-}
 </style>

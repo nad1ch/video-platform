@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   BRAND_LOGO_COMPACT_PNG,
@@ -13,7 +14,12 @@ defineProps<{
   year: number
 }>()
 
+const route = useRoute()
 const { t } = useI18n()
+
+const footerLineKey = computed(() =>
+  route.meta.footerContext === 'eat' ? 'app.footerLineEat' : 'app.footerLineStream',
+)
 
 const eggOpen = ref(false)
 const stickIn = ref(false)
@@ -104,7 +110,7 @@ function footerInitial() {
           >
             {{ t('app.footerCopyrightSymbol') }}
           </button>
-          <span class="app-site-footer__copy-rest">{{ t('app.footerLine', { year }) }}</span>
+          <span class="app-site-footer__copy-rest">{{ t(footerLineKey, { year }) }}</span>
         </p>
       </div>
     </div>

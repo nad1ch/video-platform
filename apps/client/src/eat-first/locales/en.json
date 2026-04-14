@@ -19,9 +19,11 @@
     "navBack": "Назад",
     "navCallSoonTitle": "Video call — coming soon",
     "navCallSoonAria": "Call — not available yet",
+    "navCallTitle": "Video call",
     "navEatDisabledTitle": "Eat First — disabled in navigation for now",
     "navEatDisabledAria": "Eat First — not available in the menu",
-    "footerLine": "{year} nad1ch. All rights reserved. “Who do we eat first” — original show UI.",
+    "footerLineStream": "{year} nad1ch. All rights reserved.",
+    "footerLineEat": "{year} nad1ch. All rights reserved. “Who do we eat first” — original show UI.",
     "footerCopyrightSymbol": "©",
     "footerEggTriggerAria": "Easter egg",
     "footerEggClose": "Close",
@@ -177,8 +179,7 @@
     "zoomTitle": "Zoom-style room",
     "zoomHint": "Player cameras (when enabled from their overlay) and the same cards as the global OBS view. View-only here — publish your cam from your personal /overlay.",
     "zoomWaiting": "Loading players…",
-    "zoomNoPlayers": "No players in this room yet.",
-    "zoomLiveKitName": "Lobby"
+    "zoomNoPlayers": "No players in this room yet."
   },
   "admin": {
     "eyebrow": "Host",
@@ -538,22 +539,23 @@
     "tokenMismatchHint": "Відкрий лобі й оверлей зі свого слоту (у OBS — посилання без токена).",
     "tokenMismatchCta": "Lobby",
     "mosaicDragHandle": "Drag to swap with another camera tile",
-    "liveKit": {
-      "statusNotConfigured": "LiveKit · not configured",
-      "statusWaitingGame": "LiveKit · waiting for game data…",
-      "statusConnecting": "LiveKit · connecting…",
-      "statusConnected": "LiveKit · connected",
-      "statusDisconnected": "LiveKit · disconnected",
-      "statusIdle": "LiveKit · idle",
-      "statusError": "LiveKit · error: {msg}",
-      "notConfiguredHint": "Set VITE_LIVEKIT_URL and LIVEKIT_API_KEY / SECRET (.env.local locally; on Vercel include Preview env — see .env.example).",
+    "voiceMedia": {
+      "statusNotWired": "Voice/video UI not wired",
+      "statusNotConfigured": "Media · signaling not configured",
+      "statusWaitingGame": "Media · waiting for game data…",
+      "statusConnecting": "Media · connecting…",
+      "statusConnected": "Media · connected",
+      "statusDisconnected": "Media · disconnected",
+      "statusIdle": "Media · idle",
+      "statusError": "Media · error: {msg}",
+      "notConfiguredHint": "In production set VITE_SIGNALING_URL to the same signaling host as Video call (.env / Vercel). Dev proxies to the API by default.",
       "waitingHint": "Connecting after Firestore sync. If this stays long, check the game id and network.",
       "hintControls": "Video/audio on player cards; mic & camera are here.",
       "spectatorHint": "Spectator view: add ?player=p1 (your slot) to enable camera and mic.",
       "eliminatedNoPublish": "Eliminated — camera and mic stay off.",
       "enableSound": "Enable sound",
       "enableSoundHint": "Browsers block remote audio until you interact. Click here or use Mic/Cam first.",
-      "debugSummary": "LiveKit debug (dev)"
+      "debugSummary": "Media debug (dev)"
     }
   },
   "overlayCard": {

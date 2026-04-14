@@ -19,9 +19,11 @@
     "navBack": "Назад",
     "navCallSoonTitle": "Відеодзвінок — незабаром",
     "navCallSoonAria": "Call — поки недоступно",
+    "navCallTitle": "Відеодзвінок",
     "navEatDisabledTitle": "Eat First — поки вимкнено в навігації",
     "navEatDisabledAria": "Eat First — недоступно в меню",
-    "footerLine": "{year} nad1ch. Усі права захищено. «Кого ми з’їмо першим» — оригінальний інтерфейс шоу.",
+    "footerLineStream": "{year} nad1ch. Усі права захищено.",
+    "footerLineEat": "{year} nad1ch. Усі права захищено. «Кого ми з’їмо першим» — оригінальний інтерфейс шоу.",
     "footerCopyrightSymbol": "©",
     "footerEggTriggerAria": "Пасхалка",
     "footerEggClose": "Закрити",
@@ -177,8 +179,7 @@
     "zoomTitle": "Кімната як у Zoom",
     "zoomHint": "Камери гравців (якщо увімкнено з їх оверлею) і ті самі картки, що на глобальному OBS. Тут лише перегляд — свою вебку публікуй з персонального /overlay.",
     "zoomWaiting": "Підтягуємо гравців…",
-    "zoomNoPlayers": "У цій кімнаті ще немає гравців у Firestore.",
-    "zoomLiveKitName": "Лобі"
+    "zoomNoPlayers": "У цій кімнаті ще немає гравців у Firestore."
   },
   "admin": {
     "eyebrow": "Ведучий",
@@ -523,22 +524,23 @@
     "tokenMismatchHint": "Відкрий лобі й оверлей зі свого слоту (у OBS — посилання без токена).",
     "tokenMismatchCta": "Лобі",
     "mosaicDragHandle": "Тягни, щоб поміняти місцями з іншою камерою",
-    "liveKit": {
-      "statusNotConfigured": "LiveKit · не налаштовано",
-      "statusWaitingGame": "LiveKit · чекаємо дані гри…",
-      "statusConnecting": "LiveKit · підключення…",
-      "statusConnected": "LiveKit · підключено",
-      "statusDisconnected": "LiveKit · відʼєднано",
-      "statusIdle": "LiveKit · очікування",
-      "statusError": "LiveKit · помилка: {msg}",
-      "notConfiguredHint": "Додай VITE_LIVEKIT_URL і LIVEKIT_API_KEY / SECRET (.env.local локально; на Vercel — і для Preview, див. .env.example).",
+    "voiceMedia": {
+      "statusNotWired": "Голос/відео: UI не підключено",
+      "statusNotConfigured": "Медіа · не налаштовано (сигналінг)",
+      "statusWaitingGame": "Медіа · чекаємо дані гри…",
+      "statusConnecting": "Медіа · підключення…",
+      "statusConnected": "Медіа · підключено",
+      "statusDisconnected": "Медіа · відʼєднано",
+      "statusIdle": "Медіа · очікування",
+      "statusError": "Медіа · помилка: {msg}",
+      "notConfiguredHint": "У продакшені вкажи VITE_SIGNALING_URL на той самий хост сигналінгу, що й Video call (.env / Vercel). Локально dev зазвичай проксує на API.",
       "waitingHint": "Підключення після синхрону з Firestore. Якщо зависло — перевір game id і мережу.",
       "hintControls": "Відео/голос на картках; мік і камера — тут.",
       "spectatorHint": "Режим глядача: додай ?player=p1 (свій слот), щоб увімкнути камеру й мік.",
       "eliminatedNoPublish": "Вибув — камера й мік вимкнені.",
       "enableSound": "Увімкнути звук",
       "enableSoundHint": "Браузер без кліку не відтворює чужий голос. Натисни кнопку або спочатку Mic/Cam.",
-      "debugSummary": "LiveKit debug (dev)"
+      "debugSummary": "Медіа debug (dev)"
     }
   },
   "overlayCard": {

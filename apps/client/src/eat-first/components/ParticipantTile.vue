@@ -1,10 +1,9 @@
 <script setup>
 import { computed, ref, watch, onUnmounted, nextTick } from 'vue'
-import { Track } from 'livekit-client'
 
 const props = defineProps({
-  /** LiveKit participant (стабільне посилання для attach). */
-  participant: { type: Object, required: true },
+  /** Відео/аудіо з MediaStream (mediasoup / call-core). */
+  mediaStream: { type: Object, default: null },
   identity: { type: String, default: '' },
   label: { type: String, default: '' },
   isLocal: { type: Boolean, default: false },
@@ -39,83 +38,58 @@ const ptileClass = computed(() => ({
   'ptile--mosaic-dynamic': props.mosaicMode && props.layer,
 }))
 
-/** @type {import('livekit-client').VideoTrack | null} */
-let attached = null
-/** @type {import('livekit-client').AudioTrack | null} */
-let attachedAudio = null
-
-function detach() {
+function clearVideoEl() {
   const el = videoRef.value
-  if (attached && el) {
-    try {
-      attached.detach(el)
-    } catch {
-      /* */
-    }
-  }
-  attached = null
+  if (el) el.srcObject = null
 }
 
-function detachAudio() {
+function clearAudioEl() {
   const el = audioRef.value
-  if (attachedAudio && el) {
-    try {
-      attachedAudio.detach(el)
-    } catch {
-      /* */
-    }
-  }
-  attachedAudio = null
+  if (el) el.srcObject = null
 }
 
 watch(
-  () => [props.participant, props.showVideo, props.identity],
+  () => [props.mediaStream, props.showVideo, props.identity],
   async () => {
     await nextTick()
-    detach()
+    clearVideoEl()
     if (!props.showVideo) return
     const el = videoRef.value
     if (!el) return
-    try {
-      const pub = props.participant.getTrackPublication(Track.Source.Camera)
-      const vt = pub?.videoTrack
-      if (vt) {
-        vt.attach(el)
+    if (props.mediaStream instanceof MediaStream) {
+      try {
+        el.srcObject = props.mediaStream
         el.muted = !!props.isLocal
-        attached = vt
+      } catch {
+        /* */
       }
-    } catch {
-      /* */
     }
   },
   { immediate: true, flush: 'post' },
 )
 
 watch(
-  () => [props.participant, props.isLocal, props.identity],
+  () => [props.mediaStream, props.isLocal, props.identity],
   async () => {
     await nextTick()
-    detachAudio()
+    clearAudioEl()
     if (props.isLocal) return
     const el = audioRef.value
     if (!el) return
-    try {
-      const pub = props.participant.getTrackPublication(Track.Source.Microphone)
-      const at = pub?.audioTrack
-      if (at) {
-        at.attach(el)
-        attachedAudio = at
+    if (props.mediaStream instanceof MediaStream) {
+      try {
+        el.srcObject = props.mediaStream
+      } catch {
+        /* */
       }
-    } catch {
-      /* */
     }
   },
   { immediate: true, flush: 'post' },
 )
 
 onUnmounted(() => {
-  detach()
-  detachAudio()
+  clearVideoEl()
+  clearAudioEl()
 })
 
 function initials() {

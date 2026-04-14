@@ -19,9 +19,11 @@
     "navBack": "Назад",
     "navCallSoonTitle": "Połączenie wideo — wkrótce",
     "navCallSoonAria": "Call — jeszcze niedostępne",
+    "navCallTitle": "Połączenie wideo",
     "navEatDisabledTitle": "Eat First — tymczasowo wyłączone w nawigacji",
     "navEatDisabledAria": "Eat First — niedostępne w menu",
-    "footerLine": "{year} nad1ch. Wszelkie prawa zastrzeżone. „Kogo zjemy pierwszego” — oryginalny interfejs show.",
+    "footerLineStream": "{year} nad1ch. Wszelkie prawa zastrzeżone.",
+    "footerLineEat": "{year} nad1ch. Wszelkie prawa zastrzeżone. „Kogo zjemy pierwszego” — oryginalny interfejs show.",
     "footerCopyrightSymbol": "©",
     "footerEggTriggerAria": "Niespodzianka",
     "footerEggClose": "Zamknij",
@@ -177,8 +179,7 @@
     "zoomTitle": "Pokój jak w Zoomie",
     "zoomHint": "Kamery graczy (gdy włączone z ich overlay) i te same karty co globalny OBS. Tu tylko podgląd — publikuj kamerę z osobistego /overlay.",
     "zoomWaiting": "Ładujemy graczy…",
-    "zoomNoPlayers": "Brak graczy w tej rozgrywce.",
-    "zoomLiveKitName": "Lobby"
+    "zoomNoPlayers": "Brak graczy w tej rozgrywce."
   },
   "admin": {
     "eyebrow": "Prowadzący",
@@ -538,22 +539,23 @@
     "tokenMismatchHint": "Відкрий лобі й оверлей зі свого слоту (у OBS — посилання без токена).",
     "tokenMismatchCta": "Лобі",
     "mosaicDragHandle": "Przeciągnij, zamień kafel z inną kamerą",
-    "liveKit": {
-      "statusNotConfigured": "LiveKit · nie skonfigurowano",
-      "statusWaitingGame": "LiveKit · czekam na dane gry…",
-      "statusConnecting": "LiveKit · łączenie…",
-      "statusConnected": "LiveKit · połączono",
-      "statusDisconnected": "LiveKit · rozłączono",
-      "statusIdle": "LiveKit · bezczynny",
-      "statusError": "LiveKit · błąd: {msg}",
-      "notConfiguredHint": "Ustaw VITE_LIVEKIT_URL i LIVEKIT_API_KEY / SECRET (lokalnie .env.local; na Vercel także Preview — patrz .env.example).",
+    "voiceMedia": {
+      "statusNotWired": "UI głosu/wideo niepodłączone",
+      "statusNotConfigured": "Media · signaling nie skonfigurowany",
+      "statusWaitingGame": "Media · czekam na dane gry…",
+      "statusConnecting": "Media · łączenie…",
+      "statusConnected": "Media · połączono",
+      "statusDisconnected": "Media · rozłączono",
+      "statusIdle": "Media · bezczynny",
+      "statusError": "Media · błąd: {msg}",
+      "notConfiguredHint": "W produkcji ustaw VITE_SIGNALING_URL na ten sam host sygnalizacji co Video call (.env / Vercel). Dev domyślnie proxy do API.",
       "waitingHint": "Połączenie po synchronizacji Firestore. Jeśli wisi — sprawdź game id i sieć.",
       "hintControls": "Wideo/audio na kartach graczy; mik i kamera tutaj.",
       "spectatorHint": "Widz: dodaj ?player=p1 (swój slot), by włączyć kamerę i mikrofon.",
       "eliminatedNoPublish": "Eliminacja — kamera i mikrofon wyłączone.",
       "enableSound": "Włącz dźwięk",
       "enableSoundHint": "Przeglądarka blokuje audio innych bez interakcji. Kliknij lub najpierw Mikro/Kamera.",
-      "debugSummary": "LiveKit debug (dev)"
+      "debugSummary": "Media debug (dev)"
     }
   },
   "overlayCard": {

@@ -13,10 +13,12 @@ import { RouterLink } from 'vue-router'
       </header>
       <ul class="home__cards">
         <li class="home__cards-item">
-          <AppCard muted>
-            <h2 class="home__card-title">Video call</h2>
-            <p class="home__card-text">Coming soon</p>
-          </AppCard>
+          <RouterLink :to="{ name: 'call' }" class="home__card-link">
+            <AppCard interactive>
+              <h2 class="home__card-title">Video call</h2>
+              <p class="home__card-text">Join a room (demo)</p>
+            </AppCard>
+          </RouterLink>
         </li>
         <li class="home__cards-item">
           <RouterLink :to="{ name: 'wordle' }" class="home__card-link">
@@ -27,10 +29,12 @@ import { RouterLink } from 'vue-router'
           </RouterLink>
         </li>
         <li class="home__cards-item home__cards-item--eat">
-          <AppCard muted>
-            <h2 class="home__card-title">Eat First</h2>
-            <p class="home__card-text">Coming soon</p>
-          </AppCard>
+          <RouterLink :to="{ name: 'eat', query: { view: 'join' } }" class="home__card-link">
+            <AppCard interactive>
+              <h2 class="home__card-title">Eat First</h2>
+              <p class="home__card-text">Stream voting game (overlay)</p>
+            </AppCard>
+          </RouterLink>
         </li>
       </ul>
     </AppContainer>

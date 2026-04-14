@@ -19,9 +19,11 @@
     "navBack": "Назад",
     "navCallSoonTitle": "Videoanruf — demnächst",
     "navCallSoonAria": "Call — noch nicht verfügbar",
+    "navCallTitle": "Videoanruf",
     "navEatDisabledTitle": "Eat First — vorübergehend in der Navigation deaktiviert",
     "navEatDisabledAria": "Eat First — im Menü nicht verfügbar",
-    "footerLine": "{year} nad1ch. Alle Rechte vorbehalten. „Wen essen wir zuerst“ — originale Show-Oberfläche.",
+    "footerLineStream": "{year} nad1ch. Alle Rechte vorbehalten.",
+    "footerLineEat": "{year} nad1ch. Alle Rechte vorbehalten. „Wen essen wir zuerst“ — originale Show-Oberfläche.",
     "footerCopyrightSymbol": "©",
     "footerEggTriggerAria": "Osterei",
     "footerEggClose": "Schließen",
@@ -177,8 +179,7 @@
     "zoomTitle": "Zoom-ähnlicher Raum",
     "zoomHint": "Spielerkameras (wenn in deren Overlay aktiv) und dieselben Karten wie im globalen OBS. Hier nur Ansicht — Kamera über persönliches /overlay veröffentlichen.",
     "zoomWaiting": "Spieler werden geladen…",
-    "zoomNoPlayers": "Noch keine Spieler in diesem Raum.",
-    "zoomLiveKitName": "Lobby"
+    "zoomNoPlayers": "Noch keine Spieler in diesem Raum."
   },
   "admin": {
     "eyebrow": "Host",
@@ -538,22 +539,23 @@
     "tokenMismatchHint": "Відкрий лобі й оверлей зі свого слоту (у OBS — посилання без токена).",
     "tokenMismatchCta": "Лобі",
     "mosaicDragHandle": "Ziehen, um mit einer anderen Kamera zu tauschen",
-    "liveKit": {
-      "statusNotConfigured": "LiveKit · nicht konfiguriert",
-      "statusWaitingGame": "LiveKit · warte auf Spieldaten…",
-      "statusConnecting": "LiveKit · verbinden…",
-      "statusConnected": "LiveKit · verbunden",
-      "statusDisconnected": "LiveKit · getrennt",
-      "statusIdle": "LiveKit · bereit",
-      "statusError": "LiveKit · Fehler: {msg}",
-      "notConfiguredHint": "VITE_LIVEKIT_URL und LIVEKIT_API_KEY / SECRET setzen (lokal .env.local; auf Vercel auch Preview — siehe .env.example).",
+    "voiceMedia": {
+      "statusNotWired": "Sprache/Video-UI nicht verbunden",
+      "statusNotConfigured": "Medien · Signaling nicht konfiguriert",
+      "statusWaitingGame": "Medien · warte auf Spieldaten…",
+      "statusConnecting": "Medien · verbinden…",
+      "statusConnected": "Medien · verbunden",
+      "statusDisconnected": "Medien · getrennt",
+      "statusIdle": "Medien · bereit",
+      "statusError": "Medien · Fehler: {msg}",
+      "notConfiguredHint": "In Produktion VITE_SIGNALING_URL auf denselben Signaling-Host wie Video call setzen (.env / Vercel). Dev proxied standardmäßig zur API.",
       "waitingHint": "Verbindung nach Firestore-Sync. Hängt es — Game-ID und Netzwerk prüfen.",
       "hintControls": "Video/Audio auf den Karten; Mikro und Kamera hier.",
       "spectatorHint": "Zuschauer: ?player=p1 (dein Slot) anhängen, um Kamera und Mikro zu aktivieren.",
       "eliminatedNoPublish": "Ausgeschieden — Kamera und Mikro bleiben aus.",
       "enableSound": "Ton aktivieren",
       "enableSoundHint": "Ohne Klick blockiert der Browser Remote-Audio. Button oder zuerst Mikro/Kamera.",
-      "debugSummary": "LiveKit debug (dev)"
+      "debugSummary": "Medien debug (dev)"
     }
   },
   "overlayCard": {

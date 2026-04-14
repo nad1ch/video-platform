@@ -6,7 +6,6 @@ import AppHeader from '@/components/ui/AppHeader.vue'
 import AppFooter from '@/components/ui/AppFooter.vue'
 import AppShellStreamNav from '@/components/ui/AppShellStreamNav.vue'
 import AppShellChromeToolbar from '@/components/ui/AppShellChromeToolbar.vue'
-import AppHeaderNav from '@/eat-first/ui/molecules/AppHeaderNav.vue'
 import AppHeaderToolbar from '@/eat-first/ui/organisms/AppHeaderToolbar.vue'
 import HostControlChromeBar from '@/eat-first/components/showdesk/HostControlChromeBar.vue'
 import OnboardingTourModal from '@/eat-first/ui/organisms/OnboardingTourModal.vue'
@@ -66,19 +65,24 @@ const themeIcon = computed(() => (theme.value === 'dark' ? '☀️' : '🌙'))
 const themeLabel = computed(() => (theme.value === 'dark' ? t('app.themeLight') : t('app.themeDark')))
 const footerYear = new Date().getFullYear()
 
-const headerMarkSrc = ref(BRAND_LOGO_PNG)
+const streamShellBrandImg = ref(BRAND_LOGO_PNG)
 
-function onHeaderMarkError(): void {
-  if (headerMarkSrc.value === BRAND_LOGO_PNG) {
-    headerMarkSrc.value = BRAND_LOGO_COMPACT_PNG
+function onStreamShellBrandImgError() {
+  if (streamShellBrandImg.value === BRAND_LOGO_PNG) {
+    streamShellBrandImg.value = BRAND_LOGO_COMPACT_PNG
     return
   }
-  if (headerMarkSrc.value === BRAND_LOGO_COMPACT_PNG) {
-    headerMarkSrc.value = BRAND_LOGO_SVG_FALLBACK
+  if (streamShellBrandImg.value === BRAND_LOGO_COMPACT_PNG) {
+    streamShellBrandImg.value = BRAND_LOGO_SVG_FALLBACK
     return
   }
-  headerMarkSrc.value = ''
+  streamShellBrandImg.value = ''
 }
+
+const streamBrandFallbackLetter = computed(() => {
+  const s = String(headerTitle.value ?? '').trim()
+  return (s[0] ?? 'S').toUpperCase()
+})
 
 const onboardingOpen = ref(false)
 const onboardingTourKey = ref('')
@@ -141,28 +145,31 @@ onMounted(() => {
       >
         <template #brand>
           <RouterLink
-            class="app-shell-brand app-shell-brand--with-mark"
+            class="app-shell-brand app-shell-brand--with-mark app-shell-stream-brand"
             :to="{ name: 'home' }"
             :title="headerTitle"
             :aria-label="`${t('app.navHome')} · ${headerTitle}`"
           >
-            <img
-              v-if="headerMarkSrc"
-              class="app-shell-brand__mark"
-              :src="headerMarkSrc"
-              width="40"
-              height="40"
-              alt=""
-              decoding="async"
-              fetchpriority="high"
-              @error="onHeaderMarkError"
-            />
-            <span class="app-shell-brand__title">{{ headerTitle }}</span>
+            <span v-if="streamShellBrandImg" class="app-shell-stream-brand__mark-wrap">
+              <img
+                class="app-shell-stream-brand__mark"
+                :src="streamShellBrandImg"
+                width="22"
+                height="22"
+                alt=""
+                decoding="async"
+                fetchpriority="low"
+                @error="onStreamShellBrandImgError"
+              />
+            </span>
+            <span v-else class="app-shell-stream-brand__mark-fallback" aria-hidden="true">{{
+              streamBrandFallbackLetter
+            }}</span>
+            <span class="app-shell-brand__title app-shell-stream-brand__title">{{ headerTitle }}</span>
           </RouterLink>
         </template>
         <template #start>
-          <AppHeaderNav v-if="isEatRoute" />
-          <AppShellStreamNav v-else />
+          <AppShellStreamNav />
         </template>
         <template #end>
           <AppHeaderToolbar
@@ -238,5 +245,57 @@ onMounted(() => {
 .app-shell-main--full {
   flex: 1;
   min-height: 100vh;
+}
+
+.app-shell-stream-brand__mark-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0.12rem;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle, var(--sa-color-border));
+  background: var(--logo-pad-bg, color-mix(in srgb, var(--sa-color-primary) 28%, var(--sa-color-bg-deep)));
+  line-height: 0;
+  box-sizing: border-box;
+}
+
+.app-shell-stream-brand__mark {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.app-shell-stream-brand__mark-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle, var(--sa-color-border));
+  background: var(--logo-pad-bg, color-mix(in srgb, var(--sa-color-primary) 28%, var(--sa-color-bg-deep)));
+  font-family: var(--font-display, var(--sa-font-display));
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--text-heading, var(--sa-color-text-main));
+}
+
+@media (max-width: 420px) {
+  .app-shell-stream-brand__title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 }
 </style>

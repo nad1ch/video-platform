@@ -34,8 +34,8 @@ import { nominationsFromRoom } from '../services/gameService'
  *   handsClusterMode: import('vue').ComputedRef<boolean>,
  *   isHandRaised: (p: object) => boolean,
  *   playersDisplayOrderedForGlobalMosaic?: import('vue').ComputedRef<Array<Record<string, unknown>>> | import('vue').Ref<Array<Record<string, unknown>>>,
- *   liveKitTileForPlayer?: (player: Record<string, unknown>) => unknown,
- *   liveKitVolumeForPlayer?: (player: Record<string, unknown>) => number,
+ *   mediaTileForPlayer?: (player: Record<string, unknown>) => unknown,
+ *   mediaVolumeForPlayer?: (player: Record<string, unknown>) => number,
  * }} ctx
  */
 export function useOverlayCardViewModels(ctx) {
@@ -64,8 +64,8 @@ export function useOverlayCardViewModels(ctx) {
     handsClusterMode,
     isHandRaised,
     playersDisplayOrderedForGlobalMosaic: playersDisplayOrderedRef,
-    liveKitTileForPlayer: lkTileFn,
-    liveKitVolumeForPlayer: lkVolumeFn,
+    mediaTileForPlayer: mediaTileFn,
+    mediaVolumeForPlayer: mediaVolumeFn,
   } = ctx
 
   /** @type {import('vue').ShallowRef<Map<string, import('vue').UnwrapNestedRefs<{ player: Record<string, unknown>, tile: unknown, volume: number, card: Record<string, unknown> }>>>} */
@@ -171,7 +171,7 @@ export function useOverlayCardViewModels(ctx) {
   })
 
   watchEffect(() => {
-    if (!playersDisplayOrderedRef || !lkTileFn || !lkVolumeFn) {
+    if (!playersDisplayOrderedRef || !mediaTileFn || !mediaVolumeFn) {
       mosaicOrderedIds.value = []
       const map = mosaicRowById.value
       if (map.size > 0) {
@@ -236,8 +236,8 @@ export function useOverlayCardViewModels(ctx) {
       } else {
         row.player = p
       }
-      row.tile = lkTileFn(p)
-      row.volume = lkVolumeFn(p)
+      row.tile = mediaTileFn(p)
+      row.volume = mediaVolumeFn(p)
       const nextCard = globalMosaicCardProps(p)
       if (!('speakerTimeLeft' in nextCard)) {
         delete row.card.speakerTimeLeft

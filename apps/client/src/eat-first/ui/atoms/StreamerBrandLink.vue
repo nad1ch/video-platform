@@ -14,9 +14,6 @@ defineProps({
   logoSize: { type: Number, default: 32 },
 })
 
-/**
- * Try WebP (if present) → PNG → SVG → letter fallback. Logs load failures for debugging.
- */
 const imgSrc = ref(BRAND_LOGO_PNG)
 
 function onLogoError(ev: Event) {

@@ -17,6 +17,7 @@ export type Feedback = 'correct' | 'present' | 'absent'
 
 export type LocalGuessRow = { word: string; result: Feedback[] }
 
+/** `allowed` — усі леми з Hunspell (прийнятні здогади). `secret` — лише «звичайні» леми (мала літера в .dic). */
 const PACK: Record<WordLength, { allowed: Set<string>; secret: readonly string[] }> = {
   5: { allowed: new Set(WORDS_UK_5_ALLOWED), secret: WORDS_UK_5_SECRET_POOL },
   6: { allowed: new Set(WORDS_UK_6_ALLOWED), secret: WORDS_UK_6_SECRET_POOL },

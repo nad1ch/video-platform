@@ -5,6 +5,7 @@
 export {
   useCallEngine,
   type CallEngineOptions,
+  type CallEngineRole,
   type CallSessionStore,
   type CallTile,
 } from './useCallEngine'
