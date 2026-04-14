@@ -3,12 +3,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const express_1 = __importDefault(require("express"));
 const http_1 = __importDefault(require("http"));
 const ws_1 = require("ws");
 const createWorker_1 = require("./mediasoup/createWorker");
 const RoomManager_1 = require("./rooms/RoomManager");
 const socketServer_1 = require("./signaling/socketServer");
+const twitchAuthRouter_1 = require("./wordle/twitchAuthRouter");
+const tmiChat_1 = require("./wordle/tmiChat");
+const wordleSocket_1 = require("./wordle/wordleSocket");
 async function bootstrap() {
     let shuttingDown = false;
     const worker = await (0, createWorker_1.createMediasoupWorker)({
@@ -16,42 +20,85 @@ async function bootstrap() {
     });
     const roomManager = new RoomManager_1.RoomManager(worker);
     const app = (0, express_1.default)();
+    const allowedOrigin = process.env.WORDLE_CLIENT_ORIGIN ?? 'http://localhost:5173';
+    app.use((req, res, next) => {
+        res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        if (req.method === 'OPTIONS') {
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            res.status(204).end();
+            return;
+        }
+        next();
+    });
+    app.use((0, cookie_parser_1.default)());
+    app.use(express_1.default.json());
     const server = http_1.default.createServer(app);
-    const wss = new ws_1.WebSocketServer({ server });
-    (0, socketServer_1.attachSocketServer)(wss, roomManager);
+    const wssSignaling = new ws_1.WebSocketServer({ noServer: true });
+    const wssWordle = new ws_1.WebSocketServer({ noServer: true });
+    (0, socketServer_1.attachSocketServer)(wssSignaling, roomManager);
+    (0, wordleSocket_1.attachWordleSocketServer)(wssWordle);
+    server.on('upgrade', (request, socket, head) => {
+        const host = request.headers.host ?? 'localhost';
+        const pathname = new URL(request.url ?? '/', `http://${host}`).pathname;
+        if (pathname === '/wordle-ws') {
+            wssWordle.handleUpgrade(request, socket, head, (ws) => {
+                wssWordle.emit('connection', ws, request);
+            });
+            return;
+        }
+        if (pathname === '/ws' || pathname === '/') {
+            wssSignaling.handleUpgrade(request, socket, head, (ws) => {
+                wssSignaling.emit('connection', ws, request);
+            });
+            return;
+        }
+        socket.destroy();
+    });
+    (0, twitchAuthRouter_1.mountTwitchWordleAuth)(app);
     app.get('/health', (_req, res) => {
         res.json({
             status: 'ok',
             service: 'mediasoup-server',
         });
     });
+    (0, tmiChat_1.startTwitchChatIngest)();
     const shutdown = () => {
         if (shuttingDown) {
             return;
         }
         shuttingDown = true;
         console.info('Server shutting down…');
+        (0, tmiChat_1.stopTwitchChatIngest)();
         try {
             roomManager.disposeAllRooms();
         }
         catch (err) {
             console.error('disposeAllRooms failed', err);
         }
-        wss.close((wssErr) => {
-            if (wssErr) {
-                console.error('WebSocketServer close error', wssErr);
-            }
-            server.close((httpErr) => {
-                if (httpErr) {
-                    console.error('HTTP server close error', httpErr);
+        const closeWss = (w, name, cb) => {
+            w.close((wssErr) => {
+                if (wssErr) {
+                    console.error(`WebSocketServer ${name} close error`, wssErr);
                 }
-                try {
-                    worker.close();
-                }
-                catch (err) {
-                    console.error('worker.close failed', err);
-                }
-                process.exit(0);
+                cb();
+            });
+        };
+        closeWss(wssWordle, 'wordle', () => {
+            closeWss(wssSignaling, 'signaling', () => {
+                server.close((httpErr) => {
+                    if (httpErr) {
+                        console.error('HTTP server close error', httpErr);
+                    }
+                    try {
+                        worker.close();
+                    }
+                    catch (err) {
+                        console.error('worker.close failed', err);
+                    }
+                    process.exit(0);
+                });
             });
         });
     };

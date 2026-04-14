@@ -6,6 +6,7 @@ import ThemeToggleButton from '@/eat-first/ui/atoms/ThemeToggleButton.vue'
 import UiMenuSelect from '@/eat-first/ui/molecules/UiMenuSelect.vue'
 import { useTheme } from '@/eat-first/composables/useTheme.js'
 import { persistLocale, LOCALE_OPTIONS } from '@/eat-first/i18n'
+import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 
 const props = withDefaults(
   defineProps<{
@@ -26,6 +27,8 @@ const themeLabel = computed(() =>
   theme.value === 'dark' ? t('app.themeLight') : t('app.themeDark'),
 )
 const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.label }))
+
+const twitchChannelAria = computed(() => t('app.twitchAria', { nick: STREAMER_NICK }))
 </script>
 
 <template>
@@ -40,7 +43,7 @@ const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.l
     >
       ?
     </button>
-    <StreamerBrandLink :ariaLabel="t('app.twitchAria')" />
+    <StreamerBrandLink :ariaLabel="twitchChannelAria" />
     <UiMenuSelect
       :model-value="locale"
       :options="localeMenuOptions"

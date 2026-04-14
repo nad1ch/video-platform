@@ -17,6 +17,8 @@ defineProps<{
 const route = useRoute()
 const { t } = useI18n()
 
+const twitchChannelAria = computed(() => t('app.twitchAria', { nick: STREAMER_NICK }))
+
 const footerLineKey = computed(() =>
   route.meta.footerContext === 'eat' ? 'app.footerLineEat' : 'app.footerLineStream',
 )
@@ -82,7 +84,7 @@ function footerInitial() {
         :href="STREAMER_TWITCH_URL"
         target="_blank"
         rel="noopener noreferrer"
-        :aria-label="t('app.twitchAria')"
+        :aria-label="twitchChannelAria"
       >
         <div class="app-site-footer__logo-wrap">
           <img
@@ -110,7 +112,7 @@ function footerInitial() {
           >
             {{ t('app.footerCopyrightSymbol') }}
           </button>
-          <span class="app-site-footer__copy-rest">{{ t(footerLineKey, { year }) }}</span>
+          <span class="app-site-footer__copy-rest">{{ t(footerLineKey, { year, nick: STREAMER_NICK }) }}</span>
         </p>
       </div>
     </div>

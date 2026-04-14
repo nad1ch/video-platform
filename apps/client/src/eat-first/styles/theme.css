@@ -296,16 +296,88 @@
   min-width: 0;
 }
 
+/* Stream shell (Wordle / Call / home): навігація зліва, заголовок по центру, дії справа — без логотипа біля назви */
+.app-shell-header__top--has-center {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.5rem;
+}
+
+.app-shell-header__top--has-center .app-shell-header__start {
+  flex: unset;
+  min-width: 0;
+}
+
+.app-shell-header__top--has-center > .app-shell-header__end {
+  justify-self: end;
+}
+
+.app-shell-header__center {
+  justify-self: center;
+  text-align: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-shell-stream-centered-title {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display, var(--sa-font-display));
+  font-size: clamp(0.68rem, 2.2vw, 0.88rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--text-heading, var(--sa-color-text-main));
+  line-height: 1.3;
+  padding: 0.2rem 0;
+  vertical-align: middle;
+}
+
+.app-shell-stream-centered-title:hover {
+  color: var(--text-title, var(--sa-color-primary));
+}
+
 /**
  * Вузьке вікно: перенос рядка + можливість стискання блоку дій,
  * щоб наїзд на навігацію й бренд не ламав шапку.
  */
 @media (max-width: 900px) {
-  .app-shell-header__top {
+  .app-shell-header__top:not(.app-shell-header__top--has-center) {
     flex-wrap: wrap;
     align-items: flex-start;
     row-gap: 0.4rem;
     column-gap: 0.5rem;
+  }
+
+  .app-shell-header__top--has-center {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'start end'
+      'center center';
+    align-items: center;
+    row-gap: 0.35rem;
+    column-gap: 0.5rem;
+  }
+
+  .app-shell-header__top--has-center .app-shell-header__start {
+    grid-area: start;
+  }
+
+  .app-shell-header__top--has-center > .app-shell-header__end {
+    grid-area: end;
+    justify-self: end;
+  }
+
+  .app-shell-header__top--has-center .app-shell-header__center {
+    grid-area: center;
+    justify-self: center;
+    max-width: 100%;
   }
 
   .app-shell-header__start {
@@ -336,6 +408,45 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 6.5rem;
+  }
+}
+
+/* Дуже вузькі екрани: нав / Twitch-блок / заголовок стеком — без наїзду в одному рядку */
+@media (max-width: 520px) {
+  .app-shell-header__top--has-center {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'start'
+      'end'
+      'center';
+    row-gap: 0.45rem;
+    column-gap: 0;
+  }
+
+  .app-shell-header__top--has-center .app-shell-header__start {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .app-shell-header__top--has-center > .app-shell-header__end {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    justify-self: stretch;
+    justify-content: space-between;
+  }
+
+  .app-shell-header__top--has-center .app-shell-header__center {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .app-shell-stream-centered-title {
+    display: block;
+    width: 100%;
+    text-align: center;
   }
 }
 

@@ -2,7 +2,8 @@ import type { WebSocketServer } from 'ws'
 import type { DtlsParameters } from 'mediasoup/types'
 import type { RoomManager } from '../rooms/RoomManager'
 import type { Peer } from '../peers/Peer'
-import type { WebSocket } from 'ws'
+import WebSocket from 'ws'
+import type { WebSocket as WsType } from 'ws'
 import {
   clientMessageSchema,
   handleConnectTransport,
@@ -13,13 +14,47 @@ import {
   handleProduce,
   handleSetConsumerPreferredLayers,
   handleUpdateDisplayName,
+  sendServerMessage,
 } from './messageHandlers'
+
+const WS_PING_INTERVAL_MS = 45_000
+
+type WsWithAlive = WsType & { isAlive?: boolean }
 
 export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManager): void {
   const socketPeer = new Map<WebSocket, Peer>()
   const deps = { roomManager, socketPeer }
 
+  const heartbeat = setInterval(() => {
+    for (const socket of wss.clients) {
+      const s = socket as WsWithAlive
+      if (s.readyState !== WebSocket.OPEN) {
+        continue
+      }
+      if (s.isAlive === false) {
+        s.terminate()
+        continue
+      }
+      s.isAlive = false
+      s.ping()
+    }
+  }, WS_PING_INTERVAL_MS)
+
+  if (typeof heartbeat.unref === 'function') {
+    heartbeat.unref()
+  }
+
+  wss.on('close', () => {
+    clearInterval(heartbeat)
+  })
+
   wss.on('connection', (socket) => {
+    const ext = socket as WsWithAlive
+    ext.isAlive = true
+    socket.on('pong', () => {
+      ext.isAlive = true
+    })
+
     const onDisconnect = (): void => {
       handleDisconnect(socket, deps)
     }
@@ -40,6 +75,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
 
         try {
           switch (parsed.data.type) {
+            case 'client-ping': {
+              sendServerMessage(socket, { type: 'server-pong', payload: {} })
+              break
+            }
             case 'join-room': {
               const { roomId, peerId, displayName } = parsed.data.payload
               await handleJoinRoom(socket, roomId, peerId, displayName, deps)

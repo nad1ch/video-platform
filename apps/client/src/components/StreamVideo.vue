@@ -170,11 +170,10 @@ onUnmounted(() => {
 
 .stream-video--fill {
   width: 100%;
-  height: 100%;
-  max-height: none;
+  height: auto;
+  max-height: 100%;
   min-height: 0;
-  /* contain = full frame visible; cover crops sides on wide video in a boxy tile */
-  object-fit: contain;
+  object-fit: cover;
   object-position: center;
   border: none;
 }

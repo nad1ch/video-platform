@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { useCallEngine } from 'call-core'
 import ParticipantTile from './ParticipantTile.vue'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+
+const { t } = useI18n()
 
 const {
   session,
@@ -27,44 +30,54 @@ const {
     <AppContainer class="call-page" :class="{ 'call-page--prejoin': !session.inCall }">
     <div class="call-page__shell">
       <header class="call-page__header">
-        <h1 class="call-page__title">Video call</h1>
+        <h1 class="call-page__title">{{ t('callPage.title') }}</h1>
         <p v-if="!session.inCall" class="call-page__hint">
-          One tap joins the room, sets up transports, camera and mic.
+          {{ t('callPage.hintPrejoin') }}
         </p>
       </header>
 
       <section v-if="!session.inCall" class="call-page__pre">
         <label class="call-page__field">
-          <span>Room</span>
-          <input v-model="session.roomId" type="text" autocomplete="off" placeholder="demo" />
+          <span>{{ t('callPage.fieldRoom') }}</span>
+          <input
+            v-model="session.roomId"
+            type="text"
+            autocomplete="off"
+            :placeholder="t('callPage.placeholderRoom')"
+          />
         </label>
         <label class="call-page__field">
-          <span>Your name</span>
-          <input v-model="session.selfDisplayName" type="text" autocomplete="name" placeholder="You" />
+          <span>{{ t('callPage.fieldName') }}</span>
+          <input
+            v-model="session.selfDisplayName"
+            type="text"
+            autocomplete="name"
+            :placeholder="t('callPage.placeholderName')"
+          />
         </label>
         <p v-if="joinError" class="call-page__error" role="alert">{{ joinError }}</p>
-        <p class="call-page__meta">WS: {{ wsStatus }}</p>
+        <p class="call-page__meta">{{ t('callPage.wsStatus', { status: wsStatus }) }}</p>
         <AppButton variant="primary" :disabled="joining" @click="joinCall">
-          {{ joining ? 'Joining…' : 'Join call' }}
+          {{ joining ? t('callPage.joining') : t('callPage.join') }}
         </AppButton>
       </section>
 
       <section v-else class="call-page__active">
         <div class="call-page__toolbar">
-          <AppButton variant="secondary" @click="leaveCall">Leave</AppButton>
+          <AppButton variant="secondary" @click="leaveCall">{{ t('callPage.leave') }}</AppButton>
           <AppButton
             variant="secondary"
             :class="{ 'call-page__btn--muted': !micEnabled }"
             @click="toggleMic"
           >
-            {{ micEnabled ? 'Mute mic' : 'Unmute' }}
+            {{ micEnabled ? t('callPage.muteMic') : t('callPage.unmute') }}
           </AppButton>
           <AppButton
             variant="secondary"
             :class="{ 'call-page__btn--muted': !camEnabled }"
             @click="toggleCam"
           >
-            {{ camEnabled ? 'Camera off' : 'Camera on' }}
+            {{ camEnabled ? t('callPage.cameraOff') : t('callPage.cameraOn') }}
           </AppButton>
         </div>
 
@@ -102,7 +115,7 @@ const {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  background: transparent;
+  background: var(--sa-color-bg-main);
   color: var(--sa-color-text-body);
   padding-block: 0 var(--sa-space-6);
 }

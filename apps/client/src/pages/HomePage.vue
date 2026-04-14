@@ -1,38 +1,42 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import { RouterLink } from 'vue-router'
+import { STREAM_APP_BRAND_NAME } from '@/eat-first/constants/brand.js'
+
+const { t } = useI18n()
 </script>
 
 <template>
   <div class="page-route">
     <AppContainer class="home">
       <header class="home__hero">
-        <h1 class="home__title">StreamAssist</h1>
-        <p class="home__tag">Interactive tools for streams</p>
+        <h1 class="home__title">{{ STREAM_APP_BRAND_NAME }}</h1>
+        <p class="home__tag">{{ t('home.tagline') }}</p>
       </header>
       <ul class="home__cards">
         <li class="home__cards-item">
           <RouterLink :to="{ name: 'call' }" class="home__card-link">
             <AppCard interactive>
-              <h2 class="home__card-title">Video call</h2>
-              <p class="home__card-text">Join a room (demo)</p>
+              <h2 class="home__card-title">{{ t('home.callTitle') }}</h2>
+              <p class="home__card-text">{{ t('home.callDesc') }}</p>
             </AppCard>
           </RouterLink>
         </li>
         <li class="home__cards-item">
           <RouterLink :to="{ name: 'wordle' }" class="home__card-link">
             <AppCard interactive>
-              <h2 class="home__card-title">Stream Wordle</h2>
-              <p class="home__card-text">Play with Twitch chat</p>
+              <h2 class="home__card-title">{{ t('home.wordleTitle') }}</h2>
+              <p class="home__card-text">{{ t('home.wordleDesc') }}</p>
             </AppCard>
           </RouterLink>
         </li>
         <li class="home__cards-item home__cards-item--eat">
           <RouterLink :to="{ name: 'eat', query: { view: 'join' } }" class="home__card-link">
             <AppCard interactive>
-              <h2 class="home__card-title">Eat First</h2>
-              <p class="home__card-text">Stream voting game (overlay)</p>
+              <h2 class="home__card-title">{{ t('home.eatTitle') }}</h2>
+              <p class="home__card-text">{{ t('home.eatDesc') }}</p>
             </AppCard>
           </RouterLink>
         </li>

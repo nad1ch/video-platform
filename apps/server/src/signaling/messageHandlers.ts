@@ -87,6 +87,11 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       temporalLayer: z.number().int().min(0).max(4).optional(),
     }),
   }),
+  /** App-level keepalive so proxies / CDNs do not close idle signaling (background tabs). */
+  z.object({
+    type: z.literal('client-ping'),
+    payload: z.object({}).optional(),
+  }),
 ])
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>
@@ -143,6 +148,7 @@ export type ServerMessage =
   | { type: 'producer-sync'; payload: { producers: ExistingProducerInfo[] } }
   | { type: 'consume-failed'; payload: { producerId: string; reason: string } }
   | { type: 'active-speaker'; payload: { peerId: string | null } }
+  | { type: 'server-pong'; payload: Record<string, never> }
 
 export type SignalingDeps = {
   roomManager: RoomManager

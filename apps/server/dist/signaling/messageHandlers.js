@@ -80,6 +80,11 @@ exports.clientMessageSchema = zod_1.z.discriminatedUnion('type', [
             temporalLayer: zod_1.z.number().int().min(0).max(4).optional(),
         }),
     }),
+    /** App-level keepalive so proxies / CDNs do not close idle signaling (background tabs). */
+    zod_1.z.object({
+        type: zod_1.z.literal('client-ping'),
+        payload: zod_1.z.object({}).optional(),
+    }),
 ]);
 function sendServerMessage(socket, message) {
     if (socket.readyState === ws_1.default.OPEN) {

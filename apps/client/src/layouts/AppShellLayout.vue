@@ -23,6 +23,7 @@ import {
   BRAND_LOGO_COMPACT_PNG,
   BRAND_LOGO_PNG,
   BRAND_LOGO_SVG_FALLBACK,
+  STREAM_APP_BRAND_NAME,
 } from '@/eat-first/constants/brand.js'
 import '@/eat-first/styles/host-chrome.css'
 
@@ -38,8 +39,19 @@ const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route
 const showChrome = computed(() => !isEatRoute.value || currentEatView.value !== 'overlay')
 
 const streamTitle = computed(() => {
+  void locale.value
+  const key = route.meta.appTitleKey
+  if (key === 'routes.streamAssist') {
+    return STREAM_APP_BRAND_NAME
+  }
+  if (typeof key === 'string' && key.length > 0) {
+    return t(key)
+  }
   const m = route.meta.appTitle
-  return typeof m === 'string' && m.length > 0 ? m : 'StreamAssist'
+  if (typeof m === 'string' && m.length > 0) {
+    return m
+  }
+  return STREAM_APP_BRAND_NAME
 })
 
 const hostChromeOn = computed(() => hostControlChromeStore.active === true)
@@ -143,7 +155,7 @@ onMounted(() => {
         :header-class="isEatRoute ? eatHeaderClass : undefined"
         :title="headerTitle"
       >
-        <template #brand>
+        <template v-if="isEatRoute" #brand>
           <RouterLink
             class="app-shell-brand app-shell-brand--with-mark app-shell-stream-brand"
             :to="{ name: 'home' }"
@@ -170,6 +182,16 @@ onMounted(() => {
         </template>
         <template #start>
           <AppShellStreamNav />
+        </template>
+        <template v-if="!isEatRoute" #center>
+          <RouterLink
+            class="app-shell-stream-centered-title"
+            :to="{ name: 'home' }"
+            :title="headerTitle"
+            :aria-label="`${t('app.navHome')} · ${headerTitle}`"
+          >
+            {{ headerTitle }}
+          </RouterLink>
         </template>
         <template #end>
           <AppHeaderToolbar

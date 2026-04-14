@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import StreamAudio from '../StreamAudio.vue'
 import StreamVideo from '../StreamVideo.vue'
+
+const { t, locale } = useI18n()
 
 const props = defineProps<{
   displayName: string
@@ -142,20 +145,21 @@ const isFrozen = computed(() => {
 })
 
 const placeholderHint = computed(() => {
+  void locale.value
   if (props.isLocal) {
     if (!props.stream) {
-      return 'Connecting…'
+      return t('callPage.tileConnecting')
     }
     if (!hasAnyVideoTrack.value) {
-      return 'Camera off'
+      return t('callPage.tileCameraOff')
     }
     return ''
   }
   if (!props.videoEnabled) {
-    return 'No video'
+    return t('callPage.tileNoVideo')
   }
   if (!hasLiveRemoteVideo.value) {
-    return 'Connecting…'
+    return t('callPage.tileConnecting')
   }
   return ''
 })
@@ -182,7 +186,7 @@ const placeholderHint = computed(() => {
           fill
           @video-ui="onVideoUi"
         />
-        <div v-if="isFrozen" class="tile-freeze" aria-live="polite">Reconnecting…</div>
+        <div v-if="isFrozen" class="tile-freeze" aria-live="polite">{{ t('callPage.tileReconnecting') }}</div>
       </div>
       <div v-else class="tile-placeholder">
         <span class="tile-placeholder-avatar">{{ initials(displayName) }}</span>
@@ -284,7 +288,7 @@ const placeholderHint = computed(() => {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: linear-gradient(160deg, #252630 0%, #12131a 100%);
+  background: var(--sa-color-bg-main);
   color: var(--text-h, #f3f4f6);
   z-index: 1;
 }

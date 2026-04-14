@@ -7,15 +7,10 @@ import type {
   Transport,
   TransportOptions,
 } from 'mediasoup-client/types'
-import { computed, onUnmounted, shallowRef, type ShallowRef } from 'vue'
+import { computed, onUnmounted, shallowRef } from 'vue'
 import type { SendTransportRoomApi } from '../transport/useSendTransport'
 import { waitForSignalingMessage } from '../signaling/signalingWait'
-import {
-  classifyBweMetrics,
-  mergeRecvSendBwe,
-  parseTransportStats,
-  type NetworkQualityClass,
-} from './webrtcLinkStats'
+import type { NetworkQualityClass } from './webrtcLinkStats'
 
 export type RemoteProducerInfo = {
   producerId: string
@@ -27,41 +22,6 @@ const TIMEOUT_MS = 45_000
 
 /** Coalesce rapid visibility / speaker / pin updates (producer-sync storms). */
 const PREFERRED_LAYERS_DEBOUNCE_MS = 80
-
-/** Min ms between spatial layer *upgrades* per consumer (downgrades apply immediately). Env clamp 1500–2500. */
-function readSpatialLayerCooldownMs(): number {
-  try {
-    const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
-    const raw = env?.VITE_SPATIAL_LAYER_COOLDOWN_MS
-    if (typeof raw !== 'string' || raw.length === 0) {
-      return 2000
-    }
-    const n = Number(raw)
-    return Number.isFinite(n) && n >= 1500 && n <= 2500 ? n : 2000
-  } catch {
-    return 2000
-  }
-}
-
-const SPATIAL_LAYER_COOLDOWN_MS = readSpatialLayerCooldownMs()
-
-function readBwePollMs(): number {
-  try {
-    const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
-    const raw = env?.VITE_BWE_POLL_MS
-    if (typeof raw !== 'string' || raw.length === 0) {
-      return 1500
-    }
-    const n = Number(raw)
-    return Number.isFinite(n) && n >= 500 && n <= 10_000 ? n : 1500
-  } catch {
-    return 1500
-  }
-}
-
-const BWE_POLL_MS = readBwePollMs()
-/** Require this many consecutive identical classifications before changing applied level (reduces flapping). */
-const BWE_LEVEL_HYSTERESIS_COUNT = 2
 
 function isTransportCreatedRecv(
   data: unknown,
@@ -192,6 +152,48 @@ function isConsumedForProducer(
 
 export type RemotePeerStream = { peerId: string; stream: MediaStream }
 
+/** DEV: track capture hints + inbound-rtp frame counters when the browser exposes them. */
+async function logInboundVideoDebug(consumer: Consumer, peerId: string): Promise<void> {
+  if (!import.meta.env.DEV) {
+    return
+  }
+  const track = consumer.track
+  const settings =
+    typeof track.getSettings === 'function'
+      ? (track.getSettings() as { width?: number; height?: number; frameRate?: number })
+      : {}
+  console.log('[video-debug] track settings', {
+    peerId,
+    producerId: consumer.producerId,
+    width: settings.width,
+    height: settings.height,
+    frameRate: settings.frameRate,
+  })
+
+  try {
+    const report = await consumer.getStats()
+    report.forEach((r) => {
+      if (r.type !== 'inbound-rtp') {
+        return
+      }
+      const v = r as RTCInboundRtpStreamStats
+      if (v.kind !== 'video') {
+        return
+      }
+      console.log('[video-debug] inbound-rtp', {
+        peerId,
+        framesDecoded: v.framesDecoded,
+        framesDropped: v.framesDropped,
+        framesReceived: v.framesReceived,
+        frameWidth: v.frameWidth,
+        frameHeight: v.frameHeight,
+      })
+    })
+  } catch {
+    /* stats optional */
+  }
+}
+
 export function useRemoteMedia() {
   const recvTransport = shallowRef<Transport | null>(null)
   /** Stable MediaStream per remote peer (mutate with addTrack / removeTrack only). */
@@ -220,178 +222,50 @@ export function useRemoteMedia() {
   const activeSpeakerPeerId = shallowRef<string | null>(null)
   /** Last spatialLayer sent over signaling per recv consumer id (skip duplicates). */
   const lastSentSpatialByConsumerId = new Map<string, 0 | 1 | 2>()
-  /** Last temporalLayer sent (VP8 simulcast); 0 = lowest FPS tier when supported. */
-  const lastSentTemporalByConsumerId = new Map<string, number>()
-  /** Last layer applied after cooldown gate (successful send updates together with lastSent). */
-  const lastAppliedLayerByConsumerId = new Map<string, 0 | 1 | 2>()
-  const lastAppliedAtByConsumerId = new Map<string, number>()
   let signalingRoom: SendTransportRoomApi | null = null
   let preferredLayersDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let unsubscribeNewProducer: (() => void) | null = null
   let unsubscribeProducerSync: (() => void) | null = null
 
-  /** Stats-derived quality; overridden when `networkQualityOverride !== 'auto'`. */
+  /**
+   * Reserved for future UI; transport BWE polling is disabled (quality-first baseline).
+   * Layer choice uses pin / speaker / visibility only — no dynamic bandwidth cap.
+   */
   const networkQualityFromStats = shallowRef<NetworkQualityClass>('good')
   const networkQualityOverride = shallowRef<'auto' | NetworkQualityClass>('auto')
-  let sendTransportStatsRef: ShallowRef<Transport | null> | null = null
-  let bwePollTimer: ReturnType<typeof setInterval> | null = null
-  let bweHysteresisCandidate: NetworkQualityClass | null = null
-  let bweHysteresisStreak = 0
 
   const networkQuality = computed<NetworkQualityClass>(() =>
     networkQualityOverride.value === 'auto' ? networkQualityFromStats.value : networkQualityOverride.value,
   )
 
-  function effectiveNetworkQuality(): NetworkQualityClass {
-    return networkQualityOverride.value === 'auto' ? networkQualityFromStats.value : networkQualityOverride.value
-  }
-
-  /** Max spatial index allowed by BWE; does not raise layer — combine with `min(base, cap)`. */
-  function bweSpatialCap(): 0 | 1 | 2 {
-    const n = effectiveNetworkQuality()
-    if (n === 'poor') return 0
-    if (n === 'medium') return 1
-    return 2
-  }
-
-  function registerSendTransportForStats(ref: ShallowRef<Transport | null>): void {
-    sendTransportStatsRef = ref
-  }
-
   function setNetworkQualityOverride(level: 'auto' | NetworkQualityClass): void {
     networkQualityOverride.value = level
-    schedulePreferredLayersUpdate()
-  }
-
-  function stopBwePolling(): void {
-    if (bwePollTimer !== null) {
-      clearInterval(bwePollTimer)
-      bwePollTimer = null
-    }
-    bweHysteresisCandidate = null
-    bweHysteresisStreak = 0
-  }
-
-  function commitNetworkQualityFromStats(next: NetworkQualityClass): void {
-    if (networkQualityFromStats.value === next) {
-      bweHysteresisCandidate = null
-      bweHysteresisStreak = 0
-      return
-    }
-    if (bweHysteresisCandidate === next) {
-      bweHysteresisStreak += 1
-    } else {
-      bweHysteresisCandidate = next
-      bweHysteresisStreak = 1
-    }
-    if (bweHysteresisStreak >= BWE_LEVEL_HYSTERESIS_COUNT) {
-      networkQualityFromStats.value = next
-      bweHysteresisCandidate = null
-      bweHysteresisStreak = 0
-      if (networkQualityOverride.value === 'auto') {
-        schedulePreferredLayersUpdate()
-      }
-    }
-  }
-
-  async function sampleBwe(): Promise<void> {
-    const recv = recvTransport.value
-    if (!recv || recv.closed || recv.connectionState !== 'connected') {
-      return
-    }
-    try {
-      const recvReport = await recv.getStats()
-      const recvParsed = parseTransportStats(recvReport)
-      const sendT = sendTransportStatsRef?.value
-      let merged = mergeRecvSendBwe(recvParsed, undefined)
-      if (sendT && !sendT.closed && sendT.connectionState === 'connected') {
-        const sendReport = await sendT.getStats()
-        merged = mergeRecvSendBwe(recvParsed, parseTransportStats(sendReport))
-      }
-      const raw = classifyBweMetrics(merged)
-      commitNetworkQualityFromStats(raw)
-    } catch {
-      /* ignore transient getStats errors */
-    }
-  }
-
-  function startBwePolling(): void {
-    stopBwePolling()
-    const recv = recvTransport.value
-    if (!recv || recv.closed || recv.connectionState !== 'connected') {
-      return
-    }
-    bwePollTimer = setInterval(() => {
-      void sampleBwe()
-    }, BWE_POLL_MS)
-    void sampleBwe()
   }
 
   function onRecvConnectionStateChange(state: ConnectionState): void {
-    if (state === 'connected') {
-      startBwePolling()
-    }
-    // Do not stop on 'disconnected': transient ICE; polling tolerates getStats errors until failed/closed.
     if (state === 'failed' || state === 'closed') {
-      stopBwePolling()
-    }
-  }
-
-  /** Distinct remote peers that have a video producer (for small-room layer policy). */
-  function remoteVideoPeerCount(): number {
-    const ids = new Set<string>()
-    for (const info of producerInfoById.values()) {
-      if (info.kind === 'video') {
-        ids.add(info.peerId)
+      if (import.meta.env.DEV) {
+        console.log('[recvTransport] connection ended', state)
       }
     }
-    return ids.size
   }
 
   /**
-   * Priority: pinned > active speaker > visibility. BWE applied separately as cap only.
-   *
-   * Small rooms (≤4 remote video peers): default to low/mid only — avoids pulling mid (L1) for
-   * every visible tile (common 1:1 / trio jank). Larger rooms switch back to richer defaults so
-   * grids stay readable. Many tiles (8+) may still need viewport-driven `setPeerVisible` / pausing
-   * off-screen video consumers — layers alone don’t cap total decode cost.
-   * For >4 remote video peers, layer signaling omits temporal (same as pre-optimization).
+   * Simulcast spatial only (no temporalLayer): pinned & active speaker → high (2),
+   * visible → mid (1), not visible → low (0). Server applies `setPreferredLayers({ spatialLayer })`.
    */
-  function baseSpatialLayerForPeer(peerId: string): 0 | 1 | 2 {
-    const smallRoom = remoteVideoPeerCount() <= 4
+  function spatialLayerForPeer(peerId: string): 0 | 1 | 2 {
     if (pinnedPeerId.value === peerId) {
       return 2
     }
     if (activeSpeakerPeerId.value === peerId) {
-      return smallRoom ? 1 : 2
+      return 2
     }
     const visible = peerVisibility.value.get(peerId) ?? true
     if (!visible) {
       return 0
     }
-    return smallRoom ? 0 : 1
-  }
-
-  function targetSpatialLayerForPeer(peerId: string): 0 | 1 | 2 {
-    const base = baseSpatialLayerForPeer(peerId)
-    const cap = bweSpatialCap()
-    return Math.min(base, cap) as 0 | 1 | 2
-  }
-
-  /**
-   * Ignore upgrade/lateral layer changes inside cooldown since last successful apply.
-   * Downgrades always apply immediately (BWE / pin / visibility).
-   */
-  function spatialLayerAfterCooldown(consumerId: string, desired: 0 | 1 | 2): 0 | 1 | 2 {
-    const prev = lastAppliedLayerByConsumerId.get(consumerId)
-    if (prev === undefined) return desired
-    if (desired === prev) return desired
-    if (desired < prev) return desired
-    const at = lastAppliedAtByConsumerId.get(consumerId)
-    if (at !== undefined && Date.now() - at < SPATIAL_LAYER_COOLDOWN_MS) {
-      return prev
-    }
-    return desired
+    return 1
   }
 
   function flushPreferredLayersToServer(): void {
@@ -403,51 +277,28 @@ export function useRemoteMedia() {
       const info = producerInfoById.get(producerId)
       if (!info) continue
 
-      const rawTarget = targetSpatialLayerForPeer(info.peerId)
-      const spatialLayer = spatialLayerAfterCooldown(consumer.id, rawTarget)
-      /** Large rooms: same signaling as pre-optimization (spatial only). Small rooms: add temporal 0. */
-      const wantTemporal = remoteVideoPeerCount() <= 4 ? 0 : undefined
+      const spatialLayer = spatialLayerForPeer(info.peerId)
       const prevS = lastSentSpatialByConsumerId.get(consumer.id)
-      const prevT = lastSentTemporalByConsumerId.get(consumer.id)
-      const temporalMatches =
-        wantTemporal === undefined ? prevT === undefined : prevT === wantTemporal
-      if (prevS === spatialLayer && temporalMatches) {
+      if (prevS === spatialLayer) {
         continue
       }
 
       try {
-        const payload: {
-          consumerId: string
-          spatialLayer: number
-          temporalLayer?: number
-        } = { consumerId: consumer.id, spatialLayer }
-        if (wantTemporal !== undefined) {
-          payload.temporalLayer = wantTemporal
-        }
         room.sendJson({
           type: 'set-consumer-preferred-layers',
-          payload,
+          payload: { consumerId: consumer.id, spatialLayer },
         })
         lastSentSpatialByConsumerId.set(consumer.id, spatialLayer)
-        if (wantTemporal !== undefined) {
-          lastSentTemporalByConsumerId.set(consumer.id, wantTemporal)
-        } else {
-          lastSentTemporalByConsumerId.delete(consumer.id)
-        }
-        lastAppliedLayerByConsumerId.set(consumer.id, spatialLayer)
-        lastAppliedAtByConsumerId.set(consumer.id, Date.now())
         if (import.meta.env.DEV) {
-          console.log('[layers] requested', {
+          console.log('[layers] spatial (debug)', {
             consumerId: consumer.id,
             peerId: info.peerId,
             producerId,
             spatialLayer,
-            temporalLayer: wantTemporal,
           })
         }
       } catch (e) {
         lastSentSpatialByConsumerId.delete(consumer.id)
-        lastSentTemporalByConsumerId.delete(consumer.id)
         console.error('[layers] send failed', { consumerId: consumer.id, producerId }, e)
       }
     }
@@ -655,7 +506,7 @@ export function useRemoteMedia() {
         })
       }
 
-      // Audio must never be paused; video remains visible but quality is adapted via preferred layers.
+      // Audio must never be paused; video quality follows simulcast spatial layers (no consumer.pause).
       await consumer.resume()
 
       if (import.meta.env.DEV) {
@@ -668,6 +519,7 @@ export function useRemoteMedia() {
       consumersByProducerId.set(producerId, consumer)
       upsertRemoteTrack(peerId, consumer.track)
       if (consumer.kind === 'video') {
+        void logInboundVideoDebug(consumer, peerId)
         schedulePreferredLayersUpdate()
       }
     } catch (err) {
@@ -822,8 +674,6 @@ export function useRemoteMedia() {
   }
 
   function stopRemoteMedia(): void {
-    stopBwePolling()
-    sendTransportStatsRef = null
     networkQualityOverride.value = 'auto'
     networkQualityFromStats.value = 'good'
     unsubscribeNewProducer?.()
@@ -848,9 +698,6 @@ export function useRemoteMedia() {
     consumedProducerIds.clear()
     consumingProducerIds.clear()
     lastSentSpatialByConsumerId.clear()
-    lastSentTemporalByConsumerId.clear()
-    lastAppliedLayerByConsumerId.clear()
-    lastAppliedAtByConsumerId.clear()
     if (preferredLayersDebounceTimer) {
       clearTimeout(preferredLayersDebounceTimer)
       preferredLayersDebounceTimer = null
@@ -877,7 +724,6 @@ export function useRemoteMedia() {
     activeSpeakerPeerId,
     networkQuality,
     networkQualityFromStats,
-    registerSendTransportForStats,
     setNetworkQualityOverride,
     ensureRecvTransport,
     consumeProducer,

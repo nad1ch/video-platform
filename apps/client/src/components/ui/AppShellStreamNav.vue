@@ -24,64 +24,74 @@ function goEatBack() {
 
 <template>
   <nav class="stream-nav" :aria-label="t('app.navAria')">
-    <RouterLink
-      v-if="showHomeLink"
-      class="stream-nav__icon"
-      :to="{ name: 'home' }"
-      :aria-label="t('app.navHome')"
-      :title="t('app.navHome')"
-    >
-      <svg
-        class="stream-nav__svg"
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke-width="1.75"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
+    <div class="stream-nav__leading">
+      <RouterLink
+        v-if="showHomeLink"
+        class="stream-nav__icon"
+        :to="{ name: 'home' }"
+        :aria-label="t('app.navHome')"
+        :title="t('app.navHome')"
       >
-        <path
-          d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"
-        />
-      </svg>
-    </RouterLink>
-    <button
-      v-if="showEatBack"
-      type="button"
-      class="stream-nav__icon stream-nav__icon--btn"
-      :aria-label="t('app.navBack')"
-      :title="t('app.navBack')"
-      @click="goEatBack"
-    >
-      <svg
-        class="stream-nav__svg"
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke-width="1.75"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
+        <svg
+          class="stream-nav__svg"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.75"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path
+            d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"
+          />
+        </svg>
+      </RouterLink>
+      <button
+        v-if="showEatBack"
+        type="button"
+        class="stream-nav__icon stream-nav__icon--btn"
+        :aria-label="t('app.navBack')"
+        :title="t('app.navBack')"
+        @click="goEatBack"
       >
-        <path d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
-      </svg>
-    </button>
+        <svg
+          class="stream-nav__svg"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.75"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+        </svg>
+      </button>
+    </div>
     <div class="stream-nav__links">
-      <RouterLink class="stream-nav__link" :to="{ name: 'wordle' }">Wordle</RouterLink>
+      <RouterLink class="stream-nav__link" :to="{ name: 'wordle' }">{{ t('app.navWordle') }}</RouterLink>
       <RouterLink
         class="stream-nav__link"
         :to="{ name: 'eat', query: { view: 'join' } }"
         :title="t('game.title')"
         :aria-label="t('game.title')"
       >
-        Eat
+        {{ t('app.navEat') }}
       </RouterLink>
-      <RouterLink class="stream-nav__link" :to="{ name: 'call' }" :title="t('app.navCallTitle')" :aria-label="t('app.navCallTitle')">
-        Call
+      <RouterLink
+        class="stream-nav__link"
+        :to="{ name: 'call' }"
+        :title="t('app.navCallTitle')"
+        :aria-label="t('app.navCallTitle')"
+      >
+        {{ t('app.navCall') }}
       </RouterLink>
+    </div>
+    <div class="stream-nav__trailing" aria-hidden="true">
+      <span v-if="showHomeLink || showEatBack" class="stream-nav__trailing-spacer" />
     </div>
   </nav>
 </template>
@@ -138,6 +148,23 @@ function goEatBack() {
   pointer-events: none;
 }
 
+.stream-nav__leading,
+.stream-nav__trailing {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.stream-nav__trailing {
+  justify-content: flex-end;
+}
+
+.stream-nav__trailing-spacer {
+  display: none;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
 .stream-nav__links {
   display: flex;
   flex-wrap: wrap;
@@ -171,6 +198,53 @@ function goEatBack() {
 .stream-nav__link:focus-visible {
   outline: 2px solid var(--border-cyan-strong, var(--sa-color-primary));
   outline-offset: 2px;
+}
+
+/* Телефон / вузький планшет: як у другому рядку шапки — ліворуч іконка, по центру посилання, справа баланс */
+@media (max-width: 640px) {
+  .stream-nav {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 0.35rem;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .stream-nav__leading {
+    justify-content: flex-start;
+  }
+
+  .stream-nav__links {
+    flex-wrap: nowrap;
+    justify-content: center;
+    gap: 0.2rem 0.28rem;
+  }
+
+  .stream-nav__trailing-spacer {
+    display: block;
+    width: 1.75rem;
+    height: 1.75rem;
+    visibility: hidden;
+  }
+
+  .stream-nav__icon,
+  .stream-nav__icon--btn {
+    width: 1.75rem;
+    height: 1.75rem;
+    flex-shrink: 0;
+  }
+
+  .stream-nav__svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .stream-nav__link {
+    font-size: 0.62rem;
+    padding: 0.14rem 0.32rem;
+    letter-spacing: 0.04em;
+  }
 }
 
 </style>

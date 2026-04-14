@@ -16,19 +16,19 @@ export const router = createRouter({
         {
           path: '',
           name: 'home',
-          meta: { appTitle: 'StreamAssist', footerContext: 'home' },
+          meta: { appTitleKey: 'routes.streamAssist', footerContext: 'home' },
           component: () => import('./pages/HomePage.vue'),
         },
         {
           path: 'call',
           name: 'call',
-          meta: { appTitle: 'Video call', footerContext: 'call' },
+          meta: { appTitleKey: 'routes.call', footerContext: 'call' },
           component: () => import('./components/call/CallPage.vue'),
         },
         {
           path: 'wordle',
           name: 'wordle',
-          meta: { appTitle: 'Stream Wordle', footerContext: 'wordle' },
+          meta: { appTitleKey: 'routes.wordle', footerContext: 'wordle' },
           component: () => import('./pages/WordleStreamPage.vue'),
         },
         {

@@ -116,10 +116,12 @@ export function useCallEngine(options?: CallEngineOptions) {
     sendJson,
     addMessageListener,
     drainPendingNewProducers,
+    startSignalingKeepAlive,
+    stopSignalingKeepAlive,
   } = useRoomConnection(options?.signalingUrl)
 
   const { device, loadDevice, reset: deviceReset } = useMediasoupDevice()
-  const { createSendTransport, closeSendTransport, publishLocalMedia, sendTransport } = useSendTransport()
+  const { createSendTransport, closeSendTransport, publishLocalMedia } = useSendTransport()
   const {
     localStream,
     localPlayRev,
@@ -138,7 +140,6 @@ export function useCallEngine(options?: CallEngineOptions) {
     setupReceivePath,
     stopRemoteMedia,
     setActiveSpeaker,
-    registerSendTransportForStats,
     setNetworkQualityOverride,
   } = useRemoteMedia()
 
@@ -146,8 +147,144 @@ export function useCallEngine(options?: CallEngineOptions) {
 
   const joining = ref(false)
   const joinError = ref<string | null>(null)
+  /** When true, socket close must not trigger auto-reconnect (user left or failed join cleanup). */
+  const intentionalLeave = ref(false)
   let displayNameDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let unsubActiveSpeaker: (() => void) | null = null
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let reconnectFailures = 0
+  const MAX_AUTO_RECONNECT = 20
+
+  function clearReconnectTimer(): void {
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+  }
+
+  function callJoinRoomPayload(): { roomId: string; peerId: string; displayName: string } {
+    return {
+      roomId: trimmedString(roomId.value) || 'demo',
+      peerId: stringValue(selfPeerId.value) || `peer-${Math.random().toString(36).slice(2, 10)}`,
+      displayName: trimmedString(selfDisplayName.value) || 'You',
+    }
+  }
+
+  /**
+   * After `room-state` is available: transports, consume, produce, keepalive.
+   * Used on first join and after signaling reconnect.
+   */
+  async function wireCallMediaAfterRoomState(): Promise<void> {
+    session.replaceRemoteDisplayNames(lastRoomState.value?.peers ?? [])
+
+    const caps = lastRoomState.value?.routerRtpCapabilities
+    if (!caps) {
+      throw new Error('No router capabilities from room')
+    }
+
+    await loadDevice(caps)
+
+    const d = device.value
+    if (!d?.loaded) {
+      throw new Error('Device failed to load')
+    }
+
+    const existing = lastRoomState.value?.existingProducers ?? []
+    await setupReceivePath(d, roomApi, existing)
+
+    unsubActiveSpeaker?.()
+    unsubActiveSpeaker = addMessageListener((data) => {
+      const v = parseActiveSpeakerFromServer(data)
+      if (v === undefined) {
+        return
+      }
+      setActiveSpeaker(v)
+    })
+
+    const mode = readEngineRole(options)
+    if (mode === 'participant') {
+      await createSendTransport(d, roomApi)
+
+      let stream = localStream.value
+      const tracksLive =
+        stream !== null && stream.getTracks().some((t) => t.readyState === 'live')
+      if (!tracksLive) {
+        stream = await startLocalMedia()
+      }
+      const toPublish = localStream.value ?? stream
+      if (!toPublish || toPublish.getTracks().length === 0) {
+        throw new Error('Camera/microphone not available (no tracks)')
+      }
+      await publishLocalMedia(toPublish)
+    }
+
+    startSignalingKeepAlive()
+  }
+
+  function scheduleReconnectSignaling(reason: string): void {
+    if (import.meta.env.DEV) {
+      console.log('[call-engine] schedule signaling reconnect', reason)
+    }
+    if (intentionalLeave.value || !inCall.value) {
+      return
+    }
+    if (joining.value || reconnectTimer !== null) {
+      return
+    }
+    const delay = Math.min(30_000, 1000 * 2 ** Math.min(reconnectFailures, 5))
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null
+      void tryReconnectSignalingAndMedia()
+    }, delay)
+  }
+
+  async function tryReconnectSignalingAndMedia(): Promise<void> {
+    if (intentionalLeave.value || !inCall.value) {
+      return
+    }
+    if (wsStatus.value === 'open') {
+      reconnectFailures = 0
+      return
+    }
+    if (joining.value) {
+      return
+    }
+
+    joining.value = true
+    joinError.value = null
+    let retryLater = false
+    try {
+      stopSignalingKeepAlive()
+      stopRemoteMedia()
+      closeSendTransport()
+
+      await roomConnect()
+      const p = callJoinRoomPayload()
+      joinRoom(p.roomId, p.peerId, p.displayName)
+      await waitForCondition(() => lastRoomState.value != null, 15_000)
+
+      await wireCallMediaAfterRoomState()
+
+      queueMicrotask(() => {
+        playAllPageAudio()
+      })
+      reconnectFailures = 0
+    } catch (e) {
+      reconnectFailures += 1
+      if (reconnectFailures >= MAX_AUTO_RECONNECT) {
+        joinError.value = e instanceof Error ? e.message : String(e)
+        intentionalLeave.value = true
+        teardownMedia()
+      } else {
+        retryLater = true
+      }
+    } finally {
+      joining.value = false
+    }
+    if (retryLater && !intentionalLeave.value && inCall.value) {
+      scheduleReconnectSignaling('after-error')
+    }
+  }
 
   const tiles = computed<CallTile[]>(() => {
     const selfId = selfPeerId.value
@@ -235,13 +372,6 @@ export function useCallEngine(options?: CallEngineOptions) {
     }, DISPLAY_NAME_DEBOUNCE_MS)
   })
 
-  onScopeDispose(() => {
-    if (displayNameDebounceTimer !== null) {
-      clearTimeout(displayNameDebounceTimer)
-      displayNameDebounceTimer = null
-    }
-  })
-
   if (import.meta.env.DEV) {
     watch(
       () => localStream.value,
@@ -262,6 +392,8 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   function teardownMedia(): void {
+    clearReconnectTimer()
+    stopSignalingKeepAlive()
     unsubActiveSpeaker?.()
     unsubActiveSpeaker = null
     stopRemoteMedia()
@@ -274,60 +406,25 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   async function joinCall(): Promise<void> {
+    intentionalLeave.value = false
+    reconnectFailures = 0
+    clearReconnectTimer()
     joinError.value = null
     joining.value = true
     try {
       await roomConnect()
-      joinRoom(
-        trimmedString(roomId.value) || 'demo',
-        stringValue(selfPeerId.value) || `peer-${Math.random().toString(36).slice(2, 10)}`,
-        trimmedString(selfDisplayName.value) || 'You',
-      )
+      const p = callJoinRoomPayload()
+      joinRoom(p.roomId, p.peerId, p.displayName)
       await waitForCondition(() => lastRoomState.value != null, 15_000)
 
-      session.replaceRemoteDisplayNames(lastRoomState.value?.peers ?? [])
-
-      const caps = lastRoomState.value?.routerRtpCapabilities
-      if (!caps) {
-        throw new Error('No router capabilities from room')
-      }
-
-      await loadDevice(caps)
-
-      const d = device.value
-      if (!d?.loaded) {
-        throw new Error('Device failed to load')
-      }
-
-      const existing = lastRoomState.value?.existingProducers ?? []
-      await setupReceivePath(d, roomApi, existing)
-
-      unsubActiveSpeaker?.()
-      unsubActiveSpeaker = addMessageListener((data) => {
-        const v = parseActiveSpeakerFromServer(data)
-        if (v === undefined) {
-          return
-        }
-        setActiveSpeaker(v)
-      })
-
-      const mode = readEngineRole(options)
-      if (mode === 'participant') {
-        await createSendTransport(d, roomApi)
-        registerSendTransportForStats(sendTransport)
-
-        const stream = await startLocalMedia()
-        if (!localStream.value || stream.getTracks().length === 0) {
-          throw new Error('Camera/microphone not available (no tracks)')
-        }
-        await publishLocalMedia(stream)
-      }
+      await wireCallMediaAfterRoomState()
 
       session.setInCall(true)
       queueMicrotask(() => {
         playAllPageAudio()
       })
     } catch (e) {
+      intentionalLeave.value = true
       joinError.value = e instanceof Error ? e.message : String(e)
       teardownMedia()
     } finally {
@@ -336,8 +433,47 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   function leaveCall(): void {
+    intentionalLeave.value = true
     teardownMedia()
   }
+
+  watch(wsStatus, (st, prev) => {
+    if (intentionalLeave.value || !inCall.value) {
+      return
+    }
+    if (prev === 'open' && (st === 'closed' || st === 'error')) {
+      scheduleReconnectSignaling('socket-not-open')
+    }
+  })
+
+  function onDocumentVisibilityForReconnect(): void {
+    if (typeof document === 'undefined') {
+      return
+    }
+    if (document.visibilityState !== 'visible') {
+      return
+    }
+    if (intentionalLeave.value || !inCall.value) {
+      return
+    }
+    if (wsStatus.value !== 'open') {
+      scheduleReconnectSignaling('tab-visible-again')
+    }
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onDocumentVisibilityForReconnect)
+  }
+
+  onScopeDispose(() => {
+    if (displayNameDebounceTimer !== null) {
+      clearTimeout(displayNameDebounceTimer)
+      displayNameDebounceTimer = null
+    }
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onDocumentVisibilityForReconnect)
+    }
+  })
 
   return {
     session,

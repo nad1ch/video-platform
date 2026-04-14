@@ -1,5 +1,7 @@
 <script setup>
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { STREAMER_NICK } from '../../constants/brand.js'
 import StreamerBrandLink from '../atoms/StreamerBrandLink.vue'
 import ThemeToggleButton from '../atoms/ThemeToggleButton.vue'
 import UiMenuSelect from '../molecules/UiMenuSelect.vue'
@@ -15,6 +17,8 @@ defineProps({
 defineEmits(['update:locale', 'toggle-theme', 'open-onboarding'])
 
 const { t } = useI18n()
+
+const twitchChannelAria = computed(() => t('app.twitchAria', { nick: STREAMER_NICK }))
 </script>
 
 <template>
@@ -29,7 +33,7 @@ const { t } = useI18n()
     >
       ?
     </button>
-    <StreamerBrandLink :aria-label="t('app.twitchAria')" />
+    <StreamerBrandLink :aria-label="twitchChannelAria" />
     <UiMenuSelect
       :model-value="modelLocale"
       :options="localeMenuOptions"

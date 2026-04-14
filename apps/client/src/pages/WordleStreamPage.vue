@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
+import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import {
   MAX_ATTEMPTS,
   WORD_LENGTH_OPTIONS,
@@ -19,7 +21,7 @@ import {
 const TWITCH_CHANNEL_STORAGE_KEY = 'streamassist_wordle_twitch_channel'
 const WORDLE_WORD_LEN_KEY = 'streamassist_wordle_word_len'
 const WORDLE_LOCAL_STATS_KEY = 'streamassist_wordle_local_stats'
-const DEMO_TWITCH_CHANNEL = 'nad1ch'
+const DEMO_TWITCH_CHANNEL = STREAMER_NICK
 
 type LocalWinStats = { won: number; lost: number }
 
@@ -90,6 +92,7 @@ function readStoredTwitchChannel(): string | null {
 }
 
 const route = useRoute()
+const { t, locale } = useI18n()
 
 const wordlePublicConfig = shallowRef<WordlePublicConfig | null>(null)
 
@@ -209,7 +212,7 @@ const effectiveTwitchChannel = computed(() => {
 function formatCooldownHint(ms: number): string {
   const s = ms / 1000
   const label = Number.isInteger(s) ? String(s) : s.toFixed(1)
-  return `Too fast — wait ~${label}s between guess messages`
+  return t('wordleUi.cooldownHint', { seconds: label })
 }
 
 function feedbackToEmojis(fb: Feedback[]): string {
@@ -322,16 +325,20 @@ const localBoardLocked = computed(
   () => gameStatus.value !== 'playing' || localGuesses.value.length >= MAX_ATTEMPTS,
 )
 
-const leaderboardSelfName = computed(() => sessionUser.value?.display_name ?? 'Гість')
+const leaderboardSelfName = computed(() => {
+  void locale.value
+  return sessionUser.value?.display_name ?? t('wordleUi.guest')
+})
 
 const leaderboardStatusLabel = computed(() => {
+  void locale.value
   switch (gameStatus.value) {
     case 'won':
-      return 'Перемога'
+      return t('wordleUi.statusWon')
     case 'lost':
-      return 'Програш'
+      return t('wordleUi.statusLost')
     default:
-      return 'Грає'
+      return t('wordleUi.statusPlaying')
   }
 })
 
@@ -628,11 +635,13 @@ onUnmounted(() => {
     <AppContainer wide flush class="wordle-page" :class="`wordle-page--len${wordLength}`">
       <header class="wordle-page__topbar">
         <div class="wordle-page__topbar-main">
-          <span class="wordle-page__eyebrow">Wordle UA</span>
-          <span class="wordle-page__pill">Раунд #{{ localRoundId + 1 }} · {{ wordLength }} літер</span>
-          <span class="wordle-page__pill"
-            >Спроби: {{ localGuesses.length }} / {{ WORDLE_MAX_ATTEMPTS }}</span
-          >
+          <span class="wordle-page__eyebrow">{{ t('wordleUi.eyebrow') }}</span>
+          <span class="wordle-page__pill">{{
+            t('wordleUi.roundPill', { n: localRoundId + 1, len: wordLength })
+          }}</span>
+          <span class="wordle-page__pill">{{
+            t('wordleUi.attemptsPill', { cur: localGuesses.length, max: WORDLE_MAX_ATTEMPTS })
+          }}</span>
         </div>
         <div v-if="sessionUser || twitchAuthUrl" class="wordle-page__topbar-auth">
           <template v-if="sessionUser">
@@ -644,9 +653,9 @@ onUnmounted(() => {
               height="28"
             />
             <span class="wordle-page__name">{{ sessionUser.display_name }}</span>
-            <AppButton variant="ghost" @click="logout">Вийти</AppButton>
+            <AppButton variant="ghost" @click="logout">{{ t('wordleUi.logout') }}</AppButton>
           </template>
-          <AppButton v-else variant="primary" @click="login">Увійти через Twitch</AppButton>
+          <AppButton v-else variant="primary" @click="login">{{ t('wordleUi.loginTwitch') }}</AppButton>
         </div>
       </header>
 
@@ -654,17 +663,17 @@ onUnmounted(() => {
 
       <div class="wordle-page__grid">
         <AppCard class="wordle-page__stack wordle-page__stack--side wordle-page__stack--leader">
-          <h2 class="wordle-page__card-title">Таблиця (ви)</h2>
-          <div class="wordle-page__stats-block" aria-label="Локальна статистика">
+          <h2 class="wordle-page__card-title">{{ t('wordleUi.cardYou') }}</h2>
+          <div class="wordle-page__stats-block" :aria-label="t('wordleUi.statsAria')">
             <p class="wordle-page__stats-line">
-              Вгадано: <strong>{{ localStats.won }}</strong>
+              {{ t('wordleUi.wonStat') }} <strong>{{ localStats.won }}</strong>
             </p>
             <p class="wordle-page__stats-line">
-              Не вгадано: <strong>{{ localStats.lost }}</strong>
+              {{ t('wordleUi.lostStat') }} <strong>{{ localStats.lost }}</strong>
             </p>
           </div>
-          <div class="wordle-page__len-bar" role="group" aria-label="Довжина слова">
-            <span class="wordle-page__len-label">Букви</span>
+          <div class="wordle-page__len-bar" role="group" :aria-label="t('wordleUi.wordLengthGroupAria')">
+            <span class="wordle-page__len-label">{{ t('wordleUi.lettersLabel') }}</span>
             <div class="wordle-page__len-buttons">
               <AppButton
                 v-for="n in WORD_LENGTH_OPTIONS"
@@ -682,25 +691,25 @@ onUnmounted(() => {
           <div
             v-if="gameStatus === 'playing'"
             class="wordle-page__side-tools"
-            aria-label="Підказка для стріму та нове загадане слово"
+            :aria-label="t('wordleUi.streamToolsAria')"
           >
             <AppButton type="button" variant="ghost" class="wordle-page__peek-btn wordle-page__peek-btn--block" @click="toggleSecretPeek">
-              {{ secretPeekVisible ? 'Сховати слово' : 'Показати слово' }}
+              {{ secretPeekVisible ? t('wordleUi.hideWord') : t('wordleUi.showWord') }}
+            </AppButton>
+            <AppButton type="button" variant="ghost" class="wordle-page__side-new-secret" @click="newRoundSameLength">
+              {{ t('wordleUi.newSecretWord') }}
             </AppButton>
             <p v-if="secretPeekVisible" class="wordle-page__peek-word wordle-page__peek-word--side" aria-live="polite">
               {{ secretWord }}
             </p>
-            <AppButton type="button" variant="ghost" class="wordle-page__side-new-secret" @click="newRoundSameLength">
-              Інше загадане
-            </AppButton>
           </div>
 
           <ol class="wordle-page__leader">
             <li class="wordle-page__leader-row wordle-page__leader-row--solo">
               <span class="wordle-page__who">{{ leaderboardSelfName }}</span>
-              <span class="wordle-page__stat"
-                >Спроби: {{ localGuesses.length }} / {{ WORDLE_MAX_ATTEMPTS }}</span
-              >
+              <span class="wordle-page__stat">{{
+                t('wordleUi.attemptsLine', { cur: localGuesses.length, max: WORDLE_MAX_ATTEMPTS })
+              }}</span>
               <span class="wordle-page__status-pill">{{ leaderboardStatusLabel }}</span>
             </li>
           </ol>
@@ -751,9 +760,9 @@ onUnmounted(() => {
                   :style="confettiStyle(n)"
                 />
               </div>
-              <p class="wordle-page__celebrate-title">Ви вгадали!</p>
+              <p class="wordle-page__celebrate-title">{{ t('wordleUi.celebrateTitle') }}</p>
               <AppButton variant="primary" type="button" class="wordle-page__celebrate-btn" @click="newRoundSameLength">
-                Нове слово
+                {{ t('wordleUi.newWord') }}
               </AppButton>
             </div>
 
@@ -762,16 +771,18 @@ onUnmounted(() => {
               class="wordle-page__game-panel-width wordle-page__end-panel wordle-page__end-panel--lost"
             >
               <p class="wordle-page__end-panel-text">
-                Слово було: <strong class="wordle-page__secret">{{ secretWord }}</strong>
+                {{ t('wordleUi.lostWasWord') }} <strong class="wordle-page__secret">{{ secretWord }}</strong>
               </p>
-              <AppButton variant="primary" type="button" @click="newRoundSameLength">Нове слово</AppButton>
+              <AppButton variant="primary" type="button" @click="newRoundSameLength">{{
+                t('wordleUi.newWord')
+              }}</AppButton>
             </div>
 
             <div
               v-if="gameStatus === 'playing'"
               class="wordle-page__kbd"
               :style="{ '--wordle-len': String(wordLength) }"
-              aria-label="Екранна клавіатура"
+              :aria-label="t('wordleUi.screenKeyboardAria')"
             >
               <div class="wordle-page__kbd-row">
                 <AppButton
@@ -820,7 +831,7 @@ onUnmounted(() => {
                   :disabled="localBoardLocked || normalizeWord(guessInput).length !== wordLength"
                   @click="submitGuess"
                 >
-                  Enter
+                  {{ t('wordleUi.enter') }}
                 </AppButton>
                 <AppButton
                   type="button"
@@ -835,7 +846,7 @@ onUnmounted(() => {
             </div>
 
             <form class="wordle-page__sr-form" @submit.prevent="submitGuess">
-              <label class="wordle-page__sr-only" :for="guessFieldId">Введіть слово</label>
+              <label class="wordle-page__sr-only" :for="guessFieldId">{{ t('wordleUi.guessLabel') }}</label>
               <input
                 :id="guessFieldId"
                 v-model="guessInput"
@@ -855,16 +866,16 @@ onUnmounted(() => {
         </AppCard>
 
         <AppCard class="wordle-page__stack wordle-page__stack--side wordle-page__stack--chat">
-          <h2 class="wordle-page__card-title wordle-page__card-title--chat">Чат</h2>
+          <h2 class="wordle-page__card-title wordle-page__card-title--chat">{{ t('wordleUi.chatTitle') }}</h2>
           <div class="wordle-page__iframe-wrap">
             <iframe
               :key="effectiveTwitchChannel"
               :src="chatIframeSrc"
-              title="Twitch chat"
+              :title="t('wordleUi.chatIframeTitle')"
               class="wordle-page__iframe"
             />
           </div>
-          <ul class="wordle-page__relay" aria-label="Останні повідомлення з чату">
+          <ul class="wordle-page__relay" :aria-label="t('wordleUi.chatRelayAria')">
             <li
               v-for="(c, i) in chatLines.slice(-40)"
               :key="i"
@@ -934,7 +945,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--sa-space-3);
-  padding: var(--sa-space-2) 0;
+  padding: var(--sa-space-3) 0 var(--sa-space-2);
   border-bottom: 1px solid var(--sa-color-border);
 }
 
@@ -1175,17 +1186,17 @@ onUnmounted(() => {
     align-items: stretch;
   }
 
-  /* Спочатку поле гри, потім налаштування стріму, внизу чат. */
+  /* Лідерборд / «ти» зверху, потім гра, внизу чат. */
+  .wordle-page__stack--leader {
+    order: -2;
+  }
+
   .wordle-page__stack--game {
     order: -1;
   }
 
-  .wordle-page__stack--leader {
-    order: 0;
-  }
-
   .wordle-page__stack--chat {
-    order: 1;
+    order: 0;
   }
 
   .wordle-page__game {
@@ -1199,13 +1210,13 @@ onUnmounted(() => {
 
   .wordle-page__iframe-wrap {
     flex: 0 1 auto;
-    min-height: 11rem;
-    max-height: min(38vh, 22rem);
-    height: min(38vh, 22rem);
+    min-height: max(300px, 18rem);
+    max-height: min(60vh, 38rem);
+    height: min(60vh, 38rem);
   }
 
   .wordle-page__relay {
-    max-height: min(18vh, 9rem);
+    max-height: min(34vh, 16rem);
   }
 
   .wordle-page__leader {
@@ -1236,7 +1247,7 @@ onUnmounted(() => {
   }
 
   .wordle-page__topbar {
-    padding-block: var(--sa-space-1) 0;
+    padding-block: var(--sa-space-2) var(--sa-space-3);
     gap: var(--sa-space-2);
   }
 
@@ -1247,6 +1258,17 @@ onUnmounted(() => {
 }
 
 @media (max-width: 520px) {
+  .wordle-page__topbar-main {
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+    align-items: center;
+  }
+
+  .wordle-page__pill {
+    font-size: 0.62rem;
+    padding: 0.12rem 0.38rem;
+  }
+
   .wordle-page {
     padding-inline: var(--sa-space-2);
     --wordle-cell: min(
@@ -1266,14 +1288,32 @@ onUnmounted(() => {
   }
 
   .wordle-page__kbd-row--actions {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--sa-space-2);
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.45rem;
+    max-width: 100%;
+    padding-inline: 0.25rem;
   }
 
   .wordle-page__kbd :deep(.wordle-page__kbd-action) {
-    width: 100%;
-    max-width: none;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 9.5rem;
+    width: auto;
+    padding: 0.3rem 0.45rem;
+    font-size: 0.62rem;
+  }
+
+  .wordle-page__iframe-wrap {
+    min-height: max(300px, 19rem);
+    height: min(62vh, 36rem);
+    max-height: min(62vh, 36rem);
+  }
+
+  .wordle-page__relay {
+    max-height: min(38vh, 14rem);
   }
 }
 
@@ -1383,8 +1423,9 @@ onUnmounted(() => {
 
 .wordle-page__side-tools {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--sa-space-2);
   margin: 0 0 var(--sa-space-3);
   padding: var(--sa-space-2);
@@ -1394,18 +1435,23 @@ onUnmounted(() => {
 }
 
 .wordle-page__peek-btn--block {
-  width: 100%;
+  flex: 1 1 9rem;
+  min-width: 0;
+  width: auto;
   justify-content: center;
   font-size: 0.76rem;
 }
 
 .wordle-page__side-new-secret {
-  width: 100%;
+  flex: 1 1 9rem;
+  min-width: 0;
+  width: auto;
   justify-content: center;
   font-size: 0.76rem;
 }
 
 .wordle-page__peek-word--side {
+  flex: 1 0 100%;
   margin: 0;
   text-align: center;
   font-size: 1rem;
@@ -1792,10 +1838,11 @@ onUnmounted(() => {
   font-size: 0.8rem;
 }
 
+/* Мін. ~300px висоти вбудованого чату (зручно на планшеті/телефоні; 3000px — занадто для в’юпорта). */
 .wordle-page__iframe-wrap {
   flex: 1 1 0;
   width: 100%;
-  min-height: 200px;
+  min-height: 300px;
   border-radius: var(--sa-radius-sm);
   overflow: hidden;
   border: 1px solid var(--sa-color-border);

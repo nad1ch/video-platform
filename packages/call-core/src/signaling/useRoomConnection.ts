@@ -261,6 +261,30 @@ export function useRoomConnection(wsUrl?: string) {
   /** Before drainPendingNewProducers(), stash early new-producer (recv listener not ready yet). */
   const pendingNewProducers: RemoteProducerInfo[] = []
   let bufferNewProducers = true
+  let keepAliveTimer: ReturnType<typeof setInterval> | null = null
+
+  function stopSignalingKeepAlive(): void {
+    if (keepAliveTimer !== null) {
+      clearInterval(keepAliveTimer)
+      keepAliveTimer = null
+    }
+  }
+
+  /** JSON ping so reverse proxies see traffic in background tabs (WS ping frames alone are not always enough). */
+  function startSignalingKeepAlive(intervalMs = 25_000): void {
+    stopSignalingKeepAlive()
+    keepAliveTimer = setInterval(() => {
+      const ws = wsRef.value
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return
+      }
+      try {
+        ws.send(JSON.stringify({ type: 'client-ping', payload: {} }))
+      } catch {
+        /* ignore */
+      }
+    }, intervalMs)
+  }
 
   function addMessageListener(handler: (data: unknown) => void): () => void {
     messageListeners.add(handler)
@@ -365,9 +389,9 @@ export function useRoomConnection(wsUrl?: string) {
         previous.close()
         wsRef.value = null
       }
+      stopSignalingKeepAlive()
       peers.value = []
       lastRoomState.value = null
-      messageListeners.clear()
       pendingNewProducers.length = 0
       bufferNewProducers = true
 
@@ -409,7 +433,7 @@ export function useRoomConnection(wsUrl?: string) {
           detachSocketHandlers(ws)
           wsRef.value = null
         }
-        messageListeners.clear()
+        stopSignalingKeepAlive()
         pendingNewProducers.length = 0
         bufferNewProducers = true
         reject(new Error('WebSocket connection failed'))
@@ -420,7 +444,7 @@ export function useRoomConnection(wsUrl?: string) {
           wsRef.value = null
           wsStatus.value = 'closed'
         }
-        messageListeners.clear()
+        stopSignalingKeepAlive()
         pendingNewProducers.length = 0
         bufferNewProducers = true
       }
@@ -461,6 +485,7 @@ export function useRoomConnection(wsUrl?: string) {
   }
 
   function disconnect(): void {
+    stopSignalingKeepAlive()
     const ws = wsRef.value
     if (ws) {
       detachSocketHandlers(ws)
@@ -491,5 +516,7 @@ export function useRoomConnection(wsUrl?: string) {
     sendJson,
     addMessageListener,
     drainPendingNewProducers,
+    startSignalingKeepAlive,
+    stopSignalingKeepAlive,
   }
 }

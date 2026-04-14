@@ -1,6 +1,8 @@
 /** Бренд каналу — одне джерело правди для посилань і логотипу. */
 export const STREAMER_TWITCH_URL = 'https://www.twitch.tv/nad1ch'
 export const STREAMER_NICK = 'nad1ch'
+/** Текстовий wordmark застосунку — не локалізується. */
+export const STREAM_APP_BRAND_NAME = 'StreamAssist'
 /** Основний логотип — PNG з прозорістю (`public/brand/`). */
 export const BRAND_LOGO_PNG = '/brand/nad1ch-stream-mark-transparent.png'
 /** Другий крок у ланцюжку помилок завантаження (старий марк з суцільним тлом). */

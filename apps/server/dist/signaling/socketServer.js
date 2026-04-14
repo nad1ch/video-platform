@@ -1,11 +1,41 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.attachSocketServer = attachSocketServer;
+const ws_1 = __importDefault(require("ws"));
 const messageHandlers_1 = require("./messageHandlers");
+const WS_PING_INTERVAL_MS = 45_000;
 function attachSocketServer(wss, roomManager) {
     const socketPeer = new Map();
     const deps = { roomManager, socketPeer };
+    const heartbeat = setInterval(() => {
+        for (const socket of wss.clients) {
+            const s = socket;
+            if (s.readyState !== ws_1.default.OPEN) {
+                continue;
+            }
+            if (s.isAlive === false) {
+                s.terminate();
+                continue;
+            }
+            s.isAlive = false;
+            s.ping();
+        }
+    }, WS_PING_INTERVAL_MS);
+    if (typeof heartbeat.unref === 'function') {
+        heartbeat.unref();
+    }
+    wss.on('close', () => {
+        clearInterval(heartbeat);
+    });
     wss.on('connection', (socket) => {
+        const ext = socket;
+        ext.isAlive = true;
+        socket.on('pong', () => {
+            ext.isAlive = true;
+        });
         const onDisconnect = () => {
             (0, messageHandlers_1.handleDisconnect)(socket, deps);
         };
@@ -24,6 +54,10 @@ function attachSocketServer(wss, roomManager) {
                 }
                 try {
                     switch (parsed.data.type) {
+                        case 'client-ping': {
+                            (0, messageHandlers_1.sendServerMessage)(socket, { type: 'server-pong', payload: {} });
+                            break;
+                        }
                         case 'join-room': {
                             const { roomId, peerId, displayName } = parsed.data.payload;
                             await (0, messageHandlers_1.handleJoinRoom)(socket, roomId, peerId, displayName, deps);
