@@ -8,7 +8,7 @@ import { createMediasoupWorker } from './mediasoup/createWorker'
 import { RoomManager } from './rooms/RoomManager'
 import { attachSocketServer } from './signaling/socketServer'
 import { clientPublicOrigin } from './auth/clientOrigin'
-import { mountAppOAuth } from './auth/oauthRouter'
+import { mountGlobalAuth } from './auth/oauthRouter'
 import { mountTwitchWordleAuth } from './wordle/twitchAuthRouter'
 import { startTwitchChatIngest, stopTwitchChatIngest } from './wordle/tmiChat'
 import { attachWordleSocketServer } from './wordle/wordleSocket'
@@ -68,7 +68,7 @@ async function bootstrap(): Promise<void> {
     socket.destroy()
   })
 
-  mountAppOAuth(app)
+  mountGlobalAuth(app)
   mountTwitchWordleAuth(app)
 
   app.get('/health', (_req, res) => {
