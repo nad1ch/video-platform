@@ -1,5 +1,5 @@
 import { computed, ref, type Ref } from 'vue'
-import { apiUrl } from '@/utils/apiUrl'
+import { apiBase, apiUrl } from '@/utils/apiUrl'
 
 /** Global auth user (GET /api/auth/me). */
 export type AppUser = {
@@ -149,7 +149,11 @@ export function useAuth() {
         ? redirectPath
         : '/'
     const q = encodeURIComponent(path)
-    window.location.assign(apiUrl(`/api/auth/twitch?redirect=${q}`))
+    const target = apiUrl(`/api/auth/twitch?redirect=${q}`)
+    if (import.meta.env.DEV && !apiBase()) {
+      console.info('[auth] OAuth →', target, '(set VITE_API_URL in prod when API is not same-origin)')
+    }
+    window.location.assign(target)
   }
 
   /** Full browser navigation; session is httpOnly cookie only (no localStorage tokens). */
@@ -159,7 +163,11 @@ export function useAuth() {
         ? redirectPath
         : '/'
     const q = encodeURIComponent(path)
-    window.location.href = apiUrl(`/api/auth/google?redirect=${q}`)
+    const target = apiUrl(`/api/auth/google?redirect=${q}`)
+    if (import.meta.env.DEV && !apiBase()) {
+      console.info('[auth] OAuth →', target, '(set VITE_API_URL in prod when API is not same-origin)')
+    }
+    window.location.href = target
   }
 
   async function logout(options?: { navigateHome?: boolean }): Promise<void> {
