@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 import { authJwtSecret } from './jwtSecret'
-import type { SessionUser } from './types'
+import type { SessionUser, UserRole } from './types'
 
 const COOKIE_NAME = 'wordle_session'
 
@@ -11,9 +11,16 @@ export function signSession(user: SessionUser, maxAgeSec: number): string {
     id: user.id,
     display_name: user.display_name,
     profile_image_url: user.profile_image_url,
+    role: user.role,
   }
   if (user.provider) {
     payload.provider = user.provider
+  }
+  if (typeof user.email === 'string' && user.email.length > 0) {
+    payload.email = user.email
+  }
+  if (typeof user.twitch_id === 'string' && user.twitch_id.length > 0) {
+    payload.twitch_id = user.twitch_id
   }
   return jwt.sign(payload, authJwtSecret(), { expiresIn: maxAgeSec })
 }
@@ -29,7 +36,16 @@ export function verifySessionToken(token: string): SessionPayload | null {
       return null
     }
     const p = decoded.provider
-    if (p !== undefined && p !== 'twitch' && p !== 'google' && p !== 'apple') {
+    if (p !== undefined && p !== 'twitch' && p !== 'google' && p !== 'apple' && p !== 'email') {
+      return null
+    }
+    const r = decoded.role
+    const role: UserRole = r === 'admin' || r === 'user' ? r : 'user'
+    decoded.role = role
+    if (decoded.email !== undefined && typeof decoded.email !== 'string') {
+      return null
+    }
+    if (decoded.twitch_id !== undefined && typeof decoded.twitch_id !== 'string') {
       return null
     }
     return decoded

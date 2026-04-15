@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
 import {
   useCallEngine,
   VIDEO_QUALITY_PRESETS,
@@ -16,17 +15,13 @@ import AppButton from '@/components/ui/AppButton.vue'
 type VideoQualityUiChoice = 'auto' | VideoQualityPreset
 
 const { t } = useI18n()
-const route = useRoute()
-const { user, ensureAuthLoaded } = useAuth()
+const { user, ensureAuthLoaded, isAdmin } = useAuth()
 
-/** Admin / host: `?qualityAdmin=<VITE_CALL_QUALITY_ADMIN_SECRET>` or dev `?callDebug=1`. */
-const allowManualVideoQuality = computed(() => {
-  const secret = import.meta.env.VITE_CALL_QUALITY_ADMIN_SECRET
-  if (typeof secret === 'string' && secret.length > 0) {
-    return String(route.query.qualityAdmin ?? '').trim() === secret
-  }
-  return import.meta.env.DEV && String(route.query.callDebug ?? '') === '1'
-})
+/** Manual video quality: backend `role === 'admin'` (see ADMIN_EMAILS / ADMIN_TWITCH_IDS on server). */
+const allowManualVideoQuality = computed(() => isAdmin.value)
+
+/** Debug overlay UI: admins always; in dev also local engineers (no secret in URL). */
+const showCallDebugControls = computed(() => isAdmin.value || import.meta.env.DEV)
 
 const {
   session,
@@ -150,7 +145,7 @@ onMounted(() => {
             </label>
           </div>
         </fieldset>
-        <label class="call-page__check">
+        <label v-if="showCallDebugControls" class="call-page__check">
           <input v-model="callDebugOverlay" type="checkbox" />
           <span>{{ t('callPage.debugOverlay') }}</span>
         </label>
@@ -205,7 +200,11 @@ onMounted(() => {
           />
         </div>
 
-        <aside v-if="session.callDebugOverlay" class="call-page__debug" aria-label="Call debug">
+        <aside
+          v-if="session.callDebugOverlay && showCallDebugControls"
+          class="call-page__debug"
+          aria-label="Call debug"
+        >
           <div class="call-page__debug-head">
             <span class="call-page__debug-title">{{ t('callPage.debugTitle') }}</span>
             <AppButton variant="secondary" :disabled="inboundDebugBusy" @click="refreshInboundDebug">

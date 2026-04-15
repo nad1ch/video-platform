@@ -11,6 +11,8 @@ import { handleGetApiAuthMe, handleGetApiMeLegacy } from './session/me'
 import { clientPublicOrigin } from './clientOrigin'
 import { exchangeCodeForToken, getGoogleAuthUrl, getUserProfile, resolveGoogleOAuthRedirectUri } from './googleOAuth'
 import { twitchExchangeCode, twitchFetchSessionUser } from './twitchClient'
+import { handleEmailLogin, handleEmailRegister } from './email/emailAuthHandlers'
+import { withSessionRole } from './session/withSessionRole'
 
 const isProd = process.env.NODE_ENV === 'production'
 const isDev = process.env.NODE_ENV !== 'production'
@@ -79,6 +81,9 @@ oauthRouter.post('/logout', (_req: Request, res: Response) => {
   res.status(204).end()
 })
 
+oauthRouter.post('/register', handleEmailRegister)
+oauthRouter.post('/login', handleEmailLogin)
+
 oauthRouter.get('/twitch', (req: Request, res: Response) => {
   if (!twitchConfigured()) {
     res.status(503).type('text/plain').send('Twitch OAuth is not configured (TWITCH_CLIENT_ID / SECRET).')
@@ -121,8 +126,10 @@ oauthRouter.get('/twitch/callback', async (req: Request, res: Response) => {
   try {
     const redirectUri = twitchAppRedirectUri()
     const accessToken = await twitchExchangeCode(code, redirectUri)
-    const user = await twitchFetchSessionUser(accessToken)
-    const token = signSession(user, WORDLE_SESSION_MAX_AGE_SEC)
+    const profile = await twitchFetchSessionUser(accessToken)
+    /** `role` + `twitch_id` from {@link withSessionRole} → `resolveUserRole` (Helix `id` vs ADMIN_TWITCH_IDS). */
+    const finalUser = withSessionRole(profile)
+    const token = signSession(finalUser, WORDLE_SESSION_MAX_AGE_SEC)
     setGlobalSessionCookie(res, token)
     const path = verifyOAuthReturnPath(state)
     res.redirect(302, buildPostLoginRedirectUrl(path))
@@ -164,8 +171,9 @@ oauthRouter.get('/google/callback', async (req: Request, res: Response) => {
   }
   try {
     const accessToken = await exchangeCodeForToken(code)
-    const user = await getUserProfile(accessToken)
-    const token = signSession(user, WORDLE_SESSION_MAX_AGE_SEC)
+    const profile = await getUserProfile(accessToken)
+    const finalUser = withSessionRole(profile)
+    const token = signSession(finalUser, WORDLE_SESSION_MAX_AGE_SEC)
     setGlobalSessionCookie(res, token)
     const path = verifyOAuthReturnPath(state)
     res.redirect(302, buildPostLoginRedirectUrl(path))

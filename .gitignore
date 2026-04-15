@@ -37,6 +37,9 @@ apps/client/src/wordle/dictionary/raw/uk_UA.dic
 apps/client/src/wordle/dictionary/raw/uk_UA.aff
 apps/client/src/wordle/dictionary/raw/*.zip
 
+# Server local DB (email/password users)
+apps/server/data/
+
 # Local / cache
 *.local
 .cache/

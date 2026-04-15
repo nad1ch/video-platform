@@ -1,4 +1,10 @@
-import type { SessionUser } from './session/types'
+/** Profile from Helix `users` — `id` is the stable numeric string (not login name). */
+export type TwitchProfileForSession = {
+  id: string
+  display_name: string
+  profile_image_url: string
+  provider: 'twitch'
+}
 
 function requiredEnv(name: string): string {
   const v = process.env[name]
@@ -41,7 +47,7 @@ export async function twitchExchangeCode(code: string, redirectUri: string): Pro
   return data.access_token
 }
 
-export async function twitchFetchSessionUser(accessToken: string): Promise<SessionUser> {
+export async function twitchFetchSessionUser(accessToken: string): Promise<TwitchProfileForSession> {
   const clientId = requiredEnv('TWITCH_CLIENT_ID')
   const res = await fetch('https://api.twitch.tv/helix/users', {
     headers: {
@@ -74,3 +80,4 @@ export async function twitchFetchSessionUser(accessToken: string): Promise<Sessi
     provider: 'twitch',
   }
 }
+

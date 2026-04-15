@@ -6,7 +6,10 @@ export type AppUser = {
   id: string
   displayName: string
   avatar?: string
-  provider: 'twitch' | 'google' | 'apple' | null
+  provider: 'twitch' | 'google' | 'apple' | 'email' | null
+  role: 'admin' | 'user'
+  /** Helix user id when provider is Twitch (same as `id`). */
+  twitchId?: string
 }
 
 const user: Ref<AppUser | null> = ref(null)
@@ -16,6 +19,8 @@ let inflight: Promise<void> | null = null
 /** Display-only cache (no tokens). Speeds up first paint after reload; always revalidated over the network. */
 const DISPLAY_CACHE_KEY = 'streamassist_auth_display_v1'
 const DISPLAY_CACHE_TTL_MS = 5 * 60 * 1000
+/** Dev-only: log Twitch numeric id once per tab session (cleared on logout). */
+const DEV_TWITCH_ID_LOG_KEY = 'streamassist_dev_twitch_id_logged'
 
 function readDisplayCache(): AppUser | null {
   if (typeof sessionStorage === 'undefined') {
@@ -80,12 +85,22 @@ function parseUser(raw: unknown): AppUser | null {
   }
   const p = u.provider
   const provider =
-    p === 'twitch' || p === 'google' || p === 'apple' ? p : null
+    p === 'twitch' || p === 'google' || p === 'apple' || p === 'email' ? p : null
+  const roleRaw = u.role
+  const role = roleRaw === 'admin' || roleRaw === 'user' ? roleRaw : 'user'
+  let twitchId: string | undefined
+  if (typeof u.twitchId === 'string' && u.twitchId.length > 0) {
+    twitchId = u.twitchId
+  } else if (provider === 'twitch' && id.length > 0) {
+    twitchId = id
+  }
   return {
     id,
     displayName,
     ...(avatar ? { avatar } : {}),
     provider,
+    role,
+    ...(twitchId ? { twitchId } : {}),
   }
 }
 
@@ -116,6 +131,22 @@ async function refresh(options?: RefreshAuthOptions): Promise<void> {
       const next = parseUser(j.user)
       user.value = next
       writeDisplayCache(next)
+      if (import.meta.env.DEV && next?.provider === 'twitch') {
+        try {
+          const prev = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(DEV_TWITCH_ID_LOG_KEY) : null
+          if (prev !== next.id) {
+            if (typeof sessionStorage !== 'undefined') {
+              sessionStorage.setItem(DEV_TWITCH_ID_LOG_KEY, next.id)
+            }
+            console.info(
+              '[StreamAssist dev] Twitch user id (додай у ADMIN_TWITCH_IDS у apps/server/.env):',
+              next.id,
+            )
+          }
+        } catch {
+          /* private mode */
+        }
+      }
     } else {
       user.value = null
       writeDisplayCache(null)
@@ -142,6 +173,7 @@ export function ensureAuthLoaded(): Promise<void> {
 
 export function useAuth() {
   const isAuthenticated = computed(() => Boolean(user.value))
+  const isAdmin = computed(() => user.value?.role === 'admin')
 
   function loginWithTwitch(redirectPath?: string): void {
     const path =
@@ -184,6 +216,13 @@ export function useAuth() {
     user.value = null
     loaded.value = false
     writeDisplayCache(null)
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem(DEV_TWITCH_ID_LOG_KEY)
+      }
+    } catch {
+      /* ignore */
+    }
     if (options?.navigateHome !== false) {
       const { router } = await import('@/router')
       await router.push({ path: '/' })
@@ -195,14 +234,73 @@ export function useAuth() {
     return user.value
   }
 
+  /**
+   * Email + password: try register, then login if email already exists (single UX flow).
+   * Sets httpOnly session cookie on success; call refresh() after to update client state.
+   */
+  async function loginOrRegisterWithEmail(
+    email: string,
+    password: string,
+    displayName?: string,
+  ): Promise<
+    | { ok: true; outcome: 'registered' | 'logged_in'; user: AppUser }
+    | { ok: false; error: 'validation' | 'wrong_password' | 'server' }
+  > {
+    const body = {
+      email: email.trim(),
+      password,
+      ...(displayName != null && displayName.trim().length > 0 ? { displayName: displayName.trim() } : {}),
+    }
+    const reg = await fetch(apiUrl('/api/auth/register'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (reg.ok) {
+      const j = (await reg.json()) as { user?: unknown }
+      const u = parseUser(j.user)
+      if (!u) {
+        return { ok: false, error: 'server' }
+      }
+      return { ok: true, outcome: 'registered', user: u }
+    }
+    if (reg.status === 409) {
+      const loginRes = await fetch(apiUrl('/api/auth/login'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: body.email, password: body.password }),
+      })
+      if (loginRes.ok) {
+        const j = (await loginRes.json()) as { user?: unknown }
+        const u = parseUser(j.user)
+        if (!u) {
+          return { ok: false, error: 'server' }
+        }
+        return { ok: true, outcome: 'logged_in', user: u }
+      }
+      if (loginRes.status === 401) {
+        return { ok: false, error: 'wrong_password' }
+      }
+      return { ok: false, error: 'server' }
+    }
+    if (reg.status === 400) {
+      return { ok: false, error: 'validation' }
+    }
+    return { ok: false, error: 'server' }
+  }
+
   return {
     user,
     loaded,
     isAuthenticated,
+    isAdmin,
     refresh,
     ensureAuthLoaded,
     loginWithTwitch,
     loginWithGoogle,
+    loginOrRegisterWithEmail,
     logout,
     getCurrentUser,
   }

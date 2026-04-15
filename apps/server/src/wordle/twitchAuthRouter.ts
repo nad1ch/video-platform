@@ -4,6 +4,7 @@ import { clearGlobalSessionCookie, setGlobalSessionCookie } from '../auth/sessio
 import { handleGetWordleMe } from '../auth/session/me'
 import { signSession, WORDLE_SESSION_MAX_AGE_SEC } from '../auth/session/sessionJwt'
 import { twitchExchangeCode, twitchFetchSessionUser } from '../auth/twitchClient'
+import { withSessionRole } from '../auth/session/withSessionRole'
 import { getWordleIngestChannel } from './tmiChat'
 import { readTwitchChatGuessCooldownMs } from './tmiGuessThrottle'
 
@@ -40,7 +41,8 @@ export function mountTwitchWordleAuth(app: Express): void {
     try {
       const redirectUri = wordleTwitchRedirectUri()
       const accessToken = await twitchExchangeCode(code, redirectUri)
-      const user = await twitchFetchSessionUser(accessToken)
+      const profile = await twitchFetchSessionUser(accessToken)
+      const user = withSessionRole(profile)
       const token = signSession(user, WORDLE_SESSION_MAX_AGE_SEC)
       setGlobalSessionCookie(res, token)
       res.redirect(`${clientPublicOrigin()}/wordle`)

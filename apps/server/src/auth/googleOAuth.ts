@@ -1,4 +1,6 @@
 import type { SessionUser } from './session/types'
+
+type GoogleProfileForSession = Omit<SessionUser, 'role'>
 import { clientPublicOrigin } from './clientOrigin'
 
 function requiredEnv(name: string): string {
@@ -77,7 +79,7 @@ export async function exchangeCodeForToken(code: string): Promise<string> {
  * Step 3: userinfo → SessionUser (same JWT / cookie shape as Twitch).
  * Maps conceptually: id, name → display_name, picture → profile_image_url, provider "google".
  */
-export async function getUserProfile(accessToken: string): Promise<SessionUser> {
+export async function getUserProfile(accessToken: string): Promise<GoogleProfileForSession> {
   const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
@@ -106,11 +108,13 @@ export async function getUserProfile(accessToken: string): Promise<SessionUser> 
         : u.id
 
   const avatar = typeof u.picture === 'string' ? u.picture : ''
+  const emailRaw = typeof u.email === 'string' ? u.email.trim().toLowerCase() : ''
 
   return {
     id: u.id,
     display_name: displayName,
     profile_image_url: avatar,
     provider: 'google',
+    ...(emailRaw.length > 0 ? { email: emailRaw } : {}),
   }
 }

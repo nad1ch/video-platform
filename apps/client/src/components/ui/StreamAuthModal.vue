@@ -6,21 +6,53 @@ import { useAuth } from '@/composables/useAuth'
 import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
 
 const { t } = useI18n()
-const { loginWithTwitch, loginWithGoogle } = useAuth()
+const { loginWithTwitch, loginWithGoogle, loginOrRegisterWithEmail, refresh } = useAuth()
 const { modalOpen, redirectAfterAuth, closeStreamAuthModal } = useStreamAuthModal()
 
 const email = ref('')
 const password = ref('')
-const showEmailSoon = ref(false)
+const emailSubmitting = ref(false)
+/** null | feedback key for i18n */
+const emailFeedback = ref<'ok_new' | 'ok_in' | 'err_val' | 'err_pw' | 'err_srv' | null>(null)
 
 function onBackdropClick(): void {
   closeStreamAuthModal()
-  showEmailSoon.value = false
+  emailFeedback.value = null
 }
 
-function onEmailSubmit(e: Event): void {
+async function onEmailSubmit(e: Event): Promise<void> {
   e.preventDefault()
-  showEmailSoon.value = true
+  emailFeedback.value = null
+  if (password.value.length < 6) {
+    emailFeedback.value = 'err_val'
+    return
+  }
+  emailSubmitting.value = true
+  try {
+    const r = await loginOrRegisterWithEmail(email.value, password.value)
+    if (r.ok) {
+      await refresh({ force: true })
+      emailFeedback.value = r.outcome === 'registered' ? 'ok_new' : 'ok_in'
+      window.setTimeout(() => {
+        closeStreamAuthModal()
+        emailFeedback.value = null
+        email.value = ''
+        password.value = ''
+      }, 1100)
+      return
+    }
+    if (r.error === 'wrong_password') {
+      emailFeedback.value = 'err_pw'
+      return
+    }
+    if (r.error === 'validation') {
+      emailFeedback.value = 'err_val'
+      return
+    }
+    emailFeedback.value = 'err_srv'
+  } finally {
+    emailSubmitting.value = false
+  }
 }
 
 function onTwitch(): void {
@@ -44,7 +76,7 @@ watch(modalOpen, (open) => {
   if (open) {
     document.body.style.overflow = 'hidden'
     document.addEventListener('keydown', onKeydown)
-    showEmailSoon.value = false
+    emailFeedback.value = null
   } else {
     document.body.style.overflow = ''
     document.removeEventListener('keydown', onKeydown)
@@ -106,6 +138,7 @@ onUnmounted(() => {
               name="email"
               autocomplete="email"
               :placeholder="t('app.authEmailPlaceholder')"
+              :disabled="emailSubmitting"
             />
           </label>
           <label class="stream-auth-label">
@@ -115,17 +148,56 @@ onUnmounted(() => {
               class="stream-auth-input"
               type="password"
               name="password"
+              minlength="6"
               autocomplete="current-password"
               :placeholder="t('app.authPasswordPlaceholder')"
+              :disabled="emailSubmitting"
             />
           </label>
-          <AppButton variant="ghost" type="submit" class="stream-auth-email-btn">
-            {{ t('app.authEmailContinue') }}
+          <AppButton
+            variant="ghost"
+            type="submit"
+            class="stream-auth-email-btn"
+            :disabled="emailSubmitting"
+          >
+            {{ emailSubmitting ? '…' : t('app.authEmailContinue') }}
           </AppButton>
         </form>
 
-        <p v-if="showEmailSoon" class="stream-auth-soon" role="status">
-          {{ t('app.authEmailSoon') }}
+        <p
+          v-if="emailFeedback === 'ok_new'"
+          class="stream-auth-feedback stream-auth-feedback--ok"
+          role="status"
+        >
+          {{ t('app.authEmailCreated') }}
+        </p>
+        <p
+          v-else-if="emailFeedback === 'ok_in'"
+          class="stream-auth-feedback stream-auth-feedback--ok"
+          role="status"
+        >
+          {{ t('app.authEmailLoggedIn') }}
+        </p>
+        <p
+          v-else-if="emailFeedback === 'err_val'"
+          class="stream-auth-feedback stream-auth-feedback--err"
+          role="alert"
+        >
+          {{ t('app.authEmailErrorValidation') }}
+        </p>
+        <p
+          v-else-if="emailFeedback === 'err_pw'"
+          class="stream-auth-feedback stream-auth-feedback--err"
+          role="alert"
+        >
+          {{ t('app.authEmailWrongPassword') }}
+        </p>
+        <p
+          v-else-if="emailFeedback === 'err_srv'"
+          class="stream-auth-feedback stream-auth-feedback--err"
+          role="alert"
+        >
+          {{ t('app.authEmailServerError') }}
         </p>
       </div>
     </div>
@@ -254,14 +326,24 @@ onUnmounted(() => {
   align-self: center;
 }
 
-.stream-auth-soon {
+.stream-auth-feedback {
   margin: 0.85rem 0 0;
   padding: 0.55rem 0.6rem;
   border-radius: 8px;
   border: 1px solid var(--sa-color-border);
-  background: color-mix(in srgb, var(--sa-color-warning) 10%, var(--sa-color-surface));
   font-size: 0.8rem;
   line-height: 1.4;
+}
+
+.stream-auth-feedback--ok {
+  background: color-mix(in srgb, var(--sa-color-success) 12%, var(--sa-color-surface));
+  border-color: color-mix(in srgb, var(--sa-color-success) 35%, var(--sa-color-border));
+  color: var(--sa-color-text-main);
+}
+
+.stream-auth-feedback--err {
+  background: color-mix(in srgb, var(--sa-color-warning) 10%, var(--sa-color-surface));
+  border-color: color-mix(in srgb, var(--sa-color-warning) 40%, var(--sa-color-border));
   color: var(--sa-color-text-body);
 }
 </style>
