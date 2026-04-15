@@ -6,9 +6,10 @@ import vue from '@vitejs/plugin-vue'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
-// Dev: `base` `/` → `http://localhost:5173/api/...` matches proxy. Prod build: `/app/` for Cloudflare Pages.
+// App is deployed at the site root (e.g. https://app.streamassist.net/), so assets must be `/assets/*`, not `/app/assets/*`.
+// If you ever host the SPA under a subpath, set `base` to that path and match Pages/nginx routing.
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? '/app/' : '/',
+  base: '/',
   plugins: [vue()],
   server: {
     proxy: {
