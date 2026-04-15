@@ -117,7 +117,7 @@
     "authOr": "lub",
     "authEmailLabel": "E-mail",
     "authPasswordLabel": "Hasło",
-    "authEmailPlaceholder": "you@example.com",
+    "authEmailPlaceholder": "you@@example.com",
     "authPasswordPlaceholder": "••••••••",
     "authEmailContinue": "Kontynuuj przez e-mail",
     "authEmailSoon": "Logowanie e-mailem nie jest jeszcze dostępne. Użyj Twitch lub Google.",

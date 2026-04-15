@@ -117,7 +117,7 @@
     "authOr": "або",
     "authEmailLabel": "Пошта",
     "authPasswordLabel": "Пароль",
-    "authEmailPlaceholder": "you@example.com",
+    "authEmailPlaceholder": "you@@example.com",
     "authPasswordPlaceholder": "••••••••",
     "authEmailContinue": "Продовжити з поштою",
     "authEmailSoon": "Вхід через пошту ще не підключено. Скористайся Twitch або Google.",
