@@ -117,7 +117,7 @@
     "authOr": "or",
     "authEmailLabel": "Email",
     "authPasswordLabel": "Password",
-    "authEmailPlaceholder": "you@@example.com",
+    "authEmailPlaceholder": "Email address",
     "authPasswordPlaceholder": "••••••••",
     "authEmailContinue": "Continue with email",
     "authEmailSoon": "Email sign-in is not available yet. Use Twitch or Google for now.",
