@@ -3,21 +3,28 @@ import { ref } from 'vue'
 import { isVideoQualityPreset, type VideoQualityPreset } from '../media/videoQualityPreset'
 
 const LS_VIDEO_PRESET = 'streamassist_call_video_quality_preset'
+/** When `'1'`, the user chose economy / balanced / HD (or migrated from older persisted preset). */
+const LS_VIDEO_EXPLICIT = 'streamassist_call_video_quality_explicit'
 const LS_CALL_DEBUG = 'streamassist_call_debug_overlay'
 
-function readVideoPreset(): VideoQualityPreset {
+function readVideoQualityFromStorage(): { preset: VideoQualityPreset; explicit: boolean } {
   if (typeof localStorage === 'undefined') {
-    return 'balanced'
+    return { preset: 'balanced', explicit: false }
   }
   try {
+    const explicitFlag = localStorage.getItem(LS_VIDEO_EXPLICIT)
     const v = localStorage.getItem(LS_VIDEO_PRESET)
+    if (explicitFlag === '1' && v && isVideoQualityPreset(v)) {
+      return { preset: v, explicit: true }
+    }
+    // Older builds only stored the preset — treat as an explicit choice.
     if (v && isVideoQualityPreset(v)) {
-      return v
+      return { preset: v, explicit: true }
     }
   } catch {
     /* ignore */
   }
-  return 'balanced'
+  return { preset: 'balanced', explicit: false }
 }
 
 function readCallDebugOverlay(): boolean {
@@ -42,8 +49,10 @@ export const useCallSessionStore = defineStore('callSession', () => {
   const selfPeerId = ref(randomPeerId())
   const selfDisplayName = ref('You')
   const inCall = ref(false)
-  /** Economy / balanced / HD — affects next `getUserMedia` + outbound encodings. */
-  const videoQualityPreset = ref<VideoQualityPreset>(readVideoPreset())
+  /** Economy / balanced / HD — UI selection; encoding uses `videoPublishTier` (see `videoQualityExplicit`). */
+  const videoQualityPreset = ref<VideoQualityPreset>(readVideoQualityFromStorage().preset)
+  /** False until the user changes quality (or legacy preset was in localStorage). */
+  const videoQualityExplicit = ref(readVideoQualityFromStorage().explicit)
   /** Technical overlay (stats, mode). Persisted so devs keep it across reloads. */
   const callDebugOverlay = ref(readCallDebugOverlay())
   /** displayName from server (room-state / peer-joined / peer-display-name). */
@@ -97,8 +106,22 @@ export const useCallSessionStore = defineStore('callSession', () => {
 
   function setVideoQualityPreset(p: VideoQualityPreset): void {
     videoQualityPreset.value = p
+    videoQualityExplicit.value = true
     try {
       localStorage.setItem(LS_VIDEO_PRESET, p)
+      localStorage.setItem(LS_VIDEO_EXPLICIT, '1')
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Back to automatic profiles on next capture/publish (clears persisted explicit choice). */
+  function setVideoQualityImplicitDefault(): void {
+    videoQualityExplicit.value = false
+    videoQualityPreset.value = 'balanced'
+    try {
+      localStorage.removeItem(LS_VIDEO_PRESET)
+      localStorage.removeItem(LS_VIDEO_EXPLICIT)
     } catch {
       /* ignore */
     }
@@ -123,6 +146,7 @@ export const useCallSessionStore = defineStore('callSession', () => {
     selfDisplayName,
     inCall,
     videoQualityPreset,
+    videoQualityExplicit,
     callDebugOverlay,
     remoteDisplayNames,
     replaceRemoteDisplayNames,
@@ -132,6 +156,7 @@ export const useCallSessionStore = defineStore('callSession', () => {
     labelFor,
     setInCall,
     setVideoQualityPreset,
+    setVideoQualityImplicitDefault,
     setCallDebugOverlay,
     resetSessionIdentity,
   }

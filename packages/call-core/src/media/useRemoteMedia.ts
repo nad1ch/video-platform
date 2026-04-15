@@ -719,6 +719,56 @@ export function useRemoteMedia() {
     schedulePreferredLayersUpdate()
   }
 
+  /**
+   * Tear down all consumers and the composite stream for a peer that left (or stopped publishing).
+   * Prevents stale tiles and frozen frames after `peer-left`.
+   */
+  function removeRemotePeer(peerId: string): void {
+    const producerIds: string[] = []
+    for (const [producerId, info] of producerInfoById.entries()) {
+      if (info.peerId === peerId) {
+        producerIds.push(producerId)
+      }
+    }
+    for (const producerId of producerIds) {
+      const consumer = consumersByProducerId.get(producerId)
+      if (consumer && !consumer.closed) {
+        lastSentSpatialByConsumerId.delete(consumer.id)
+        consumer.close()
+      }
+      consumersByProducerId.delete(producerId)
+      producerInfoById.delete(producerId)
+      consumedProducerIds.delete(producerId)
+      consumingProducerIds.delete(producerId)
+    }
+
+    const stream = streamsByPeerId.get(peerId)
+    if (stream) {
+      for (const t of stream.getTracks()) {
+        t.stop()
+      }
+      streamsByPeerId.delete(peerId)
+    }
+
+    if (pinnedPeerId.value === peerId) {
+      pinnedPeerId.value = null
+    }
+    if (activeSpeakerPeerId.value === peerId) {
+      activeSpeakerPeerId.value = null
+    }
+
+    const vis = new Map(peerVisibility.value)
+    vis.delete(peerId)
+    peerVisibility.value = vis
+    const pri = new Map(peerPriority.value)
+    pri.delete(peerId)
+    peerPriority.value = pri
+
+    syncRemotePeerStreamsRef()
+    bumpRemotePeerPlayRev(peerId)
+    schedulePreferredLayersUpdate()
+  }
+
   async function collectInboundVideoDebugStats(): Promise<InboundVideoDebugRow[]> {
     const out: InboundVideoDebugRow[] = []
     for (const [producerId, consumer] of consumersByProducerId.entries()) {
@@ -821,6 +871,7 @@ export function useRemoteMedia() {
     setPeerConsumePriority,
     setPinnedPeer,
     setActiveSpeaker,
+    removeRemotePeer,
     stopRemoteMedia,
     collectInboundVideoDebugStats,
   }

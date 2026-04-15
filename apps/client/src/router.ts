@@ -8,7 +8,7 @@ import { useAuth } from '@/composables/useAuth'
 import { registerEatFirstRouterGuards } from '@/eat-first/router.js'
 
 export const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/',

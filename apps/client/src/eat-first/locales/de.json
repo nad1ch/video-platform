@@ -38,11 +38,17 @@
     "tileNoVideo": "Kein Video",
     "tileReconnecting": "Neu verbinden…",
     "qualityPreset": "Videoqualität (nächster Beitritt)",
+    "qualityAdminHint": "Nur Host/Admin. Andere: automatische Qualität.",
     "quality": {
+      "auto": "Auto — passt sich der Raumgröße an (nächster Beitritt)",
       "economy": "Sparsam — ~360p, niedrigere Bitrate",
-      "balanced": "Ausgewogen — ~720p (Standard)",
+      "balanced": "Ausgewogen — ~720p",
       "hd": "HD — bis 1080p, höhere Bitrate"
     },
+    "presenceJoined": "{name} ist dem Call beigetreten",
+    "presenceLeft": "{name} hat den Call verlassen",
+    "listenVolume": "Lautstärke (nur für dich)",
+    "listenMuteLocal": "Für mich stumm",
     "debugOverlay": "Technisches Debug-Panel (Statistik)",
     "debugTitle": "Call-Debug",
     "debugRefresh": "Inbound-Stats aktualisieren",

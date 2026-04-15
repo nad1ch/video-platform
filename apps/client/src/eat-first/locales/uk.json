@@ -38,11 +38,17 @@
     "tileNoVideo": "Немає відео",
     "tileReconnecting": "Перепідключення…",
     "qualityPreset": "Якість відео (наступний вхід)",
+    "qualityAdminHint": "Лише для ведучого/адміна. Інші — автоматична якість.",
     "quality": {
+      "auto": "Авто — підлаштовується під кімнату (наступний вхід)",
       "economy": "Економія — ~360p, менший бітрейт",
-      "balanced": "Баланс — ~720p (типово)",
+      "balanced": "Баланс — ~720p",
       "hd": "HD — до 1080p, вищий бітрейт"
     },
+    "presenceJoined": "{name} приєднався до дзвінка",
+    "presenceLeft": "{name} вийшов з дзвінка",
+    "listenVolume": "Гучність (для вас)",
+    "listenMuteLocal": "Без звуку для мене",
     "debugOverlay": "Технічна панель (статистика)",
     "debugTitle": "Дебаг дзвінка",
     "debugRefresh": "Оновити inbound stats",

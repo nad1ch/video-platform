@@ -4,7 +4,7 @@ import { onUnmounted, shallowRef } from 'vue'
 import {
   getSimulcastEncodingsForPreset,
   getSingleLayerEncodingsForPreset,
-  type VideoQualityPreset,
+  type VideoPublishTier,
 } from '../media/videoQualityPreset'
 import { waitForSignalingMessage } from '../signaling/signalingWait'
 
@@ -73,8 +73,8 @@ export type PublishLocalMediaOptions = {
    * Omit or `false` for single-layer (default; best for small calls).
    */
   videoSimulcast?: boolean
-  /** Capture/encode ladder; defaults to `balanced`. */
-  videoQualityPreset?: VideoQualityPreset
+  /** Capture/encode ladder; defaults to `balanced` for API callers that omit it. */
+  videoPublishTier?: VideoPublishTier
 }
 
 export type SendTransportRoomApi = {
@@ -89,14 +89,20 @@ export type SendTransportRoomApi = {
 
 const CONNECT_TIMEOUT_MS = 45_000
 
-function outboundVideoGoogleStartBitrateKbps(preset: VideoQualityPreset): number {
-  if (preset === 'economy') {
-    return 400
+function outboundVideoGoogleStartBitrateKbps(tier: VideoPublishTier): number {
+  switch (tier) {
+    case 'economy':
+      return 400
+    case 'hd':
+      return 1200
+    case 'auto_large_room':
+      return 750
+    case 'auto_small_room':
+      return 900
+    case 'balanced':
+    default:
+      return 900
   }
-  if (preset === 'hd') {
-    return 1200
-  }
-  return 900
 }
 
 /** Mild Opus cap — stable voice, not aggressive throttling. */
@@ -205,15 +211,15 @@ export function useSendTransport() {
       }
       if (track.kind === 'video') {
         const useSimulcast = options?.videoSimulcast === true
-        const preset = options?.videoQualityPreset ?? 'balanced'
+        const tier = options?.videoPublishTier ?? 'balanced'
         const encodings = useSimulcast
-          ? getSimulcastEncodingsForPreset(preset)
-          : getSingleLayerEncodingsForPreset(preset)
+          ? getSimulcastEncodingsForPreset(tier)
+          : getSingleLayerEncodingsForPreset(tier)
         if (import.meta.env.DEV) {
           console.log('[produce] video outbound', {
             trackId: track.id,
             simulcast: useSimulcast,
-            preset,
+            tier,
             encodings: encodings.map((e) => ({
               maxBitrate: e.maxBitrate,
               scaleResolutionDownBy: e.scaleResolutionDownBy,
@@ -226,7 +232,7 @@ export function useSendTransport() {
           track,
           encodings,
           codecOptions: {
-            videoGoogleStartBitrate: outboundVideoGoogleStartBitrateKbps(preset),
+            videoGoogleStartBitrate: outboundVideoGoogleStartBitrateKbps(tier),
           },
         })
       } else {

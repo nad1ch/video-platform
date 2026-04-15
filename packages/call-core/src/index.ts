@@ -32,11 +32,17 @@ export {
 export { useLocalMedia, type UseLocalMediaOptions } from './media/useLocalMedia'
 export { gridSizeTierFromParticipantCount } from './media/gridTier'
 export {
+  ACTIVE_CAMERA_SMALL_ROOM_MAX,
+  AUTO_LARGE_ROOM_VIDEO_CAPTURE,
+  countActiveCameraPublishersAtWire,
   getCallVideoConstraints,
   getSimulcastEncodingsForPreset,
   getSingleLayerEncodingsForPreset,
   isVideoQualityPreset,
+  resolveOutgoingVideoPublishTier,
+  resolveVideoPublishTier,
   VIDEO_QUALITY_PRESETS,
+  type VideoPublishTier,
   type VideoQualityPreset,
 } from './media/videoQualityPreset'
 export {
@@ -54,6 +60,8 @@ export {
   type RemoteProducerInfo,
   type SetupReceivePathOptions,
 } from './media/useRemoteMedia'
+
+export { loadRemoteListeningPrefs, saveRemoteListeningPrefs, type RemoteListenEntry } from './audio/remoteListeningPrefs'
 
 export {
   useRoomConnection,

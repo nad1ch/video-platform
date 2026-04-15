@@ -1,6 +1,8 @@
 import { getActivePinia, storeToRefs } from 'pinia'
 import type { ComputedRef, Ref } from 'vue'
-import { computed, onScopeDispose, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
+import { loadRemoteListeningPrefs, saveRemoteListeningPrefs } from './audio/remoteListeningPrefs'
+import type { RemoteListenEntry } from './audio/remoteListeningPrefs'
 import { gridSizeTierFromParticipantCount } from './media/gridTier'
 import { useCallSessionStore } from './stores/callSession'
 import { playAllPageAudio } from './audio/audioPlaybackUnlock'
@@ -8,6 +10,11 @@ import { useLocalMedia } from './media/useLocalMedia'
 import { useMediasoupDevice } from './media/useMediasoupDevice'
 import { useRemoteMedia } from './media/useRemoteMedia'
 import { useRoomConnection } from './signaling/useRoomConnection'
+import {
+  countActiveCameraPublishersAtWire,
+  resolveOutgoingVideoPublishTier,
+  type VideoPublishTier,
+} from './media/videoQualityPreset'
 import { shouldUseVideoSimulcastForRoom } from './media/videoSimulcast'
 import { useSendTransport } from './transport/useSendTransport'
 import { waitForCondition } from './utils/waitForCondition'
@@ -31,6 +38,11 @@ export type CallEngineOptions = {
    * between publish and recv-only (e.g. Eat overlay spectator vs player).
    */
   role?: Ref<CallEngineRole> | ComputedRef<CallEngineRole>
+  /**
+   * When true, manual economy/balanced/hd controls apply. Regular users should omit or pass false
+   * so outbound quality follows automatic room profiles only.
+   */
+  allowManualVideoQuality?: Ref<boolean> | ComputedRef<boolean>
 }
 
 /** One grid tile: dumb UI maps this to `ParticipantTile`. */
@@ -42,6 +54,10 @@ export type CallTile = {
   videoEnabled: boolean
   audioEnabled: boolean
   playRev?: number
+  /** Local-only listening volume for this remote peer (0..1). */
+  remoteListenVolume?: number
+  /** Local-only mute for this remote peer (does not affect their mic). */
+  remoteListenMuted?: boolean
 }
 
 const DISPLAY_NAME_DEBOUNCE_MS = 400
@@ -97,6 +113,14 @@ function readEngineRole(options: CallEngineOptions | undefined): CallEngineRole 
   return 'participant'
 }
 
+function readAllowManualVideoQuality(options: CallEngineOptions | undefined): boolean {
+  const r = options?.allowManualVideoQuality
+  if (r && typeof r === 'object' && 'value' in r) {
+    return Boolean((r as Ref<boolean>).value)
+  }
+  return false
+}
+
 export function useCallEngine(options?: CallEngineOptions) {
   if (getActivePinia() === undefined) {
     throw new Error(
@@ -105,7 +129,8 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   const session = options?.session ?? useCallSessionStore()
-  const { roomId, selfPeerId, selfDisplayName, inCall, videoQualityPreset } = storeToRefs(session)
+  const { roomId, selfPeerId, selfDisplayName, inCall, videoQualityPreset, videoQualityExplicit } =
+    storeToRefs(session)
 
   const {
     lastRoomState,
@@ -123,6 +148,10 @@ export function useCallEngine(options?: CallEngineOptions) {
 
   const { device, loadDevice, reset: deviceReset } = useMediasoupDevice()
   const { createSendTransport, closeSendTransport, publishLocalMedia } = useSendTransport()
+
+  const wirePublishTier = ref<VideoPublishTier>('auto_large_room')
+  const lastWireActiveCameraPublishers = ref(0)
+
   const {
     localStream,
     localPlayRev,
@@ -133,7 +162,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     toggleMic,
     toggleCam,
   } = useLocalMedia({
-    getVideoQualityPreset: () => videoQualityPreset.value,
+    getVideoPublishTier: () => wirePublishTier.value,
   })
   const {
     remotePeerStreams,
@@ -145,7 +174,74 @@ export function useCallEngine(options?: CallEngineOptions) {
     setActiveSpeaker,
     setNetworkQualityOverride,
     collectInboundVideoDebugStats,
+    removeRemotePeer,
   } = useRemoteMedia()
+
+  const remoteListenPrefs = shallowRef(new Map<string, RemoteListenEntry>())
+  const callPresenceMessages = ref<{ id: string; at: number; kind: 'join' | 'leave'; displayName: string }[]>([])
+
+  function roomStorageKey(): string {
+    return trimmedString(roomId.value) || 'demo'
+  }
+
+  function syncListenPrefsFromStorage(): void {
+    remoteListenPrefs.value = loadRemoteListeningPrefs(roomStorageKey())
+  }
+
+  function persistListenPrefs(): void {
+    saveRemoteListeningPrefs(roomStorageKey(), remoteListenPrefs.value)
+  }
+
+  function setRemoteListenVolume(peerId: string, volume: number): void {
+    const next = new Map(remoteListenPrefs.value)
+    const cur = next.get(peerId) ?? { volume: 1, muted: false }
+    cur.volume = Math.min(1, Math.max(0, volume))
+    next.set(peerId, cur)
+    remoteListenPrefs.value = next
+    persistListenPrefs()
+  }
+
+  function setRemoteListenMuted(peerId: string, muted: boolean): void {
+    const next = new Map(remoteListenPrefs.value)
+    const cur = next.get(peerId) ?? { volume: 1, muted: false }
+    cur.muted = muted
+    next.set(peerId, cur)
+    remoteListenPrefs.value = next
+    persistListenPrefs()
+  }
+
+  function pushCallPresence(kind: 'join' | 'leave', displayName: string): void {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    callPresenceMessages.value = [...callPresenceMessages.value, { id, at: Date.now(), kind, displayName }].slice(-12)
+  }
+
+  const unsubPeerPresence = addMessageListener((data) => {
+    if (!data || typeof data !== 'object') {
+      return
+    }
+    const m = data as { type?: string; payload?: unknown }
+    if (m.type === 'peer-joined') {
+      const p = m.payload as { peerId?: string; displayName?: string }
+      if (typeof p.peerId !== 'string' || p.peerId === selfPeerId.value) {
+        return
+      }
+      const name =
+        typeof p.displayName === 'string' && p.displayName.trim() ? p.displayName.trim() : p.peerId
+      pushCallPresence('join', name)
+      return
+    }
+    if (m.type === 'peer-left') {
+      const p = m.payload as { peerId?: string }
+      if (typeof p.peerId !== 'string') {
+        return
+      }
+      const peerId = p.peerId
+      const name =
+        lastRoomState.value?.peers.find((x) => x.peerId === peerId)?.displayName ?? session.labelFor(peerId)
+      pushCallPresence('leave', name)
+      removeRemotePeer(peerId)
+    }
+  })
 
   const roomApi = { sendJson, addMessageListener, drainPendingNewProducers }
 
@@ -165,6 +261,9 @@ export function useCallEngine(options?: CallEngineOptions) {
 
   const callDebugSnapshot = computed(() => ({
     videoQualityPreset: videoQualityPreset.value,
+    videoQualityExplicit: videoQualityExplicit.value,
+    videoPublishTier: wirePublishTier.value,
+    activeCameraPublishersAtWire: lastWireActiveCameraPublishers.value,
     peerCountAtWire: lastWirePeerCount.value,
     publishSimulcast: lastWireVideoSimulcast.value,
     activeSpeakerPeerId: activeSpeakerPeerId.value,
@@ -209,6 +308,21 @@ export function useCallEngine(options?: CallEngineOptions) {
     const videoSimulcast = shouldUseVideoSimulcastForRoom(peerCount)
     lastWirePeerCount.value = peerCount
     lastWireVideoSimulcast.value = videoSimulcast
+
+    const mode = readEngineRole(options)
+    const activeCam = countActiveCameraPublishersAtWire(
+      existing,
+      selfPeerId.value,
+      mode === 'participant' && camEnabled.value,
+    )
+    lastWireActiveCameraPublishers.value = activeCam
+    wirePublishTier.value = resolveOutgoingVideoPublishTier({
+      manualPreset: videoQualityPreset.value,
+      manualExplicit: videoQualityExplicit.value,
+      allowManualQuality: readAllowManualVideoQuality(options),
+      activeCameraPublishersAtWire: activeCam,
+    })
+
     await setupReceivePath(d, roomApi, existing, {
       enableVideoSpatialLayerSignaling: videoSimulcast,
     })
@@ -222,7 +336,6 @@ export function useCallEngine(options?: CallEngineOptions) {
       setActiveSpeaker(v)
     })
 
-    const mode = readEngineRole(options)
     if (mode === 'participant') {
       await createSendTransport(d, roomApi)
 
@@ -238,7 +351,7 @@ export function useCallEngine(options?: CallEngineOptions) {
       }
       await publishLocalMedia(toPublish, {
         videoSimulcast,
-        videoQualityPreset: videoQualityPreset.value,
+        videoPublishTier: wirePublishTier.value,
       })
     }
 
@@ -333,6 +446,8 @@ export function useCallEngine(options?: CallEngineOptions) {
         videoEnabled: v ? v.enabled : false,
         audioEnabled: a ? a.enabled : true,
         playRev: remotePeerPlayRevs.value.get(peerId) ?? 0,
+        remoteListenVolume: remoteListenPrefs.value.get(peerId)?.volume ?? 1,
+        remoteListenMuted: remoteListenPrefs.value.get(peerId)?.muted ?? false,
       })
     }
 
@@ -396,6 +511,12 @@ export function useCallEngine(options?: CallEngineOptions) {
     }, DISPLAY_NAME_DEBOUNCE_MS)
   })
 
+  watch(roomId, () => {
+    if (!inCall.value) {
+      syncListenPrefsFromStorage()
+    }
+  })
+
   if (import.meta.env.DEV) {
     watch(
       () => localStream.value,
@@ -418,6 +539,8 @@ export function useCallEngine(options?: CallEngineOptions) {
   function teardownMedia(): void {
     lastWirePeerCount.value = 0
     lastWireVideoSimulcast.value = false
+    lastWireActiveCameraPublishers.value = 0
+    callPresenceMessages.value = []
     clearReconnectTimer()
     stopSignalingKeepAlive()
     unsubActiveSpeaker?.()
@@ -437,6 +560,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     clearReconnectTimer()
     joinError.value = null
     joining.value = true
+    syncListenPrefsFromStorage()
     try {
       await roomConnect()
       const p = callJoinRoomPayload()
@@ -492,6 +616,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   onScopeDispose(() => {
+    unsubPeerPresence()
     if (displayNameDebounceTimer !== null) {
       clearTimeout(displayNameDebounceTimer)
       displayNameDebounceTimer = null
@@ -520,5 +645,8 @@ export function useCallEngine(options?: CallEngineOptions) {
     wsStatus,
     callDebugSnapshot,
     refreshInboundVideoDebugStats: collectInboundVideoDebugStats,
+    callPresenceMessages,
+    setRemoteListenVolume,
+    setRemoteListenMuted,
   }
 }

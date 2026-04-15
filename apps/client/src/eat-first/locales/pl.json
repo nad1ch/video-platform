@@ -38,11 +38,17 @@
     "tileNoVideo": "Brak wideo",
     "tileReconnecting": "Ponowne łączenie…",
     "qualityPreset": "Jakość wideo (następne dołączenie)",
+    "qualityAdminHint": "Tylko host/admin. Inni: automatyczna jakość.",
     "quality": {
+      "auto": "Auto — dostosowuje się do pokoju (następne dołączenie)",
       "economy": "Oszczędny — ~360p, niższy bitrate",
-      "balanced": "Zbalansowany — ~720p (domyślnie)",
+      "balanced": "Zbalansowany — ~720p",
       "hd": "HD — do 1080p, wyższy bitrate"
     },
+    "presenceJoined": "{name} dołączył do rozmowy",
+    "presenceLeft": "{name} opuścił rozmowę",
+    "listenVolume": "Głośność (tylko u ciebie)",
+    "listenMuteLocal": "Wycisz u mnie",
     "debugOverlay": "Panel debugowania (statystyki)",
     "debugTitle": "Debug połączenia",
     "debugRefresh": "Odśwież statystyki inbound",

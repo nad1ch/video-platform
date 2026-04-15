@@ -1,17 +1,32 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import {
   useCallEngine,
   VIDEO_QUALITY_PRESETS,
   type InboundVideoDebugRow,
   type VideoQualityPreset,
 } from 'call-core'
+import { useAuth } from '@/composables/useAuth'
 import ParticipantTile from './ParticipantTile.vue'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 
+type VideoQualityUiChoice = 'auto' | VideoQualityPreset
+
 const { t } = useI18n()
+const route = useRoute()
+const { user, ensureAuthLoaded } = useAuth()
+
+/** Admin / host: `?qualityAdmin=<VITE_CALL_QUALITY_ADMIN_SECRET>` or dev `?callDebug=1`. */
+const allowManualVideoQuality = computed(() => {
+  const secret = import.meta.env.VITE_CALL_QUALITY_ADMIN_SECRET
+  if (typeof secret === 'string' && secret.length > 0) {
+    return String(route.query.qualityAdmin ?? '').trim() === secret
+  }
+  return import.meta.env.DEV && String(route.query.callDebug ?? '') === '1'
+})
 
 const {
   session,
@@ -30,11 +45,22 @@ const {
   wsStatus,
   callDebugSnapshot,
   refreshInboundVideoDebugStats,
-} = useCallEngine()
+  callPresenceMessages,
+  setRemoteListenVolume,
+  setRemoteListenMuted,
+} = useCallEngine({ allowManualVideoQuality })
 
-const videoPreset = computed({
-  get: () => session.videoQualityPreset as VideoQualityPreset,
-  set: (v: VideoQualityPreset) => session.setVideoQualityPreset(v),
+const videoQualityChoice = computed({
+  get(): VideoQualityUiChoice {
+    return session.videoQualityExplicit ? session.videoQualityPreset : 'auto'
+  },
+  set(v: VideoQualityUiChoice) {
+    if (v === 'auto') {
+      session.setVideoQualityImplicitDefault()
+    } else {
+      session.setVideoQualityPreset(v)
+    }
+  },
 })
 
 const callDebugOverlay = computed({
@@ -57,6 +83,14 @@ async function refreshInboundDebug(): Promise<void> {
 }
 
 onMounted(() => {
+  void (async () => {
+    await ensureAuthLoaded()
+    const authName = user.value?.displayName?.trim()
+    const cur = String(session.selfDisplayName ?? '').trim()
+    if (authName && (!cur || cur === 'You')) {
+      session.selfDisplayName = authName
+    }
+  })()
   try {
     const q = new URLSearchParams(window.location.search).get('callDebug')
     if (q === '1' || q === 'true') {
@@ -98,15 +132,20 @@ onMounted(() => {
             :placeholder="t('callPage.placeholderName')"
           />
         </label>
-        <fieldset class="call-page__fieldset">
+        <fieldset v-if="allowManualVideoQuality" class="call-page__fieldset">
           <legend class="call-page__legend">{{ t('callPage.qualityPreset') }}</legend>
+          <p class="call-page__hint call-page__hint--small">{{ t('callPage.qualityAdminHint') }}</p>
           <div class="call-page__preset-row">
+            <label class="call-page__preset">
+              <input v-model="videoQualityChoice" type="radio" name="video-quality" value="auto" />
+              <span>{{ t('callPage.quality.auto') }}</span>
+            </label>
             <label
               v-for="p in qualityPresets"
               :key="p"
               class="call-page__preset"
             >
-              <input v-model="videoPreset" type="radio" name="video-quality" :value="p" />
+              <input v-model="videoQualityChoice" type="radio" name="video-quality" :value="p" />
               <span>{{ t(`callPage.quality.${p}`) }}</span>
             </label>
           </div>
@@ -123,6 +162,12 @@ onMounted(() => {
       </section>
 
       <section v-else class="call-page__active">
+        <ul v-if="callPresenceMessages.length" class="call-page__presence" aria-live="polite">
+          <li v-for="m in callPresenceMessages" :key="m.id" class="call-page__presence-li">
+            <template v-if="m.kind === 'join'">{{ t('callPage.presenceJoined', { name: m.displayName }) }}</template>
+            <template v-else>{{ t('callPage.presenceLeft', { name: m.displayName }) }}</template>
+          </li>
+        </ul>
         <div class="call-page__toolbar">
           <AppButton variant="secondary" @click="leaveCall">{{ t('callPage.leave') }}</AppButton>
           <AppButton
@@ -143,16 +188,20 @@ onMounted(() => {
 
         <div class="call-page__grid" :class="gridModifier">
           <ParticipantTile
-            v-for="t in tiles"
-            :key="t.peerId"
-            :display-name="t.displayName"
-            :stream="t.stream"
-            :is-local="t.isLocal"
-            :video-enabled="t.videoEnabled"
-            :audio-enabled="t.audioEnabled"
-            :play-rev="t.playRev"
+            v-for="tile in tiles"
+            :key="tile.peerId"
+            :display-name="tile.displayName"
+            :stream="tile.stream"
+            :is-local="tile.isLocal"
+            :video-enabled="tile.videoEnabled"
+            :audio-enabled="tile.audioEnabled"
+            :play-rev="tile.playRev"
             :size-tier="sizeTier"
-            :active-speaker="activeSpeakerPeerId === t.peerId"
+            :active-speaker="activeSpeakerPeerId === tile.peerId"
+            :remote-listen-volume="tile.remoteListenVolume"
+            :remote-listen-muted="tile.remoteListenMuted"
+            @update:listen-volume="setRemoteListenVolume(tile.peerId, $event)"
+            @update:listen-muted="setRemoteListenMuted(tile.peerId, $event)"
           />
         </div>
 
@@ -166,6 +215,12 @@ onMounted(() => {
           <dl class="call-page__debug-dl">
             <dt>preset</dt>
             <dd>{{ callDebugSnapshot.videoQualityPreset }}</dd>
+            <dt>explicit</dt>
+            <dd>{{ callDebugSnapshot.videoQualityExplicit }}</dd>
+            <dt>publish tier</dt>
+            <dd>{{ callDebugSnapshot.videoPublishTier }}</dd>
+            <dt>active cameras @ wire</dt>
+            <dd>{{ callDebugSnapshot.activeCameraPublishersAtWire }}</dd>
             <dt>peers @ wire</dt>
             <dd>{{ callDebugSnapshot.peerCountAtWire }}</dd>
             <dt>publish simulcast</dt>
@@ -243,6 +298,24 @@ onMounted(() => {
   margin: 0;
   font-size: 0.9rem;
   opacity: 0.85;
+}
+
+.call-page__hint--small {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.call-page__presence {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--sa-color-text-muted, #9ca3af);
+}
+
+.call-page__presence-li {
+  padding: 0.15rem 0;
 }
 
 .call-page__pre {

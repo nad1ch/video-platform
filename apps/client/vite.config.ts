@@ -6,7 +6,9 @@ import vue from '@vitejs/plugin-vue'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
+// Dev: `base` `/` → `http://localhost:5173/api/...` matches proxy. Prod build: `/app/` for Cloudflare Pages.
 export default defineConfig({
+  base: process.env.NODE_ENV === 'production' ? '/app/' : '/',
   plugins: [vue()],
   server: {
     proxy: {

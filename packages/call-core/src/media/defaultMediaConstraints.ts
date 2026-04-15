@@ -1,14 +1,15 @@
 import type { VideoQualityPreset } from './videoQualityPreset'
 import { getCallVideoConstraints } from './videoQualityPreset'
 
+/** Voice-first defaults (widely supported). Optional `channelCount`/`sampleRate` can be added per-device if needed. */
 export const DEFAULT_CALL_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: true,
   noiseSuppression: true,
   autoGainControl: true,
 }
 
-/** @deprecated Prefer `getCallVideoConstraints(preset)` — kept as balanced alias. */
-export const DEFAULT_CALL_VIDEO_CONSTRAINTS: MediaTrackConstraints = getCallVideoConstraints('balanced')
+/** @deprecated Prefer `getCallVideoConstraints(tier)` — implicit multi-user auto profile. */
+export const DEFAULT_CALL_VIDEO_CONSTRAINTS: MediaTrackConstraints = getCallVideoConstraints('auto_large_room')
 
 export function getVideoConstraintsForPreset(preset: VideoQualityPreset): MediaTrackConstraints {
   return getCallVideoConstraints(preset)

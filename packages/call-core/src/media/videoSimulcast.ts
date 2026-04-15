@@ -12,11 +12,11 @@ export function shouldUseVideoSimulcastForRoom(peerCount: number): boolean {
   return peerCount >= VIDEO_SIMULCAST_MIN_PEERS_IN_ROOM
 }
 
-/** Balanced preset (back-compat export for callers that need a static reference). */
-export const VP8_SINGLE_LAYER_ENCODING: RtpEncodingParameters[] = getSingleLayerEncodingsForPreset('balanced')
+/** Implicit multi-user auto tier (back-compat export for callers that need a static reference). */
+export const VP8_SINGLE_LAYER_ENCODING: RtpEncodingParameters[] = getSingleLayerEncodingsForPreset('auto_large_room')
 
-/** Balanced preset simulcast ladder. */
-export const VP8_SIMULCAST_ENCODINGS: RtpEncodingParameters[] = getSimulcastEncodingsForPreset('balanced')
+/** Implicit multi-user simulcast ladder. */
+export const VP8_SIMULCAST_ENCODINGS: RtpEncodingParameters[] = getSimulcastEncodingsForPreset('auto_large_room')
 
 /** Maps UI grid tier → mediasoup simulcast spatialLayer (unused in-app; real policy is in `useRemoteMedia`). */
 export function spatialLayerForGridSizeTier(tier: 'sm' | 'md' | 'lg'): number {

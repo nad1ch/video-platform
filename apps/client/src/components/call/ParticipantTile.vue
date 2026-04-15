@@ -6,6 +6,11 @@ import StreamVideo from '../StreamVideo.vue'
 
 const { t, locale } = useI18n()
 
+const emit = defineEmits<{
+  'update:listenVolume': [value: number]
+  'update:listenMuted': [value: boolean]
+}>()
+
 const props = defineProps<{
   displayName: string
   stream: MediaStream | null
@@ -18,6 +23,10 @@ const props = defineProps<{
   sizeTier: 'sm' | 'md' | 'lg'
   /** Remote/local tile with strongest mic level (Web Audio analyser). */
   activeSpeaker?: boolean
+  /** Local-only remote listening volume 0..1 */
+  remoteListenVolume?: number
+  /** Local-only remote listen mute */
+  remoteListenMuted?: boolean
 }>()
 
 function initials(name: string): string {
@@ -176,6 +185,8 @@ const placeholderHint = computed(() => {
         class="tile-audio"
         :stream="audioSplitStream"
         :play-rev="playRev"
+        :listen-volume="remoteListenVolume ?? 1"
+        :listen-muted="remoteListenMuted ?? false"
       />
       <div v-if="showVideo" class="tile-video-wrap">
         <StreamVideo
@@ -198,6 +209,32 @@ const placeholderHint = computed(() => {
       <span class="tile-mic" :class="{ 'tile-mic--off': !audioEnabled }" aria-hidden="true">
         {{ audioEnabled ? '●' : '○' }}
       </span>
+    </div>
+    <div v-if="!isLocal" class="tile-listen">
+      <label class="tile-listen__label">
+        <span class="tile-listen__text">{{ t('callPage.listenVolume') }}</span>
+        <input
+          class="tile-listen__range"
+          type="range"
+          min="0"
+          max="100"
+          :value="Math.round((remoteListenVolume ?? 1) * 100)"
+          @input="
+            emit(
+              'update:listenVolume',
+              Math.min(1, Math.max(0, Number(($event.target as HTMLInputElement).value) / 100)),
+            )
+          "
+        />
+      </label>
+      <label class="tile-listen__mute">
+        <input
+          type="checkbox"
+          :checked="remoteListenMuted ?? false"
+          @change="emit('update:listenMuted', ($event.target as HTMLInputElement).checked)"
+        />
+        <span>{{ t('callPage.listenMuteLocal') }}</span>
+      </label>
     </div>
   </div>
 </template>
@@ -342,5 +379,38 @@ const placeholderHint = computed(() => {
 
 .tile-mic--off {
   opacity: 0.45;
+}
+
+.tile-listen {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem 0.45rem;
+  font-size: 0.7rem;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--text-m, #d1d5db);
+}
+
+.tile-listen__label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.tile-listen__text {
+  flex-shrink: 0;
+}
+
+.tile-listen__range {
+  flex: 1;
+  min-width: 0;
+}
+
+.tile-listen__mute {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
 }
 </style>

@@ -17,7 +17,7 @@ import {
   type LocalGuessRow,
   type WordLength,
 } from '@/wordle/wordleLogic'
-import { apiBase, apiUrl } from '@/utils/apiUrl'
+import { apiUrl, sameOriginApiPrefix } from '@/utils/apiUrl'
 import { useAuth } from '@/composables/useAuth'
 
 const TWITCH_CHANNEL_STORAGE_KEY = 'streamassist_wordle_twitch_channel'
@@ -177,7 +177,7 @@ type SessionUser = {
   profile_image_url: string
 }
 
-const { refresh: refreshGlobalAuth } = useAuth()
+const { isAuthenticated } = useAuth()
 
 const gameState = shallowRef<GameStatePayload | null>(null)
 const leaderboard = ref<LeaderboardEntry[]>([])
@@ -188,9 +188,6 @@ const wsStatus = ref<'idle' | 'open' | 'closed' | 'error'>('idle')
 const lastError = ref<string | null>(null)
 
 let ws: WebSocket | null = null
-
-const twitchClientId = import.meta.env.VITE_TWITCH_CLIENT_ID as string | undefined
-const twitchOAuthRedirect = import.meta.env.VITE_TWITCH_OAUTH_REDIRECT_URI as string | undefined
 
 /**
  * Priority: URL ?channel= → localStorage (viewer choice) → VITE_TWITCH_CHANNEL → demo fallback.
@@ -249,25 +246,16 @@ function wordleWsUrl(): string {
   if (typeof env === 'string' && env.trim().length > 0) {
     return env.trim()
   }
+  const prefix = sameOriginApiPrefix()
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const base = apiBase()
-  const path = base ? `${base}/wordle-ws` : '/wordle-ws'
+  if (prefix.startsWith('http://') || prefix.startsWith('https://')) {
+    const u = new URL('/wordle-ws', prefix.endsWith('/') ? prefix : `${prefix}/`)
+    u.protocol = proto
+    return u.toString()
+  }
+  const path = prefix ? `${prefix}/wordle-ws` : '/wordle-ws'
   return `${proto}//${location.host}${path}`
 }
-
-const twitchAuthUrl = computed(() => {
-  if (!twitchClientId || !twitchOAuthRedirect) {
-    return null
-  }
-  const p = new URLSearchParams({
-    client_id: twitchClientId,
-    redirect_uri: twitchOAuthRedirect,
-    response_type: 'code',
-    scope: '',
-    force_verify: 'true',
-  })
-  return `https://id.twitch.tv/oauth2/authorize?${p.toString()}`
-})
 
 const chatIframeSrc = computed(() => {
   const ch = effectiveTwitchChannel.value
@@ -464,6 +452,16 @@ async function refreshMe(): Promise<void> {
   }
 }
 
+/** Sync Wordle session display with global shell auth (single logout/login in header). */
+watch(isAuthenticated, async (auth) => {
+  if (auth) {
+    await refreshMe()
+  } else {
+    sessionUser.value = null
+  }
+  connectWs()
+})
+
 function kbdAppendLetter(ch: string): void {
   lastError.value = null
   if (localBoardLocked.value) {
@@ -539,26 +537,6 @@ function setWordLength(len: WordLength): void {
 
 function toggleSecretPeek(): void {
   secretPeekVisible.value = !secretPeekVisible.value
-}
-
-async function logout(): Promise<void> {
-  await fetch(apiUrl('/api/auth/logout'), { method: 'POST', credentials: 'include' })
-  sessionUser.value = null
-  await refreshGlobalAuth()
-  connectWs()
-}
-
-function login(): void {
-  const u = twitchAuthUrl.value
-  if (u) {
-    window.location.href = u
-  }
-}
-
-/** Same `wordle_session` cookie as app shell; returns to /wordle after Google OAuth. */
-function loginWithGoogleWordle(): void {
-  const q = encodeURIComponent('/wordle')
-  window.location.href = apiUrl(`/api/auth/google?redirect=${q}`)
 }
 
 function onWindowKeydown(e: KeyboardEvent): void {
@@ -647,44 +625,16 @@ onUnmounted(() => {
 <template>
   <div class="page-route">
     <AppContainer wide flush class="wordle-page" :class="`wordle-page--len${wordLength}`">
-      <header class="wordle-page__topbar">
-        <div class="wordle-page__topbar-main">
-          <span class="wordle-page__eyebrow">{{ t('wordleUi.eyebrow') }}</span>
-          <span class="wordle-page__pill">{{
-            t('wordleUi.roundPill', { n: localRoundId + 1, len: wordLength })
-          }}</span>
-          <span class="wordle-page__pill">{{
-            t('wordleUi.attemptsPill', { cur: localGuesses.length, max: WORDLE_MAX_ATTEMPTS })
-          }}</span>
-        </div>
-        <div class="wordle-page__topbar-auth">
-          <template v-if="sessionUser">
-            <img
-              class="wordle-page__avatar"
-              :src="sessionUser.profile_image_url"
-              :alt="sessionUser.display_name"
-              width="28"
-              height="28"
-            />
-            <span class="wordle-page__name">{{ sessionUser.display_name }}</span>
-            <AppButton variant="ghost" @click="logout">{{ t('wordleUi.logout') }}</AppButton>
-          </template>
-          <div v-else class="wordle-page__auth-btns">
-            <AppButton v-if="twitchAuthUrl" variant="primary" @click="login">{{
-              t('wordleUi.loginTwitch')
-            }}</AppButton>
-            <AppButton variant="secondary" type="button" @click="loginWithGoogleWordle">{{
-              t('wordleUi.loginGoogle')
-            }}</AppButton>
-          </div>
-        </div>
-      </header>
-
       <p v-if="lastError" class="wordle-page__banner">{{ lastError }}</p>
 
       <div class="wordle-page__grid">
         <AppCard class="wordle-page__stack wordle-page__stack--side wordle-page__stack--leader">
           <h2 class="wordle-page__card-title">{{ t('wordleUi.cardYou') }}</h2>
+          <p class="wordle-page__session-meta" aria-live="polite">
+            <span class="wordle-page__pill">{{
+              t('wordleUi.roundPill', { n: localRoundId + 1, len: wordLength })
+            }}</span>
+          </p>
           <div class="wordle-page__stats-block" :aria-label="t('wordleUi.statsAria')">
             <p class="wordle-page__stats-line">
               {{ t('wordleUi.wonStat') }} <strong>{{ localStats.won }}</strong>
@@ -940,14 +890,14 @@ onUnmounted(() => {
   --wordle-gap: 10px;
   --wordle-len-css: 5;
   flex: 1 1 auto;
-  padding-block: var(--sa-space-3) var(--sa-space-6);
+  padding-block: var(--sa-space-2) var(--sa-space-5);
   /* AppContainer `flush` прибирає зовнішній padding — відступи лише тут */
   padding-inline: var(--sa-space-4);
   font-family: var(--sa-font-main);
   display: flex;
   flex-direction: column;
   min-height: 0;
-  gap: var(--sa-space-3);
+  gap: var(--sa-space-2);
 }
 
 .wordle-page--len6 {
@@ -958,46 +908,6 @@ onUnmounted(() => {
 .wordle-page--len7 {
   --wordle-cell: 56px;
   --wordle-len-css: 7;
-}
-
-.wordle-page__topbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sa-space-3);
-  padding: var(--sa-space-3) 0 var(--sa-space-2);
-  border-bottom: 1px solid var(--sa-color-border);
-}
-
-.wordle-page__topbar-main {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sa-space-2);
-  min-width: 0;
-}
-
-.wordle-page__topbar-auth {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sa-space-2);
-}
-
-.wordle-page__auth-btns {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sa-space-2);
-}
-
-.wordle-page__eyebrow {
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--sa-color-text-muted);
 }
 
 .wordle-page__pill {
@@ -1014,20 +924,6 @@ onUnmounted(() => {
 .wordle-page__pill--dim {
   color: var(--sa-color-text-muted);
   font-weight: 500;
-}
-
-.wordle-page__avatar {
-  border-radius: 50%;
-  vertical-align: middle;
-}
-
-.wordle-page__name {
-  font-size: 0.85rem;
-  color: var(--sa-color-text-main);
-  max-width: 10rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .wordle-page__hint {
@@ -1200,9 +1096,45 @@ onUnmounted(() => {
 }
 
 @media (min-width: 1101px) {
+  .wordle-page {
+    --wordle-gap: clamp(6px, 1vmin, 10px);
+  }
+
+  .wordle-page--len5 {
+    --wordle-cell: clamp(40px, min(7.2vmin, 7dvh), 78px);
+  }
+
+  .wordle-page--len6 {
+    --wordle-cell: clamp(34px, min(6.2vmin, 6.2dvh), 66px);
+  }
+
+  .wordle-page--len7 {
+    --wordle-cell: clamp(30px, min(5.4vmin, 5.5dvh), 56px);
+  }
+
   .wordle-page__grid {
     grid-template-columns: minmax(9.5rem, 0.62fr) minmax(17rem, 1.08fr) minmax(9rem, 0.82fr);
-    min-height: min(76vh, 880px);
+  }
+
+  @media (max-height: 820px) {
+    .wordle-page__kbd {
+      gap: var(--sa-space-1);
+    }
+
+    .wordle-page__kbd :deep(.wordle-page__kbd-key) {
+      padding: 0.28rem 0.18rem;
+      font-size: 0.72rem;
+      max-width: 2.55rem;
+    }
+
+    .wordle-page__kbd :deep(.wordle-page__kbd-action) {
+      padding: 0.34rem 0.55rem;
+      font-size: 0.68rem;
+    }
+
+    .wordle-page__game {
+      gap: var(--sa-space-2);
+    }
   }
 }
 
@@ -1274,24 +1206,9 @@ onUnmounted(() => {
     overflow-x: clip;
   }
 
-  .wordle-page__topbar {
-    padding-block: var(--sa-space-2) var(--sa-space-3);
-    gap: var(--sa-space-2);
-  }
-
-  .wordle-page__topbar-auth {
-    width: 100%;
-    justify-content: flex-start;
-  }
 }
 
 @media (max-width: 520px) {
-  .wordle-page__topbar-main {
-    flex-wrap: wrap;
-    row-gap: 0.35rem;
-    align-items: center;
-  }
-
   .wordle-page__pill {
     font-size: 0.62rem;
     padding: 0.12rem 0.38rem;
@@ -1373,20 +1290,19 @@ onUnmounted(() => {
 
 @media (min-width: 1101px) {
   .wordle-page__grid :deep(.wordle-page__stack) {
-    height: 100%;
+    min-height: 0;
   }
 
-  /* Не центрувати сітку по вертикалі на високій колонці: при зумі вміст вищий за слот —
-     flex `center` розкидає overflow вгору/вниз і верх «вилазить» на рядок раунду над сіткою. */
   .wordle-page__grid :deep(.wordle-page__stack--game) {
     overflow-x: clip;
-    overflow-y: auto;
+    overflow-y: visible;
     min-height: 0;
   }
 
   .wordle-page__grid :deep(.wordle-page__stack--game > .wordle-page__game) {
-    flex: 1 1 0;
-    justify-content: flex-start;
+    flex: 1 1 auto;
+    min-height: 0;
+    justify-content: center;
   }
 }
 
@@ -1395,14 +1311,21 @@ onUnmounted(() => {
 }
 
 .wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__card-title),
+.wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__session-meta),
 .wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__stats-block),
 .wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__len-bar),
 .wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__side-tools) {
   flex-shrink: 0;
 }
 
+.wordle-page__session-meta {
+  margin: calc(-1 * var(--sa-space-1)) 0 var(--sa-space-2);
+  font-size: 0.78rem;
+  color: var(--sa-color-text-body);
+}
+
 .wordle-page__card-title {
-  margin: 0 0 var(--sa-space-3);
+  margin: 0 0 var(--sa-space-2);
   font-size: 0.95rem;
   font-weight: 700;
   color: var(--sa-color-text-main);

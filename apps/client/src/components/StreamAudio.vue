@@ -10,9 +10,15 @@ const props = withDefaults(
     stream: MediaStream | null
     /** Bump when parent stream gains audio track in place. */
     playRev?: number
+    /** Local listening volume 0..1 (does not affect remote sender). */
+    listenVolume?: number
+    /** Local-only mute for this stream (does not affect remote sender). */
+    listenMuted?: boolean
   }>(),
   {
     playRev: 0,
+    listenVolume: 1,
+    listenMuted: false,
   },
 )
 
@@ -37,7 +43,9 @@ async function bindAudio(): Promise<void> {
   }
   clearPlayUnlock()
   a.autoplay = true
-  a.muted = false
+  const vol = props.listenMuted ? 0 : Math.min(1, Math.max(0, props.listenVolume ?? 1))
+  a.volume = vol
+  a.muted = vol <= 0.0001
   // DOM typings omit playsInline on HTMLAudioElement; iOS/Safari still honor it for inline playback.
   ;(a as HTMLAudioElement & { playsInline?: boolean }).playsInline = true
   if (!s) {
@@ -89,7 +97,8 @@ async function bindAudio(): Promise<void> {
 }
 
 watch(
-  () => [props.stream, props.playRev ?? 0] as const,
+  () =>
+    [props.stream, props.playRev ?? 0, props.listenVolume ?? 1, props.listenMuted ?? false] as const,
   () => {
     void bindAudio()
   },

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
+  countActiveCameraPublishersAtWire,
+  resolveOutgoingVideoPublishTier,
+  useCallSessionStore,
   useLocalMedia,
   useMediasoupDevice,
   useRemoteMedia,
@@ -26,9 +29,24 @@ const {
   drainPendingNewProducers,
 } = useRoomConnection()
 
+const session = useCallSessionStore()
+
 const { device, loaded: deviceLoaded, loadDevice, reset: deviceReset } = useMediasoupDevice()
 const { sendTransport, createSendTransport, closeSendTransport, publishLocalMedia } = useSendTransport()
-const { localStream, startLocalMedia, stopLocalMedia } = useLocalMedia()
+/** Debug path: full manual quality + wire-time camera count (aligns with `resolveOutgoingVideoPublishTier`). */
+const { localStream, startLocalMedia, stopLocalMedia } = useLocalMedia({
+  getVideoPublishTier: () =>
+    resolveOutgoingVideoPublishTier({
+      manualPreset: session.videoQualityPreset,
+      manualExplicit: session.videoQualityExplicit,
+      allowManualQuality: true,
+      activeCameraPublishersAtWire: countActiveCameraPublishersAtWire(
+        lastRoomState.value?.existingProducers ?? [],
+        session.selfPeerId,
+        true,
+      ),
+    }),
+})
 const {
   remotePeerStreams,
   remotePeerPlayRevs,
@@ -187,7 +205,18 @@ async function onPublishLocal(): Promise<void> {
   busy.value = true
   try {
     const stream = await startLocalMedia()
-    await publishLocalMedia(stream)
+    await publishLocalMedia(stream, {
+      videoPublishTier: resolveOutgoingVideoPublishTier({
+        manualPreset: session.videoQualityPreset,
+        manualExplicit: session.videoQualityExplicit,
+        allowManualQuality: true,
+        activeCameraPublishersAtWire: countActiveCameraPublishersAtWire(
+          lastRoomState.value?.existingProducers ?? [],
+          session.selfPeerId,
+          true,
+        ),
+      }),
+    })
     pushLog('local camera/mic published')
   } catch (e) {
     pushLog(`error: publishLocal — ${e instanceof Error ? e.message : String(e)}`)
