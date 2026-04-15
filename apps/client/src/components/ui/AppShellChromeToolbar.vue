@@ -56,15 +56,15 @@ const twitchChannelAria = computed(() => t('app.twitchAria', { nick: STREAMER_NI
     <StreamerBrandLink :ariaLabel="twitchChannelAria" />
     <div v-if="isAuthenticated && user" class="auth-chip">
       <img
-        v-if="user.profile_image_url"
+        v-if="user.avatar"
         class="auth-chip__avatar"
-        :src="user.profile_image_url"
+        :src="user.avatar"
         width="28"
         height="28"
         alt=""
         decoding="async"
       />
-      <span class="auth-chip__name" :title="user.display_name">{{ user.display_name }}</span>
+      <span class="auth-chip__name" :title="user.displayName">{{ user.displayName }}</span>
       <AppButton variant="ghost" class="auth-chip__out" type="button" @click="logout()">
         {{ t('app.authLogout') }}
       </AppButton>

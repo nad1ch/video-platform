@@ -1,4 +1,4 @@
-import type { SessionUser } from '../wordle/types'
+import type { SessionUser } from './session/types'
 
 function requiredEnv(name: string): string {
   const v = process.env[name]

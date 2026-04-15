@@ -36,7 +36,17 @@
     "tileConnecting": "Connecting…",
     "tileCameraOff": "Camera off",
     "tileNoVideo": "No video",
-    "tileReconnecting": "Reconnecting…"
+    "tileReconnecting": "Reconnecting…",
+    "qualityPreset": "Video quality (next join)",
+    "quality": {
+      "economy": "Economy — ~360p, lower bitrate",
+      "balanced": "Balanced — ~720p (default)",
+      "hd": "HD — up to 1080p, higher bitrate"
+    },
+    "debugOverlay": "Show technical debug panel (stats)",
+    "debugTitle": "Call debug",
+    "debugRefresh": "Refresh inbound stats",
+    "debugRefreshing": "…"
   },
   "wordleUi": {
     "eyebrow": "Nardle",
@@ -44,6 +54,7 @@
     "attemptsPill": "Attempts: {cur} / {max}",
     "logout": "Log out",
     "loginTwitch": "Log in with Twitch",
+    "loginGoogle": "Login with Google",
     "cardYou": "Scoreboard (you)",
     "statsAria": "Local statistics",
     "wonStat": "Won:",
@@ -111,7 +122,7 @@
     "authEmailContinue": "Continue with email",
     "authEmailSoon": "Email sign-in is not available yet. Use Twitch or Google for now.",
     "authLoginTwitch": "Log in with Twitch",
-    "authLoginGoogle": "Log in with Google",
+    "authLoginGoogle": "Login with Google",
     "authLogout": "Log out",
     "authSignedInAs": "Signed in as {name}",
     "authNeedLogin": "Sign in to open that page.",

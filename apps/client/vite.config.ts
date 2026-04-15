@@ -14,9 +14,20 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
+      // SPA under /app (e.g. reverse proxy): browser calls /app/api/* → same backend /api/*
+      '/app/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/app/, ''),
+      },
       '/wordle-ws': {
         target: 'ws://localhost:3000',
         ws: true,
+      },
+      '/app/wordle-ws': {
+        target: 'ws://localhost:3000',
+        ws: true,
+        rewrite: (p) => p.replace(/^\/app/, ''),
       },
     },
   },

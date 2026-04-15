@@ -1,3 +1,5 @@
+import './loadDotEnv'
+
 import cookieParser from 'cookie-parser'
 import express from 'express'
 import http from 'http'
@@ -5,6 +7,7 @@ import { WebSocketServer } from 'ws'
 import { createMediasoupWorker } from './mediasoup/createWorker'
 import { RoomManager } from './rooms/RoomManager'
 import { attachSocketServer } from './signaling/socketServer'
+import { clientPublicOrigin } from './auth/clientOrigin'
 import { mountAppOAuth } from './auth/oauthRouter'
 import { mountTwitchWordleAuth } from './wordle/twitchAuthRouter'
 import { startTwitchChatIngest, stopTwitchChatIngest } from './wordle/tmiChat'
@@ -19,7 +22,7 @@ async function bootstrap(): Promise<void> {
   const roomManager = new RoomManager(worker)
 
   const app = express()
-  const allowedOrigin = process.env.WORDLE_CLIENT_ORIGIN ?? 'http://localhost:5173'
+  const allowedOrigin = clientPublicOrigin()
 
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', allowedOrigin)

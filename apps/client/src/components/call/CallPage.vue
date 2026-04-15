@@ -1,6 +1,12 @@
 <script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useCallEngine } from 'call-core'
+import {
+  useCallEngine,
+  VIDEO_QUALITY_PRESETS,
+  type InboundVideoDebugRow,
+  type VideoQualityPreset,
+} from 'call-core'
 import ParticipantTile from './ParticipantTile.vue'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -22,7 +28,44 @@ const {
   toggleMic,
   toggleCam,
   wsStatus,
+  callDebugSnapshot,
+  refreshInboundVideoDebugStats,
 } = useCallEngine()
+
+const videoPreset = computed({
+  get: () => session.videoQualityPreset as VideoQualityPreset,
+  set: (v: VideoQualityPreset) => session.setVideoQualityPreset(v),
+})
+
+const callDebugOverlay = computed({
+  get: () => session.callDebugOverlay,
+  set: (v: boolean) => session.setCallDebugOverlay(v),
+})
+
+const qualityPresets = VIDEO_QUALITY_PRESETS
+
+const inboundDebugRows = ref<InboundVideoDebugRow[]>([])
+const inboundDebugBusy = ref(false)
+
+async function refreshInboundDebug(): Promise<void> {
+  inboundDebugBusy.value = true
+  try {
+    inboundDebugRows.value = await refreshInboundVideoDebugStats()
+  } finally {
+    inboundDebugBusy.value = false
+  }
+}
+
+onMounted(() => {
+  try {
+    const q = new URLSearchParams(window.location.search).get('callDebug')
+    if (q === '1' || q === 'true') {
+      session.setCallDebugOverlay(true)
+    }
+  } catch {
+    /* ignore */
+  }
+})
 </script>
 
 <template>
@@ -54,6 +97,23 @@ const {
             autocomplete="name"
             :placeholder="t('callPage.placeholderName')"
           />
+        </label>
+        <fieldset class="call-page__fieldset">
+          <legend class="call-page__legend">{{ t('callPage.qualityPreset') }}</legend>
+          <div class="call-page__preset-row">
+            <label
+              v-for="p in qualityPresets"
+              :key="p"
+              class="call-page__preset"
+            >
+              <input v-model="videoPreset" type="radio" name="video-quality" :value="p" />
+              <span>{{ t(`callPage.quality.${p}`) }}</span>
+            </label>
+          </div>
+        </fieldset>
+        <label class="call-page__check">
+          <input v-model="callDebugOverlay" type="checkbox" />
+          <span>{{ t('callPage.debugOverlay') }}</span>
         </label>
         <p v-if="joinError" class="call-page__error" role="alert">{{ joinError }}</p>
         <p class="call-page__meta">{{ t('callPage.wsStatus', { status: wsStatus }) }}</p>
@@ -95,6 +155,33 @@ const {
             :active-speaker="activeSpeakerPeerId === t.peerId"
           />
         </div>
+
+        <aside v-if="session.callDebugOverlay" class="call-page__debug" aria-label="Call debug">
+          <div class="call-page__debug-head">
+            <span class="call-page__debug-title">{{ t('callPage.debugTitle') }}</span>
+            <AppButton variant="secondary" :disabled="inboundDebugBusy" @click="refreshInboundDebug">
+              {{ inboundDebugBusy ? t('callPage.debugRefreshing') : t('callPage.debugRefresh') }}
+            </AppButton>
+          </div>
+          <dl class="call-page__debug-dl">
+            <dt>preset</dt>
+            <dd>{{ callDebugSnapshot.videoQualityPreset }}</dd>
+            <dt>peers @ wire</dt>
+            <dd>{{ callDebugSnapshot.peerCountAtWire }}</dd>
+            <dt>publish simulcast</dt>
+            <dd>{{ callDebugSnapshot.publishSimulcast }}</dd>
+            <dt>active speaker</dt>
+            <dd>{{ callDebugSnapshot.activeSpeakerPeerId ?? '—' }}</dd>
+          </dl>
+          <ul v-if="inboundDebugRows.length" class="call-page__debug-list">
+            <li v-for="row in inboundDebugRows" :key="row.producerId" class="call-page__debug-li">
+              <span class="call-page__debug-peer">{{ row.peerId.slice(0, 8) }}…</span>
+              {{ row.frameWidth ?? '?' }}×{{ row.frameHeight ?? '?' }}
+              <span v-if="row.framesPerSecond != null" class="call-page__debug-fps"> ~{{ row.framesPerSecond.toFixed(1) }} fps</span>
+              <span class="call-page__debug-loss"> loss {{ row.packetsLost ?? '—' }}</span>
+            </li>
+          </ul>
+        </aside>
       </section>
     </div>
     </AppContainer>
@@ -182,6 +269,40 @@ const {
   font: inherit;
 }
 
+.call-page__fieldset {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--sa-color-border);
+  border-radius: var(--sa-radius-sm);
+}
+
+.call-page__legend {
+  padding: 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.call-page__preset-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.call-page__preset {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.call-page__check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
 .call-page__error {
   margin: 0;
   color: #f87171;
@@ -206,6 +327,7 @@ const {
   gap: 0.75rem;
   min-height: 0;
   width: 100%;
+  position: relative;
 }
 
 .call-page__toolbar {
@@ -254,5 +376,71 @@ const {
   .call-page__grid--12 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+.call-page__debug {
+  position: fixed;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 50;
+  max-width: min(420px, calc(100vw - 1.5rem));
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--sa-radius-sm);
+  border: 1px solid var(--sa-color-border);
+  background: color-mix(in srgb, var(--sa-color-bg-main) 92%, #000);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  font-size: 0.75rem;
+  font-family: var(--sa-font-mono, ui-monospace, monospace);
+}
+
+.call-page__debug-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.call-page__debug-title {
+  font-weight: 700;
+  color: var(--sa-color-text-main);
+}
+
+.call-page__debug-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.65rem;
+  margin: 0 0 0.5rem;
+}
+
+.call-page__debug-dl dt {
+  margin: 0;
+  opacity: 0.75;
+}
+
+.call-page__debug-dl dd {
+  margin: 0;
+}
+
+.call-page__debug-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.call-page__debug-li {
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--sa-color-border);
+}
+
+.call-page__debug-peer {
+  font-weight: 600;
+  margin-right: 0.35rem;
+}
+
+.call-page__debug-fps,
+.call-page__debug-loss {
+  opacity: 0.85;
 }
 </style>

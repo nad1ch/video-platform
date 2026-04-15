@@ -36,7 +36,17 @@
     "tileConnecting": "Підключення…",
     "tileCameraOff": "Камера вимкнена",
     "tileNoVideo": "Немає відео",
-    "tileReconnecting": "Перепідключення…"
+    "tileReconnecting": "Перепідключення…",
+    "qualityPreset": "Якість відео (наступний вхід)",
+    "quality": {
+      "economy": "Економія — ~360p, менший бітрейт",
+      "balanced": "Баланс — ~720p (типово)",
+      "hd": "HD — до 1080p, вищий бітрейт"
+    },
+    "debugOverlay": "Технічна панель (статистика)",
+    "debugTitle": "Дебаг дзвінка",
+    "debugRefresh": "Оновити inbound stats",
+    "debugRefreshing": "…"
   },
   "wordleUi": {
     "eyebrow": "Надлі",
@@ -44,6 +54,7 @@
     "attemptsPill": "Спроби: {cur} / {max}",
     "logout": "Вийти",
     "loginTwitch": "Увійти через Twitch",
+    "loginGoogle": "Увійти через Google",
     "cardYou": "Таблиця (ви)",
     "statsAria": "Локальна статистика",
     "wonStat": "Вгадано:",

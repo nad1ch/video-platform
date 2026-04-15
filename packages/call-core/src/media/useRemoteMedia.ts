@@ -155,6 +155,26 @@ function isConsumedForProducer(
 
 export type RemotePeerStream = { peerId: string; stream: MediaStream }
 
+export type SetupReceivePathOptions = {
+  /**
+   * When true, send `set-consumer-preferred-layers` for remote video (required if publishers use simulcast).
+   * Must match `publishLocalMedia(..., { videoSimulcast })` policy for this session.
+   */
+  enableVideoSpatialLayerSignaling?: boolean
+}
+
+export type InboundVideoDebugRow = {
+  peerId: string
+  producerId: string
+  frameWidth?: number
+  frameHeight?: number
+  framesPerSecond?: number
+  framesDecoded?: number
+  framesDropped?: number
+  packetsLost?: number
+  jitter?: number
+}
+
 /** DEV: track capture hints + inbound-rtp frame counters when the browser exposes them. */
 async function logInboundVideoDebug(consumer: Consumer, peerId: string): Promise<void> {
   if (!import.meta.env.DEV) {
@@ -227,6 +247,8 @@ export function useRemoteMedia() {
   const lastSentSpatialByConsumerId = new Map<string, 0 | 1 | 2>()
   let signalingRoom: SendTransportRoomApi | null = null
   let preferredLayersDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  /** Set per `setupReceivePath` — avoids spatial-layer WS traffic when everyone publishes single-layer. */
+  const videoSpatialLayerSignalingEnabled = shallowRef(false)
   let unsubscribeNewProducer: (() => void) | null = null
   let unsubscribeProducerSync: (() => void) | null = null
 
@@ -288,6 +310,9 @@ export function useRemoteMedia() {
   function flushPreferredLayersToServer(): void {
     const room = signalingRoom
     if (!room) return
+    if (!videoSpatialLayerSignalingEnabled.value) {
+      return
+    }
 
     for (const [producerId, consumer] of consumersByProducerId.entries()) {
       if (consumer.closed || consumer.kind !== 'video') continue
@@ -537,6 +562,8 @@ export function useRemoteMedia() {
       upsertRemoteTrack(peerId, consumer.track)
       if (consumer.kind === 'video') {
         void logInboundVideoDebug(consumer, peerId)
+        // Apply target spatial layer immediately — default consumer layer can sit on low simulcast until debounce fires.
+        flushPreferredLayersToServer()
         schedulePreferredLayersUpdate()
       }
     } catch (err) {
@@ -622,7 +649,9 @@ export function useRemoteMedia() {
     device: Device,
     room: SendTransportRoomApi,
     existing: RemoteProducerInfo[],
+    pathOptions?: SetupReceivePathOptions,
   ): Promise<void> {
+    videoSpatialLayerSignalingEnabled.value = pathOptions?.enableVideoSpatialLayerSignaling === true
     signalingRoom = room
     await ensureRecvTransport(device, room)
     startNewProducerListener(device, room)
@@ -683,14 +712,55 @@ export function useRemoteMedia() {
   }
 
   function setActiveSpeaker(peerId: string | null): void {
-    if (activeSpeakerPeerId.value !== peerId) {
+    if (activeSpeakerPeerId.value !== peerId && import.meta.env.DEV) {
       console.log('[speaker] active speaker changed', { peerId })
     }
     activeSpeakerPeerId.value = peerId
     schedulePreferredLayersUpdate()
   }
 
+  async function collectInboundVideoDebugStats(): Promise<InboundVideoDebugRow[]> {
+    const out: InboundVideoDebugRow[] = []
+    for (const [producerId, consumer] of consumersByProducerId.entries()) {
+      if (consumer.closed || consumer.kind !== 'video') {
+        continue
+      }
+      const info = producerInfoById.get(producerId)
+      const peerId = info?.peerId ?? '?'
+      const row: InboundVideoDebugRow = {
+        peerId,
+        producerId: consumer.producerId,
+      }
+      try {
+        const report = await consumer.getStats()
+        report.forEach((r) => {
+          if (r.type !== 'inbound-rtp') {
+            return
+          }
+          const v = r as RTCInboundRtpStreamStats & { framesPerSecond?: number }
+          if (v.kind !== 'video') {
+            return
+          }
+          row.frameWidth = v.frameWidth
+          row.frameHeight = v.frameHeight
+          row.framesDecoded = v.framesDecoded
+          row.framesDropped = v.framesDropped
+          row.packetsLost = v.packetsLost
+          row.jitter = v.jitter
+          if (typeof v.framesPerSecond === 'number') {
+            row.framesPerSecond = v.framesPerSecond
+          }
+        })
+      } catch {
+        /* stats optional */
+      }
+      out.push(row)
+    }
+    return out
+  }
+
   function stopRemoteMedia(): void {
+    videoSpatialLayerSignalingEnabled.value = false
     networkQualityOverride.value = 'auto'
     networkQualityFromStats.value = 'good'
     unsubscribeNewProducer?.()
@@ -752,5 +822,6 @@ export function useRemoteMedia() {
     setPinnedPeer,
     setActiveSpeaker,
     stopRemoteMedia,
+    collectInboundVideoDebugStats,
   }
 }

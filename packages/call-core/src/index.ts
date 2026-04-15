@@ -23,14 +23,36 @@ export {
 export { getAudioAnalysisAudioContext } from './audio/audioAnalysisContext'
 export { useActiveSpeaker, type ActiveSpeakerTile } from './audio/useActiveSpeaker'
 
-export { useLocalMedia } from './media/useLocalMedia'
+export {
+  applyWebcamContentHint,
+  DEFAULT_CALL_AUDIO_CONSTRAINTS,
+  DEFAULT_CALL_VIDEO_CONSTRAINTS,
+  getVideoConstraintsForPreset,
+} from './media/defaultMediaConstraints'
+export { useLocalMedia, type UseLocalMediaOptions } from './media/useLocalMedia'
 export { gridSizeTierFromParticipantCount } from './media/gridTier'
-export { spatialLayerForGridSizeTier, VP8_SIMULCAST_ENCODINGS } from './media/videoSimulcast'
+export {
+  getCallVideoConstraints,
+  getSimulcastEncodingsForPreset,
+  getSingleLayerEncodingsForPreset,
+  isVideoQualityPreset,
+  VIDEO_QUALITY_PRESETS,
+  type VideoQualityPreset,
+} from './media/videoQualityPreset'
+export {
+  shouldUseVideoSimulcastForRoom,
+  spatialLayerForGridSizeTier,
+  VIDEO_SIMULCAST_MIN_PEERS_IN_ROOM,
+  VP8_SIMULCAST_ENCODINGS,
+  VP8_SINGLE_LAYER_ENCODING,
+} from './media/videoSimulcast'
 export { useMediasoupDevice } from './media/useMediasoupDevice'
 export {
   useRemoteMedia,
+  type InboundVideoDebugRow,
   type RemotePeerStream,
   type RemoteProducerInfo,
+  type SetupReceivePathOptions,
 } from './media/useRemoteMedia'
 
 export {
@@ -43,6 +65,7 @@ export {
 export {
   useSendTransport,
   type PendingProducerNotice,
+  type PublishLocalMediaOptions,
   type SendTransportRoomApi,
 } from './transport/useSendTransport'
 

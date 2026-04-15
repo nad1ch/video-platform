@@ -1,4 +1,5 @@
-import type { SessionUser } from '../wordle/types'
+import type { SessionUser } from './session/types'
+import { clientPublicOrigin } from './clientOrigin'
 
 function requiredEnv(name: string): string {
   const v = process.env[name]
@@ -8,23 +9,43 @@ function requiredEnv(name: string): string {
   return v
 }
 
-export function googleAuthorizeUrl(redirectUri: string, state: string): string {
+/** Must match the Authorized redirect URI in Google Cloud (and token exchange). */
+export function resolveGoogleOAuthRedirectUri(): string {
+  const explicit = process.env.GOOGLE_OAUTH_REDIRECT_URI
+  if (typeof explicit === 'string' && explicit.trim().length > 0) {
+    return explicit.trim()
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('GOOGLE_OAUTH_REDIRECT_URI must be set in production.')
+  }
+  return `${clientPublicOrigin()}/api/auth/google/callback`
+}
+
+/**
+ * Step 1: Google OAuth 2.0 authorization URL (Authorization Code flow).
+ * `state` should carry signed post-login path (see `signOAuthReturnPath` in auth/session/sessionJwt).
+ */
+export function getGoogleAuthUrl(state: string): string {
   const clientId = requiredEnv('GOOGLE_CLIENT_ID')
+  const redirectUri = resolveGoogleOAuthRedirectUri()
   const p = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
     scope: 'openid email profile',
+    access_type: 'offline',
+    /** Account picker + consent: avoids silent re-pick of the same Google session after app logout. */
+    prompt: 'select_account consent',
     state,
-    access_type: 'online',
-    include_granted_scopes: 'true',
   })
   return `https://accounts.google.com/o/oauth2/v2/auth?${p.toString()}`
 }
 
-export async function googleExchangeCode(code: string, redirectUri: string): Promise<string> {
+/** Step 2: exchange authorization code for access token. */
+export async function exchangeCodeForToken(code: string): Promise<string> {
   const clientId = requiredEnv('GOOGLE_CLIENT_ID')
   const clientSecret = requiredEnv('GOOGLE_CLIENT_SECRET')
+  const redirectUri = resolveGoogleOAuthRedirectUri()
 
   const body = new URLSearchParams({
     code,
@@ -52,7 +73,11 @@ export async function googleExchangeCode(code: string, redirectUri: string): Pro
   return data.access_token
 }
 
-export async function googleFetchSessionUser(accessToken: string): Promise<SessionUser> {
+/**
+ * Step 3: userinfo → SessionUser (same JWT / cookie shape as Twitch).
+ * Maps conceptually: id, name → display_name, picture → profile_image_url, provider "google".
+ */
+export async function getUserProfile(accessToken: string): Promise<SessionUser> {
   const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
@@ -73,17 +98,19 @@ export async function googleFetchSessionUser(accessToken: string): Promise<Sessi
     throw new Error('Google userinfo missing id')
   }
 
-  const display =
+  const displayName =
     typeof u.name === 'string' && u.name.trim().length > 0
       ? u.name.trim()
       : typeof u.email === 'string'
         ? u.email
         : u.id
 
+  const avatar = typeof u.picture === 'string' ? u.picture : ''
+
   return {
-    id: `google:${u.id}`,
-    display_name: display,
-    profile_image_url: typeof u.picture === 'string' ? u.picture : '',
+    id: u.id,
+    display_name: displayName,
+    profile_image_url: avatar,
     provider: 'google',
   }
 }

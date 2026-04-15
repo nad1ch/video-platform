@@ -1,6 +1,15 @@
 import { onUnmounted, ref, shallowRef } from 'vue'
+import { applyWebcamContentHint, DEFAULT_CALL_AUDIO_CONSTRAINTS } from './defaultMediaConstraints'
+import type { VideoQualityPreset } from './videoQualityPreset'
+import { getCallVideoConstraints } from './videoQualityPreset'
 
-export function useLocalMedia() {
+export type UseLocalMediaOptions = {
+  /** Defaults to `'balanced'` when omitted. */
+  getVideoQualityPreset?: () => VideoQualityPreset
+}
+
+export function useLocalMedia(options?: UseLocalMediaOptions) {
+  const resolvePreset = (): VideoQualityPreset => options?.getVideoQualityPreset?.() ?? 'balanced'
   const localStream = shallowRef<MediaStream | null>(null)
   const micEnabled = ref(true)
   const camEnabled = ref(true)
@@ -25,10 +34,14 @@ export function useLocalMedia() {
       console.log('[local] starting media')
     }
     stopLocalMedia()
+    const preset = resolvePreset()
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: true,
+      audio: { ...DEFAULT_CALL_AUDIO_CONSTRAINTS },
+      video: { ...getCallVideoConstraints(preset) },
     })
+    for (const t of stream.getVideoTracks()) {
+      applyWebcamContentHint(t)
+    }
     if (import.meta.env.DEV) {
       console.log(
         '[local] stream tracks',

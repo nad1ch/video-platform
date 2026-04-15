@@ -28,53 +28,6 @@ function clearPlayUnlock(): void {
   }
 }
 
-let playoutDebugPoll: ReturnType<typeof setInterval> | null = null
-let playoutDebugTarget: HTMLAudioElement | null = null
-const playoutDebugListeners: Array<{ type: string; fn: EventListener }> = []
-
-function clearPlayoutDebug(): void {
-  if (playoutDebugPoll !== null) {
-    clearInterval(playoutDebugPoll)
-    playoutDebugPoll = null
-  }
-  if (playoutDebugTarget) {
-    for (const { type, fn } of playoutDebugListeners) {
-      playoutDebugTarget.removeEventListener(type, fn)
-    }
-    playoutDebugListeners.length = 0
-    playoutDebugTarget = null
-  }
-}
-
-function attachPlayoutDebug(a: HTMLAudioElement): void {
-  if (!import.meta.env.DEV) {
-    return
-  }
-  clearPlayoutDebug()
-  playoutDebugTarget = a
-  const add = (type: string, fn: EventListener): void => {
-    a.addEventListener(type, fn)
-    playoutDebugListeners.push({ type, fn })
-  }
-  add('play', () => console.log('[audio] play'))
-  add('playing', () => console.log('[audio] playing'))
-  add('pause', () => console.log('[audio] pause'))
-  add('waiting', () => console.log('[audio] waiting'))
-  add('stalled', () => console.log('[audio] stalled'))
-  add('loadedmetadata', () => console.log('[audio] loadedmetadata'))
-  add('canplay', () => console.log('[audio] canplay'))
-
-  playoutDebugPoll = setInterval(() => {
-    console.log('[audio] state', {
-      paused: a.paused,
-      currentTime: a.currentTime,
-      readyState: a.readyState,
-      muted: a.muted,
-      volume: a.volume,
-    })
-  }, 1000)
-}
-
 async function bindAudio(): Promise<void> {
   await nextTick()
   const a = el.value
@@ -88,7 +41,6 @@ async function bindAudio(): Promise<void> {
   // DOM typings omit playsInline on HTMLAudioElement; iOS/Safari still honor it for inline playback.
   ;(a as HTMLAudioElement & { playsInline?: boolean }).playsInline = true
   if (!s) {
-    clearPlayoutDebug()
     a.srcObject = null
     return
   }
@@ -134,7 +86,6 @@ async function bindAudio(): Promise<void> {
     })
   }
 
-  attachPlayoutDebug(a)
 }
 
 watch(
@@ -147,7 +98,6 @@ watch(
 
 onUnmounted(() => {
   clearPlayUnlock()
-  clearPlayoutDebug()
   const a = el.value
   if (a) {
     a.srcObject = null

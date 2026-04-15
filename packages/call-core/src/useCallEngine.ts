@@ -8,6 +8,7 @@ import { useLocalMedia } from './media/useLocalMedia'
 import { useMediasoupDevice } from './media/useMediasoupDevice'
 import { useRemoteMedia } from './media/useRemoteMedia'
 import { useRoomConnection } from './signaling/useRoomConnection'
+import { shouldUseVideoSimulcastForRoom } from './media/videoSimulcast'
 import { useSendTransport } from './transport/useSendTransport'
 import { waitForCondition } from './utils/waitForCondition'
 
@@ -104,7 +105,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   const session = options?.session ?? useCallSessionStore()
-  const { roomId, selfPeerId, selfDisplayName, inCall } = storeToRefs(session)
+  const { roomId, selfPeerId, selfDisplayName, inCall, videoQualityPreset } = storeToRefs(session)
 
   const {
     lastRoomState,
@@ -131,7 +132,9 @@ export function useCallEngine(options?: CallEngineOptions) {
     stopLocalMedia,
     toggleMic,
     toggleCam,
-  } = useLocalMedia()
+  } = useLocalMedia({
+    getVideoQualityPreset: () => videoQualityPreset.value,
+  })
   const {
     remotePeerStreams,
     remotePeerPlayRevs,
@@ -141,6 +144,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     stopRemoteMedia,
     setActiveSpeaker,
     setNetworkQualityOverride,
+    collectInboundVideoDebugStats,
   } = useRemoteMedia()
 
   const roomApi = { sendJson, addMessageListener, drainPendingNewProducers }
@@ -154,6 +158,17 @@ export function useCallEngine(options?: CallEngineOptions) {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let reconnectFailures = 0
   const MAX_AUTO_RECONNECT = 20
+
+  /** Snapshot after last successful `wireCallMediaAfterRoomState` (for debug overlay). */
+  const lastWirePeerCount = ref(0)
+  const lastWireVideoSimulcast = ref(false)
+
+  const callDebugSnapshot = computed(() => ({
+    videoQualityPreset: videoQualityPreset.value,
+    peerCountAtWire: lastWirePeerCount.value,
+    publishSimulcast: lastWireVideoSimulcast.value,
+    activeSpeakerPeerId: activeSpeakerPeerId.value,
+  }))
 
   function clearReconnectTimer(): void {
     if (reconnectTimer !== null) {
@@ -190,7 +205,13 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
 
     const existing = lastRoomState.value?.existingProducers ?? []
-    await setupReceivePath(d, roomApi, existing)
+    const peerCount = lastRoomState.value?.peers.length ?? 0
+    const videoSimulcast = shouldUseVideoSimulcastForRoom(peerCount)
+    lastWirePeerCount.value = peerCount
+    lastWireVideoSimulcast.value = videoSimulcast
+    await setupReceivePath(d, roomApi, existing, {
+      enableVideoSpatialLayerSignaling: videoSimulcast,
+    })
 
     unsubActiveSpeaker?.()
     unsubActiveSpeaker = addMessageListener((data) => {
@@ -215,7 +236,10 @@ export function useCallEngine(options?: CallEngineOptions) {
       if (!toPublish || toPublish.getTracks().length === 0) {
         throw new Error('Camera/microphone not available (no tracks)')
       }
-      await publishLocalMedia(toPublish)
+      await publishLocalMedia(toPublish, {
+        videoSimulcast,
+        videoQualityPreset: videoQualityPreset.value,
+      })
     }
 
     startSignalingKeepAlive()
@@ -392,6 +416,8 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   function teardownMedia(): void {
+    lastWirePeerCount.value = 0
+    lastWireVideoSimulcast.value = false
     clearReconnectTimer()
     stopSignalingKeepAlive()
     unsubActiveSpeaker?.()
@@ -492,5 +518,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     toggleMic,
     toggleCam,
     wsStatus,
+    callDebugSnapshot,
+    refreshInboundVideoDebugStats: collectInboundVideoDebugStats,
   }
 }

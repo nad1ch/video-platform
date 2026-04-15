@@ -103,7 +103,7 @@ router.beforeEach(async (to) => {
   }
 
   return {
-    name: 'home',
+    path: '/',
     query: {
       needLogin: '1',
       authRedirect: to.fullPath,

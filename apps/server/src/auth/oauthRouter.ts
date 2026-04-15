@@ -1,35 +1,28 @@
 import type { Express, Request, Response } from 'express'
-import type { SessionUser } from '../wordle/types'
 import {
-  readSessionFromCookie,
-  WORDLE_SESSION_COOKIE,
-  WORDLE_SESSION_MAX_AGE_SEC,
   signOAuthReturnPath,
   signSession,
   verifyOAuthReturnPath,
-} from '../wordle/sessionJwt'
-import { googleAuthorizeUrl, googleExchangeCode, googleFetchSessionUser } from './googleOAuth'
+  WORDLE_SESSION_MAX_AGE_SEC,
+} from './session/sessionJwt'
+import { clearGlobalSessionCookie, setGlobalSessionCookie } from './session/cookies'
+import { handleGetApiAuthMe, handleGetApiMeLegacy } from './session/me'
+import { clientPublicOrigin } from './clientOrigin'
+import { exchangeCodeForToken, getGoogleAuthUrl, getUserProfile, resolveGoogleOAuthRedirectUri } from './googleOAuth'
 import { twitchExchangeCode, twitchFetchSessionUser } from './twitchClient'
 
-function clientOrigin(): string {
-  const raw = process.env.BASE_URL ?? process.env.WORDLE_CLIENT_ORIGIN ?? 'http://localhost:5173'
-  return raw.replace(/\/$/, '')
-}
+const isProd = process.env.NODE_ENV === 'production'
+const isDev = process.env.NODE_ENV !== 'production'
 
 function twitchAppRedirectUri(): string {
   const explicit = process.env.TWITCH_AUTH_REDIRECT_URI
   if (typeof explicit === 'string' && explicit.trim().length > 0) {
     return explicit.trim()
   }
-  return `${clientOrigin()}/api/auth/twitch/callback`
-}
-
-function googleRedirectUri(): string {
-  const explicit = process.env.GOOGLE_OAUTH_REDIRECT_URI
-  if (typeof explicit === 'string' && explicit.trim().length > 0) {
-    return explicit.trim()
+  if (isProd) {
+    throw new Error('TWITCH_AUTH_REDIRECT_URI must be set in production (full callback URL registered in Twitch console).')
   }
-  return `${clientOrigin()}/api/auth/google/callback`
+  return `${clientPublicOrigin()}/api/auth/twitch/callback`
 }
 
 /**
@@ -44,20 +37,6 @@ export function sanitizePostLoginPath(raw: string | undefined): string {
     return '/'
   }
   return t
-}
-
-function setSessionCookie(res: Response, token: string): void {
-  res.cookie(WORDLE_SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: WORDLE_SESSION_MAX_AGE_SEC * 1000,
-    path: '/',
-  })
-}
-
-function clearSessionCookie(res: Response): void {
-  res.clearCookie(WORDLE_SESSION_COOKIE, { path: '/' })
 }
 
 function twitchConfigured(): boolean {
@@ -77,31 +56,16 @@ function appleConfigured(): boolean {
   )
 }
 
-function sessionJson(session: SessionUser) {
-  return {
-    id: session.id,
-    display_name: session.display_name,
-    profile_image_url: session.profile_image_url,
-    provider: session.provider ?? null,
-  }
-}
-
 export function mountAppOAuth(app: Express): void {
-  app.get('/api/me', (req: Request, res: Response) => {
-    const session = readSessionFromCookie(req.headers.cookie)
-    if (!session) {
-      res.status(401).json({ authenticated: false })
-      return
-    }
-    res.json({
-      authenticated: true,
-      user: sessionJson(session),
-    })
-  })
+  /** Global session (camelCase); preferred for new clients. */
+  app.get('/api/auth/me', handleGetApiAuthMe)
+
+  /** @deprecated Prefer GET /api/auth/me — same cookie, snake_case user object. */
+  app.get('/api/me', handleGetApiMeLegacy)
 
   app.post('/api/auth/logout', (_req: Request, res: Response) => {
-    clearSessionCookie(res)
-    res.json({ ok: true })
+    clearGlobalSessionCookie(res)
+    res.status(204).end()
   })
 
   app.get('/api/auth/twitch', (req: Request, res: Response) => {
@@ -109,17 +73,29 @@ export function mountAppOAuth(app: Express): void {
       res.status(503).type('text/plain').send('Twitch OAuth is not configured (TWITCH_CLIENT_ID / SECRET).')
       return
     }
+    let redirectUri: string
+    try {
+      redirectUri = twitchAppRedirectUri()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'OAuth misconfigured'
+      res.status(503).type('text/plain').send(msg)
+      return
+    }
     const clientId = process.env.TWITCH_CLIENT_ID as string
-    const redirectUri = twitchAppRedirectUri()
     const returnPath = sanitizePostLoginPath(
       typeof req.query.redirect === 'string' ? req.query.redirect : undefined,
     )
     const state = signOAuthReturnPath(returnPath)
+    if (isDev) {
+      console.log('[auth] [twitch] authorize', { redirectUri, returnPath })
+    }
     const p = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: '',
+      /** Twitch: user must confirm authorize again (closest to “pick account” / no silent re-login). */
+      force_verify: 'true',
       state,
     })
     res.redirect(302, `https://id.twitch.tv/oauth2/authorize?${p.toString()}`)
@@ -137,11 +113,11 @@ export function mountAppOAuth(app: Express): void {
       const accessToken = await twitchExchangeCode(code, redirectUri)
       const user = await twitchFetchSessionUser(accessToken)
       const token = signSession(user, WORDLE_SESSION_MAX_AGE_SEC)
-      setSessionCookie(res, token)
+      setGlobalSessionCookie(res, token)
       const path = sanitizePostLoginPath(verifyOAuthReturnPath(state))
-      res.redirect(302, `${clientOrigin()}${path}`)
+      res.redirect(302, `${clientPublicOrigin()}${path}`)
     } catch (e) {
-      console.error('[auth] Twitch callback error', e)
+      console.error('[auth] [twitch] callback error', e)
       res.status(500).type('text/plain').send('OAuth failed')
     }
   })
@@ -151,12 +127,22 @@ export function mountAppOAuth(app: Express): void {
       res.status(503).type('text/plain').send('Google OAuth is not configured.')
       return
     }
-    const redirectUri = googleRedirectUri()
+    let redirectUri: string
+    try {
+      redirectUri = resolveGoogleOAuthRedirectUri()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'OAuth misconfigured'
+      res.status(503).type('text/plain').send(msg)
+      return
+    }
     const returnPath = sanitizePostLoginPath(
       typeof req.query.redirect === 'string' ? req.query.redirect : undefined,
     )
     const state = signOAuthReturnPath(returnPath)
-    res.redirect(302, googleAuthorizeUrl(redirectUri, state))
+    if (isDev) {
+      console.log('[auth] [google] authorize', { redirectUri, returnPath })
+    }
+    res.redirect(302, getGoogleAuthUrl(state))
   })
 
   app.get('/api/auth/google/callback', async (req: Request, res: Response) => {
@@ -167,15 +153,14 @@ export function mountAppOAuth(app: Express): void {
       return
     }
     try {
-      const redirectUri = googleRedirectUri()
-      const accessToken = await googleExchangeCode(code, redirectUri)
-      const user = await googleFetchSessionUser(accessToken)
+      const accessToken = await exchangeCodeForToken(code)
+      const user = await getUserProfile(accessToken)
       const token = signSession(user, WORDLE_SESSION_MAX_AGE_SEC)
-      setSessionCookie(res, token)
+      setGlobalSessionCookie(res, token)
       const path = sanitizePostLoginPath(verifyOAuthReturnPath(state))
-      res.redirect(302, `${clientOrigin()}${path}`)
+      res.redirect(302, `${clientPublicOrigin()}${path}`)
     } catch (e) {
-      console.error('[auth] Google callback error', e)
+      console.error('[auth] [google] callback error', e)
       res.status(500).type('text/plain').send('OAuth failed')
     }
   })

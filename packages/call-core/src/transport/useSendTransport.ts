@@ -1,12 +1,11 @@
 import type { Device } from 'mediasoup-client'
-import type {
-  ConnectionState,
-  DtlsParameters,
-  RtpEncodingParameters,
-  Transport,
-  TransportOptions,
-} from 'mediasoup-client/types'
+import type { ConnectionState, DtlsParameters, Transport, TransportOptions } from 'mediasoup-client/types'
 import { onUnmounted, shallowRef } from 'vue'
+import {
+  getSimulcastEncodingsForPreset,
+  getSingleLayerEncodingsForPreset,
+  type VideoQualityPreset,
+} from '../media/videoQualityPreset'
 import { waitForSignalingMessage } from '../signaling/signalingWait'
 
 function isTransportCreatedMessage(
@@ -68,6 +67,16 @@ export type PendingProducerNotice = {
   kind: 'audio' | 'video'
 }
 
+export type PublishLocalMediaOptions = {
+  /**
+   * Large-room mode: VP8 simulcast + receiver spatial-layer signaling.
+   * Omit or `false` for single-layer (default; best for small calls).
+   */
+  videoSimulcast?: boolean
+  /** Capture/encode ladder; defaults to `balanced`. */
+  videoQualityPreset?: VideoQualityPreset
+}
+
 export type SendTransportRoomApi = {
   sendJson: (obj: object) => void
   addMessageListener: (handler: (data: unknown) => void) => () => void
@@ -80,15 +89,15 @@ export type SendTransportRoomApi = {
 
 const CONNECT_TIMEOUT_MS = 45_000
 
-/** Video only. Ordered low → high; maps to consumer `spatialLayer` 0…2. */
-const OUTBOUND_VIDEO_SIMULCAST_ENCODINGS: RtpEncodingParameters[] = [
-  { maxBitrate: 150_000, scaleResolutionDownBy: 4 },
-  { maxBitrate: 400_000, scaleResolutionDownBy: 2 },
-  { maxBitrate: 1_200_000 },
-]
-
-/** Hint for encoder ramp-up (kbps); does not replace per-layer `maxBitrate`. */
-const OUTBOUND_VIDEO_GOOGLE_START_BITRATE_KBPS = 320
+function outboundVideoGoogleStartBitrateKbps(preset: VideoQualityPreset): number {
+  if (preset === 'economy') {
+    return 400
+  }
+  if (preset === 'hd') {
+    return 1200
+  }
+  return 900
+}
 
 /** Mild Opus cap — stable voice, not aggressive throttling. */
 const OUTBOUND_AUDIO_OPUS_MAX_AVG_BITRATE_BPS = 96_000
@@ -185,7 +194,7 @@ export function useSendTransport() {
     return transport
   }
 
-  async function publishLocalMedia(stream: MediaStream): Promise<void> {
+  async function publishLocalMedia(stream: MediaStream, options?: PublishLocalMediaOptions): Promise<void> {
     const transport = sendTransport.value
     if (!transport || transport.closed) {
       throw new Error('Send transport required')
@@ -195,20 +204,29 @@ export function useSendTransport() {
         continue
       }
       if (track.kind === 'video') {
+        const useSimulcast = options?.videoSimulcast === true
+        const preset = options?.videoQualityPreset ?? 'balanced'
+        const encodings = useSimulcast
+          ? getSimulcastEncodingsForPreset(preset)
+          : getSingleLayerEncodingsForPreset(preset)
         if (import.meta.env.DEV) {
-          console.log('[produce] video simulcast encodings', {
+          console.log('[produce] video outbound', {
             trackId: track.id,
-            encodings: OUTBOUND_VIDEO_SIMULCAST_ENCODINGS.map((e) => ({
+            simulcast: useSimulcast,
+            preset,
+            encodings: encodings.map((e) => ({
               maxBitrate: e.maxBitrate,
               scaleResolutionDownBy: e.scaleResolutionDownBy,
+              rid: e.rid,
+              maxFramerate: e.maxFramerate,
             })),
           })
         }
         await transport.produce({
           track,
-          encodings: OUTBOUND_VIDEO_SIMULCAST_ENCODINGS,
+          encodings,
           codecOptions: {
-            videoGoogleStartBitrate: OUTBOUND_VIDEO_GOOGLE_START_BITRATE_KBPS,
+            videoGoogleStartBitrate: outboundVideoGoogleStartBitrateKbps(preset),
           },
         })
       } else {

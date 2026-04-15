@@ -1,35 +1,25 @@
 import type { Express, Request, Response } from 'express'
-import {
-  readSessionFromCookie,
-  WORDLE_SESSION_COOKIE,
-  WORDLE_SESSION_MAX_AGE_SEC,
-  signSession,
-} from './sessionJwt'
+import { clientPublicOrigin } from '../auth/clientOrigin'
+import { clearGlobalSessionCookie, setGlobalSessionCookie } from '../auth/session/cookies'
+import { handleGetWordleMe } from '../auth/session/me'
+import { signSession, WORDLE_SESSION_MAX_AGE_SEC } from '../auth/session/sessionJwt'
+import { twitchExchangeCode, twitchFetchSessionUser } from '../auth/twitchClient'
 import { getWordleIngestChannel } from './tmiChat'
 import { readTwitchChatGuessCooldownMs } from './tmiGuessThrottle'
-import { twitchExchangeCode, twitchFetchSessionUser } from '../auth/twitchClient'
 
-function requiredEnv(name: string): string {
-  const v = process.env[name]
-  if (typeof v !== 'string' || v.length === 0) {
-    throw new Error(`Missing required env: ${name}`)
+const isProd = process.env.NODE_ENV === 'production'
+
+function wordleTwitchRedirectUri(): string {
+  const explicit = process.env.TWITCH_OAUTH_REDIRECT_URI
+  if (typeof explicit === 'string' && explicit.trim().length > 0) {
+    return explicit.trim()
   }
-  return v
-}
-
-function clientOrigin(): string {
-  const raw = process.env.BASE_URL ?? process.env.WORDLE_CLIENT_ORIGIN ?? 'http://localhost:5173'
-  return raw.replace(/\/$/, '')
-}
-
-function setSessionCookie(res: Response, token: string): void {
-  res.cookie(WORDLE_SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: WORDLE_SESSION_MAX_AGE_SEC * 1000,
-    path: '/',
-  })
+  if (isProd) {
+    throw new Error(
+      'TWITCH_OAUTH_REDIRECT_URI must be set in production (Wordle Twitch callback URL registered in Twitch console).',
+    )
+  }
+  return `${clientPublicOrigin()}/api/wordle/auth/callback`
 }
 
 export function mountTwitchWordleAuth(app: Express): void {
@@ -48,34 +38,23 @@ export function mountTwitchWordleAuth(app: Express): void {
     }
 
     try {
-      const redirectUri = requiredEnv('TWITCH_OAUTH_REDIRECT_URI')
+      const redirectUri = wordleTwitchRedirectUri()
       const accessToken = await twitchExchangeCode(code, redirectUri)
       const user = await twitchFetchSessionUser(accessToken)
       const token = signSession(user, WORDLE_SESSION_MAX_AGE_SEC)
-      setSessionCookie(res, token)
-      res.redirect(`${clientOrigin()}/wordle`)
+      setGlobalSessionCookie(res, token)
+      res.redirect(`${clientPublicOrigin()}/wordle`)
     } catch (e) {
-      console.error('[wordle] OAuth callback error', e)
+      console.error('[auth] [twitch] wordle OAuth callback error', e)
       res.status(500).send('OAuth failed')
     }
   })
 
-  app.get('/api/wordle/me', (req: Request, res: Response) => {
-    const session = readSessionFromCookie(req.headers.cookie)
-    if (!session) {
-      res.status(401).json({ authenticated: false })
-      return
-    }
-    res.json({
-      id: session.id,
-      display_name: session.display_name,
-      profile_image_url: session.profile_image_url,
-      provider: session.provider ?? null,
-    })
-  })
+  app.get('/api/wordle/me', handleGetWordleMe)
 
+  /** @deprecated Prefer POST /api/auth/logout — clears the same global session cookie. */
   app.post('/api/wordle/logout', (_req: Request, res: Response) => {
-    res.clearCookie(WORDLE_SESSION_COOKIE, { path: '/' })
-    res.json({ ok: true })
+    clearGlobalSessionCookie(res)
+    res.status(204).end()
   })
 }

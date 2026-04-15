@@ -1,5 +1,35 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { isVideoQualityPreset, type VideoQualityPreset } from '../media/videoQualityPreset'
+
+const LS_VIDEO_PRESET = 'streamassist_call_video_quality_preset'
+const LS_CALL_DEBUG = 'streamassist_call_debug_overlay'
+
+function readVideoPreset(): VideoQualityPreset {
+  if (typeof localStorage === 'undefined') {
+    return 'balanced'
+  }
+  try {
+    const v = localStorage.getItem(LS_VIDEO_PRESET)
+    if (v && isVideoQualityPreset(v)) {
+      return v
+    }
+  } catch {
+    /* ignore */
+  }
+  return 'balanced'
+}
+
+function readCallDebugOverlay(): boolean {
+  if (typeof localStorage === 'undefined') {
+    return false
+  }
+  try {
+    return localStorage.getItem(LS_CALL_DEBUG) === '1'
+  } catch {
+    return false
+  }
+}
 
 function randomPeerId(): string {
   return `peer-${Math.random().toString(36).slice(2, 10)}`
@@ -12,6 +42,10 @@ export const useCallSessionStore = defineStore('callSession', () => {
   const selfPeerId = ref(randomPeerId())
   const selfDisplayName = ref('You')
   const inCall = ref(false)
+  /** Economy / balanced / HD — affects next `getUserMedia` + outbound encodings. */
+  const videoQualityPreset = ref<VideoQualityPreset>(readVideoPreset())
+  /** Technical overlay (stats, mode). Persisted so devs keep it across reloads. */
+  const callDebugOverlay = ref(readCallDebugOverlay())
   /** displayName from server (room-state / peer-joined / peer-display-name). */
   const remoteDisplayNames = ref<Record<string, string>>({})
 
@@ -61,6 +95,24 @@ export const useCallSessionStore = defineStore('callSession', () => {
     inCall.value = v
   }
 
+  function setVideoQualityPreset(p: VideoQualityPreset): void {
+    videoQualityPreset.value = p
+    try {
+      localStorage.setItem(LS_VIDEO_PRESET, p)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function setCallDebugOverlay(v: boolean): void {
+    callDebugOverlay.value = v
+    try {
+      localStorage.setItem(LS_CALL_DEBUG, v ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }
+
   function resetSessionIdentity(): void {
     selfPeerId.value = randomPeerId()
   }
@@ -70,6 +122,8 @@ export const useCallSessionStore = defineStore('callSession', () => {
     selfPeerId,
     selfDisplayName,
     inCall,
+    videoQualityPreset,
+    callDebugOverlay,
     remoteDisplayNames,
     replaceRemoteDisplayNames,
     upsertRemoteDisplayName,
@@ -77,6 +131,8 @@ export const useCallSessionStore = defineStore('callSession', () => {
     clearRemoteDisplayNames,
     labelFor,
     setInCall,
+    setVideoQualityPreset,
+    setCallDebugOverlay,
     resetSessionIdentity,
   }
 })

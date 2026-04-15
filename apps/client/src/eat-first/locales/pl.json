@@ -36,7 +36,17 @@
     "tileConnecting": "Łączenie…",
     "tileCameraOff": "Kamera wyłączona",
     "tileNoVideo": "Brak wideo",
-    "tileReconnecting": "Ponowne łączenie…"
+    "tileReconnecting": "Ponowne łączenie…",
+    "qualityPreset": "Jakość wideo (następne dołączenie)",
+    "quality": {
+      "economy": "Oszczędny — ~360p, niższy bitrate",
+      "balanced": "Zbalansowany — ~720p (domyślnie)",
+      "hd": "HD — do 1080p, wyższy bitrate"
+    },
+    "debugOverlay": "Panel debugowania (statystyki)",
+    "debugTitle": "Debug połączenia",
+    "debugRefresh": "Odśwież statystyki inbound",
+    "debugRefreshing": "…"
   },
   "wordleUi": {
     "eyebrow": "Nardle",
@@ -44,6 +54,7 @@
     "attemptsPill": "Próby: {cur} / {max}",
     "logout": "Wyloguj",
     "loginTwitch": "Zaloguj przez Twitch",
+    "loginGoogle": "Zaloguj przez Google",
     "cardYou": "Tabela (ty)",
     "statsAria": "Statystyki lokalne",
     "wonStat": "Odgadnięte:",

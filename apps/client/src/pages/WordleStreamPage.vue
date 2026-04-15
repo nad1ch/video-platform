@@ -17,6 +17,8 @@ import {
   type LocalGuessRow,
   type WordLength,
 } from '@/wordle/wordleLogic'
+import { apiBase, apiUrl } from '@/utils/apiUrl'
+import { useAuth } from '@/composables/useAuth'
 
 const TWITCH_CHANNEL_STORAGE_KEY = 'streamassist_wordle_twitch_channel'
 const WORDLE_WORD_LEN_KEY = 'streamassist_wordle_word_len'
@@ -175,6 +177,8 @@ type SessionUser = {
   profile_image_url: string
 }
 
+const { refresh: refreshGlobalAuth } = useAuth()
+
 const gameState = shallowRef<GameStatePayload | null>(null)
 const leaderboard = ref<LeaderboardEntry[]>([])
 const chatLines = ref<ChatLine[]>([])
@@ -223,7 +227,7 @@ function feedbackToEmojis(fb: Feedback[]): string {
 
 async function fetchWordlePublicConfig(): Promise<void> {
   try {
-    const res = await fetch('/api/wordle/public-config')
+    const res = await fetch(apiUrl('/api/wordle/public-config'))
     if (!res.ok) {
       return
     }
@@ -246,7 +250,9 @@ function wordleWsUrl(): string {
     return env.trim()
   }
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${location.host}/wordle-ws`
+  const base = apiBase()
+  const path = base ? `${base}/wordle-ws` : '/wordle-ws'
+  return `${proto}//${location.host}${path}`
 }
 
 const twitchAuthUrl = computed(() => {
@@ -258,6 +264,7 @@ const twitchAuthUrl = computed(() => {
     redirect_uri: twitchOAuthRedirect,
     response_type: 'code',
     scope: '',
+    force_verify: 'true',
   })
   return `https://id.twitch.tv/oauth2/authorize?${p.toString()}`
 })
@@ -445,7 +452,7 @@ function connectWs(): void {
 
 async function refreshMe(): Promise<void> {
   try {
-    const res = await fetch('/api/wordle/me', { credentials: 'include' })
+    const res = await fetch(apiUrl('/api/wordle/me'), { credentials: 'include' })
     if (res.ok) {
       const j = (await res.json()) as SessionUser
       sessionUser.value = j
@@ -535,8 +542,9 @@ function toggleSecretPeek(): void {
 }
 
 async function logout(): Promise<void> {
-  await fetch('/api/wordle/logout', { method: 'POST', credentials: 'include' })
+  await fetch(apiUrl('/api/auth/logout'), { method: 'POST', credentials: 'include' })
   sessionUser.value = null
+  await refreshGlobalAuth()
   connectWs()
 }
 
@@ -545,6 +553,12 @@ function login(): void {
   if (u) {
     window.location.href = u
   }
+}
+
+/** Same `wordle_session` cookie as app shell; returns to /wordle after Google OAuth. */
+function loginWithGoogleWordle(): void {
+  const q = encodeURIComponent('/wordle')
+  window.location.href = apiUrl(`/api/auth/google?redirect=${q}`)
 }
 
 function onWindowKeydown(e: KeyboardEvent): void {
@@ -643,7 +657,7 @@ onUnmounted(() => {
             t('wordleUi.attemptsPill', { cur: localGuesses.length, max: WORDLE_MAX_ATTEMPTS })
           }}</span>
         </div>
-        <div v-if="sessionUser || twitchAuthUrl" class="wordle-page__topbar-auth">
+        <div class="wordle-page__topbar-auth">
           <template v-if="sessionUser">
             <img
               class="wordle-page__avatar"
@@ -655,7 +669,14 @@ onUnmounted(() => {
             <span class="wordle-page__name">{{ sessionUser.display_name }}</span>
             <AppButton variant="ghost" @click="logout">{{ t('wordleUi.logout') }}</AppButton>
           </template>
-          <AppButton v-else variant="primary" @click="login">{{ t('wordleUi.loginTwitch') }}</AppButton>
+          <div v-else class="wordle-page__auth-btns">
+            <AppButton v-if="twitchAuthUrl" variant="primary" @click="login">{{
+              t('wordleUi.loginTwitch')
+            }}</AppButton>
+            <AppButton variant="secondary" type="button" @click="loginWithGoogleWordle">{{
+              t('wordleUi.loginGoogle')
+            }}</AppButton>
+          </div>
         </div>
       </header>
 
@@ -958,6 +979,13 @@ onUnmounted(() => {
 }
 
 .wordle-page__topbar-auth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sa-space-2);
+}
+
+.wordle-page__auth-btns {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
