@@ -1,0 +1,37 @@
+// StreamAssist — minimal persistence (OAuth users + stats). DATABASE_URL required when Prisma is used.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  provider       String
+  providerUserId String
+  email          String?  @unique
+  displayName    String
+  avatarUrl      String?
+  role           String
+  twitchId       String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  stats          UserStats?
+
+  @@unique([provider, providerUserId])
+}
+
+model UserStats {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coins       Int      @default(0)
+  gamesPlayed Int      @default(0)
+  wins        Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

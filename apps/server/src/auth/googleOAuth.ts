@@ -1,7 +1,7 @@
 import type { SessionUser } from './session/types'
-
-type GoogleProfileForSession = Omit<SessionUser, 'role'>
 import { clientPublicOrigin } from './clientOrigin'
+
+export type GoogleProfileForSession = Omit<SessionUser, 'role'>
 
 function requiredEnv(name: string): string {
   const v = process.env[name]

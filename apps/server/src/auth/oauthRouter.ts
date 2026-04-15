@@ -12,6 +12,7 @@ import { clientPublicOrigin } from './clientOrigin'
 import { exchangeCodeForToken, getGoogleAuthUrl, getUserProfile, resolveGoogleOAuthRedirectUri } from './googleOAuth'
 import { twitchExchangeCode, twitchFetchSessionUser } from './twitchClient'
 import { handleEmailLogin, handleEmailRegister } from './email/emailAuthHandlers'
+import { persistGoogleOAuthUser, persistTwitchOAuthUser } from './persistOAuthUser'
 import { withSessionRole } from './session/withSessionRole'
 
 const isProd = process.env.NODE_ENV === 'production'
@@ -127,6 +128,7 @@ oauthRouter.get('/twitch/callback', async (req: Request, res: Response) => {
     const redirectUri = twitchAppRedirectUri()
     const accessToken = await twitchExchangeCode(code, redirectUri)
     const profile = await twitchFetchSessionUser(accessToken)
+    await persistTwitchOAuthUser(profile)
     /** `role` + `twitch_id` from {@link withSessionRole} → `resolveUserRole` (Helix `id` vs ADMIN_TWITCH_IDS). */
     const finalUser = withSessionRole(profile)
     const token = signSession(finalUser, WORDLE_SESSION_MAX_AGE_SEC)
@@ -172,6 +174,7 @@ oauthRouter.get('/google/callback', async (req: Request, res: Response) => {
   try {
     const accessToken = await exchangeCodeForToken(code)
     const profile = await getUserProfile(accessToken)
+    await persistGoogleOAuthUser(profile)
     const finalUser = withSessionRole(profile)
     const token = signSession(finalUser, WORDLE_SESSION_MAX_AGE_SEC)
     setGlobalSessionCookie(res, token)
