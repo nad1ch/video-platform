@@ -7,7 +7,7 @@ import { WebSocketServer } from 'ws'
 import { createMediasoupWorker } from './mediasoup/createWorker'
 import { RoomManager } from './rooms/RoomManager'
 import { attachSocketServer } from './signaling/socketServer'
-import { clientPublicOrigin } from './auth/clientOrigin'
+import { corsAllowedOrigins } from './auth/clientOrigin'
 import { mountGlobalAuth } from './auth/oauthRouter'
 import { mountTwitchWordleAuth } from './wordle/twitchAuthRouter'
 import { startTwitchChatIngest, stopTwitchChatIngest } from './wordle/tmiChat'
@@ -22,11 +22,26 @@ async function bootstrap(): Promise<void> {
   const roomManager = new RoomManager(worker)
 
   const app = express()
-  const allowedOrigin = clientPublicOrigin()
 
   app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
-    res.setHeader('Access-Control-Allow-Credentials', 'true')
+    const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined
+    const allowed = corsAllowedOrigins()
+
+    if (origin && !allowed.includes(origin)) {
+      if (req.method === 'OPTIONS') {
+        res.status(403).end()
+        return
+      }
+      res.status(403).type('text/plain').send('Forbidden by CORS')
+      return
+    }
+
+    if (origin && allowed.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin)
+      res.setHeader('Access-Control-Allow-Credentials', 'true')
+      res.setHeader('Vary', 'Origin')
+    }
+
     if (req.method === 'OPTIONS') {
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type')

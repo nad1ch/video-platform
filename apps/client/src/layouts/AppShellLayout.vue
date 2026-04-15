@@ -26,6 +26,7 @@ import {
   STREAM_APP_BRAND_NAME,
 } from '@/eat-first/constants/brand.js'
 import '@/eat-first/styles/host-chrome.css'
+import PurpleLightningBackdrop from '@/components/ui/PurpleLightningBackdrop.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -149,6 +150,7 @@ onMounted(() => {
 
 <template>
   <div class="app-shell-layout eat-first-root page-stack" :data-theme="theme">
+    <PurpleLightningBackdrop :light="theme === 'light'" />
     <div class="app-shell-layout__body app-layout">
       <AppHeader
         v-if="showChrome"
@@ -245,6 +247,7 @@ onMounted(() => {
 
 <style scoped>
 .page-stack {
+  position: relative;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -258,6 +261,8 @@ onMounted(() => {
 }
 
 .app-shell-layout__body {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-height: 0;
   display: flex;
