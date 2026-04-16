@@ -22,13 +22,15 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY package*.json ./
-# `postinstall` runs `prisma generate` — schema must exist before `npm install`.
+# `postinstall` runs `scripts/prisma-generate-retry.cjs` — copy it + schema before `npm install`.
 COPY prisma ./prisma/
+COPY scripts/prisma-generate-retry.cjs ./scripts/prisma-generate-retry.cjs
 RUN npm install
 
 COPY . .
 
 EXPOSE 3000
-EXPOSE 40000-49999/udp
+# Match docker-compose.local UDP publish + MEDIASOUP_RTC_* (default local example uses 52000–52199).
+EXPOSE 52000-52199/udp
 
 CMD ["npm", "run", "dev"]

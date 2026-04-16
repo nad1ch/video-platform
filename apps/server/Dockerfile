@@ -10,8 +10,9 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY package*.json ./
-# `postinstall` runs `prisma generate` — schema must exist before `npm install`.
+# `postinstall` runs `scripts/prisma-generate-retry.cjs` — copy it + schema before `npm install`.
 COPY prisma ./prisma/
+COPY scripts/prisma-generate-retry.cjs ./scripts/prisma-generate-retry.cjs
 RUN npm install
 
 COPY . .

@@ -18,6 +18,27 @@ function resolveMediasoupWorkerLogLevel(): WorkerLogLevel | undefined {
 
 const PINO_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'] as const
 
+const DEFAULT_RTC_MIN = 40_000
+const DEFAULT_RTC_MAX = 49_999
+
+function resolveRtcPortRange(log: pino.Logger): { rtcMinPort: number; rtcMaxPort: number } {
+  const rawMin = process.env.MEDIASOUP_RTC_MIN_PORT?.trim()
+  const rawMax = process.env.MEDIASOUP_RTC_MAX_PORT?.trim()
+  const parsedMin = rawMin != null && rawMin.length > 0 ? Number.parseInt(rawMin, 10) : NaN
+  const parsedMax = rawMax != null && rawMax.length > 0 ? Number.parseInt(rawMax, 10) : NaN
+  let rtcMinPort =
+    Number.isFinite(parsedMin) && parsedMin >= 1024 && parsedMin <= 64999 ? parsedMin : DEFAULT_RTC_MIN
+  let rtcMaxPort =
+    Number.isFinite(parsedMax) && parsedMax >= rtcMinPort && parsedMax <= 65_535 ? parsedMax : DEFAULT_RTC_MAX
+  if (rtcMaxPort - rtcMinPort < 99) {
+    rtcMaxPort = Math.min(65_535, rtcMinPort + 99)
+  }
+  if (rtcMinPort !== DEFAULT_RTC_MIN || rtcMaxPort !== DEFAULT_RTC_MAX) {
+    log.info({ rtcMinPort, rtcMaxPort }, 'mediasoup RTC port range (override via MEDIASOUP_RTC_MIN_PORT / MEDIASOUP_RTC_MAX_PORT)')
+  }
+  return { rtcMinPort, rtcMaxPort }
+}
+
 function resolvePinoLevel(): (typeof PINO_LEVELS)[number] | undefined {
   const raw = process.env.SERVER_PINO_LEVEL?.trim().toLowerCase()
   if (!raw) {
@@ -34,12 +55,13 @@ export async function createMediasoupWorker(options?: CreateMediasoupWorkerOptio
   })
 
   const workerLogLevel = resolveMediasoupWorkerLogLevel()
+  const { rtcMinPort, rtcMaxPort } = resolveRtcPortRange(log)
 
   let worker: Worker
   try {
     worker = await createWorker({
-      rtcMinPort: 40000,
-      rtcMaxPort: 49999,
+      rtcMinPort,
+      rtcMaxPort,
       ...(workerLogLevel !== undefined ? { logLevel: workerLogLevel } : {}),
     })
   } catch (err) {

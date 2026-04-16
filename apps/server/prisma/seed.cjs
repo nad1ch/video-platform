@@ -66,6 +66,14 @@ async function main() {
 
 main()
   .catch((e) => {
+    const msg = String(e?.message ?? e)
+    const code = e && typeof e === 'object' && 'code' in e ? String((e).code) : ''
+    if (code === 'P1001' || msg.includes("Can't reach database server") || msg.includes('P1001')) {
+      console.error(
+        '[seed] Database is not reachable. Start Postgres on DATABASE_URL (e.g. `docker compose -f docker/docker-compose.local.yml up -d db`), then run migrations and seed again.',
+      )
+      process.exit(1)
+    }
     console.error(e)
     process.exit(1)
   })
