@@ -56,7 +56,7 @@
 }
 
 .anim-stagger > * {
-  animation: ui-slide-up var(--motion-duration) var(--motion-ease) both;
+  animation: ui-fade-in var(--motion-duration) var(--motion-ease) both;
   animation-delay: calc(var(--stagger-index, 0) * 55ms);
 }
 
@@ -64,22 +64,29 @@
   animation: ui-scale-in 0.35s var(--motion-ease) both;
 }
 
-/* Переходи між маршрутами (App.vue → RouterView) */
-.route-slide-enter-active,
-.route-slide-leave-active {
-  transition:
-    opacity 0.38s var(--motion-ease),
-    transform 0.42s var(--motion-ease);
+/*
+ * Stream shell + Eat First: лише opacity (без translate — менше «скачків»).
+ * Разом із `.app-shell-route-stack` / `.eat-first-route-stack` (leave = absolute) — crossfade без порожнього кадру.
+ */
+.route-soft-enter-active,
+.route-soft-leave-active {
+  transition: opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity;
 }
 
-.route-slide-enter-from {
+.route-soft-enter-from,
+.route-soft-leave-to {
   opacity: 0;
-  transform: translateY(14px) scale(0.988);
 }
 
-.route-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-10px) scale(0.99);
+@media (prefers-reduced-motion: reduce) {
+  .route-soft-enter-active,
+  .route-soft-leave-active,
+  .route-fade-enter-active,
+  .route-fade-leave-active {
+    transition-duration: 0.01ms !important;
+    will-change: auto;
+  }
 }
 
 .route-none-enter-active,
@@ -95,7 +102,8 @@
 
 .route-fade-enter-active,
 .route-fade-leave-active {
-  transition: opacity 0.28s var(--motion-ease);
+  transition: opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity;
 }
 
 .route-fade-enter-from,

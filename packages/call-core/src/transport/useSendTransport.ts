@@ -1,5 +1,11 @@
 import type { Device } from 'mediasoup-client'
-import type { ConnectionState, DtlsParameters, Transport, TransportOptions } from 'mediasoup-client/types'
+import type {
+  ConnectionState,
+  DtlsParameters,
+  Producer,
+  Transport,
+  TransportOptions,
+} from 'mediasoup-client/types'
 import { onUnmounted, shallowRef } from 'vue'
 import {
   getSimulcastEncodingsForPreset,
@@ -110,6 +116,10 @@ const OUTBOUND_AUDIO_OPUS_MAX_AVG_BITRATE_BPS = 96_000
 
 export function useSendTransport() {
   const sendTransport = shallowRef<Transport | null>(null)
+  /** First outbound camera producer (used for screen-share `replaceTrack`). */
+  const outboundVideoProducer = shallowRef<Producer | null>(null)
+  /** First outbound mic producer (`replaceTrack` when user switches input device). */
+  const outboundAudioProducer = shallowRef<Producer | null>(null)
 
   async function createSendTransport(
     mediaDevice: Device,
@@ -228,15 +238,16 @@ export function useSendTransport() {
             })),
           })
         }
-        await transport.produce({
+        const producer = await transport.produce({
           track,
           encodings,
           codecOptions: {
             videoGoogleStartBitrate: outboundVideoGoogleStartBitrateKbps(tier),
           },
         })
+        outboundVideoProducer.value = producer
       } else {
-        await transport.produce({
+        const audioProducer = await transport.produce({
           track,
           codecOptions: {
             opusDtx: true,
@@ -244,11 +255,30 @@ export function useSendTransport() {
             opusMaxAverageBitrate: OUTBOUND_AUDIO_OPUS_MAX_AVG_BITRATE_BPS,
           },
         })
+        outboundAudioProducer.value = audioProducer
       }
     }
   }
 
+  async function replaceOutboundVideoTrack(track: MediaStreamTrack): Promise<void> {
+    const p = outboundVideoProducer.value
+    if (!p || p.closed) {
+      throw new Error('Outbound video producer is not ready')
+    }
+    await p.replaceTrack({ track })
+  }
+
+  async function replaceOutboundAudioTrack(track: MediaStreamTrack): Promise<void> {
+    const p = outboundAudioProducer.value
+    if (!p || p.closed) {
+      throw new Error('Outbound audio producer is not ready')
+    }
+    await p.replaceTrack({ track })
+  }
+
   function closeSendTransport(): void {
+    outboundVideoProducer.value = null
+    outboundAudioProducer.value = null
     const t = sendTransport.value
     if (t && !t.closed) {
       t.close()
@@ -264,6 +294,8 @@ export function useSendTransport() {
     sendTransport,
     createSendTransport,
     publishLocalMedia,
+    replaceOutboundVideoTrack,
+    replaceOutboundAudioTrack,
     closeSendTransport,
   }
 }

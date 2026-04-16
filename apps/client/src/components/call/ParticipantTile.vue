@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, shallowRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import StreamAudio from '../StreamAudio.vue'
 import StreamVideo from '../StreamVideo.vue'
@@ -12,6 +12,8 @@ const emit = defineEmits<{
 }>()
 
 const props = defineProps<{
+  /** Room participant id (for optional volume_* localStorage mirror). */
+  peerId?: string
   displayName: string
   stream: MediaStream | null
   isLocal: boolean
@@ -23,11 +25,73 @@ const props = defineProps<{
   sizeTier: 'sm' | 'md' | 'lg'
   /** Remote/local tile with strongest mic level (Web Audio analyser). */
   activeSpeaker?: boolean
-  /** Local-only remote listening volume 0..1 */
+  /** Local-only remote listening gain 0..2 (0–200%). */
   remoteListenVolume?: number
   /** Local-only remote listen mute */
   remoteListenMuted?: boolean
+  /** “Raise hand” from signaling (call room). */
+  raiseHand?: boolean
 }>()
+
+const menuOpen = ref(false)
+const menuRoot = ref<HTMLElement | null>(null)
+
+function persistVolumeMirror(gain: number): void {
+  const id = typeof props.peerId === 'string' ? props.peerId.trim() : ''
+  if (!id || typeof localStorage === 'undefined') {
+    return
+  }
+  try {
+    localStorage.setItem(`volume_${id}`, String(Math.round(gain * 100)))
+  } catch {
+    /* ignore */
+  }
+}
+
+function onDocPointerDown(ev: PointerEvent): void {
+  if (!menuOpen.value) {
+    return
+  }
+  const root = menuRoot.value
+  if (root && ev.target instanceof Node && root.contains(ev.target)) {
+    return
+  }
+  menuOpen.value = false
+}
+
+watch(menuOpen, (open) => {
+  if (typeof document === 'undefined') {
+    return
+  }
+  if (open) {
+    document.addEventListener('pointerdown', onDocPointerDown, true)
+  } else {
+    document.removeEventListener('pointerdown', onDocPointerDown, true)
+  }
+})
+
+onMounted(() => {
+  if (props.isLocal) {
+    return
+  }
+  const id = typeof props.peerId === 'string' ? props.peerId.trim() : ''
+  if (!id || typeof localStorage === 'undefined') {
+    return
+  }
+  try {
+    const raw = localStorage.getItem(`volume_${id}`)
+    if (raw == null) {
+      return
+    }
+    const n = Number(raw)
+    if (!Number.isFinite(n) || n < 0 || n > 200) {
+      return
+    }
+    emit('update:listenVolume', n / 100)
+  } catch {
+    /* ignore */
+  }
+})
 
 function initials(name: string): string {
   const n = typeof name === 'string' ? name : String(name ?? '')
@@ -35,7 +99,7 @@ function initials(name: string): string {
   return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || '?'
 }
 
-/** Remote: audio-only split stream for <audio> (video uses the same composite stream as props). */
+/** Remote: audio-only split stream for Web Audio path (video uses the same composite stream as props). */
 const audioSplitStream = shallowRef<MediaStream | null>(null)
 
 function clearSplitHolder(holder: { value: MediaStream | null }): void {
@@ -89,18 +153,16 @@ watch(
 )
 
 onUnmounted(() => {
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('pointerdown', onDocPointerDown, true)
+  }
   clearSplitHolder(audioSplitStream)
 })
 
-/** Local: any video track — no muted/readyState gating (getUserMedia quirk). */
 const hasAnyVideoTrack = computed(
   () => Boolean(props.stream && props.stream.getVideoTracks().length > 0),
 )
 
-/**
- * Remote: show <video> once the track exists and is live.
- * Do not require !track.muted — recv tracks often stay muted until the first RTP frame.
- */
 const hasLiveRemoteVideo = computed(() => {
   if (!props.stream || props.isLocal) {
     return false
@@ -172,12 +234,36 @@ const placeholderHint = computed(() => {
   }
   return ''
 })
+
+const volumePercentUi = computed(() =>
+  Math.min(200, Math.max(0, Math.round((props.remoteListenVolume ?? 1) * 100))),
+)
+
+function onVolumeSliderInput(ev: Event): void {
+  const t = ev.target as HTMLInputElement
+  const pct = Math.min(200, Math.max(0, Number(t.value)))
+  const gain = pct / 100
+  emit('update:listenVolume', gain)
+  persistVolumeMirror(gain)
+}
+
+function onMuteCheckboxChange(ev: Event): void {
+  const t = ev.target as HTMLInputElement
+  emit('update:listenMuted', t.checked)
+}
+
+function toggleMenu(): void {
+  menuOpen.value = !menuOpen.value
+}
 </script>
 
 <template>
   <div
     class="tile"
-    :class="[`tile--${sizeTier}`, { 'tile--active-speaker': activeSpeaker }]"
+    :class="[
+      `tile--${sizeTier}`,
+      { 'tile--active-speaker': activeSpeaker, 'tile--menu-open': menuOpen },
+    ]"
   >
     <div class="tile-media">
       <StreamAudio
@@ -198,66 +284,121 @@ const placeholderHint = computed(() => {
           @video-ui="onVideoUi"
         />
         <div v-if="isFrozen" class="tile-freeze" aria-live="polite">{{ t('callPage.tileReconnecting') }}</div>
+        <div class="tile-overlay" aria-hidden="false">
+          <span class="tile-overlay__name">{{ displayName }}</span>
+          <span class="tile-overlay__icons" aria-hidden="true">
+            <span v-if="raiseHand" class="tile-overlay__hand" :title="t('callPage.raiseHandBadge')" aria-hidden="true"
+              >✋</span
+            >
+            <span class="tile-overlay__mic" :class="{ 'tile-overlay__mic--off': !audioEnabled }">
+              <svg
+                v-if="audioEnabled"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+                width="15"
+                height="15"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 3c-1.66 0-3 1.2-3 2.7v4.6c0 1.5 1.34 2.7 3 2.7s3-1.2 3-2.7V5.7C15 4.2 13.66 3 12 3Z"
+                />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v3" />
+              </svg>
+              <svg
+                v-else
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                width="15"
+                height="15"
+              >
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+                <path d="M12 19v3" />
+                <path d="M3 3l18 18" />
+              </svg>
+            </span>
+          </span>
+        </div>
+        <div v-if="!isLocal" ref="menuRoot" class="tile-menu">
+          <button
+            type="button"
+            class="tile-menu__trigger"
+            :aria-expanded="menuOpen"
+            :aria-label="t('callPage.participantMenu')"
+            @click.stop="toggleMenu"
+          >
+            ⋯
+          </button>
+          <div v-if="menuOpen" class="tile-menu__dropdown">
+            <label class="tile-menu__row">
+              <span class="tile-menu__label">{{ t('callPage.listenVolume') }}</span>
+              <span class="tile-menu__pct">{{ volumePercentUi }}%</span>
+            </label>
+            <input
+              class="tile-menu__range"
+              type="range"
+              min="0"
+              max="200"
+              :value="volumePercentUi"
+              @input="onVolumeSliderInput"
+            />
+            <label class="tile-menu__row tile-menu__row--check">
+              <input
+                type="checkbox"
+                :checked="remoteListenMuted ?? false"
+                @change="onMuteCheckboxChange"
+              />
+              <span>{{ t('callPage.listenMuteLocal') }}</span>
+            </label>
+          </div>
+        </div>
       </div>
       <div v-else class="tile-placeholder">
         <span class="tile-placeholder-avatar">{{ initials(displayName) }}</span>
         <span class="tile-placeholder-hint">{{ placeholderHint }}</span>
       </div>
     </div>
-    <div class="tile-bar">
-      <span class="tile-name">{{ displayName }}</span>
-      <span class="tile-mic" :class="{ 'tile-mic--off': !audioEnabled }" aria-hidden="true">
-        {{ audioEnabled ? '●' : '○' }}
-      </span>
-    </div>
-    <div v-if="!isLocal" class="tile-listen">
-      <label class="tile-listen__label">
-        <span class="tile-listen__text">{{ t('callPage.listenVolume') }}</span>
-        <input
-          class="tile-listen__range"
-          type="range"
-          min="0"
-          max="100"
-          :value="Math.round((remoteListenVolume ?? 1) * 100)"
-          @input="
-            emit(
-              'update:listenVolume',
-              Math.min(1, Math.max(0, Number(($event.target as HTMLInputElement).value) / 100)),
-            )
-          "
-        />
-      </label>
-      <label class="tile-listen__mute">
-        <input
-          type="checkbox"
-          :checked="remoteListenMuted ?? false"
-          @change="emit('update:listenMuted', ($event.target as HTMLInputElement).checked)"
-        />
-        <span>{{ t('callPage.listenMuteLocal') }}</span>
-      </label>
-    </div>
   </div>
 </template>
 
 <style scoped>
 .tile {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  border-radius: 10px;
+  border-radius: 14px;
   overflow: hidden;
-  background: var(--call-tile-bg, #1a1b22);
+  background: transparent;
   border: 1px solid var(--call-tile-border, #2e303a);
   transition:
     box-shadow 0.2s ease,
-    border-color 0.2s ease;
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.tile:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 12px 32px rgb(0 0 0 / 0.45),
+    0 0 0 1px color-mix(in srgb, var(--sa-color-border, #2e303a) 80%, transparent);
 }
 
 .tile--active-speaker {
   border-color: var(--accent, #c084fc);
-  /* Inset glow avoids extra outer box-shadow footprint (less perceived “jump” vs video). */
-  box-shadow: inset 0 0 0 2px rgba(192, 132, 252, 0.55);
+  box-shadow:
+    inset 0 0 0 2px rgba(192, 132, 252, 0.45),
+    0 12px 28px rgb(0 0 0 / 0.35);
 }
 
 .tile--lg .tile-media {
@@ -279,6 +420,7 @@ const placeholderHint = computed(() => {
   position: relative;
   flex: 1;
   min-height: 0;
+  background: transparent;
 }
 
 .tile-audio {
@@ -292,6 +434,7 @@ const placeholderHint = computed(() => {
   position: absolute;
   inset: 0;
   z-index: 1;
+  background: #000;
 }
 
 .tile-video-wrap :deep(.stream-video) {
@@ -308,13 +451,168 @@ const placeholderHint = computed(() => {
   background: rgba(0, 0, 0, 0.5);
   color: var(--text-h, #f3f4f6);
   font-size: 0.75rem;
-  z-index: 2;
+  z-index: 4;
   pointer-events: none;
 }
 
-.tile-video {
+.tile-overlay {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem 0.55rem;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.82), rgb(0 0 0 / 0.05));
+  pointer-events: none;
+}
+
+.tile-overlay__name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #f9fafb;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.75);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.tile-overlay__icons {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.tile-overlay__hand {
+  font-size: 0.85rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 4px rgb(250 204 21 / 0.45));
+}
+
+.tile-overlay__mic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.95;
+  color: #86efac;
+}
+
+.tile-overlay__mic--off {
+  color: #f87171;
+  opacity: 0.95;
+}
+
+.tile-menu {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 5;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.tile:hover .tile-menu,
+.tile--menu-open .tile-menu {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tile-menu__trigger {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  background: rgb(0 0 0 / 0.55);
+  color: #f3f4f6;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease;
+}
+
+.tile-menu__trigger:hover {
+  background: rgb(0 0 0 / 0.72);
+  box-shadow: 0 0 16px rgb(255 255 255 / 0.12);
+  transform: scale(1.04);
+}
+
+.tile-menu__dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 13rem;
+  max-width: min(17rem, calc(100vw - 1.5rem));
+  padding: 10px 12px 12px;
+  border-radius: 8px;
+  border: 1px solid rgb(0 0 0 / 0.45);
+  background: #2b2d31;
+  box-shadow:
+    0 12px 32px rgb(0 0 0 / 0.55),
+    0 0 0 1px rgb(255 255 255 / 0.04);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.tile-menu__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #f2f3f5;
+  margin-bottom: 0.5rem;
+}
+
+.tile-menu__row--check {
+  margin-bottom: 0;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgb(0 0 0 / 0.35);
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #dbdee1;
+  cursor: pointer;
+}
+
+.tile-menu__label {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.tile-menu__pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.7rem;
+  color: #949ba4;
+}
+
+.tile-menu__range {
+  width: 100%;
+  margin: 0;
+  height: 5px;
+  border-radius: 3px;
+  accent-color: #5865f2;
+  cursor: pointer;
+}
+
+.tile-menu__row--check input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #5865f2;
+  cursor: pointer;
 }
 
 .tile-placeholder {
@@ -325,7 +623,7 @@ const placeholderHint = computed(() => {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: var(--sa-color-bg-main);
+  background: transparent;
   color: var(--text-h, #f3f4f6);
   z-index: 1;
 }
@@ -352,65 +650,5 @@ const placeholderHint = computed(() => {
 .tile-placeholder-hint {
   font-size: 0.75rem;
   opacity: 0.75;
-}
-
-.tile-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.35rem 0.6rem;
-  font-size: 0.8rem;
-  background: rgba(0, 0, 0, 0.35);
-  color: var(--text-h, #f3f4f6);
-}
-
-.tile-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tile-mic {
-  flex-shrink: 0;
-  opacity: 0.9;
-  font-size: 0.65rem;
-}
-
-.tile-mic--off {
-  opacity: 0.45;
-}
-
-.tile-listen {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.25rem 0.5rem 0.45rem;
-  font-size: 0.7rem;
-  background: rgba(0, 0, 0, 0.45);
-  color: var(--text-m, #d1d5db);
-}
-
-.tile-listen__label {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.tile-listen__text {
-  flex-shrink: 0;
-}
-
-.tile-listen__range {
-  flex: 1;
-  min-width: 0;
-}
-
-.tile-listen__mute {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  cursor: pointer;
 }
 </style>

@@ -9,9 +9,18 @@ import {
   STREAMER_TWITCH_URL,
 } from '../../constants/brand.js'
 
-defineProps({
+const props = defineProps({
   ariaLabel: { type: String, required: true },
   logoSize: { type: Number, default: 32 },
+  /** When false, only the channel mark is shown (link still goes to Twitch). */
+  showNick: { type: Boolean, default: false },
+})
+
+const logoBoxStyle = () => ({
+  width: `${props.logoSize}px`,
+  height: `${props.logoSize}px`,
+  maxWidth: `${props.logoSize}px`,
+  maxHeight: `${props.logoSize}px`,
 })
 
 const imgSrc = ref(BRAND_LOGO_PNG)
@@ -42,6 +51,7 @@ function initialNick() {
 <template>
   <a
     class="app-shell-mini-brand"
+    :class="{ 'app-shell-mini-brand--icon-only': !props.showNick }"
     :href="STREAMER_TWITCH_URL"
     target="_blank"
     rel="noopener noreferrer"
@@ -52,16 +62,22 @@ function initialNick() {
       <img
         class="app-shell-mini-brand__logo"
         :src="imgSrc"
-        :width="logoSize"
-        :height="logoSize"
+        :width="props.logoSize"
+        :height="props.logoSize"
+        :style="logoBoxStyle()"
         alt=""
         decoding="async"
         fetchpriority="low"
         @error="onLogoError"
       />
     </picture>
-    <span v-else class="app-shell-mini-brand__fallback" aria-hidden="true">{{ initialNick() }}</span>
-    <span class="app-shell-mini-brand__nick">{{ STREAMER_NICK }}</span>
+    <span
+      v-else
+      class="app-shell-mini-brand__fallback"
+      :style="logoBoxStyle()"
+      aria-hidden="true"
+    >{{ initialNick() }}</span>
+    <span v-if="props.showNick" class="app-shell-mini-brand__nick">{{ STREAMER_NICK }}</span>
   </a>
 </template>
 
@@ -70,6 +86,15 @@ function initialNick() {
   display: inline-flex;
   flex-shrink: 0;
   line-height: 0;
+}
+
+.app-shell-mini-brand--icon-only {
+  gap: 0;
+}
+
+.app-shell-mini-brand--icon-only .app-shell-mini-brand__logo,
+.app-shell-mini-brand--icon-only .app-shell-mini-brand__fallback {
+  border-radius: 50%;
 }
 
 .app-shell-mini-brand__fallback {

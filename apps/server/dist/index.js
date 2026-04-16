@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+require("./loadDotEnv");
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const express_1 = __importDefault(require("express"));
 const http_1 = __importDefault(require("http"));
@@ -10,7 +11,9 @@ const ws_1 = require("ws");
 const createWorker_1 = require("./mediasoup/createWorker");
 const RoomManager_1 = require("./rooms/RoomManager");
 const socketServer_1 = require("./signaling/socketServer");
+const clientOrigin_1 = require("./auth/clientOrigin");
 const oauthRouter_1 = require("./auth/oauthRouter");
+const leaderboardRouter_1 = require("./leaderboardRouter");
 const twitchAuthRouter_1 = require("./wordle/twitchAuthRouter");
 const tmiChat_1 = require("./wordle/tmiChat");
 const wordleSocket_1 = require("./wordle/wordleSocket");
@@ -21,10 +24,22 @@ async function bootstrap() {
     });
     const roomManager = new RoomManager_1.RoomManager(worker);
     const app = (0, express_1.default)();
-    const allowedOrigin = process.env.WORDLE_CLIENT_ORIGIN ?? 'http://localhost:5173';
     app.use((req, res, next) => {
-        res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+        const allowed = (0, clientOrigin_1.corsAllowedOrigins)();
+        if (origin && !allowed.includes(origin)) {
+            if (req.method === 'OPTIONS') {
+                res.status(403).end();
+                return;
+            }
+            res.status(403).type('text/plain').send('Forbidden by CORS');
+            return;
+        }
+        if (origin && allowed.includes(origin)) {
+            res.setHeader('Access-Control-Allow-Origin', origin);
+            res.setHeader('Access-Control-Allow-Credentials', 'true');
+            res.setHeader('Vary', 'Origin');
+        }
         if (req.method === 'OPTIONS') {
             res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
             res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -57,8 +72,9 @@ async function bootstrap() {
         }
         socket.destroy();
     });
-    (0, oauthRouter_1.mountAppOAuth)(app);
+    (0, oauthRouter_1.mountGlobalAuth)(app);
     (0, twitchAuthRouter_1.mountTwitchWordleAuth)(app);
+    (0, leaderboardRouter_1.mountLeaderboardRoutes)(app);
     app.get('/health', (_req, res) => {
         res.json({
             status: 'ok',

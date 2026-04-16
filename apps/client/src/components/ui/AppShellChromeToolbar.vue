@@ -39,6 +39,15 @@ const themeLabel = computed(() =>
 const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.label }))
 
 const twitchChannelAria = computed(() => t('app.twitchAria', { nick: STREAMER_NICK }))
+
+function userAvatarInitial(displayName: string): string {
+  const s = displayName.trim()
+  if (!s) {
+    return '?'
+  }
+  const ch = [...s][0]
+  return ch ? ch.toUpperCase() : '?'
+}
 </script>
 
 <template>
@@ -53,18 +62,28 @@ const twitchChannelAria = computed(() => t('app.twitchAria', { nick: STREAMER_NI
     >
       ?
     </button>
-    <StreamerBrandLink :ariaLabel="twitchChannelAria" />
+    <div
+      v-if="isAuthenticated && user"
+      class="auth-user"
+      role="group"
+      :aria-label="user.displayName"
+      :title="user.displayName"
+    >
+      <div class="auth-user__avatar" aria-hidden="true">
+        <img
+          v-if="user.avatar"
+          class="auth-user__avatar-img"
+          :src="user.avatar"
+          width="30"
+          height="30"
+          alt=""
+          decoding="async"
+        />
+        <span v-else class="auth-user__avatar-fallback">{{ userAvatarInitial(user.displayName) }}</span>
+      </div>
+      <span class="auth-user__name">{{ user.displayName }}</span>
+    </div>
     <div v-if="isAuthenticated && user" class="auth-chip">
-      <img
-        v-if="user.avatar"
-        class="auth-chip__avatar"
-        :src="user.avatar"
-        width="28"
-        height="28"
-        alt=""
-        decoding="async"
-      />
-      <span class="auth-chip__name" :title="user.displayName">{{ user.displayName }}</span>
       <AppButton variant="ghost" class="auth-chip__out" type="button" @click="logout()">
         {{ t('app.authLogout') }}
       </AppButton>
@@ -86,6 +105,7 @@ const twitchChannelAria = computed(() => t('app.twitchAria', { nick: STREAMER_NI
       @update:model-value="persistLocale"
     />
     <ThemeToggleButton :label="themeLabel" :icon="themeIcon" @click="toggleTheme" />
+    <StreamerBrandLink :ariaLabel="twitchChannelAria" :show-nick="false" :logo-size="30" />
     <StreamAuthModal />
   </div>
 </template>
@@ -112,29 +132,65 @@ const twitchChannelAria = computed(() => t('app.twitchAria', { nick: STREAMER_NI
   border-color: var(--border-strong, var(--sa-color-primary-border));
 }
 
+.auth-user {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  max-width: min(14rem, 36vw);
+  flex-shrink: 1;
+}
+
+.auth-user__avatar {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--border-input, var(--sa-color-border));
+  background: var(--bg-card-soft, color-mix(in srgb, var(--sa-color-surface) 88%, transparent));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 22%, transparent);
+}
+
+.auth-user__avatar-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.auth-user__avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-heading, var(--sa-color-text-main));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--sa-color-primary) 38%, #1e1b4b),
+    #0f172a
+  );
+}
+
+.auth-user__name {
+  min-width: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-heading, var(--sa-color-text-main));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .auth-chip {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  max-width: min(12rem, 38vw);
-  flex-shrink: 1;
-  min-width: 0;
-}
-
-.auth-chip__avatar {
-  border-radius: 50%;
   flex-shrink: 0;
-  object-fit: cover;
-}
-
-.auth-chip__name {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text-heading, var(--sa-color-text-main));
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
 }
 
 .auth-chip__out {

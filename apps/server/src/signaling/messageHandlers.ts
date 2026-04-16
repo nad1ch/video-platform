@@ -91,6 +91,18 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('client-ping'),
     payload: z.object({}).optional(),
   }),
+  z.object({
+    type: z.literal('call-chat'),
+    payload: z.object({
+      text: z.string().min(1).max(500),
+    }),
+  }),
+  z.object({
+    type: z.literal('raise-hand'),
+    payload: z.object({
+      raised: z.boolean(),
+    }),
+  }),
 ])
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>
@@ -352,6 +364,48 @@ export async function handleJoinRoom(
       continue
     }
     p.sendJson(joinedMsg)
+  }
+}
+
+export function handleCallChat(socket: WsSocket, text: string, deps: SignalingDeps): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  const trimmed = text.trim().slice(0, 500)
+  if (!trimmed) {
+    return
+  }
+  const msg = {
+    type: 'call-chat' as const,
+    payload: {
+      peerId: peer.id,
+      displayName: peer.displayName,
+      text: trimmed,
+      at: Date.now(),
+    },
+  }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
+export function handleRaiseHand(socket: WsSocket, raised: boolean, deps: SignalingDeps): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  const msg = { type: 'raise-hand' as const, payload: { peerId: peer.id, raised } }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
   }
 }
 

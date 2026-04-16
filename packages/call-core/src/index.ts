@@ -4,6 +4,7 @@
  */
 export {
   useCallEngine,
+  type CallChatLine,
   type CallEngineOptions,
   type CallEngineRole,
   type CallSessionStore,
@@ -29,7 +30,7 @@ export {
   DEFAULT_CALL_VIDEO_CONSTRAINTS,
   getVideoConstraintsForPreset,
 } from './media/defaultMediaConstraints'
-export { useLocalMedia, type UseLocalMediaOptions } from './media/useLocalMedia'
+export { useLocalMedia, type CallMediaDeviceOption, type UseLocalMediaOptions } from './media/useLocalMedia'
 export { gridSizeTierFromParticipantCount } from './media/gridTier'
 export {
   ACTIVE_CAMERA_SMALL_ROOM_MAX,

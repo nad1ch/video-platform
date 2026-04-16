@@ -54,10 +54,20 @@ export type CallTile = {
   videoEnabled: boolean
   audioEnabled: boolean
   playRev?: number
-  /** Local-only listening volume for this remote peer (0..1). */
+  /** Local-only listening gain for this remote peer (0..2 → 0–200%). */
   remoteListenVolume?: number
   /** Local-only mute for this remote peer (does not affect their mic). */
   remoteListenMuted?: boolean
+  /** Signaled “raise hand” for this peer. */
+  handRaised?: boolean
+}
+
+export type CallChatLine = {
+  id: string
+  peerId: string
+  displayName: string
+  text: string
+  at: number
 }
 
 const DISPLAY_NAME_DEBOUNCE_MS = 400
@@ -147,7 +157,13 @@ export function useCallEngine(options?: CallEngineOptions) {
   } = useRoomConnection(options?.signalingUrl)
 
   const { device, loadDevice, reset: deviceReset } = useMediasoupDevice()
-  const { createSendTransport, closeSendTransport, publishLocalMedia } = useSendTransport()
+  const {
+    createSendTransport,
+    closeSendTransport,
+    publishLocalMedia,
+    replaceOutboundVideoTrack,
+    replaceOutboundAudioTrack,
+  } = useSendTransport()
 
   const wirePublishTier = ref<VideoPublishTier>('auto_large_room')
   const lastWireActiveCameraPublishers = ref(0)
@@ -157,13 +173,31 @@ export function useCallEngine(options?: CallEngineOptions) {
     localPlayRev,
     micEnabled,
     camEnabled,
+    audioInputDevices,
+    videoInputDevices,
+    refreshMediaDevices,
     startLocalMedia,
     stopLocalMedia,
     toggleMic,
     toggleCam,
+    swapLocalAudioInput,
+    swapLocalVideoInput,
   } = useLocalMedia({
     getVideoPublishTier: () => wirePublishTier.value,
   })
+
+  const localAudioInputDeviceId = computed(() => {
+    const t = localStream.value?.getAudioTracks()[0]
+    const id = t?.getSettings?.()?.deviceId
+    return typeof id === 'string' ? id : ''
+  })
+
+  const localVideoInputDeviceId = computed(() => {
+    const t = localStream.value?.getVideoTracks()[0]
+    const id = t?.getSettings?.()?.deviceId
+    return typeof id === 'string' ? id : ''
+  })
+
   const {
     remotePeerStreams,
     remotePeerPlayRevs,
@@ -180,6 +214,40 @@ export function useCallEngine(options?: CallEngineOptions) {
   const remoteListenPrefs = shallowRef(new Map<string, RemoteListenEntry>())
   const callPresenceMessages = ref<{ id: string; at: number; kind: 'join' | 'leave'; displayName: string }[]>([])
 
+  const callChatMessages = ref<CallChatLine[]>([])
+  const peerHandRaised = ref<Record<string, boolean>>({})
+  /** Local user's raised-hand flag (also echoed from server). */
+  const handRaised = ref(false)
+  const screenSharing = ref(false)
+  const screenShareStream = shallowRef<MediaStream | null>(null)
+
+  async function setCallAudioInputDevice(deviceId: string): Promise<void> {
+    await swapLocalAudioInput(deviceId)
+    if (readEngineRole(options) !== 'participant' || !inCall.value) {
+      return
+    }
+    const t = localStream.value?.getAudioTracks()[0]
+    if (t && t.readyState === 'live') {
+      await replaceOutboundAudioTrack(t)
+    }
+  }
+
+  async function setCallVideoInputDevice(deviceId: string): Promise<void> {
+    await swapLocalVideoInput(deviceId)
+    if (screenSharing.value) {
+      return
+    }
+    if (readEngineRole(options) !== 'participant' || !inCall.value) {
+      return
+    }
+    const t = localStream.value?.getVideoTracks()[0]
+    if (t && t.readyState === 'live') {
+      await replaceOutboundVideoTrack(t)
+    }
+  }
+
+  const MAX_CALL_CHAT = 200
+
   function roomStorageKey(): string {
     return trimmedString(roomId.value) || 'demo'
   }
@@ -195,7 +263,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   function setRemoteListenVolume(peerId: string, volume: number): void {
     const next = new Map(remoteListenPrefs.value)
     const cur = next.get(peerId) ?? { volume: 1, muted: false }
-    cur.volume = Math.min(1, Math.max(0, volume))
+    cur.volume = Math.min(2, Math.max(0, volume))
     next.set(peerId, cur)
     remoteListenPrefs.value = next
     persistListenPrefs()
@@ -240,6 +308,51 @@ export function useCallEngine(options?: CallEngineOptions) {
         lastRoomState.value?.peers.find((x) => x.peerId === peerId)?.displayName ?? session.labelFor(peerId)
       pushCallPresence('leave', name)
       removeRemotePeer(peerId)
+      if (peerHandRaised.value[peerId]) {
+        const next = { ...peerHandRaised.value }
+        delete next[peerId]
+        peerHandRaised.value = next
+      }
+    }
+  })
+
+  const unsubRoomChatAndHands = addMessageListener((data) => {
+    if (!data || typeof data !== 'object') {
+      return
+    }
+    const m = data as { type?: string; payload?: unknown }
+    if (m.type === 'call-chat' && m.payload && typeof m.payload === 'object') {
+      const p = m.payload as Record<string, unknown>
+      const peerId = typeof p.peerId === 'string' ? p.peerId : ''
+      const displayName = typeof p.displayName === 'string' ? p.displayName : peerId || '—'
+      const text = typeof p.text === 'string' ? p.text : ''
+      const at = typeof p.at === 'number' && Number.isFinite(p.at) ? p.at : Date.now()
+      if (!peerId || !text.trim()) {
+        return
+      }
+      const id = `${at}-${Math.random().toString(36).slice(2, 8)}`
+      callChatMessages.value = [...callChatMessages.value, { id, peerId, displayName, text: text.slice(0, 500), at }].slice(
+        -MAX_CALL_CHAT,
+      )
+      return
+    }
+    if (m.type === 'raise-hand' && m.payload && typeof m.payload === 'object') {
+      const p = m.payload as Record<string, unknown>
+      const peerId = typeof p.peerId === 'string' ? p.peerId : ''
+      const raised = Boolean(p.raised)
+      if (!peerId) {
+        return
+      }
+      const next = { ...peerHandRaised.value }
+      if (raised) {
+        next[peerId] = true
+      } else {
+        delete next[peerId]
+      }
+      peerHandRaised.value = next
+      if (peerId === selfPeerId.value) {
+        handRaised.value = raised
+      }
     }
   })
 
@@ -448,6 +561,7 @@ export function useCallEngine(options?: CallEngineOptions) {
         playRev: remotePeerPlayRevs.value.get(peerId) ?? 0,
         remoteListenVolume: remoteListenPrefs.value.get(peerId)?.volume ?? 1,
         remoteListenMuted: remoteListenPrefs.value.get(peerId)?.muted ?? false,
+        handRaised: Boolean(peerHandRaised.value[peerId]),
       })
     }
 
@@ -464,6 +578,7 @@ export function useCallEngine(options?: CallEngineOptions) {
         videoEnabled: camEnabled.value,
         audioEnabled: micEnabled.value,
         playRev: localPlayRev.value,
+        handRaised: handRaised.value,
       },
     ]
     list.push(...remoteTiles)
@@ -536,7 +651,94 @@ export function useCallEngine(options?: CallEngineOptions) {
     )
   }
 
+  async function stopScreenShare(): Promise<void> {
+    for (const t of screenShareStream.value?.getTracks() ?? []) {
+      t.stop()
+    }
+    screenShareStream.value = null
+    if (!screenSharing.value) {
+      localPlayRev.value += 1
+      return
+    }
+    screenSharing.value = false
+    try {
+      const cam = localStream.value?.getVideoTracks().find((x) => x.readyState === 'live')
+      if (cam) {
+        await replaceOutboundVideoTrack(cam)
+      }
+    } catch {
+      /* producer may already be torn down */
+    } finally {
+      localPlayRev.value += 1
+    }
+  }
+
+  async function toggleScreenShare(): Promise<void> {
+    if (readEngineRole(options) !== 'participant' || !inCall.value) {
+      return
+    }
+    if (screenSharing.value) {
+      await stopScreenShare()
+      return
+    }
+    try {
+      const dm = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+      const vt = dm.getVideoTracks()[0]
+      if (!vt) {
+        for (const x of dm.getTracks()) {
+          x.stop()
+        }
+        return
+      }
+      screenShareStream.value = dm
+      vt.addEventListener('ended', () => {
+        void stopScreenShare()
+      })
+      await replaceOutboundVideoTrack(vt)
+      screenSharing.value = true
+      localPlayRev.value += 1
+    } catch {
+      /* user cancelled or unsupported */
+    }
+  }
+
+  function sendChatMessage(text: string): void {
+    const t = trimmedString(text)
+    if (!t || !inCall.value) {
+      return
+    }
+    try {
+      sendJson({ type: 'call-chat', payload: { text: t.slice(0, 500) } })
+    } catch {
+      /* ws closed */
+    }
+  }
+
+  function setRaiseHand(raised: boolean): void {
+    if (!inCall.value) {
+      return
+    }
+    try {
+      sendJson({ type: 'raise-hand', payload: { raised } })
+      handRaised.value = raised
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function toggleRaiseHand(): void {
+    setRaiseHand(!handRaised.value)
+  }
+
   function teardownMedia(): void {
+    for (const t of screenShareStream.value?.getTracks() ?? []) {
+      t.stop()
+    }
+    screenShareStream.value = null
+    screenSharing.value = false
+    callChatMessages.value = []
+    peerHandRaised.value = {}
+    handRaised.value = false
     lastWirePeerCount.value = 0
     lastWireVideoSimulcast.value = false
     lastWireActiveCameraPublishers.value = 0
@@ -617,6 +819,7 @@ export function useCallEngine(options?: CallEngineOptions) {
 
   onScopeDispose(() => {
     unsubPeerPresence()
+    unsubRoomChatAndHands()
     if (displayNameDebounceTimer !== null) {
       clearTimeout(displayNameDebounceTimer)
       displayNameDebounceTimer = null
@@ -642,11 +845,25 @@ export function useCallEngine(options?: CallEngineOptions) {
     camEnabled,
     toggleMic,
     toggleCam,
+    audioInputDevices,
+    videoInputDevices,
+    refreshMediaDevices,
+    localAudioInputDeviceId,
+    localVideoInputDeviceId,
+    setCallAudioInputDevice,
+    setCallVideoInputDevice,
     wsStatus,
     callDebugSnapshot,
     refreshInboundVideoDebugStats: collectInboundVideoDebugStats,
     callPresenceMessages,
     setRemoteListenVolume,
     setRemoteListenMuted,
+    callChatMessages,
+    sendChatMessage,
+    peerHandRaised,
+    handRaised,
+    toggleRaiseHand,
+    screenSharing,
+    toggleScreenShare,
   }
 }

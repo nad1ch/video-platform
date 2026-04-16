@@ -77,7 +77,7 @@ onUnmounted(() => {
     <Transition name="ui-menu-select-pop">
       <ul
         v-if="open"
-        class="ui-menu-select__list"
+        class="ui-menu-select__list sa-scrollbar"
         role="listbox"
         :aria-label="ariaLabel"
       >

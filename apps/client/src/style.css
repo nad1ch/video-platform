@@ -1,4 +1,7 @@
 :root {
+  /* Уникаємо горизонтального «стрибка», коли скролбар з’являється/зникає між сторінками різної висоти. */
+  scrollbar-gutter: stable;
+
   /* Legacy aliases — map to ui-theme / eat-first HUD tokens (single dark chrome). */
   --text: var(--sa-color-text-body);
   --text-h: var(--sa-color-text-main);
@@ -28,6 +31,84 @@
   @media (max-width: 1024px) {
     font-size: 16px;
   }
+}
+
+/* Тонкий «фіолетовий» скролбар (як на /eat), замість системного на всьому документі. */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.48) rgba(10, 8, 22, 0.65);
+}
+
+html::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+html::-webkit-scrollbar-track {
+  background: rgba(10, 8, 22, 0.65);
+}
+
+html::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.52);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+html::-webkit-scrollbar-thumb:hover {
+  background: rgba(192, 132, 252, 0.62);
+  background-clip: padding-box;
+}
+
+/**
+ * Відеодзвінок: жодного скролу сторінки — ланцюг flex з обрізанням зайвої висоти сітки.
+ * Клас вмикає CallPage.vue на маршруті `call`.
+ */
+html.sa-call-route {
+  overflow: hidden;
+  height: 100vh;
+  height: 100dvh;
+}
+
+html.sa-call-route body {
+  overflow: hidden;
+  height: 100%;
+  margin: 0;
+}
+
+html.sa-call-route #app,
+html.sa-call-route .app-root {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+html.sa-call-route .page-stack {
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+
+html.sa-call-route .app-layout {
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+
+html.sa-call-route .app-shell-main {
+  min-height: 0 !important;
+}
+
+html.sa-call-route .app-shell-main__viewport {
+  min-height: 0 !important;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+html.sa-call-route .app-shell-route-stack {
+  min-height: 0;
+  overflow: hidden;
 }
 
 body {

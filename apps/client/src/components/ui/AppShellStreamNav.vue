@@ -3,10 +3,12 @@ import { computed } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { eatViewFromRoute } from '@/eat-first/eatFirstRouteUtils.js'
+import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const { isAdmin } = useAuth()
 
 /** На головній дублювати «дім» не потрібно; на інших сторінках — швидкий перехід на лобі. */
 const showHomeLink = computed(() => route.name !== 'home')
@@ -88,6 +90,16 @@ function goEatBack() {
         :aria-label="t('app.navCallTitle')"
       >
         {{ t('app.navCall') }}
+      </RouterLink>
+      <RouterLink
+        v-if="isAdmin"
+        class="stream-nav__link"
+        :class="{ 'router-link-active stream-nav__link--active': route.path.startsWith('/admin') }"
+        :to="{ name: 'admin-users' }"
+        :title="t('routes.admin')"
+        :aria-label="t('routes.admin')"
+      >
+        {{ t('routes.admin') }}
       </RouterLink>
     </div>
     <div class="stream-nav__trailing" aria-hidden="true">

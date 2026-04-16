@@ -234,6 +234,36 @@
   background-clip: padding-box;
 }
 
+/**
+ * Універсальний тонкий скрол (ті ж токени, що й .eat-page), для overflow-контейнерів поза /eat.
+ * На елементах під .eat-first-root підтягуються --scrollbar-thumb / --scrollbar-track.
+ */
+.sa-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb, rgba(139, 92, 246, 0.5)) var(--scrollbar-track, rgba(8, 6, 20, 0.55));
+}
+
+.sa-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.sa-scrollbar::-webkit-scrollbar-track {
+  background: var(--scrollbar-track, rgba(8, 6, 20, 0.55));
+}
+
+.sa-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, rgba(139, 92, 246, 0.5));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.sa-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover, rgba(192, 132, 252, 0.62));
+  background-clip: padding-box;
+}
+
 .theme-toggle {
   border: 1px solid var(--border);
   background: var(--bg-card);

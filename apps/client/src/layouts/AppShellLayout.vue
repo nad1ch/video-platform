@@ -27,6 +27,7 @@ import {
 } from '@/eat-first/constants/brand.js'
 import '@/eat-first/styles/host-chrome.css'
 import PurpleLightningBackdrop from '@/components/ui/PurpleLightningBackdrop.vue'
+import '@/eat-first/styles/motion.css'
 
 const route = useRoute()
 const router = useRouter()
@@ -38,6 +39,23 @@ const isEatRoute = computed(() => route.path.startsWith('/eat'))
 const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route) : 'join'))
 
 const showChrome = computed(() => !isEatRoute.value || currentEatView.value !== 'overlay')
+
+const showSiteFooter = computed(() => showChrome.value && route.name !== 'call')
+
+/** Стабільний ключ для Transition: без зайвих анімацій на дрібні зміни query (наприклад ?channel=). */
+const routeTransitionKey = computed(() => {
+  if (route.path.startsWith('/eat')) {
+    const raw = route.query.view
+    const view =
+      typeof raw === 'string'
+        ? raw
+        : Array.isArray(raw) && typeof raw[0] === 'string'
+          ? raw[0]
+          : 'join'
+    return `eat:${view}`
+  }
+  return String(route.name ?? route.path)
+})
 
 const streamTitle = computed(() => {
   void locale.value
@@ -229,11 +247,17 @@ onMounted(() => {
           class="app-shell-main__viewport"
           :class="{ 'app-shell-main__viewport--chrome': showChrome }"
         >
-          <RouterView />
+          <div class="app-shell-route-stack">
+            <RouterView v-slot="{ Component }">
+              <Transition name="route-soft">
+                <component :is="Component" v-if="Component" :key="routeTransitionKey" />
+              </Transition>
+            </RouterView>
+          </div>
         </div>
       </main>
 
-      <AppFooter v-if="showChrome" :year="footerYear" />
+      <AppFooter v-if="showSiteFooter" :year="footerYear" />
 
       <OnboardingTourModal
         v-if="isEatRoute"
@@ -272,6 +296,30 @@ onMounted(() => {
 .app-shell-main--full {
   flex: 1;
   min-height: 100vh;
+}
+
+/* Crossfade між маршрутами: без `out-in` (там видно «миготіння» фону). Стара сторінка — поверх, уходить у opacity. */
+.app-shell-route-stack {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell-route-stack :deep(.route-soft-enter-active) {
+  position: relative;
+  z-index: 0;
+}
+
+.app-shell-route-stack :deep(.route-soft-leave-active) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  z-index: 2;
+  pointer-events: none;
 }
 
 .app-shell-stream-brand__mark-wrap {

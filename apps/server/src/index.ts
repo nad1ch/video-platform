@@ -9,6 +9,8 @@ import { RoomManager } from './rooms/RoomManager'
 import { attachSocketServer } from './signaling/socketServer'
 import { corsAllowedOrigins } from './auth/clientOrigin'
 import { mountGlobalAuth } from './auth/oauthRouter'
+import { mountAdminRoutes } from './adminRouter'
+import { mountLeaderboardRoutes } from './leaderboardRouter'
 import { mountTwitchWordleAuth } from './wordle/twitchAuthRouter'
 import { startTwitchChatIngest, stopTwitchChatIngest } from './wordle/tmiChat'
 import { attachWordleSocketServer } from './wordle/wordleSocket'
@@ -85,6 +87,8 @@ async function bootstrap(): Promise<void> {
 
   mountGlobalAuth(app)
   mountTwitchWordleAuth(app)
+  mountLeaderboardRoutes(app)
+  mountAdminRoutes(app)
 
   app.get('/health', (_req, res) => {
     res.json({

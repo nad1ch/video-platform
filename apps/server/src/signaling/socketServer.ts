@@ -9,9 +9,11 @@ import {
   handleConnectTransport,
   handleConsume,
   handleCreateTransport,
+  handleCallChat,
   handleDisconnect,
   handleJoinRoom,
   handleProduce,
+  handleRaiseHand,
   handleSetConsumerPreferredLayers,
   handleUpdateDisplayName,
   sendServerMessage,
@@ -117,6 +119,16 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             case 'set-consumer-preferred-layers': {
               const { consumerId, spatialLayer } = parsed.data.payload
               await handleSetConsumerPreferredLayers(socket, consumerId, spatialLayer, deps)
+              break
+            }
+            case 'call-chat': {
+              const { text } = parsed.data.payload
+              handleCallChat(socket, text, deps)
+              break
+            }
+            case 'raise-hand': {
+              const { raised } = parsed.data.payload
+              handleRaiseHand(socket, raised, deps)
               break
             }
             default:

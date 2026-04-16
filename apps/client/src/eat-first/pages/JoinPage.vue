@@ -6,7 +6,6 @@ import { getOrCreateDeviceId } from '../utils/deviceId.js'
 import { setJoinSessionToken } from '../utils/joinSessionToken.js'
 import { useI18n } from 'vue-i18n'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
-import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
 import { callableApiEnabled } from '../services/callableApi.js'
 import { ensureAnonymousAuth } from '../services/authBootstrap.js'
@@ -48,37 +47,12 @@ const gameRoomJoin = ref({})
 let unsub = null
 let unsubRoom = null
 
-const joinGotPlayers = ref(false)
-const joinGotRoom = ref(false)
-const joinLobbyReady = ref(false)
-
-const JOIN_LOADER_FALLBACK_MS = 12000
-let joinLoaderFallbackTimer = null
-
-function clearJoinLoaderFallback() {
-  if (joinLoaderFallbackTimer != null) {
-    clearTimeout(joinLoaderFallbackTimer)
-    joinLoaderFallbackTimer = null
-  }
-}
-
-function armJoinLoaderFallback() {
-  clearJoinLoaderFallback()
-  joinLoaderFallbackTimer = setTimeout(() => {
-    joinLoaderFallbackTimer = null
-    if (!joinLobbyReady.value) joinLobbyReady.value = true
-  }, JOIN_LOADER_FALLBACK_MS)
-}
-
 watch(
   gameId,
   (gid) => {
     setPersistedGameId(gid)
-    joinGotPlayers.value = false
-    joinGotRoom.value = false
-    joinLobbyReady.value = false
-    clearJoinLoaderFallback()
-    armJoinLoaderFallback()
+    players.value = []
+    gameRoomJoin.value = {}
     if (unsub) {
       unsub()
       unsub = null
@@ -89,29 +63,15 @@ watch(
     }
     unsub = subscribeToPlayers(gid, (list) => {
       players.value = Array.isArray(list) ? list : []
-      joinGotPlayers.value = true
     })
     unsubRoom = subscribeToGameRoom(gid, (d) => {
       gameRoomJoin.value = normalizeGameRoomPayload(d && typeof d === 'object' ? d : {})
-      joinGotRoom.value = true
     })
   },
   { immediate: true },
 )
 
-watch(
-  [joinGotPlayers, joinGotRoom],
-  () => {
-    if (joinGotPlayers.value && joinGotRoom.value) {
-      joinLobbyReady.value = true
-      clearJoinLoaderFallback()
-    }
-  },
-  { flush: 'post' },
-)
-
 onUnmounted(() => {
-  clearJoinLoaderFallback()
   if (joinToastTimer) clearTimeout(joinToastTimer)
   if (unsub) unsub()
   if (unsubRoom) unsubRoom()
@@ -305,13 +265,7 @@ function handUpJoin(pid) {
 
 <template>
   <div class="join">
-    <AppPageLoader
-      :visible="!joinLobbyReady"
-      :label="$t('join.loading')"
-    />
-    <div class="join-bg" aria-hidden="true" />
-
-    <header class="join-hero anim-slide-up">
+    <header class="join-hero anim-fade-in">
       <p class="eyebrow">{{ $t('join.eyebrow') }}</p>
       <h1 class="title">{{ $t('game.title') }}</h1>
       <p class="lead">
@@ -319,13 +273,13 @@ function handUpJoin(pid) {
       </p>
     </header>
 
-    <ol class="join-steps anim-slide-up" style="animation-delay: 40ms">
+    <ol class="join-steps anim-fade-in" style="animation-delay: 40ms">
       <li><span class="join-steps__n">1</span> {{ $t('join.step1') }}</li>
       <li><span class="join-steps__n">2</span> {{ $t('join.step2') }}</li>
       <li><span class="join-steps__n">3</span> {{ $t('join.step3') }}</li>
     </ol>
 
-    <div class="game-bar anim-slide-up" style="animation-delay: 80ms" data-onb="join-game-bar">
+    <div class="game-bar anim-fade-in" style="animation-delay: 80ms" data-onb="join-game-bar">
       <label class="lbl" for="gid">{{ $t('join.gameId') }}</label>
       <div class="game-row">
         <input id="gid" v-model="gameInput" type="text" class="inp" autocomplete="off" />
@@ -361,7 +315,7 @@ function handUpJoin(pid) {
     </section>
 
     <section
-      class="obs-hint anim-slide-up"
+      class="obs-hint anim-fade-in"
       style="animation-delay: 0.12s"
       aria-labelledby="obs-hint-title"
       data-onb="join-obs"
@@ -381,7 +335,7 @@ function handUpJoin(pid) {
 
     <section
       id="player-slots"
-      class="cards-wrap anim-slide-up"
+      class="cards-wrap anim-fade-in"
       style="animation-delay: 0.16s"
       aria-labelledby="slots-title"
       data-onb="join-slots"
@@ -503,14 +457,8 @@ function handUpJoin(pid) {
   font-family: var(--font-body);
   color: var(--text-body);
   overflow-x: hidden;
-}
-
-.join-bg {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  background: var(--bg-body);
-  pointer-events: none;
+  /* Короткий fade блоків після маршруту — близько до `route-soft` у шеллі. */
+  --motion-duration: 0.14s;
 }
 
 .join-hero,

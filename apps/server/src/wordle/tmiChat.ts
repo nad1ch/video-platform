@@ -1,5 +1,11 @@
 import tmi from 'tmi.js'
-import { getCurrentGameId, getCurrentWordLength, submitGuess } from './gameStore'
+import {
+  buildWordleRoundPersistencePayload,
+  getCurrentGameId,
+  getCurrentWordLength,
+  submitGuess,
+} from './gameStore'
+import { persistWordleRound } from './persistRound'
 import { broadcastTwitchChatLine, broadcastUserGuess } from './wordleSocket'
 import { isValidGuessShape, normalizeWord } from './wordleLogic'
 import { readTwitchChatGuessCooldownMs, tryConsumeTwitchGuessThrottle } from './tmiGuessThrottle'
@@ -125,6 +131,13 @@ export function startTwitchChatIngest(): void {
       attempts: result.attempts,
       guessed: result.guessed,
     })
+
+    if (result.guessed) {
+      const payload = buildWordleRoundPersistencePayload(result.userId)
+      if (payload) {
+        void persistWordleRound(payload)
+      }
+    }
   })
 
   c.on('connected', (addr, port) => {

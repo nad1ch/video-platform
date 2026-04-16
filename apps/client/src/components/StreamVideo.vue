@@ -164,17 +164,20 @@ onUnmounted(() => {
   display: block;
   width: min(320px, 100%);
   max-height: 240px;
-  background: #0a0a0c;
+  background: transparent;
   border: 1px solid var(--border, #2e303a);
 }
 
 .stream-video--fill {
+  display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   max-height: 100%;
   min-height: 0;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   border: none;
+  /* Смуги, які не закриває кадр (contain), — чорні, без «просвічування» фону сторінки. */
+  background: #000;
 }
 </style>

@@ -2,7 +2,6 @@
 import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppContainer from '@/components/ui/AppContainer.vue'
-import AppCard from '@/components/ui/AppCard.vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { STREAM_APP_BRAND_NAME } from '@/eat-first/constants/brand.js'
 import { useAuth } from '@/composables/useAuth'
@@ -58,29 +57,23 @@ watch(
         {{ t('app.authNeedLoginHeaderHint') }}
       </p>
 
-      <ul class="home__cards">
-        <li class="home__cards-item">
-          <RouterLink :to="{ name: 'call' }" class="home__card-link">
-            <AppCard interactive>
-              <h2 class="home__card-title">{{ t('home.callTitle') }}</h2>
-              <p class="home__card-text">{{ t('home.callDesc') }}</p>
-            </AppCard>
+      <ul class="home__nav-pills" :aria-label="t('app.navAria')">
+        <li class="home__nav-pills__item">
+          <RouterLink :to="{ name: 'call' }" class="home__pill home__pill--primary">
+            <span class="home__pill__title">{{ t('home.callTitle') }}</span>
+            <span class="home__pill__desc">{{ t('home.callDesc') }}</span>
           </RouterLink>
         </li>
-        <li class="home__cards-item">
-          <RouterLink :to="{ name: 'wordle' }" class="home__card-link">
-            <AppCard interactive>
-              <h2 class="home__card-title">{{ t('home.wordleTitle') }}</h2>
-              <p class="home__card-text">{{ t('home.wordleDesc') }}</p>
-            </AppCard>
+        <li class="home__nav-pills__item">
+          <RouterLink :to="{ name: 'wordle' }" class="home__pill home__pill--ghost">
+            <span class="home__pill__title">{{ t('home.wordleTitle') }}</span>
+            <span class="home__pill__desc">{{ t('home.wordleDesc') }}</span>
           </RouterLink>
         </li>
-        <li class="home__cards-item home__cards-item--eat">
-          <RouterLink :to="{ name: 'eat', query: { view: 'join' } }" class="home__card-link">
-            <AppCard interactive>
-              <h2 class="home__card-title">{{ t('home.eatTitle') }}</h2>
-              <p class="home__card-text">{{ t('home.eatDesc') }}</p>
-            </AppCard>
+        <li class="home__nav-pills__item">
+          <RouterLink :to="{ name: 'eat', query: { view: 'join' } }" class="home__pill home__pill--ghost">
+            <span class="home__pill__title">{{ t('home.eatTitle') }}</span>
+            <span class="home__pill__desc">{{ t('home.eatDesc') }}</span>
           </RouterLink>
         </li>
       </ul>
@@ -135,61 +128,118 @@ watch(
   font-size: 0.92rem;
 }
 
-.home__cards {
+/* Ряд «як у Discord»: pill + primary blurple, інші — темні капсули з бордером */
+.home__nav-pills {
   list-style: none;
   margin: var(--sa-space-8) 0 0;
   padding: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 260px));
+  display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  align-items: stretch;
-  gap: var(--sa-space-5);
+  align-items: center;
+  gap: 0.65rem 0.85rem;
   width: 100%;
-  max-width: 36rem;
+  max-width: min(56rem, 100%);
   box-sizing: border-box;
 }
 
-.home__cards-item {
+.home__nav-pills__item {
   margin: 0;
   min-width: 0;
 }
 
-.home__card-link {
+.home__pill {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  text-align: left;
   text-decoration: none;
-  color: inherit;
-  display: block;
+  padding: 0.5rem 1.15rem 0.55rem;
+  min-height: 2.65rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  max-width: min(100%, 19rem);
+  box-sizing: border-box;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-.home__card-link:focus-visible {
+.home__pill:focus-visible {
   outline: 2px solid var(--sa-color-primary);
   outline-offset: 3px;
-  border-radius: var(--sa-radius-lg);
 }
 
-@media (max-width: 600px) {
-  .home__cards {
-    grid-template-columns: 1fr;
-  }
-}
-
-.home__cards-item--eat {
-  grid-column: 1 / -1;
-  justify-self: center;
-  width: min(100%, 260px);
-}
-
-.home__card-title {
-  margin: 0 0 var(--sa-space-2);
-  font-family: var(--font-body, var(--sa-font-main));
-  font-size: 1.1rem;
+.home__pill--primary {
+  --home-pill-fg: #ffffff;
+  background: var(--sa-color-primary, #5865f2);
+  border-color: color-mix(in srgb, var(--sa-color-primary) 70%, #000 30%);
+  color: var(--home-pill-fg);
   font-weight: 600;
-  color: var(--text-title, var(--sa-color-text-main));
+  box-shadow: 0 1px 0 color-mix(in srgb, #000 35%, transparent);
 }
 
-.home__card-text {
-  margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.4;
+.home__pill--primary:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.home__pill--ghost {
+  background: color-mix(in srgb, var(--sa-color-surface, #2b2d31) 88%, transparent);
+  border-color: color-mix(in srgb, var(--sa-color-text-main, #fff) 10%, transparent);
+  color: var(--text-title, var(--sa-color-text-main));
+  box-shadow: 0 1px 0 color-mix(in srgb, #000 25%, transparent);
+}
+
+.home__pill--ghost:hover {
+  background: color-mix(in srgb, var(--sa-color-surface, #2b2d31) 72%, var(--sa-color-text-main, #fff) 6%);
+  border-color: color-mix(in srgb, var(--sa-color-text-main, #fff) 16%, transparent);
+  transform: translateY(-1px);
+}
+
+.home__pill__title {
+  display: block;
+  font-family: var(--font-body, var(--sa-font-main, system-ui, sans-serif));
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.25;
+}
+
+.home__pill__desc {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.3;
+  opacity: 0.88;
+}
+
+.home__pill--primary .home__pill__desc {
+  color: color-mix(in srgb, var(--home-pill-fg) 88%, transparent);
+}
+
+.home__pill--ghost .home__pill__desc {
   color: var(--text-body, var(--sa-color-text-body));
+  opacity: 0.9;
+}
+
+@media (max-width: 520px) {
+  .home__nav-pills {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 22rem;
+    margin-inline: auto;
+  }
+
+  .home__pill {
+    max-width: none;
+    align-items: center;
+    text-align: center;
+  }
 }
 </style>

@@ -33,7 +33,6 @@ const twitchChannelAria = computed(() => t('app.twitchAria', { nick: STREAMER_NI
     >
       ?
     </button>
-    <StreamerBrandLink :aria-label="twitchChannelAria" />
     <UiMenuSelect
       :model-value="modelLocale"
       :options="localeMenuOptions"
@@ -42,6 +41,7 @@ const twitchChannelAria = computed(() => t('app.twitchAria', { nick: STREAMER_NI
       @update:model-value="$emit('update:locale', $event)"
     />
     <ThemeToggleButton :label="themeLabel" :icon="themeIcon" @click="$emit('toggle-theme')" />
+    <StreamerBrandLink :ariaLabel="twitchChannelAria" :show-nick="false" :logo-size="30" />
   </div>
 </template>
 

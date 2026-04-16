@@ -10,5 +10,7 @@ declare module 'vue-router' {
     footerContext?: 'home' | 'wordle' | 'call' | 'eat'
     /** Потрібна сесія StreamAssist OAuth (cookie JWT). */
     requiresAuth?: boolean
+    /** Лише `user.role === 'admin'` (інше — редірект на `/`). */
+    requiresAdmin?: boolean
   }
 }

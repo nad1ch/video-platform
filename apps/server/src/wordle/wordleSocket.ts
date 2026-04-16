@@ -4,10 +4,12 @@ import type { WebSocketServer } from 'ws'
 import { isAdminConfigured, isAdminTwitchUserId } from './adminConfig'
 import {
   adminStartNewGame,
+  buildWordleRoundPersistencePayload,
   getGameStatePayload,
   getLeaderboardPayload,
   submitGuess,
 } from './gameStore'
+import { persistWordleRound } from './persistRound'
 import { readSessionFromCookie } from './sessionJwt'
 import { clearTwitchGuessThrottle } from './tmiGuessThrottle'
 import { WordleWs } from './wsProtocol'
@@ -148,6 +150,12 @@ export function attachWordleSocketServer(wss: WebSocketServer): void {
           attempts: result.attempts,
           guessed: result.guessed,
         })
+        if (result.guessed) {
+          const payload = buildWordleRoundPersistencePayload(result.userId)
+          if (payload) {
+            void persistWordleRound(payload)
+          }
+        }
         return
       }
 

@@ -1,17 +1,17 @@
 const LS_PREFIX = 'streamassist_call_listen_v1:'
 
 export type RemoteListenEntry = {
-  /** 0..1 */
+  /** Linear playback gain 0..2 (0–200%; 1 = 100%). */
   volume: number
   /** Local-only mute (does not affect sender). */
   muted: boolean
 }
 
-function clamp01(v: number): number {
+function clampGain(v: number): number {
   if (!Number.isFinite(v)) {
     return 1
   }
-  return Math.min(1, Math.max(0, v))
+  return Math.min(2, Math.max(0, v))
 }
 
 export function loadRemoteListeningPrefs(roomId: string): Map<string, RemoteListenEntry> {
@@ -34,7 +34,7 @@ export function loadRemoteListeningPrefs(roomId: string): Map<string, RemoteList
         continue
       }
       const r = row as { v?: unknown; m?: unknown }
-      const volume = clamp01(typeof r.v === 'number' ? r.v : 1)
+      const volume = clampGain(typeof r.v === 'number' ? r.v : 1)
       const muted = r.m === true
       out.set(peerId, { volume, muted })
     }
@@ -52,7 +52,7 @@ export function saveRemoteListeningPrefs(roomId: string, map: Map<string, Remote
   try {
     const o: Record<string, { v: number; m: boolean }> = {}
     for (const [peerId, e] of map.entries()) {
-      o[peerId] = { v: clamp01(e.volume), m: e.muted === true }
+      o[peerId] = { v: clampGain(e.volume), m: e.muted === true }
     }
     if (Object.keys(o).length === 0) {
       localStorage.removeItem(key)

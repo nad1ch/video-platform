@@ -1,5 +1,25 @@
 import type { SessionPayload } from './sessionJwt'
 import type { GlobalAuthUser } from './types'
+import type { UserRole } from './types'
+import { resolveUserRole } from '../resolveUserRole'
+
+/**
+ * Роль з JWT може застаріти після зміни ADMIN_* у .env.
+ * Для API «хто я зараз» завжди зводимо роль до поточних allowlist (resolveUserRole).
+ */
+function effectiveSessionRole(session: SessionPayload): UserRole {
+  return resolveUserRole({
+    provider: session.provider,
+    id: session.id,
+    email: session.email,
+    twitchId:
+      session.provider === 'twitch'
+        ? typeof session.twitch_id === 'string' && session.twitch_id.length > 0
+          ? session.twitch_id
+          : session.id
+        : undefined,
+  })
+}
 
 export function sessionToGlobalAuthUser(session: SessionPayload): GlobalAuthUser {
   const provider = session.provider
@@ -8,7 +28,7 @@ export function sessionToGlobalAuthUser(session: SessionPayload): GlobalAuthUser
       ? provider
       : null
   const trimmed = session.profile_image_url.trim()
-  const role = session.role === 'admin' || session.role === 'user' ? session.role : 'user'
+  const role = effectiveSessionRole(session)
   const twitchId =
     p === 'twitch' ? (session.twitch_id ?? session.id) : undefined
   return {
@@ -30,7 +50,7 @@ export function sessionToLegacyApiUser(session: SessionPayload): {
   role: 'admin' | 'user'
   twitch_id?: string
 } {
-  const role = session.role === 'admin' || session.role === 'user' ? session.role : 'user'
+  const role = effectiveSessionRole(session)
   const twitch_id =
     session.provider === 'twitch' ? (session.twitch_id ?? session.id) : undefined
   return {

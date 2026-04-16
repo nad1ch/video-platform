@@ -4,13 +4,14 @@ import {
   isAudioPlaybackUnlocked,
   playAllPageAudioThrottled,
 } from 'call-core'
+import { getSharedCallPlaybackContext, resumeSharedCallPlaybackContext } from '@/audio/callPlaybackAudioContext'
 
 const props = withDefaults(
   defineProps<{
     stream: MediaStream | null
     /** Bump when parent stream gains audio track in place. */
     playRev?: number
-    /** Local listening volume 0..1 (does not affect remote sender). */
+    /** Local listening gain 0..2 (0–200%; 1 = default). */
     listenVolume?: number
     /** Local-only mute for this stream (does not affect remote sender). */
     listenMuted?: boolean
@@ -27,6 +28,10 @@ const el = ref<HTMLAudioElement | null>(null)
 /** One-shot gesture retry after autoplay policy blocks play() */
 let playUnlockHandler: (() => void) | null = null
 
+let sourceNode: MediaStreamAudioSourceNode | null = null
+let gainNode: GainNode | null = null
+let usingWebAudio = false
+
 function clearPlayUnlock(): void {
   if (playUnlockHandler) {
     document.removeEventListener('pointerdown', playUnlockHandler, true)
@@ -34,50 +39,107 @@ function clearPlayUnlock(): void {
   }
 }
 
-async function bindAudio(): Promise<void> {
-  await nextTick()
+function teardownWebAudio(): void {
+  try {
+    sourceNode?.disconnect()
+  } catch {
+    /* ignore */
+  }
+  sourceNode = null
+  try {
+    gainNode?.disconnect()
+  } catch {
+    /* ignore */
+  }
+  gainNode = null
+  usingWebAudio = false
+}
+
+function applyGain(): void {
+  if (!gainNode) {
+    return
+  }
+  const muted = Boolean(props.listenMuted)
+  const raw = Number(props.listenVolume ?? 1)
+  const g = muted ? 0 : Math.min(2, Math.max(0, Number.isFinite(raw) ? raw : 1))
+  gainNode.gain.value = g
+}
+
+function applyElementVolume(): void {
   const a = el.value
-  const s = props.stream
   if (!a) {
     return
   }
-  clearPlayUnlock()
-  a.autoplay = true
-  const vol = props.listenMuted ? 0 : Math.min(1, Math.max(0, props.listenVolume ?? 1))
+  const vol = props.listenMuted ? 0 : Math.min(1, Math.max(0, Number(props.listenVolume ?? 1)))
   a.volume = vol
   a.muted = vol <= 0.0001
-  // DOM typings omit playsInline on HTMLAudioElement; iOS/Safari still honor it for inline playback.
-  ;(a as HTMLAudioElement & { playsInline?: boolean }).playsInline = true
-  if (!s) {
-    a.srcObject = null
+}
+
+async function bindAudioGraph(): Promise<void> {
+  await nextTick()
+  clearPlayUnlock()
+  teardownWebAudio()
+
+  const s = props.stream
+  const a = el.value
+
+  if (!s || s.getAudioTracks().length === 0) {
+    if (a) {
+      a.srcObject = null
+    }
     return
   }
-  if (import.meta.env.DEV) {
-    console.log('[StreamAudio] attach', {
-      streamId: s.id,
-      element: { muted: a.muted, paused: a.paused, volume: a.volume },
-      tracks: s.getAudioTracks().map((t) => ({
-        id: t.id,
-        enabled: t.enabled,
-        muted: t.muted,
-        readyState: t.readyState,
-      })),
-    })
+
+  if (typeof AudioContext === 'undefined') {
+    await bindElementFallback(s)
+    return
   }
+
+  try {
+    await resumeSharedCallPlaybackContext()
+    const ctx = getSharedCallPlaybackContext()
+    sourceNode = ctx.createMediaStreamSource(s)
+    gainNode = ctx.createGain()
+    applyGain()
+    sourceNode.connect(gainNode)
+    gainNode.connect(ctx.destination)
+    usingWebAudio = true
+
+    if (isAudioPlaybackUnlocked()) {
+      requestAnimationFrame(() => {
+        playAllPageAudioThrottled()
+      })
+    }
+  } catch (err) {
+    console.warn('[StreamAudio] Web Audio path failed, falling back to element', err)
+    teardownWebAudio()
+    await bindElementFallback(s)
+  }
+}
+
+async function bindElementFallback(s: MediaStream): Promise<void> {
+  const a = el.value
+  if (!a) {
+    return
+  }
+  usingWebAudio = false
+  a.autoplay = true
+  applyElementVolume()
+  ;(a as HTMLAudioElement & { playsInline?: boolean }).playsInline = true
   if (a.srcObject !== s) {
     a.srcObject = s
   }
   try {
     await a.play()
-  } catch (err) {
-    console.warn('[StreamAudio] play failed', err)
+  } catch (e) {
+    console.warn('[StreamAudio] play failed', e)
     const isNotAllowed =
-      err instanceof DOMException
-        ? err.name === 'NotAllowedError'
-        : typeof err === 'object' &&
-          err !== null &&
-          'name' in err &&
-          (err as { name?: string }).name === 'NotAllowedError'
+      e instanceof DOMException
+        ? e.name === 'NotAllowedError'
+        : typeof e === 'object' &&
+          e !== null &&
+          'name' in e &&
+          (e as { name?: string }).name === 'NotAllowedError'
     if (isNotAllowed) {
       playUnlockHandler = () => {
         clearPlayUnlock()
@@ -86,27 +148,36 @@ async function bindAudio(): Promise<void> {
       document.addEventListener('pointerdown', playUnlockHandler, { capture: true, once: true })
     }
   }
-
   if (isAudioPlaybackUnlocked()) {
     requestAnimationFrame(() => {
-      void a.play().catch(() => {})
       playAllPageAudioThrottled()
     })
   }
-
 }
 
 watch(
-  () =>
-    [props.stream, props.playRev ?? 0, props.listenVolume ?? 1, props.listenMuted ?? false] as const,
+  () => [props.stream, props.playRev ?? 0] as const,
   () => {
-    void bindAudio()
+    void bindAudioGraph()
   },
   { immediate: true, flush: 'post' },
 )
 
+watch(
+  () => [props.listenVolume ?? 1, props.listenMuted ?? false] as const,
+  () => {
+    if (usingWebAudio && gainNode) {
+      applyGain()
+    } else if (!usingWebAudio && el.value?.srcObject) {
+      applyElementVolume()
+    }
+  },
+  { flush: 'post' },
+)
+
 onUnmounted(() => {
   clearPlayUnlock()
+  teardownWebAudio()
   const a = el.value
   if (a) {
     a.srcObject = null

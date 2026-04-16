@@ -38,6 +38,37 @@ export const router = createRouter({
           meta: { footerContext: 'eat' },
           component: () => import('./pages/EatFirstPage.vue'),
         },
+        {
+          path: 'admin',
+          meta: {
+            requiresAdmin: true,
+            appTitleKey: 'routes.admin',
+            footerContext: 'home',
+          },
+          component: () => import('./admin/AdminPage.vue'),
+          children: [
+            {
+              path: '',
+              name: 'admin-users',
+              component: () => import('./admin/AdminUsers.vue'),
+            },
+            {
+              path: 'games',
+              name: 'admin-games',
+              component: () => import('./admin/AdminGames.vue'),
+            },
+            {
+              path: 'stats',
+              name: 'admin-stats',
+              component: () => import('./admin/AdminStats.vue'),
+            },
+            {
+              path: 'debug',
+              name: 'admin-debug',
+              component: () => import('./admin/AdminDebug.vue'),
+            },
+          ],
+        },
       ],
     },
     {
@@ -90,6 +121,14 @@ function eatViewNeedsStreamAuth(query: Record<string, unknown>): boolean {
 }
 
 router.beforeEach(async (to) => {
+  if (to.meta.requiresAdmin) {
+    const { ensureAuthLoaded, user } = useAuth()
+    await ensureAuthLoaded()
+    if (user.value?.role !== 'admin') {
+      return { path: '/' }
+    }
+  }
+
   const needMeta = Boolean(to.meta.requiresAuth)
   const needEatStaff = to.name === 'eat' && eatViewNeedsStreamAuth(to.query as Record<string, unknown>)
   if (!needMeta && !needEatStaff) {

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { Game, GameStatePayload, GuessRow, LeaderboardEntry, PlayerState, Store } from './types'
+import type { PersistWordleRoundInput } from './persistRound'
 import { computeFeedback, generateWord, isValidGuessShape, normalizeWord } from './wordleLogic'
 
 const MAX_ATTEMPTS_PER_ROUND = 6
@@ -161,6 +162,26 @@ export function adminStartNewGame(): { gameId: string; wordLength: number; start
     gameId: g.id,
     wordLength: [...g.word].length,
     startedAt: g.startedAt,
+  }
+}
+
+/** Snapshot for DB persistence after a winning guess (in-memory store still holds all participants). */
+export function buildWordleRoundPersistencePayload(winnerUserId: string): PersistWordleRoundInput | null {
+  const w = String(winnerUserId ?? '').trim()
+  if (!w) {
+    return null
+  }
+  const players = Object.values(store.players)
+  if (players.length === 0) {
+    return null
+  }
+  return {
+    winnerUserId: w,
+    players: players.map((p) => ({
+      userId: p.userId,
+      attempts: p.attempts,
+      isWinner: p.userId === w && p.guessed === true,
+    })),
   }
 }
 

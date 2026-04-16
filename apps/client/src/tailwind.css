@@ -1,0 +1,3 @@
+/* Preflight disabled in tailwind.config.js — keeps existing global styles intact. */
+@tailwind components;
+@tailwind utilities;
