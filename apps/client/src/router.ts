@@ -70,6 +70,11 @@ export const router = createRouter({
               component: () => import('./admin/AdminUsers.vue'),
             },
             {
+              path: 'streamers',
+              name: 'admin-streamers',
+              component: () => import('./admin/AdminStreamers.vue'),
+            },
+            {
               path: 'games',
               name: 'admin-games',
               component: () => import('./admin/AdminGames.vue'),

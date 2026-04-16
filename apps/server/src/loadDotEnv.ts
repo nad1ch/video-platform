@@ -41,3 +41,11 @@ const cwdRelative = path.resolve(process.cwd(), '.env')
 applyDotEnvFile(repoRelative)
 applyDotEnvFile(hereRelative)
 applyDotEnvFile(cwdRelative)
+
+// Optional local overrides (host Prisma + `npm run dev`); same paths with `.env.local`.
+const repoLocal = path.resolve(process.cwd(), 'apps', 'server', '.env.local')
+const hereLocal = path.resolve(__dirname, '..', '.env.local')
+const cwdLocal = path.resolve(process.cwd(), '.env.local')
+applyDotEnvFile(repoLocal)
+applyDotEnvFile(hereLocal)
+applyDotEnvFile(cwdLocal)

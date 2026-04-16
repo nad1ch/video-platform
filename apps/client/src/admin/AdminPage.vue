@@ -8,6 +8,7 @@ const { t } = useI18n()
 
 const items = computed(() => [
   { name: 'admin-users' as const, label: t('adminPanel.navUsers'), to: '/admin' },
+  { name: 'admin-streamers' as const, label: t('adminPanel.navStreamers'), to: '/admin/streamers' },
   { name: 'admin-games' as const, label: t('adminPanel.navGames'), to: '/admin/games' },
   { name: 'admin-stats' as const, label: t('adminPanel.navStats'), to: '/admin/stats' },
   { name: 'admin-debug' as const, label: t('adminPanel.navSession'), to: '/admin/debug' },

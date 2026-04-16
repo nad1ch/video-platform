@@ -4,17 +4,16 @@
 # Working copy is GITIGNORED. Bootstrap once:
 #   cp docker/docker-compose.local.example.yml docker/docker-compose.local.yml
 #   cp apps/server/Dockerfile.local.example apps/server/Dockerfile.local
+#   cp apps/server/.env.local.example apps/server/.env.local
 #
-# Postgres + API with bind mounts (hot reload). Published :5432 only for host tools / Prisma from OS.
+# Postgres + API with bind mounts (hot reload). Published :5432 for host Prisma / GUI tools.
 #
 # From repo root:
 #   docker compose -f docker/docker-compose.local.yml up -d
 #
-# Prisma (host Node, first time):
-#   cd apps/server && DATABASE_URL=postgresql://streamassist:streamassist@localhost:5432/streamassist npx prisma migrate dev
+# Prisma (host Node, first time — DB must be up):
+#   cd apps/server && npm run db:migrate:dev && npm run db:seed
 # =============================================================================
-
-version: "3.9"
 
 services:
   db:
@@ -53,7 +52,11 @@ services:
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://streamassist:streamassist@db:5432/streamassist
-      # ICE_SERVERS_JSON=...  # optional; see apps/server/env.example
+      ADMIN_EMAILS: admin@local.streamassist
+      WORDLE_JWT_SECRET: local-docker-dev-secret-min-16-chars
+      AUTH_JWT_SECRET: local-docker-dev-secret-min-16-chars
+      WORDLE_CLIENT_ORIGIN: http://localhost:5173
+      MEDIASOUP_ANNOUNCED_ADDRESS: 127.0.0.1
     command: npm run dev
 
 volumes:
