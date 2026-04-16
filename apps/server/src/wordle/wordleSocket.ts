@@ -16,6 +16,28 @@ import { WordleWs } from './wsProtocol'
 
 const clientsByStreamer = new Map<string, Set<WebSocket>>()
 
+/** JSON ping so nginx / proxies do not close idle upstream WebSockets. */
+const WORDLE_JSON_PING_MS = 25_000
+let wordleJsonPingTimer: ReturnType<typeof setInterval> | null = null
+
+function pingAllWordleClients(): void {
+  for (const set of clientsByStreamer.values()) {
+    for (const ws of set) {
+      safeSend(ws, { type: 'ping' })
+    }
+  }
+}
+
+function ensureWordleJsonPingTimer(): void {
+  if (wordleJsonPingTimer !== null) {
+    return
+  }
+  wordleJsonPingTimer = setInterval(pingAllWordleClients, WORDLE_JSON_PING_MS)
+  if (typeof wordleJsonPingTimer.unref === 'function') {
+    wordleJsonPingTimer.unref()
+  }
+}
+
 function clientSet(streamerId: string): Set<WebSocket> {
   let set = clientsByStreamer.get(streamerId)
   if (!set) {
@@ -44,7 +66,11 @@ function safeSend(ws: WebSocket, obj: unknown): void {
   if (ws.readyState !== 1) {
     return
   }
-  ws.send(JSON.stringify(obj))
+  try {
+    ws.send(JSON.stringify(obj))
+  } catch {
+    /* ignore */
+  }
 }
 
 function broadcastWordleToStreamer(streamerId: string, obj: unknown): void {
@@ -54,8 +80,13 @@ function broadcastWordleToStreamer(streamerId: string, obj: unknown): void {
   }
   const raw = JSON.stringify(obj)
   for (const ws of set) {
-    if (ws.readyState === 1) {
+    if (ws.readyState !== 1) {
+      continue
+    }
+    try {
       ws.send(raw)
+    } catch {
+      /* ignore */
     }
   }
 }
@@ -175,6 +206,8 @@ function parseOptionalPeerId(req: IncomingMessage): string | null {
 }
 
 export function attachWordleSocketServer(wss: WebSocketServer): void {
+  ensureWordleJsonPingTimer()
+
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     const streamerId = parseStreamerId(req)
     if (!streamerId) {
@@ -212,7 +245,18 @@ export function attachWordleSocketServer(wss: WebSocketServer): void {
     })
 
     ws.on('message', (buf) => {
-      const msg = parseClientMsg(buf.toString())
+      const raw = buf.toString()
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(raw)
+      } catch {
+        return
+      }
+      if (parsed && typeof parsed === 'object' && (parsed as { type?: unknown }).type === 'pong') {
+        return
+      }
+
+      const msg = parseClientMsg(raw)
       if (!msg) {
         return
       }
@@ -258,6 +302,10 @@ export function attachWordleSocketServer(wss: WebSocketServer): void {
         const meta = adminStartNewGame(streamerId)
         broadcastNewRound(streamerId, meta)
       }
+    })
+
+    ws.on('error', () => {
+      unregisterClient(streamerId, ws)
     })
 
     ws.on('close', () => {

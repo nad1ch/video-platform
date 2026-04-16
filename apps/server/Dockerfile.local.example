@@ -9,16 +9,21 @@
 
 FROM node:20-bullseye
 
+# mediasoup postinstall: prebuilt worker may not match the kernel/glibc in this image; fallback build needs pip (`invoke`).
 RUN apt-get update && apt-get install -y \
   python3 \
+  python3-pip \
   make \
   g++ \
   build-essential \
+  ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY package*.json ./
+# `postinstall` runs `prisma generate` — schema must exist before `npm install`.
+COPY prisma ./prisma/
 RUN npm install
 
 COPY . .

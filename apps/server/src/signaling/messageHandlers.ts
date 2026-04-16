@@ -107,6 +107,11 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('client-ping'),
     payload: z.object({}).optional(),
   }),
+  /** Answer to server JSON `{ type: 'ping' }` (nginx / proxy idle timeouts). */
+  z.object({
+    type: z.literal('pong'),
+    payload: z.object({}).optional(),
+  }),
   z.object({
     type: z.literal('call-chat'),
     payload: z.object({

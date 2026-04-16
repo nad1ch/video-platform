@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from 'express'
 import { Prisma } from '@prisma/client'
 import { prisma } from './prisma'
+import { readSessionFromCookie, type SessionPayload } from './auth/session/sessionJwt'
 
 function isDatabaseConfigured(): boolean {
   const u = process.env.DATABASE_URL
@@ -282,7 +283,94 @@ async function ratingLeaderboardForStreamer(streamerId: string): Promise<
   }))
 }
 
+async function resolvePrismaUserIdForSession(session: SessionPayload): Promise<string | null> {
+  const byId = await prisma.user.findUnique({
+    where: { id: session.id },
+    select: { id: true },
+  })
+  if (byId) {
+    return byId.id
+  }
+  const tid =
+    session.provider === 'twitch'
+      ? typeof session.twitch_id === 'string' && session.twitch_id.length > 0
+        ? session.twitch_id
+        : session.id
+      : null
+  if (typeof tid === 'string' && tid.length > 0) {
+    const byTwitch = await prisma.user.findFirst({
+      where: { twitchId: tid },
+      select: { id: true },
+    })
+    return byTwitch?.id ?? null
+  }
+  return null
+}
+
 export function mountLeaderboardRoutes(app: Express): void {
+  /**
+   * Records a solo Wordle win for the signed-in Prisma user (OAuth-linked row).
+   * Body: { streamerId, attempts } — increments UserStreamerStats (gamesPlayed + wins).
+   */
+  app.post('/api/wins', async (req: Request, res: Response) => {
+    if (!isDatabaseConfigured()) {
+      res.status(503).json({ error: 'database_unconfigured' })
+      return
+    }
+    const session = readSessionFromCookie(req.headers.cookie)
+    if (!session) {
+      res.status(401).json({ error: 'unauthorized' })
+      return
+    }
+    const userId = await resolvePrismaUserIdForSession(session)
+    if (!userId) {
+      res.status(403).json({ error: 'account_not_linked' })
+      return
+    }
+    const body = req.body as { streamerId?: unknown; attempts?: unknown }
+    const streamerId = typeof body.streamerId === 'string' ? body.streamerId.trim() : ''
+    const attemptsRaw = body.attempts
+    const attempts =
+      typeof attemptsRaw === 'number' && Number.isFinite(attemptsRaw)
+        ? Math.round(attemptsRaw)
+        : typeof attemptsRaw === 'string'
+          ? Number.parseInt(attemptsRaw, 10)
+          : NaN
+    if (!streamerId || !Number.isFinite(attempts) || attempts < 1 || attempts > 6) {
+      res.status(400).json({ error: 'invalid_body' })
+      return
+    }
+    try {
+      const streamer = await prisma.streamer.findFirst({
+        where: { id: streamerId, isActive: true },
+        select: { id: true },
+      })
+      if (!streamer) {
+        res.status(404).json({ error: 'streamer_not_found' })
+        return
+      }
+      await prisma.userStreamerStats.upsert({
+        where: {
+          userId_streamerId: { userId, streamerId },
+        },
+        create: {
+          userId,
+          streamerId,
+          gamesPlayed: 1,
+          wins: 1,
+        },
+        update: {
+          gamesPlayed: { increment: 1 },
+          wins: { increment: 1 },
+        },
+      })
+      res.status(204).end()
+    } catch (e) {
+      console.error('[leaderboard] POST /api/wins', e)
+      res.status(500).json({ error: 'server_error' })
+    }
+  })
+
   app.get('/api/leaderboard/wins', async (req: Request, res: Response) => {
     if (!isDatabaseConfigured()) {
       res.json({ entries: [] })

@@ -23,12 +23,30 @@ import {
 } from './messageHandlers'
 
 const WS_PING_INTERVAL_MS = 45_000
+/** JSON frames so reverse proxies that ignore WS-level ping still see traffic. */
+const WS_JSON_PING_INTERVAL_MS = 25_000
 
 type WsWithAlive = WsType & { isAlive?: boolean }
 
 export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManager): void {
   const socketPeer = new Map<WebSocket, Peer>()
   const deps = { roomManager, socketPeer }
+
+  const jsonPing = setInterval(() => {
+    for (const socket of wss.clients) {
+      if (socket.readyState !== WebSocket.OPEN) {
+        continue
+      }
+      try {
+        socket.send(JSON.stringify({ type: 'ping' }))
+      } catch {
+        /* ignore */
+      }
+    }
+  }, WS_JSON_PING_INTERVAL_MS)
+  if (typeof jsonPing.unref === 'function') {
+    jsonPing.unref()
+  }
 
   const heartbeat = setInterval(() => {
     for (const socket of wss.clients) {
@@ -51,6 +69,7 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
 
   wss.on('close', () => {
     clearInterval(heartbeat)
+    clearInterval(jsonPing)
   })
 
   wss.on('connection', (socket) => {
@@ -82,6 +101,9 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
           switch (parsed.data.type) {
             case 'client-ping': {
               sendServerMessage(socket, { type: 'server-pong', payload: {} })
+              break
+            }
+            case 'pong': {
               break
             }
             case 'join-room': {

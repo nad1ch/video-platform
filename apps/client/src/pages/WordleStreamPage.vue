@@ -19,6 +19,7 @@ import {
 } from '@/wordle/wordleLogic'
 import { apiUrl, sameOriginApiPrefix } from '@/utils/apiUrl'
 import { useAuth } from '@/composables/useAuth'
+import { replyJsonPingIfNeeded } from 'call-core'
 
 const WORDLE_WORD_LEN_KEY = 'streamassist_wordle_word_len'
 const WORDLE_LOCAL_STATS_KEY = 'streamassist_wordle_local_stats'
@@ -231,6 +232,30 @@ const ircRelayStatus = ref<'idle' | 'connected' | 'disconnected' | 'reconnecting
 const lastError = ref<string | null>(null)
 
 let ws: WebSocket | null = null
+let wordleWsDisposed = false
+let wordleWsReconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearWordleWsReconnect(): void {
+  if (wordleWsReconnectTimer !== null) {
+    clearTimeout(wordleWsReconnectTimer)
+    wordleWsReconnectTimer = null
+  }
+}
+
+function scheduleWordleWsReconnect(): void {
+  clearWordleWsReconnect()
+  if (wordleWsDisposed) {
+    return
+  }
+  wordleWsReconnectTimer = setTimeout(() => {
+    wordleWsReconnectTimer = null
+    if (wordleWsDisposed) {
+      return
+    }
+    console.warn('[WS] disconnected, reconnecting...')
+    connectWs()
+  }, 1000)
+}
 
 /** Twitch channel login for this streamer room (from API; URL slug while loading). */
 const effectiveTwitchChannel = computed(() => {
@@ -403,9 +428,15 @@ const secretWord = ref(randomWord(5))
 const localGuesses = ref<LocalGuessRow[]>([])
 const gameStatus = ref<'playing' | 'won' | 'lost'>('playing')
 const localRoundId = ref(0)
+/** Уникає повторного POST /api/wins за один локальний раунд (скидання з `localRoundId`). */
+const hasWon = ref(false)
 const localStats = ref<LocalWinStats>({ won: 0, lost: 0 })
 /** Для стріму: тимчасово показати загадане слово. */
 const secretPeekVisible = ref(false)
+
+watch(localRoundId, () => {
+  hasWon.value = false
+})
 
 /** Довжина слова для підказки в чаті: з WS-стану раунду (як на сервері для Twitch), інакше локальна сітка. */
 const chatTargetWordLength = computed(() => {
@@ -545,25 +576,47 @@ function kbdKeyFeedbackModifier(ch: string): string | undefined {
 
 function connectWs(): void {
   const streamerId = streamerProfile.value?.id
-  if (!streamerId) {
+  if (!streamerId || wordleWsDisposed) {
     return
   }
-  ws?.close()
+  clearWordleWsReconnect()
+  const prev = ws
+  if (prev) {
+    prev.onopen = null
+    prev.onmessage = null
+    prev.onerror = null
+    prev.onclose = null
+    prev.close()
+    ws = null
+  }
   wsStatus.value = 'idle'
   const url = wordleWsUrl(streamerId)
   const socket = new WebSocket(url)
   ws = socket
 
   socket.onopen = () => {
+    if (ws !== socket) {
+      return
+    }
+    console.log('[WS] connected')
     wsStatus.value = 'open'
   }
 
   socket.onclose = () => {
-    wsStatus.value = 'closed'
+    console.log('[WS] closed')
+    if (ws === socket) {
+      ws = null
+      wsStatus.value = 'closed'
+    }
+    if (!wordleWsDisposed) {
+      scheduleWordleWsReconnect()
+    }
   }
 
   socket.onerror = () => {
-    wsStatus.value = 'error'
+    if (ws === socket) {
+      wsStatus.value = 'error'
+    }
   }
 
   socket.onmessage = (ev) => {
@@ -571,6 +624,9 @@ function connectWs(): void {
     try {
       data = JSON.parse(String(ev.data))
     } catch {
+      return
+    }
+    if (replyJsonPingIfNeeded(data, socket)) {
       return
     }
     const t = data.type
@@ -644,6 +700,37 @@ function kbdBackspace(): void {
   guessInput.value = chars.join('')
 }
 
+async function postWinToLeaderboard(): Promise<void> {
+  if (hasWon.value) {
+    return
+  }
+  const streamerId = streamerProfile.value?.id
+  if (typeof streamerId !== 'string' || streamerId.length === 0) {
+    return
+  }
+  const attempts = localGuesses.value.length
+  if (attempts < 1 || attempts > MAX_ATTEMPTS) {
+    return
+  }
+  hasWon.value = true
+  console.log('[WIN] sending win', { streamerId, attempts })
+  try {
+    const res = await fetch(apiUrl('/api/wins'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamerId, attempts }),
+    })
+    if (!res.ok) {
+      hasWon.value = false
+      return
+    }
+    void loadGlobalLbActive()
+  } catch {
+    hasWon.value = false
+  }
+}
+
 function submitGuess(): void {
   lastError.value = null
   if (gameStatus.value !== 'playing') {
@@ -663,6 +750,7 @@ function submitGuess(): void {
   if (guess === secretWord.value) {
     gameStatus.value = 'won'
     secretPeekVisible.value = false
+    void postWinToLeaderboard()
   } else if (localGuesses.value.length >= MAX_ATTEMPTS) {
     gameStatus.value = 'lost'
     secretPeekVisible.value = false
@@ -949,15 +1037,25 @@ function globalLbScoreFor(row: WordleGlobalWinsRow | WordleGlobalStreakRow | Wor
 }
 
 onMounted(() => {
+  wordleWsDisposed = false
   document.documentElement.classList.add(WORDLE_ROUTE_HTML_CLASS)
   void loadGlobalLbActive()
   window.addEventListener('keydown', onWindowKeydown)
 })
 
 onUnmounted(() => {
+  wordleWsDisposed = true
+  clearWordleWsReconnect()
   document.documentElement.classList.remove(WORDLE_ROUTE_HTML_CLASS)
   window.removeEventListener('keydown', onWindowKeydown)
-  ws?.close()
+  const s = ws
+  if (s) {
+    s.onopen = null
+    s.onmessage = null
+    s.onerror = null
+    s.onclose = null
+    s.close()
+  }
   ws = null
 })
 </script>

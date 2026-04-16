@@ -80,3 +80,4 @@ export {
 
 export { waitForCondition } from './utils/waitForCondition'
 export { newCallTabPeerId, readOrCreateCallDeviceId } from './utils/callTabPeerId'
+export { replyJsonPingIfNeeded } from './utils/jsonWsPing'

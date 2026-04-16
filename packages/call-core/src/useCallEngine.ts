@@ -502,9 +502,6 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   function scheduleReconnectSignaling(reason: string): void {
-    if (import.meta.env.DEV) {
-      console.log('[call-engine] schedule signaling reconnect', reason)
-    }
     if (intentionalLeave.value || !inCall.value) {
       return
     }
@@ -512,6 +509,7 @@ export function useCallEngine(options?: CallEngineOptions) {
       return
     }
     const delay = Math.min(30_000, 1000 * 2 ** Math.min(reconnectFailures, 5))
+    console.warn('[WS] disconnected, reconnecting...', { reason, delayMs: delay })
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null
       void tryReconnectSignalingAndMedia()

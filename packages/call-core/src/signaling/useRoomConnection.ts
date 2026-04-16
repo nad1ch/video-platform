@@ -2,6 +2,7 @@
 
 import type { RtpCapabilities } from 'mediasoup-client/types'
 import { onUnmounted, ref, shallowRef } from 'vue'
+import { replyJsonPingIfNeeded } from '../utils/jsonWsPing'
 
 export type RemoteProducerInfo = {
   producerId: string
@@ -427,6 +428,9 @@ export function useRoomConnection(wsUrl?: string) {
         } catch {
           return
         }
+        if (replyJsonPingIfNeeded(data, ws)) {
+          return
+        }
         bufferIncomingNewProducer(data)
         notifyMessageListeners(data)
         const structured = parseServerMessage(data)
@@ -439,6 +443,7 @@ export function useRoomConnection(wsUrl?: string) {
         if (wsRef.value !== ws) {
           return
         }
+        console.log('[WS] connected')
         wsStatus.value = 'open'
         resolve()
       }
@@ -456,6 +461,7 @@ export function useRoomConnection(wsUrl?: string) {
       }
 
       ws.onclose = () => {
+        console.log('[WS] closed')
         if (wsRef.value === ws) {
           wsRef.value = null
           wsStatus.value = 'closed'
