@@ -275,14 +275,16 @@ function toggleMenu(): void {
         :listen-muted="remoteListenMuted ?? false"
       />
       <div v-if="showVideo" class="tile-video-wrap">
-        <StreamVideo
-          :stream="stream"
-          muted
-          :play-rev="playRev"
-          :report-video-ui="!isLocal"
-          fill
-          @video-ui="onVideoUi"
-        />
+        <div class="tile-video-clip">
+          <StreamVideo
+            :stream="stream"
+            muted
+            :play-rev="playRev"
+            :report-video-ui="!isLocal"
+            fill
+            @video-ui="onVideoUi"
+          />
+        </div>
         <div v-if="isFrozen" class="tile-freeze" aria-live="polite">{{ t('callPage.tileReconnecting') }}</div>
         <div class="tile-overlay" aria-hidden="false">
           <span class="tile-overlay__name">{{ displayName }}</span>
@@ -378,7 +380,6 @@ function toggleMenu(): void {
   min-width: 0;
   min-height: 0;
   border-radius: 14px;
-  overflow: hidden;
   background: transparent;
   border: 1px solid var(--call-tile-border, #2e303a);
   transition:
@@ -435,6 +436,15 @@ function toggleMenu(): void {
   inset: 0;
   z-index: 1;
   background: #000;
+  border-radius: 14px;
+}
+
+.tile-video-clip {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  z-index: 0;
 }
 
 .tile-video-wrap :deep(.stream-video) {
@@ -626,6 +636,8 @@ function toggleMenu(): void {
   background: transparent;
   color: var(--text-h, #f3f4f6);
   z-index: 1;
+  border-radius: 14px;
+  overflow: hidden;
 }
 
 .tile-placeholder-avatar {

@@ -1908,13 +1908,18 @@ onUnmounted(() => {
   flex: 1 1 0;
   align-self: stretch;
   width: 100%;
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  /* Лише вертикальний скрол: таблиця інколи на 1–2px ширша за контейнер і дає зайвий горизонтальний скрол. */
+  overflow-x: hidden;
+  overflow-y: auto;
   margin-top: var(--sa-space-1);
 }
 
 .wordle-page__glb-table {
   width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.72rem;
 }
@@ -1951,6 +1956,10 @@ onUnmounted(() => {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   color: var(--sa-color-text-muted);
+}
+
+.wordle-page__glb-td--player {
+  min-width: 0;
 }
 
 .wordle-page__glb-td--score {

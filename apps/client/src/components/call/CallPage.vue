@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { CallChatLine } from 'call-core'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
@@ -356,6 +356,11 @@ function onDisplayNameEnter(): void {
   }
   void joinCall()
 }
+
+onBeforeUnmount(() => {
+  /* Вихід з маршруту /call (навігація по сайту) має закривати кімнату й зупиняти медіа, інакше Pinia-сесія лишається inCall. */
+  leaveCall()
+})
 
 onMounted(() => {
   document.addEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
@@ -1055,7 +1060,7 @@ watch(
   align-content: center;
   justify-items: stretch;
   width: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .call-page__grid--1 {
@@ -1103,10 +1108,18 @@ watch(
 
 .call-page__tile-wrap {
   position: relative;
+  z-index: 0;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* Сусідня клітина сітки інакше перекриває outline/тінь попередньої (порядок малювання в DOM). */
+.call-page__tile-wrap:hover,
+.call-page__tile-wrap:focus-within,
+.call-page__tile-wrap--over {
+  z-index: 2;
 }
 
 .call-page__tile-wrap--over {
