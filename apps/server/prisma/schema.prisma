@@ -10,13 +10,20 @@ datasource db {
 }
 
 model Streamer {
-  id               String              @id @default(cuid())
-  twitchId         String              @unique
-  username         String              @unique
-  isActive         Boolean             @default(true)
-  users            User[]
-  gameRounds      GameRound[]
-  userStreamerStats UserStreamerStats[]
+  id        String   @id @default(cuid())
+  /** Public slug for `/wordle/:name` (Twitch-style login, lowercase). */
+  name      String   @unique
+  twitchId  String   @unique
+  username  String   @unique
+  /** User who may administer this streamer row (admin-created). */
+  ownerId   String?
+  owner     User?    @relation("StreamerOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  isActive  Boolean  @default(true)
+  members   User[]   @relation("StreamerMembers")
+  gameRounds          GameRound[]
+  userStreamerStats   UserStreamerStats[]
+
+  @@index([ownerId])
 }
 
 model User {
@@ -29,7 +36,8 @@ model User {
   role               String
   twitchId           String?             @unique
   streamerId         String?
-  streamer           Streamer?           @relation(fields: [streamerId], references: [id], onDelete: SetNull)
+  streamer           Streamer?           @relation("StreamerMembers", fields: [streamerId], references: [id], onDelete: SetNull)
+  ownedStreamers     Streamer[]          @relation("StreamerOwner")
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   stats              UserStats?

@@ -1,0 +1,60 @@
+# =============================================================================
+# LOCAL MACHINE ONLY — not for staging/production
+# =============================================================================
+# Working copy is GITIGNORED. Bootstrap once:
+#   cp docker/docker-compose.local.example.yml docker/docker-compose.local.yml
+#   cp apps/server/Dockerfile.local.example apps/server/Dockerfile.local
+#
+# Postgres + API with bind mounts (hot reload). Published :5432 only for host tools / Prisma from OS.
+#
+# From repo root:
+#   docker compose -f docker/docker-compose.local.yml up -d
+#
+# Prisma (host Node, first time):
+#   cd apps/server && DATABASE_URL=postgresql://streamassist:streamassist@localhost:5432/streamassist npx prisma migrate dev
+# =============================================================================
+
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: video-platform-postgres-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: streamassist
+      POSTGRES_PASSWORD: streamassist
+      POSTGRES_DB: streamassist
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U streamassist -d streamassist"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  server:
+    build:
+      context: ../apps/server
+      dockerfile: Dockerfile.local
+    container_name: video-platform-server-local
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+      - "40000-49999:40000-49999/udp"
+    volumes:
+      - ../apps/server:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://streamassist:streamassist@db:5432/streamassist
+      # ICE_SERVERS_JSON=...  # optional; see apps/server/env.example
+    command: npm run dev
+
+volumes:
+  pgdata_local:

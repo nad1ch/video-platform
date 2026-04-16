@@ -44,6 +44,7 @@ export function mountStreamerApiRoutes(app: Express): void {
         id: DEV_FALLBACK_STREAMER_ID,
         twitchId: 'dev',
         username: devLogin,
+        name: devLogin,
         isActive: true,
       })
       return
@@ -51,8 +52,11 @@ export function mountStreamerApiRoutes(app: Express): void {
 
     try {
       const row = await prisma.streamer.findFirst({
-        where: { username, isActive: true },
-        select: { id: true, twitchId: true, username: true, isActive: true },
+        where: {
+          isActive: true,
+          OR: [{ name: username }, { username }],
+        },
+        select: { id: true, twitchId: true, username: true, name: true, isActive: true },
       })
       if (!row) {
         res.status(404).json({ error: 'not_found' })

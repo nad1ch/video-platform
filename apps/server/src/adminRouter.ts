@@ -36,6 +36,7 @@ export function mountAdminRoutes(app: Express): void {
             avatarUrl: true,
             provider: true,
             role: true,
+            twitchId: true,
           },
         }),
         prisma.userStreamerStats.groupBy({
@@ -57,6 +58,7 @@ export function mountAdminRoutes(app: Express): void {
           avatar: u.avatarUrl?.trim() ? u.avatarUrl.trim() : undefined,
           provider: u.provider,
           role: u.role === 'admin' ? 'admin' : 'user',
+          twitchId: u.twitchId ?? undefined,
           wins: w?.wins ?? 0,
           gamesPlayed: w?.gamesPlayed ?? 0,
         }
@@ -148,6 +150,131 @@ export function mountAdminRoutes(app: Express): void {
       })
     } catch (e) {
       console.error('[admin] GET /api/admin/stats', e)
+      res.status(500).json({ error: 'server_error' })
+    }
+  })
+
+  app.get('/api/admin/streamers', async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) {
+      return
+    }
+    if (!isDatabaseConfigured()) {
+      res.json({ databaseConfigured: false, streamers: [] })
+      return
+    }
+    try {
+      const rows = await prisma.streamer.findMany({
+        orderBy: { name: 'asc' },
+        take: 200,
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          twitchId: true,
+          isActive: true,
+          ownerId: true,
+          owner: { select: { id: true, displayName: true, email: true } },
+        },
+      })
+      res.json({ databaseConfigured: true, streamers: rows })
+    } catch (e) {
+      console.error('[admin] GET /api/admin/streamers', e)
+      res.status(500).json({ error: 'server_error', streamers: [] })
+    }
+  })
+
+  app.post('/api/admin/streamers', async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) {
+      return
+    }
+    if (!isDatabaseConfigured()) {
+      res.status(503).json({ error: 'database_unconfigured' })
+      return
+    }
+    const body = req.body as { name?: unknown; ownerId?: unknown }
+    const rawName = typeof body.name === 'string' ? body.name : ''
+    const ownerId = typeof body.ownerId === 'string' ? body.ownerId.trim() : ''
+    const name = rawName.trim().replace(/^#/, '').toLowerCase()
+    if (name.length < 2 || name.length > 25 || !/^[a-z0-9_]+$/.test(name)) {
+      res.status(400).json({ error: 'invalid_name' })
+      return
+    }
+    if (!ownerId) {
+      res.status(400).json({ error: 'owner_required' })
+      return
+    }
+    try {
+      const owner = await prisma.user.findUnique({
+        where: { id: ownerId },
+        select: { id: true, twitchId: true },
+      })
+      if (!owner) {
+        res.status(400).json({ error: 'owner_not_found' })
+        return
+      }
+      if (!owner.twitchId || !owner.twitchId.trim()) {
+        res.status(400).json({ error: 'owner_twitch_required', message: 'Owner must have linked Twitch id for IRC ingest' })
+        return
+      }
+      const twitchId = owner.twitchId.trim()
+      const twitchTaken = await prisma.streamer.findFirst({
+        where: { twitchId },
+        select: { id: true },
+      })
+      if (twitchTaken) {
+        res.status(409).json({ error: 'twitch_id_already_streamer' })
+        return
+      }
+      const streamer = await prisma.streamer.create({
+        data: {
+          name,
+          username: name,
+          twitchId,
+          ownerId: owner.id,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          twitchId: true,
+          isActive: true,
+          ownerId: true,
+        },
+      })
+      res.status(201).json(streamer)
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        res.status(409).json({ error: 'duplicate_name_or_username' })
+        return
+      }
+      console.error('[admin] POST /api/admin/streamers', e)
+      res.status(500).json({ error: 'server_error' })
+    }
+  })
+
+  app.delete('/api/admin/streamers/:id', async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) {
+      return
+    }
+    if (!isDatabaseConfigured()) {
+      res.status(503).json({ error: 'database_unconfigured' })
+      return
+    }
+    const id = typeof req.params.id === 'string' ? req.params.id.trim() : ''
+    if (!id) {
+      res.status(400).json({ error: 'invalid_id' })
+      return
+    }
+    try {
+      await prisma.streamer.delete({ where: { id } })
+      res.status(204).end()
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+        res.status(404).json({ error: 'not_found' })
+        return
+      }
+      console.error('[admin] DELETE /api/admin/streamers/:id', e)
       res.status(500).json({ error: 'server_error' })
     }
   })

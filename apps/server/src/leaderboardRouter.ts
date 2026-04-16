@@ -29,7 +29,7 @@ async function resolveStreamerScopeFromQuery(req: Request): Promise<string | nul
     return null
   }
   const row = await prisma.streamer.findFirst({
-    where: { username: raw, isActive: true },
+    where: { isActive: true, OR: [{ name: raw }, { username: raw }] },
     select: { id: true },
   })
   return row?.id ?? null

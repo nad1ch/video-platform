@@ -43,5 +43,10 @@ apps/server/data/
 # Local / cache
 *.local
 .cache/
+
+# Local-only Docker (copy from *.example.* — never commit working files)
+docker/docker-compose.local.yml
+apps/server/Dockerfile.local
+docker/.env.local
 .turbo/
 .eslintcache
