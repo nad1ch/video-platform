@@ -1,6 +1,6 @@
 import { getActivePinia, storeToRefs } from 'pinia'
 import type { ComputedRef, Ref } from 'vue'
-import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { loadRemoteListeningPrefs, saveRemoteListeningPrefs } from './audio/remoteListeningPrefs'
 import type { RemoteListenEntry } from './audio/remoteListeningPrefs'
 import { gridSizeTierFromParticipantCount } from './media/gridTier'
@@ -18,6 +18,7 @@ import {
 import { shouldUseVideoSimulcastForRoom } from './media/videoSimulcast'
 import { useSendTransport } from './transport/useSendTransport'
 import { waitForCondition } from './utils/waitForCondition'
+import { newCallTabPeerId } from './utils/callTabPeerId'
 
 /** Pinia session store from this package (or a compatible drop-in). */
 export type CallSessionStore = ReturnType<typeof useCallSessionStore>
@@ -54,6 +55,11 @@ export type CallTile = {
   videoEnabled: boolean
   audioEnabled: boolean
   playRev?: number
+  /**
+   * Local camera-only tiles: `cover` often looks better in a square grid.
+   * Screen share and all remote tiles use `contain` (default false).
+   */
+  videoFillCover?: boolean
   /** Local-only listening gain for this remote peer (0..2 → 0–200%). */
   remoteListenVolume?: number
   /** Local-only mute for this remote peer (does not affect their mic). */
@@ -186,21 +192,32 @@ export function useCallEngine(options?: CallEngineOptions) {
     getVideoPublishTier: () => wirePublishTier.value,
   })
 
+  /** When `getSettings().deviceId` is empty (some drivers), keep menu highlight on last explicit pick. */
+  const lastPickedAudioInputId = ref('')
+  const lastPickedVideoInputId = ref('')
+
   const localAudioInputDeviceId = computed(() => {
     const t = localStream.value?.getAudioTracks()[0]
     const id = t?.getSettings?.()?.deviceId
-    return typeof id === 'string' ? id : ''
+    if (typeof id === 'string' && id.length > 0) {
+      return id
+    }
+    return lastPickedAudioInputId.value
   })
 
   const localVideoInputDeviceId = computed(() => {
     const t = localStream.value?.getVideoTracks()[0]
     const id = t?.getSettings?.()?.deviceId
-    return typeof id === 'string' ? id : ''
+    if (typeof id === 'string' && id.length > 0) {
+      return id
+    }
+    return lastPickedVideoInputId.value
   })
 
   const {
     remotePeerStreams,
     remotePeerPlayRevs,
+    remoteVideoSourceByPeerId,
     activeSpeakerPeerId,
     networkQuality,
     setupReceivePath,
@@ -209,6 +226,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     setNetworkQualityOverride,
     collectInboundVideoDebugStats,
     removeRemotePeer,
+    requestForcedProducerResync,
   } = useRemoteMedia()
 
   const remoteListenPrefs = shallowRef(new Map<string, RemoteListenEntry>())
@@ -220,8 +238,11 @@ export function useCallEngine(options?: CallEngineOptions) {
   const handRaised = ref(false)
   const screenSharing = ref(false)
   const screenShareStream = shallowRef<MediaStream | null>(null)
+  let detachScreenShareEndedListener: (() => void) | null = null
+  let stoppingScreenShare = false
 
   async function setCallAudioInputDevice(deviceId: string): Promise<void> {
+    lastPickedAudioInputId.value = deviceId.trim()
     await swapLocalAudioInput(deviceId)
     if (readEngineRole(options) !== 'participant' || !inCall.value) {
       return
@@ -233,6 +254,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   async function setCallVideoInputDevice(deviceId: string): Promise<void> {
+    lastPickedVideoInputId.value = deviceId.trim()
     await swapLocalVideoInput(deviceId)
     if (screenSharing.value) {
       return
@@ -392,7 +414,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   function callJoinRoomPayload(): { roomId: string; peerId: string; displayName: string } {
     return {
       roomId: trimmedString(roomId.value) || 'demo',
-      peerId: stringValue(selfPeerId.value) || `peer-${Math.random().toString(36).slice(2, 10)}`,
+      peerId: stringValue(selfPeerId.value) || newCallTabPeerId(),
       displayName: trimmedString(selfDisplayName.value) || 'You',
     }
   }
@@ -468,6 +490,14 @@ export function useCallEngine(options?: CallEngineOptions) {
       })
     }
 
+    // Merge-only producer list from server (no consumer teardown). Catches join races where
+    // `new-producer` / `recv-connected` producer-sync overlapped initial `existingProducers` consume.
+    try {
+      sendJson({ type: 'request-producer-sync', payload: { resetConsumers: false } })
+    } catch {
+      /* ws closed */
+    }
+
     startSignalingKeepAlive()
   }
 
@@ -536,6 +566,40 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
   }
 
+  /**
+   * Local tile preview: must follow the **same** video track as outbound `replaceTrack`, not only
+   * `localStream` (camera). Use `screenShareStream` as soon as display capture exists — `screenSharing`
+   * is toggled for UI and may lag behind `replaceTrack`, which caused a black local tile.
+   */
+  const localSelfPreviewStream = computed<MediaStream | null>(() => {
+    if (readEngineRole(options) !== 'participant') {
+      return localStream.value
+    }
+    const dm = screenShareStream.value
+    const vt = dm?.getVideoTracks()[0]
+    if (vt && vt.readyState === 'live') {
+      // Preview the original display-capture stream directly. Re-wrapping the track into a synthetic
+      // MediaStream was causing black local previews in some browsers while outbound replaceTrack worked.
+      return dm
+    }
+    return localStream.value
+  })
+
+  function isRemoteVideoActive(
+    track: MediaStreamTrack | undefined,
+    source: 'camera' | 'screen',
+  ): boolean {
+    if (!track || track.readyState !== 'live') {
+      return false
+    }
+    if (source === 'screen') {
+      return true
+    }
+    // Camera: require both sender-enabled track and inbound RTP (`!muted`).
+    // `enabled || !muted` was too loose (e.g. `enabled=false` + `muted=false` still showed a black tile).
+    return Boolean(track.enabled && !track.muted)
+  }
+
   const tiles = computed<CallTile[]>(() => {
     const selfId = selfPeerId.value
     const mode = readEngineRole(options)
@@ -551,13 +615,16 @@ export function useCallEngine(options?: CallEngineOptions) {
       }
       const a = stream.getAudioTracks()[0]
       const v = stream.getVideoTracks()[0]
+      const remoteSource = remoteVideoSourceByPeerId.value.get(peerId) ?? 'camera'
       remoteTiles.push({
         peerId,
         stream,
         displayName: session.labelFor(peerId),
         isLocal: false,
-        videoEnabled: v ? v.enabled : false,
+        videoEnabled: isRemoteVideoActive(v, remoteSource),
         audioEnabled: a ? a.enabled : true,
+        /** Camera: cover in grid. Screen share (`replaceTrack`): contain so the whole desktop is visible. */
+        videoFillCover: remoteSource === 'camera',
         playRev: remotePeerPlayRevs.value.get(peerId) ?? 0,
         remoteListenVolume: remoteListenPrefs.value.get(peerId)?.volume ?? 1,
         remoteListenMuted: remoteListenPrefs.value.get(peerId)?.muted ?? false,
@@ -572,11 +639,13 @@ export function useCallEngine(options?: CallEngineOptions) {
     const list: CallTile[] = [
       {
         peerId: selfId,
-        stream: localStream.value,
+        stream: localSelfPreviewStream.value,
         displayName: trimmedString(selfDisplayName.value) || 'You',
         isLocal: true,
-        videoEnabled: camEnabled.value,
+        videoEnabled: screenSharing.value || camEnabled.value,
         audioEnabled: micEnabled.value,
+        /** Webcam grid: cover. Screen capture: same as remote — contain. */
+        videoFillCover: !screenSharing.value && camEnabled.value,
         playRev: localPlayRev.value,
         handRaised: handRaised.value,
       },
@@ -652,24 +721,48 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   async function stopScreenShare(): Promise<void> {
-    for (const t of screenShareStream.value?.getTracks() ?? []) {
-      t.stop()
-    }
-    screenShareStream.value = null
-    if (!screenSharing.value) {
-      localPlayRev.value += 1
+    if (stoppingScreenShare) {
       return
     }
-    screenSharing.value = false
+    const dm = screenShareStream.value
+    const wasSharing = screenSharing.value
+    if (!dm && !wasSharing) {
+      return
+    }
+    stoppingScreenShare = true
+    detachScreenShareEndedListener?.()
+    detachScreenShareEndedListener = null
+
+    // Swap the outbound producer back to the camera *before* stopping display tracks,
+    // otherwise the producer can briefly reference an `ended` track and remotes/self glitch.
     try {
-      const cam = localStream.value?.getVideoTracks().find((x) => x.readyState === 'live')
-      if (cam) {
-        await replaceOutboundVideoTrack(cam)
+      if (wasSharing) {
+        screenSharing.value = false
+        try {
+          const cam = localStream.value?.getVideoTracks().find((x) => x.readyState === 'live')
+          if (cam) {
+            const producerId = await replaceOutboundVideoTrack(cam)
+            await nextTick()
+            try {
+              sendJson({ type: 'producer-video-source', payload: { producerId, source: 'camera' } })
+            } catch {
+              /* ws closed */
+            }
+          }
+        } catch {
+          /* producer may already be torn down */
+        }
       }
-    } catch {
-      /* producer may already be torn down */
-    } finally {
+
+      if (dm) {
+        for (const t of dm.getTracks()) {
+          t.stop()
+        }
+      }
+      screenShareStream.value = null
       localPlayRev.value += 1
+    } finally {
+      stoppingScreenShare = false
     }
   }
 
@@ -683,7 +776,13 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
     try {
       const dm = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+      if (import.meta.env.DEV) {
+        console.log('[screen-share] SCREEN STREAM', dm)
+      }
       const vt = dm.getVideoTracks()[0]
+      if (import.meta.env.DEV) {
+        console.log('[screen-share] SCREEN TRACK', vt)
+      }
       if (!vt) {
         for (const x of dm.getTracks()) {
           x.stop()
@@ -691,16 +790,69 @@ export function useCallEngine(options?: CallEngineOptions) {
         return
       }
       screenShareStream.value = dm
-      vt.addEventListener('ended', () => {
+      detachScreenShareEndedListener?.()
+      const onEnded = () => {
         void stopScreenShare()
-      })
-      await replaceOutboundVideoTrack(vt)
+      }
+      vt.addEventListener('ended', onEnded, { once: true })
+      detachScreenShareEndedListener = () => {
+        vt.removeEventListener('ended', onEnded)
+      }
       screenSharing.value = true
       localPlayRev.value += 1
-    } catch {
-      /* user cancelled or unsupported */
+      await nextTick()
+      if (import.meta.env.DEV) {
+        console.log('[screen-share] PRODUCING SCREEN (replaceTrack)', vt.id)
+      }
+      const producerId = await replaceOutboundVideoTrack(vt)
+      await nextTick()
+      try {
+        sendJson({ type: 'producer-video-source', payload: { producerId, source: 'screen' } })
+      } catch {
+        /* ws closed */
+      }
+      localPlayRev.value += 1
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn('[screen-share] start failed', e)
+      }
+      const orphan = screenShareStream.value
+      if (orphan) {
+        for (const t of orphan.getTracks()) {
+          t.stop()
+        }
+      }
+      detachScreenShareEndedListener?.()
+      detachScreenShareEndedListener = null
+      screenShareStream.value = null
+      screenSharing.value = false
+      stoppingScreenShare = false
     }
   }
+
+  /**
+   * Local `track.enabled` alone does not stop RTP — remotes often keep `!muted` and draw black.
+   * Mirror Meet-style camera off by pausing the **server** video producer when not screen-sharing.
+   */
+  watch(
+    () =>
+      [inCall.value, readEngineRole(options), camEnabled.value, screenSharing.value] as const,
+    async ([inC, role, cam, screen]) => {
+      if (!inC || role !== 'participant' || stoppingScreenShare) {
+        return
+      }
+      const wantPaused = !screen && !cam
+      try {
+        sendJson({
+          type: 'set-outbound-video-paused',
+          payload: { paused: wantPaused },
+        })
+      } catch {
+        /* ws closed */
+      }
+    },
+    { flush: 'post' },
+  )
 
   function sendChatMessage(text: string): void {
     const t = trimmedString(text)
@@ -731,11 +883,16 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   function teardownMedia(): void {
+    lastPickedAudioInputId.value = ''
+    lastPickedVideoInputId.value = ''
+    detachScreenShareEndedListener?.()
+    detachScreenShareEndedListener = null
     for (const t of screenShareStream.value?.getTracks() ?? []) {
       t.stop()
     }
     screenShareStream.value = null
     screenSharing.value = false
+    stoppingScreenShare = false
     callChatMessages.value = []
     peerHandRaised.value = {}
     handRaised.value = false
@@ -798,6 +955,36 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
   })
 
+  let tabVisibleRecvResyncTimer: ReturnType<typeof setTimeout> | null = null
+
+  function scheduleRecvResyncAfterTabForeground(source: 'visibility' | 'focus'): void {
+    if (intentionalLeave.value || !inCall.value) {
+      return
+    }
+    if (wsStatus.value !== 'open') {
+      return
+    }
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      return
+    }
+    if (tabVisibleRecvResyncTimer !== null) {
+      clearTimeout(tabVisibleRecvResyncTimer)
+    }
+    tabVisibleRecvResyncTimer = setTimeout(() => {
+      tabVisibleRecvResyncTimer = null
+      if (intentionalLeave.value || !inCall.value || wsStatus.value !== 'open') {
+        return
+      }
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return
+      }
+      if (import.meta.env.DEV) {
+        console.log('[visibility] visible → resync', { source })
+      }
+      requestForcedProducerResync()
+    }, 200)
+  }
+
   function onDocumentVisibilityForReconnect(): void {
     if (typeof document === 'undefined') {
       return
@@ -810,11 +997,20 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
     if (wsStatus.value !== 'open') {
       scheduleReconnectSignaling('tab-visible-again')
+      return
     }
+    scheduleRecvResyncAfterTabForeground('visibility')
+  }
+
+  function onWindowFocusForRecvResync(): void {
+    scheduleRecvResyncAfterTabForeground('focus')
   }
 
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', onDocumentVisibilityForReconnect)
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', onWindowFocusForRecvResync)
   }
 
   onScopeDispose(() => {
@@ -824,8 +1020,15 @@ export function useCallEngine(options?: CallEngineOptions) {
       clearTimeout(displayNameDebounceTimer)
       displayNameDebounceTimer = null
     }
+    if (tabVisibleRecvResyncTimer !== null) {
+      clearTimeout(tabVisibleRecvResyncTimer)
+      tabVisibleRecvResyncTimer = null
+    }
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', onDocumentVisibilityForReconnect)
+    }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('focus', onWindowFocusForRecvResync)
     }
   })
 

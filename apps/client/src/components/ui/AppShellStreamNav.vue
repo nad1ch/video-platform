@@ -3,7 +3,12 @@ import { computed } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { eatViewFromRoute } from '@/eat-first/eatFirstRouteUtils.js'
+import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import { useAuth } from '@/composables/useAuth'
+
+const defaultWordleStreamer =
+  (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
+  STREAMER_NICK
 
 const route = useRoute()
 const router = useRouter()
@@ -74,7 +79,12 @@ function goEatBack() {
       </button>
     </div>
     <div class="stream-nav__links">
-      <RouterLink class="stream-nav__link" :to="{ name: 'wordle' }">{{ t('app.navWordle') }}</RouterLink>
+      <RouterLink
+        class="stream-nav__link"
+        :to="{ name: 'wordle-streamer', params: { streamer: defaultWordleStreamer } }"
+      >
+        {{ t('app.navWordle') }}
+      </RouterLink>
       <RouterLink
         class="stream-nav__link"
         :to="{ name: 'eat', query: { view: 'join' } }"

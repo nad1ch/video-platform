@@ -729,6 +729,11 @@
   min-height: min(64vh, 680px);
 }
 
+/* Wordle: вертикальний скрол сторінки, блоки не ділять «штучну» висоту — футер не наїжджає на чат. */
+.app-shell-main__viewport--chrome.app-shell-main__viewport--wordle {
+  min-height: 0;
+}
+
 /* Маршрутні сторінки тягнуться на всю ширину під шапкою (інакше flex може стискати до контенту). */
 .app-shell-main__viewport > * {
   width: 100%;

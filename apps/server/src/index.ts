@@ -11,6 +11,7 @@ import { corsAllowedOrigins } from './auth/clientOrigin'
 import { mountGlobalAuth } from './auth/oauthRouter'
 import { mountAdminRoutes } from './adminRouter'
 import { mountLeaderboardRoutes } from './leaderboardRouter'
+import { mountStreamerApiRoutes } from './wordle/streamerApiRouter'
 import { mountTwitchWordleAuth } from './wordle/twitchAuthRouter'
 import { startTwitchChatIngest, stopTwitchChatIngest } from './wordle/tmiChat'
 import { attachWordleSocketServer } from './wordle/wordleSocket'
@@ -86,6 +87,7 @@ async function bootstrap(): Promise<void> {
   })
 
   mountGlobalAuth(app)
+  mountStreamerApiRoutes(app)
   mountTwitchWordleAuth(app)
   mountLeaderboardRoutes(app)
   mountAdminRoutes(app)
@@ -97,7 +99,9 @@ async function bootstrap(): Promise<void> {
     })
   })
 
-  startTwitchChatIngest()
+  void startTwitchChatIngest().catch((err) => {
+    console.error('[wordle] startTwitchChatIngest failed', err)
+  })
 
   const shutdown = (): void => {
     if (shuttingDown) {
@@ -106,7 +110,9 @@ async function bootstrap(): Promise<void> {
     shuttingDown = true
     console.info('Server shutting down…')
 
-    stopTwitchChatIngest()
+    void stopTwitchChatIngest().catch((err) => {
+      console.error('[wordle] stopTwitchChatIngest failed', err)
+    })
 
     try {
       roomManager.disposeAllRooms()

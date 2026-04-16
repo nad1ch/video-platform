@@ -71,6 +71,7 @@ export type PendingProducerNotice = {
   producerId: string
   peerId: string
   kind: 'audio' | 'video'
+  videoSource?: 'camera' | 'screen'
 }
 
 export type PublishLocalMediaOptions = {
@@ -120,6 +121,9 @@ export function useSendTransport() {
   const outboundVideoProducer = shallowRef<Producer | null>(null)
   /** First outbound mic producer (`replaceTrack` when user switches input device). */
   const outboundAudioProducer = shallowRef<Producer | null>(null)
+
+  /** Serialize outbound video `replaceTrack` (screen ↔ camera spam, device swap + screen). */
+  let outboundVideoReplaceChain: Promise<unknown> = Promise.resolve()
 
   async function createSendTransport(
     mediaDevice: Device,
@@ -186,6 +190,7 @@ export function useSendTransport() {
             kind,
             rtpParameters,
             requestId,
+            ...(kind === 'video' ? { videoSource: 'camera' as const } : {}),
           },
         })
       } catch (err) {
@@ -245,6 +250,9 @@ export function useSendTransport() {
             videoGoogleStartBitrate: outboundVideoGoogleStartBitrateKbps(tier),
           },
         })
+        if (import.meta.env.DEV) {
+          console.log('[produce] PRODUCER CREATED', producer.id, producer.kind)
+        }
         outboundVideoProducer.value = producer
       } else {
         const audioProducer = await transport.produce({
@@ -260,12 +268,25 @@ export function useSendTransport() {
     }
   }
 
-  async function replaceOutboundVideoTrack(track: MediaStreamTrack): Promise<void> {
-    const p = outboundVideoProducer.value
-    if (!p || p.closed) {
-      throw new Error('Outbound video producer is not ready')
-    }
-    await p.replaceTrack({ track })
+  async function replaceOutboundVideoTrack(track: MediaStreamTrack): Promise<string> {
+    const job = outboundVideoReplaceChain.then(async (): Promise<string> => {
+      const p = outboundVideoProducer.value
+      if (!p || p.closed) {
+        throw new Error('Outbound video producer is not ready')
+      }
+      if (import.meta.env.DEV) {
+        console.log('[produce] replaceOutboundVideoTrack', { producerId: p.id, trackId: track.id })
+      }
+      await p.replaceTrack({ track })
+      if (import.meta.env.DEV) {
+        console.log('[produce] replaceTrack applied', p.id)
+      }
+      return p.id
+    })
+    outboundVideoReplaceChain = job.catch(() => {
+      /* never stall the queue */
+    })
+    return job
   }
 
   async function replaceOutboundAudioTrack(track: MediaStreamTrack): Promise<void> {
@@ -277,6 +298,7 @@ export function useSendTransport() {
   }
 
   function closeSendTransport(): void {
+    outboundVideoReplaceChain = Promise.resolve()
     outboundVideoProducer.value = null
     outboundAudioProducer.value = null
     const t = sendTransport.value

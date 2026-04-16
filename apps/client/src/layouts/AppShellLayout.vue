@@ -36,6 +36,11 @@ const { theme, setTheme, toggleTheme } = useTheme()
 
 const isEatRoute = computed(() => route.path.startsWith('/eat'))
 
+/** Wordle/stream: контент у довгому вертикальному потоці — без мін-висоти viewport (інакше flex «тискає» блоки). */
+const isWordleStreamRoute = computed(
+  () => route.name === 'wordle-streamer' || route.name === 'app-streamer',
+)
+
 const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route) : 'join'))
 
 const showChrome = computed(() => !isEatRoute.value || currentEatView.value !== 'overlay')
@@ -245,7 +250,10 @@ onMounted(() => {
       <main class="app-shell-main" :class="{ 'app-shell-main--full': !showChrome }">
         <div
           class="app-shell-main__viewport"
-          :class="{ 'app-shell-main__viewport--chrome': showChrome }"
+          :class="{
+            'app-shell-main__viewport--chrome': showChrome,
+            'app-shell-main__viewport--wordle': isWordleStreamRoute,
+          }"
         >
           <div class="app-shell-route-stack">
             <RouterView v-slot="{ Component }">

@@ -10713,7 +10713,6 @@ export const WORDS_UK_5_SECRET_POOL: readonly string[] = [
   "перед",
   "трохи",
   "потім",
-  "могли",
   "такий",
   "знать",
   "скоро",
@@ -10721,7 +10720,6 @@ export const WORDS_UK_5_SECRET_POOL: readonly string[] = [
   "гроші",
   "хтось",
   "разом",
-  "могла",
   "місце",
   "будем",
   "давно",
@@ -11003,6 +11001,8 @@ export const WORDS_UK_5_SECRET_POOL: readonly string[] = [
   "бридж",
   "ранчо",
   "багаж",
+  "аякже",
+  "краса",
 ]
 
 export const WORDS_UK_6_ALLOWED: readonly string[] = [
@@ -27785,7 +27785,6 @@ export const WORDS_UK_6_SECRET_POOL: readonly string[] = [
   "гаразд",
   "правда",
   "тільки",
-  "потому",
   "більше",
   "ніколи",
   "привіт",
@@ -28100,6 +28099,7 @@ export const WORDS_UK_6_SECRET_POOL: readonly string[] = [
   "тисяча",
   "мюзикл",
   "носити",
+  "кредит",
 ]
 
 export const WORDS_UK_7_ALLOWED: readonly string[] = [
@@ -52092,7 +52092,6 @@ export const WORDS_UK_7_SECRET_POOL: readonly string[] = [
   "жовтень",
   "грудень",
   "людство",
-  "конечно",
   "сказати",
   "можливо",
   "зробити",
@@ -52417,5 +52416,6 @@ export const WORDS_UK_7_SECRET_POOL: readonly string[] = [
   "скласти",
   "напасть",
   "лікарів",
+  "винахід",
 ]
 

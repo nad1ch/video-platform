@@ -9,20 +9,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Streamer {
+  id               String              @id @default(cuid())
+  twitchId         String              @unique
+  username         String              @unique
+  isActive         Boolean             @default(true)
+  users            User[]
+  gameRounds      GameRound[]
+  userStreamerStats UserStreamerStats[]
+}
+
 model User {
-  id             String   @id @default(cuid())
-  provider       String
-  providerUserId String
-  email          String?  @unique
-  displayName    String
-  avatarUrl      String?
-  role           String
-  twitchId       String?  @unique
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  stats          UserStats?
+  id                 String              @id @default(cuid())
+  provider           String
+  providerUserId     String
+  email              String?             @unique
+  displayName        String
+  avatarUrl          String?
+  role               String
+  twitchId           String?             @unique
+  streamerId         String?
+  streamer           Streamer?           @relation(fields: [streamerId], references: [id], onDelete: SetNull)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  stats              UserStats?
+  userStreamerStats  UserStreamerStats[]
 
   @@unique([provider, providerUserId])
+  @@index([streamerId])
+}
+
+// Wordle stats per registered user per streamer room.
+model UserStreamerStats {
+  id          String   @id @default(cuid())
+  userId      String
+  streamerId  String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamer    Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+  gamesPlayed Int      @default(0)
+  wins        Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, streamerId])
+  @@index([streamerId, wins])
+  @@index([userId])
 }
 
 model UserStats {
@@ -39,9 +70,14 @@ model UserStats {
 // Wordle stream round snapshot; participant userId strings match gameStore (session id or Twitch IRC id).
 model GameRound {
   id           String        @id @default(cuid())
+  streamerId String?
+  streamer     Streamer?   @relation(fields: [streamerId], references: [id], onDelete: SetNull)
   winnerUserId String
   createdAt    DateTime      @default(now())
   results      GameResult[]
+
+  @@index([streamerId])
+  @@index([streamerId, createdAt])
 }
 
 model GameResult {

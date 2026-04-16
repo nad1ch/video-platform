@@ -6,7 +6,7 @@ import { signSession, WORDLE_SESSION_MAX_AGE_SEC } from '../auth/session/session
 import { twitchExchangeCode, twitchFetchSessionUser } from '../auth/twitchClient'
 import { persistTwitchOAuthUser } from '../auth/persistOAuthUser'
 import { withSessionRole } from '../auth/session/withSessionRole'
-import { getWordleIngestChannel } from './tmiChat'
+import { getIngestChannelForStreamer } from './tmiChat'
 import { readTwitchChatGuessCooldownMs } from './tmiGuessThrottle'
 
 const isProd = process.env.NODE_ENV === 'production'
@@ -25,9 +25,14 @@ function wordleTwitchRedirectUri(): string {
 }
 
 export function mountTwitchWordleAuth(app: Express): void {
-  app.get('/api/wordle/public-config', (_req: Request, res: Response) => {
+  app.get('/api/wordle/public-config', (req: Request, res: Response) => {
+    const streamerId = typeof req.query.streamerId === 'string' ? req.query.streamerId.trim() : ''
+    if (!streamerId) {
+      res.status(400).json({ error: 'streamerId_required' })
+      return
+    }
     res.json({
-      ingestChannel: getWordleIngestChannel(),
+      ingestChannel: getIngestChannelForStreamer(streamerId),
       chatGuessCooldownMs: readTwitchChatGuessCooldownMs(),
     })
   })
@@ -47,7 +52,9 @@ export function mountTwitchWordleAuth(app: Express): void {
       const user = withSessionRole(profile)
       const token = signSession(user, WORDLE_SESSION_MAX_AGE_SEC)
       setGlobalSessionCookie(res, token)
-      res.redirect(`${clientPublicOrigin()}/wordle`)
+      const defaultSlug =
+        (process.env.WORDLE_DEFAULT_STREAMER_USERNAME || 'nad1ch').trim().toLowerCase() || 'nad1ch'
+      res.redirect(`${clientPublicOrigin()}/wordle/${encodeURIComponent(defaultSlug)}`)
     } catch (e) {
       console.error('[auth] [twitch] wordle OAuth callback error', e)
       res.status(500).send('OAuth failed')

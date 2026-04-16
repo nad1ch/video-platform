@@ -24,6 +24,44 @@ async function safeEnumerateDevices(): Promise<MediaDeviceInfo[]> {
   }
 }
 
+/** Explicit pick from enumerateDevices: `ideal` can keep the previous device; `exact` forces the switch. */
+async function getUserMediaWithDeviceIdExactThenIdeal(
+  constraints: MediaStreamConstraints,
+  kind: 'audio' | 'video',
+): Promise<MediaStream> {
+  const pick = constraints[kind]
+  if (!pick || typeof pick !== 'object') {
+    return await navigator.mediaDevices.getUserMedia(constraints)
+  }
+  const o = pick as Record<string, unknown>
+  const raw = o.deviceId
+  let deviceId: string | undefined
+  if (typeof raw === 'string') {
+    deviceId = raw.trim()
+  } else if (raw && typeof raw === 'object' && 'exact' in raw) {
+    const ex = (raw as { exact?: unknown }).exact
+    deviceId = typeof ex === 'string' ? ex.trim() : undefined
+  } else if (raw && typeof raw === 'object' && 'ideal' in raw) {
+    const id = (raw as { ideal?: unknown }).ideal
+    deviceId = typeof id === 'string' ? id.trim() : undefined
+  }
+  if (!deviceId) {
+    return await navigator.mediaDevices.getUserMedia(constraints)
+  }
+  const withExact = {
+    ...constraints,
+    [kind]: { ...o, deviceId: { exact: deviceId } },
+  } as MediaStreamConstraints
+  try {
+    return await navigator.mediaDevices.getUserMedia(withExact)
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.warn(`[local] ${kind} exact deviceId failed, retry ideal`, e)
+    }
+    return await navigator.mediaDevices.getUserMedia(constraints)
+  }
+}
+
 export function useLocalMedia(options?: UseLocalMediaOptions) {
   const resolveTier = (): VideoPublishTier => options?.getVideoPublishTier?.() ?? 'auto_large_room'
   const localStream = shallowRef<MediaStream | null>(null)
@@ -162,9 +200,12 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     }
     const old = stream.getAudioTracks()[0]
     const prevEnabled = old ? old.enabled : true
-    const tmp = await navigator.mediaDevices.getUserMedia({
-      audio: { ...DEFAULT_CALL_AUDIO_CONSTRAINTS, deviceId: { ideal: deviceId } },
-    })
+    const tmp = await getUserMediaWithDeviceIdExactThenIdeal(
+      {
+        audio: { ...DEFAULT_CALL_AUDIO_CONSTRAINTS, deviceId: { ideal: deviceId } },
+      },
+      'audio',
+    )
     const nt = tmp.getAudioTracks()[0]
     if (!nt) {
       for (const t of tmp.getTracks()) {
@@ -200,9 +241,12 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     const old = stream.getVideoTracks()[0]
     const prevEnabled = old ? old.enabled : false
     const tier = resolveTier()
-    const tmp = await navigator.mediaDevices.getUserMedia({
-      video: { ...getCallVideoConstraints(tier), deviceId: { ideal: deviceId } },
-    })
+    const tmp = await getUserMediaWithDeviceIdExactThenIdeal(
+      {
+        video: { ...getCallVideoConstraints(tier), deviceId: { ideal: deviceId } },
+      },
+      'video',
+    )
     const nt = tmp.getVideoTracks()[0]
     if (!nt) {
       for (const t of tmp.getTracks()) {

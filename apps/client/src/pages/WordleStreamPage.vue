@@ -20,16 +20,23 @@ import {
 import { apiUrl, sameOriginApiPrefix } from '@/utils/apiUrl'
 import { useAuth } from '@/composables/useAuth'
 
-const TWITCH_CHANNEL_STORAGE_KEY = 'streamassist_wordle_twitch_channel'
 const WORDLE_WORD_LEN_KEY = 'streamassist_wordle_word_len'
 const WORDLE_LOCAL_STATS_KEY = 'streamassist_wordle_local_stats'
 const DEMO_TWITCH_CHANNEL = STREAMER_NICK
 
+/** Ланцюг висоти як у `sa-call-route` — див. `style.css` (`html.sa-wordle-route`). */
+const WORDLE_ROUTE_HTML_CLASS = 'sa-wordle-route'
+
 type LocalWinStats = { won: number; lost: number }
 
-function loadWordLength(): WordLength {
+type WordlePublicConfig = {
+  ingestChannel: string | null
+  chatGuessCooldownMs: number
+}
+
+function loadWordLength(scope: string): WordLength {
   try {
-    const n = Number(localStorage.getItem(WORDLE_WORD_LEN_KEY))
+    const n = Number(localStorage.getItem(`${WORDLE_WORD_LEN_KEY}:${scope}`))
     if (n === 5 || n === 6 || n === 7) {
       return n
     }
@@ -39,17 +46,17 @@ function loadWordLength(): WordLength {
   return 5
 }
 
-function persistWordLength(len: WordLength): void {
+function persistWordLength(scope: string, len: WordLength): void {
   try {
-    localStorage.setItem(WORDLE_WORD_LEN_KEY, String(len))
+    localStorage.setItem(`${WORDLE_WORD_LEN_KEY}:${scope}`, String(len))
   } catch {
     /* ignore */
   }
 }
 
-function loadLocalStats(): LocalWinStats {
+function loadLocalStats(scope: string): LocalWinStats {
   try {
-    const raw = localStorage.getItem(WORDLE_LOCAL_STATS_KEY)
+    const raw = localStorage.getItem(`${WORDLE_LOCAL_STATS_KEY}:${scope}`)
     if (!raw) {
       return { won: 0, lost: 0 }
     }
@@ -63,9 +70,9 @@ function loadLocalStats(): LocalWinStats {
   }
 }
 
-function persistLocalStats(s: LocalWinStats): void {
+function persistLocalStats(scope: string, s: LocalWinStats): void {
   try {
-    localStorage.setItem(WORDLE_LOCAL_STATS_KEY, JSON.stringify(s))
+    localStorage.setItem(`${WORDLE_LOCAL_STATS_KEY}:${scope}`, JSON.stringify(s))
   } catch {
     /* ignore */
   }
@@ -85,34 +92,44 @@ function normalizeTwitchLogin(raw: string | null | undefined): string | null {
   return t
 }
 
-function readStoredTwitchChannel(): string | null {
-  try {
-    return normalizeTwitchLogin(localStorage.getItem(TWITCH_CHANNEL_STORAGE_KEY))
-  } catch {
-    return null
-  }
-}
-
 const route = useRoute()
 const { t, locale } = useI18n()
 
+/** Per-streamer local prefs (URL slug until API resolves). */
+const wordleStorageScope = computed(() => normalizeTwitchLogin(String(route.params.streamer || '')) || 'default')
+
 const wordlePublicConfig = shallowRef<WordlePublicConfig | null>(null)
 
-function channelFromQuery(): string | null {
-  const q = route.query.channel
-  const raw = Array.isArray(q) ? q[0] : q
-  return normalizeTwitchLogin(typeof raw === 'string' ? raw : undefined)
+type StreamerCard = {
+  id: string
+  twitchId: string
+  username: string
+  isActive: boolean
 }
 
-function persistQueryChannelToStorage(): void {
-  const q = channelFromQuery()
-  if (!q) {
+const streamerProfile = shallowRef<StreamerCard | null>(null)
+const streamerLoadError = ref<string | null>(null)
+
+async function loadStreamerCard(): Promise<void> {
+  streamerLoadError.value = null
+  const slug = normalizeTwitchLogin(String(route.params.streamer || ''))
+  if (!slug) {
+    streamerProfile.value = null
+    streamerLoadError.value = 'Invalid streamer'
     return
   }
   try {
-    localStorage.setItem(TWITCH_CHANNEL_STORAGE_KEY, q)
+    const res = await fetch(apiUrl(`/api/streamer/${encodeURIComponent(slug)}`))
+    if (!res.ok) {
+      streamerProfile.value = null
+      streamerLoadError.value = res.status === 404 ? 'Streamer not found' : 'Failed to load streamer'
+      return
+    }
+    streamerProfile.value = (await res.json()) as StreamerCard
+    streamerLoadError.value = null
   } catch {
-    /* private mode / quota */
+    streamerProfile.value = null
+    streamerLoadError.value = 'Network error'
   }
 }
 
@@ -154,11 +171,6 @@ type ChatLine = {
   guessFeedback?: Feedback[]
 }
 
-type WordlePublicConfig = {
-  ingestChannel: string | null
-  chatGuessCooldownMs: number
-}
-
 /** Must match `apps/server/src/wordle/wsProtocol.ts` (WordleWs). */
 const Ws = {
   state: 'wordle:state',
@@ -166,6 +178,7 @@ const Ws = {
   userGuess: 'wordle:user-guess',
   newGame: 'wordle:new-game',
   twitchChat: 'wordle:twitch-chat',
+  ircStatus: 'wordle:irc-status',
   session: 'wordle:session',
   error: 'wordle:error',
   guessRejected: 'wordle:guess-rejected',
@@ -213,29 +226,19 @@ const chatLines = ref<ChatLine[]>([])
 const sessionUser = shallowRef<SessionUser | null>(null)
 const guessInput = ref('')
 const wsStatus = ref<'idle' | 'open' | 'closed' | 'error'>('idle')
+/** Twitch IRC ingest on the server (independent of this browser WebSocket). */
+const ircRelayStatus = ref<'idle' | 'connected' | 'disconnected' | 'reconnecting' | 'connecting' | 'error'>('idle')
 const lastError = ref<string | null>(null)
 
 let ws: WebSocket | null = null
 
-/**
- * Priority: URL ?channel= → localStorage (viewer choice) → VITE_TWITCH_CHANNEL → demo fallback.
- * Custom chat panel shows IRC relay over WebSocket; server ingest must use TWITCH_CHANNEL (match for live guesses).
- */
+/** Twitch channel login for this streamer room (from API; URL slug while loading). */
 const effectiveTwitchChannel = computed(() => {
-  void route.query.channel
-  const q = channelFromQuery()
-  if (q) {
-    return q
+  const fromApi = streamerProfile.value?.username
+  if (typeof fromApi === 'string' && fromApi.length > 0) {
+    return fromApi.toLowerCase()
   }
-  const saved = readStoredTwitchChannel()
-  if (saved) {
-    return saved
-  }
-  const env = normalizeTwitchLogin(import.meta.env.VITE_TWITCH_CHANNEL as string | undefined)
-  if (env) {
-    return env
-  }
-  return DEMO_TWITCH_CHANNEL
+  return normalizeTwitchLogin(String(route.params.streamer || '')) ?? DEMO_TWITCH_CHANNEL
 })
 
 function formatCooldownHint(ms: number): string {
@@ -250,9 +253,20 @@ function feedbackToEmojis(fb: Feedback[]): string {
     .join(' ')
 }
 
+/** Unique per page load / tab — never from localStorage (avoids WS / UI collisions across tabs). */
+const wordleTabPeerId =
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `tab-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
+
 async function fetchWordlePublicConfig(): Promise<void> {
+  const id = streamerProfile.value?.id
+  if (!id) {
+    wordlePublicConfig.value = null
+    return
+  }
   try {
-    const res = await fetch(apiUrl('/api/wordle/public-config'))
+    const res = await fetch(apiUrl(`/api/wordle/public-config?streamerId=${encodeURIComponent(id)}`))
     if (!res.ok) {
       return
     }
@@ -269,20 +283,27 @@ async function fetchWordlePublicConfig(): Promise<void> {
   }
 }
 
-function wordleWsUrl(): string {
+function wordleWsUrl(streamerId: string): string {
   const env = import.meta.env.VITE_WORDLE_WS_URL as string | undefined
-  if (typeof env === 'string' && env.trim().length > 0) {
-    return env.trim()
-  }
-  const prefix = sameOriginApiPrefix()
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  if (prefix.startsWith('http://') || prefix.startsWith('https://')) {
-    const u = new URL('/wordle-ws', prefix.endsWith('/') ? prefix : `${prefix}/`)
+  if (typeof env === 'string' && env.trim().length > 0) {
+    const u = new URL(env.trim())
+    u.searchParams.set('streamerId', streamerId)
+    u.searchParams.set('peerId', wordleTabPeerId)
     u.protocol = proto
     return u.toString()
   }
+  const prefix = sameOriginApiPrefix()
+  if (prefix.startsWith('http://') || prefix.startsWith('https://')) {
+    const u = new URL('/wordle-ws', prefix.endsWith('/') ? prefix : `${prefix}/`)
+    u.protocol = proto
+    u.searchParams.set('streamerId', streamerId)
+    u.searchParams.set('peerId', wordleTabPeerId)
+    return u.toString()
+  }
   const path = prefix ? `${prefix}/wordle-ws` : '/wordle-ws'
-  return `${proto}//${location.host}${path}`
+  const q = new URLSearchParams({ streamerId, peerId: wordleTabPeerId }).toString()
+  return `${proto}//${location.host}${path}?${q}`
 }
 
 const twitchWatchUrl = computed(
@@ -323,18 +344,28 @@ const wsStatusLabel = computed(() => {
   }
 })
 
-watch(
-  () => route.query.channel,
-  () => {
-    persistQueryChannelToStorage()
-  },
-)
+const ircRelayBanner = computed(() => {
+  void locale.value
+  switch (ircRelayStatus.value) {
+    case 'reconnecting':
+      return t('wordleUi.chatIrcReconnecting')
+    case 'disconnected':
+      return t('wordleUi.chatIrcDisconnected')
+    case 'connecting':
+      return t('wordleUi.chatIrcConnecting')
+    case 'error':
+      return t('wordleUi.chatIrcError')
+    default:
+      return ''
+  }
+})
 
 watch(
-  effectiveTwitchChannel,
-  (ch, prev) => {
-    if (prev !== undefined && ch !== prev) {
+  () => streamerProfile.value?.id,
+  (id, prev) => {
+    if (prev !== undefined && id !== prev) {
       chatLines.value = []
+      ircRelayStatus.value = 'idle'
     }
   },
 )
@@ -342,10 +373,10 @@ watch(
 /** Локальна гра (український Wordle); співпадає з MAX_ATTEMPTS у wordleLogic. */
 const WORDLE_MAX_ATTEMPTS = MAX_ATTEMPTS
 
-/** Рядки клавіатури: усі 33 літери української абетки. */
-const KBD_ROW1 = ['А', 'Б', 'В', 'Г', 'Ґ', 'Д', 'Е', 'Є', 'Ж', 'З', 'И'] as const
-const KBD_ROW2 = ['І', 'Ї', 'Й', 'К', 'Л', 'М', 'Н', 'О', 'П', 'Р', 'С'] as const
-const KBD_ROW3 = ['Т', 'У', 'Ф', 'Х', 'Ц', 'Ч', 'Ш', 'Щ', 'Ь', 'Ю', 'Я'] as const
+/** Екранна клавіатура: стандартний український JCUKEN-порядок (Windows/PC). */
+const KBD_ROW1 = ['Й', 'Ц', 'У', 'К', 'Е', 'Н', 'Г', 'Ш', 'Щ', 'З', 'Х', 'Ї'] as const
+const KBD_ROW2 = ['Ф', 'І', 'В', 'А', 'П', 'Р', 'О', 'Л', 'Д', 'Ж', 'Є'] as const
+const KBD_ROW3 = ['Ґ', 'Я', 'Ч', 'С', 'М', 'И', 'Т', 'Ь', 'Б', 'Ю'] as const
 
 const CONFETTI_PIECES = 32
 
@@ -367,14 +398,41 @@ function confettiStyle(i: number): Record<string, string> {
 
 const guessFieldId = 'wordle-guess-sr'
 
-const wordLength = ref<WordLength>(loadWordLength())
-const secretWord = ref(randomWord(wordLength.value))
+const wordLength = ref<WordLength>(5)
+const secretWord = ref(randomWord(5))
 const localGuesses = ref<LocalGuessRow[]>([])
 const gameStatus = ref<'playing' | 'won' | 'lost'>('playing')
 const localRoundId = ref(0)
-const localStats = ref<LocalWinStats>(loadLocalStats())
+const localStats = ref<LocalWinStats>({ won: 0, lost: 0 })
 /** Для стріму: тимчасово показати загадане слово. */
 const secretPeekVisible = ref(false)
+
+/** Довжина слова для підказки в чаті: з WS-стану раунду (як на сервері для Twitch), інакше локальна сітка. */
+const chatTargetWordLength = computed(() => {
+  const ws = gameState.value?.wordLength
+  if (typeof ws === 'number' && Number.isFinite(ws) && ws > 0) {
+    return Math.min(32, Math.max(1, Math.round(ws)))
+  }
+  return wordLength.value
+})
+
+watch(
+  () => normalizeTwitchLogin(String(route.params.streamer || '')) || 'default',
+  async (scope) => {
+    const len = loadWordLength(scope)
+    wordLength.value = len
+    secretWord.value = randomWord(len)
+    localGuesses.value = []
+    guessInput.value = ''
+    gameStatus.value = 'playing'
+    localStats.value = loadLocalStats(scope)
+    localRoundId.value += 1
+    await loadStreamerCard()
+    void fetchWordlePublicConfig()
+    connectWs()
+  },
+  { immediate: true },
+)
 
 const localBoardLocked = computed(
   () => gameStatus.value !== 'playing' || localGuesses.value.length >= MAX_ATTEMPTS,
@@ -486,9 +544,13 @@ function kbdKeyFeedbackModifier(ch: string): string | undefined {
 }
 
 function connectWs(): void {
+  const streamerId = streamerProfile.value?.id
+  if (!streamerId) {
+    return
+  }
   ws?.close()
   wsStatus.value = 'idle'
-  const url = wordleWsUrl()
+  const url = wordleWsUrl(streamerId)
   const socket = new WebSocket(url)
   ws = socket
 
@@ -533,6 +595,17 @@ function connectWs(): void {
       }
       chatLines.value = [...chatLines.value.slice(-250), line]
       void nextTick(() => scrollChatToBottom())
+    } else if (t === Ws.ircStatus && p && typeof p === 'object') {
+      const st = (p as { status?: unknown }).status
+      if (
+        st === 'connected' ||
+        st === 'disconnected' ||
+        st === 'reconnecting' ||
+        st === 'connecting' ||
+        st === 'error'
+      ) {
+        ircRelayStatus.value = st
+      }
     } else if (t === Ws.error && p && typeof p === 'object') {
       const msg = (p as { message?: string }).message
       lastError.value = typeof msg === 'string' ? msg : 'Error'
@@ -615,7 +688,7 @@ function setWordLength(len: WordLength): void {
   lastError.value = null
   secretPeekVisible.value = false
   wordLength.value = len
-  persistWordLength(len)
+  persistWordLength(wordleStorageScope.value, len)
   secretWord.value = randomWord(len)
   localGuesses.value = []
   guessInput.value = ''
@@ -684,13 +757,22 @@ watch(gameStatus, (next, prev) => {
   if (next === 'won') {
     const s = { ...localStats.value, won: localStats.value.won + 1 }
     localStats.value = s
-    persistLocalStats(s)
+    persistLocalStats(wordleStorageScope.value, s)
   } else if (next === 'lost') {
     const s = { ...localStats.value, lost: localStats.value.lost + 1 }
     localStats.value = s
-    persistLocalStats(s)
+    persistLocalStats(wordleStorageScope.value, s)
   }
 })
+
+const WORDLE_STREAM_CHAT_ANCHOR_ID = 'wordle-stream-chat-anchor'
+
+function scrollWordleChatIntoView(): void {
+  if (typeof document === 'undefined') {
+    return
+  }
+  document.getElementById(WORDLE_STREAM_CHAT_ANCHOR_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 const globalLbTab = ref<'wins' | 'streak' | 'rating'>('wins')
 const globalLbWinsRows = ref<WordleGlobalWinsRow[]>([])
@@ -721,11 +803,23 @@ function globalLbInitials(name: string): string {
   return s[0]!.toUpperCase()
 }
 
+function globalLeaderboardQuery(): string {
+  const id = streamerProfile.value?.id
+  if (typeof id === 'string' && id.length > 0) {
+    return `?streamerId=${encodeURIComponent(id)}`
+  }
+  const slug = normalizeTwitchLogin(String(route.params.streamer || ''))
+  if (slug) {
+    return `?streamer=${encodeURIComponent(slug)}`
+  }
+  return ''
+}
+
 async function loadGlobalLbWins(): Promise<void> {
   globalLbLoading.value = true
   globalLbError.value = null
   try {
-    const res = await fetch(apiUrl('/api/leaderboard/wins'), { credentials: 'include' })
+    const res = await fetch(apiUrl(`/api/leaderboard/wins${globalLeaderboardQuery()}`), { credentials: 'include' })
     const j = (await res.json()) as { entries?: unknown }
     const list = Array.isArray(j.entries) ? j.entries : []
     globalLbWinsRows.value = list
@@ -751,7 +845,7 @@ async function loadGlobalLbStreak(): Promise<void> {
   globalLbLoading.value = true
   globalLbError.value = null
   try {
-    const res = await fetch(apiUrl('/api/leaderboard/streak'), { credentials: 'include' })
+    const res = await fetch(apiUrl(`/api/leaderboard/streak${globalLeaderboardQuery()}`), { credentials: 'include' })
     const j = (await res.json()) as { entries?: unknown }
     const list = Array.isArray(j.entries) ? j.entries : []
     globalLbStreakRows.value = list
@@ -777,7 +871,7 @@ async function loadGlobalLbRating(): Promise<void> {
   globalLbLoading.value = true
   globalLbError.value = null
   try {
-    const res = await fetch(apiUrl('/api/leaderboard/rating'), { credentials: 'include' })
+    const res = await fetch(apiUrl(`/api/leaderboard/rating${globalLeaderboardQuery()}`), { credentials: 'include' })
     const j = (await res.json()) as { entries?: unknown }
     const list = Array.isArray(j.entries) ? j.entries : []
     globalLbRatingRows.value = list
@@ -815,6 +909,13 @@ watch(globalLbTab, () => {
   void loadGlobalLbActive()
 })
 
+watch(
+  () => streamerProfile.value?.id,
+  () => {
+    void loadGlobalLbActive()
+  },
+)
+
 const globalLbDisplayRows = computed(
   (): readonly (WordleGlobalWinsRow | WordleGlobalStreakRow | WordleGlobalRatingRow)[] => {
     if (globalLbTab.value === 'wins') {
@@ -848,14 +949,13 @@ function globalLbScoreFor(row: WordleGlobalWinsRow | WordleGlobalStreakRow | Wor
 }
 
 onMounted(() => {
-  persistQueryChannelToStorage()
-  void fetchWordlePublicConfig()
+  document.documentElement.classList.add(WORDLE_ROUTE_HTML_CLASS)
   void loadGlobalLbActive()
-  connectWs()
   window.addEventListener('keydown', onWindowKeydown)
 })
 
 onUnmounted(() => {
+  document.documentElement.classList.remove(WORDLE_ROUTE_HTML_CLASS)
   window.removeEventListener('keydown', onWindowKeydown)
   ws?.close()
   ws = null
@@ -864,8 +964,13 @@ onUnmounted(() => {
 
 <template>
   <div class="page-route">
-    <AppContainer wide flush class="wordle-page" :class="`wordle-page--len${wordLength}`">
-      <p v-if="lastError" class="wordle-page__banner">{{ lastError }}</p>
+    <AppContainer
+      wide
+      flush
+      :class="['wordle-page', `wordle-page--len${wordLength}`]"
+    >
+      <p v-if="streamerLoadError" class="wordle-page__banner wordle-page__banner--error">{{ streamerLoadError }}</p>
+      <p v-else-if="lastError" class="wordle-page__banner">{{ lastError }}</p>
 
       <div class="wordle-page__grid">
         <AppCard class="wordle-page__stack wordle-page__stack--side wordle-page__stack--leader">
@@ -997,20 +1102,6 @@ onUnmounted(() => {
             </p>
           </div>
 
-          <div class="wordle-page__len-bar" role="group" :aria-label="t('wordleUi.wordLengthGroupAria')">
-            <div class="wordle-page__len-buttons">
-              <AppButton
-                v-for="n in WORD_LENGTH_OPTIONS"
-                :key="n"
-                type="button"
-                :variant="wordLength === n ? 'primary' : 'ghost'"
-                class="wordle-page__len-btn"
-                @click="setWordLength(n)"
-              >
-                {{ n }}
-              </AppButton>
-            </div>
-          </div>
         </AppCard>
 
         <AppCard class="wordle-page__stack wordle-page__stack--game">
@@ -1082,62 +1173,80 @@ onUnmounted(() => {
               :style="{ '--wordle-len': String(wordLength) }"
               :aria-label="t('wordleUi.screenKeyboardAria')"
             >
-              <div class="wordle-page__kbd-row">
-                <AppButton
-                  v-for="ch in KBD_ROW1"
-                  :key="ch"
-                  type="button"
-                  variant="ghost"
-                  class="wordle-page__kbd-key"
-                  :class="kbdKeyFeedbackModifier(ch)"
-                  :disabled="localBoardLocked"
-                  @click="kbdAppendLetter(ch)"
-                >
-                  {{ ch }}
-                </AppButton>
+              <div class="wordle-page__kbd-inner">
+                <div class="wordle-page__kbd-main">
+                  <div class="wordle-page__kbd-row">
+                    <AppButton
+                      v-for="ch in KBD_ROW1"
+                      :key="ch"
+                      type="button"
+                      variant="ghost"
+                      class="wordle-page__kbd-key"
+                      :class="kbdKeyFeedbackModifier(ch)"
+                      :disabled="localBoardLocked"
+                      @click="kbdAppendLetter(ch)"
+                    >
+                      {{ ch }}
+                    </AppButton>
+                  </div>
+                  <div class="wordle-page__kbd-row wordle-page__kbd-row--mid">
+                    <AppButton
+                      v-for="ch in KBD_ROW2"
+                      :key="ch"
+                      type="button"
+                      variant="ghost"
+                      class="wordle-page__kbd-key"
+                      :class="kbdKeyFeedbackModifier(ch)"
+                      :disabled="localBoardLocked"
+                      @click="kbdAppendLetter(ch)"
+                    >
+                      {{ ch }}
+                    </AppButton>
+                  </div>
+                  <div class="wordle-page__kbd-row">
+                    <AppButton
+                      v-for="ch in KBD_ROW3"
+                      :key="ch"
+                      type="button"
+                      variant="ghost"
+                      class="wordle-page__kbd-key"
+                      :class="kbdKeyFeedbackModifier(ch)"
+                      :disabled="localBoardLocked"
+                      @click="kbdAppendLetter(ch)"
+                    >
+                      {{ ch }}
+                    </AppButton>
+                  </div>
+                </div>
               </div>
-              <div class="wordle-page__kbd-row wordle-page__kbd-row--mid">
-                <AppButton
-                  v-for="ch in KBD_ROW2"
-                  :key="ch"
-                  type="button"
-                  variant="ghost"
-                  class="wordle-page__kbd-key"
-                  :class="kbdKeyFeedbackModifier(ch)"
-                  :disabled="localBoardLocked"
-                  @click="kbdAppendLetter(ch)"
-                >
-                  {{ ch }}
-                </AppButton>
-              </div>
-              <div class="wordle-page__kbd-row">
-                <AppButton
-                  v-for="ch in KBD_ROW3"
-                  :key="ch"
-                  type="button"
-                  variant="ghost"
-                  class="wordle-page__kbd-key"
-                  :class="kbdKeyFeedbackModifier(ch)"
-                  :disabled="localBoardLocked"
-                  @click="kbdAppendLetter(ch)"
-                >
-                  {{ ch }}
-                </AppButton>
-              </div>
-              <div class="wordle-page__kbd-row wordle-page__kbd-row--actions">
+              <div
+                class="wordle-page__kbd-row wordle-page__kbd-row--actions"
+                role="group"
+                :aria-label="t('wordleUi.kbdToolbarAria')"
+              >
                 <AppButton
                   type="button"
                   variant="secondary"
-                  class="wordle-page__kbd-action"
+                  class="wordle-page__kbd-action wordle-page__kbd-side-action"
                   :disabled="localBoardLocked || normalizeWord(guessInput).length !== wordLength"
                   @click="submitGuess"
                 >
                   {{ t('wordleUi.enter') }}
                 </AppButton>
                 <AppButton
+                  v-for="n in WORD_LENGTH_OPTIONS"
+                  :key="n"
+                  type="button"
+                  :variant="wordLength === n ? 'primary' : 'ghost'"
+                  class="wordle-page__len-btn wordle-page__len-btn--kbd"
+                  @click="setWordLength(n)"
+                >
+                  {{ n }}
+                </AppButton>
+                <AppButton
                   type="button"
                   variant="ghost"
-                  class="wordle-page__kbd-action"
+                  class="wordle-page__kbd-action wordle-page__kbd-side-action"
                   :disabled="localBoardLocked"
                   @click="kbdBackspace"
                 >
@@ -1166,16 +1275,27 @@ onUnmounted(() => {
           </div>
         </AppCard>
 
-        <AppCard class="wordle-page__stack wordle-page__stack--side wordle-page__stack--chat">
+        <div class="wordle-page__chat-mobile-trigger">
+          <AppButton type="button" variant="secondary" @click="scrollWordleChatIntoView">
+            {{ t('wordleUi.chatMobileOpen') }}
+          </AppButton>
+        </div>
+
+        <AppCard
+          :id="WORDLE_STREAM_CHAT_ANCHOR_ID"
+          class="wordle-page__stack wordle-page__stack--side wordle-page__stack--chat"
+        >
           <div class="wordle-page__chat-shell">
             <header class="wordle-page__chat-head">
               <div class="wordle-page__chat-head-row">
                 <h2 class="wordle-page__chat-title">{{ t('wordleUi.chatTitle') }}</h2>
                 <span class="wordle-page__chat-ws-pill" :data-state="wsStatus">{{ wsStatusLabel }}</span>
               </div>
+              <p class="wordle-page__chat-len-hint" role="note">
+                {{ t('wordleUi.chatGuessLenHint', { n: chatTargetWordLength }) }}
+              </p>
               <div class="wordle-page__chat-toolbar">
                 <span class="wordle-page__chat-channel-pill">#{{ effectiveTwitchChannel }}</span>
-                <span class="wordle-page__chat-feed-label">{{ t('wordleUi.chatFeedLabel') }}</span>
                 <a
                   class="wordle-page__chat-external"
                   :href="twitchWatchUrl"
@@ -1185,6 +1305,7 @@ onUnmounted(() => {
                   {{ t('wordleUi.chatOpenTwitch') }}
                 </a>
               </div>
+              <p v-if="ircRelayBanner" class="wordle-page__chat-irc-banner" role="status">{{ ircRelayBanner }}</p>
             </header>
             <div
               ref="chatFeedEl"
@@ -1233,6 +1354,7 @@ onUnmounted(() => {
           </div>
         </AppCard>
       </div>
+
     </AppContainer>
   </div>
 </template>
@@ -1246,8 +1368,8 @@ onUnmounted(() => {
   width: 100%;
 }
 
-/* На вузьких/планшетних екранах не розтягуємо сторінку на всю висоту viewport. */
-@media (max-width: 1100px) {
+/* Десктоп-сітка з `min-width: 1201px`; нижче — планшет/мобільна колонка. */
+@media (max-width: 1200px) {
   .page-route {
     flex: 0 1 auto;
   }
@@ -1266,6 +1388,10 @@ onUnmounted(() => {
   flex-direction: column;
   min-height: 0;
   gap: var(--sa-space-2);
+  width: 100%;
+  max-width: min(56.25rem, 100%);
+  margin-inline: auto;
+  box-sizing: border-box;
 }
 
 .wordle-page--len6 {
@@ -1439,17 +1565,63 @@ onUnmounted(() => {
   color: var(--sa-color-text-main);
 }
 
+.wordle-page__chat-mobile-trigger {
+  display: none;
+  justify-content: center;
+  padding: var(--sa-space-1) 0;
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  /* Кнопка прокрутки до чату в потоці документа; сам чат більше не fixed-оверлей (не наїжджає на поле/клавіатуру). */
+  .wordle-page__chat-mobile-trigger {
+    display: flex;
+  }
+}
+
 .wordle-page__grid {
   flex: 1;
   min-height: 0;
   display: grid;
+  grid-template-columns: 1fr;
   gap: var(--sa-space-4);
   align-items: stretch;
+  /* `minmax(min-content, max-content)` ламав flow на одній колонці (планшет). */
+  grid-auto-rows: auto;
 }
 
-@media (min-width: 1101px) {
+/* Триколонка: лідерборд/чат не розтягуються ширше за клітинку grid, горизонтальний вміст не «протікає». */
+.wordle-page__grid :deep(.wordle-page__stack--leader),
+.wordle-page__grid :deep(.wordle-page__stack--chat) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.wordle-page__grid :deep(.wordle-page__stack--leader) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+@media (min-width: 1201px) {
+  /* Одна висота колонок, скрол лише всередині (чат / таблиця), без скролу body. */
+  .page-route {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
   .wordle-page {
     --wordle-gap: clamp(6px, 1vmin, 10px);
+    max-width: min(87.5rem, 100%);
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
   }
 
   .wordle-page--len5 {
@@ -1465,7 +1637,21 @@ onUnmounted(() => {
   }
 
   .wordle-page__grid {
-    grid-template-columns: minmax(9.5rem, 0.62fr) minmax(17rem, 1.08fr) minmax(9rem, 0.82fr);
+    align-items: stretch;
+    justify-content: center;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    /* Було: боки min 260px + центр minmax(0,720px) — усе стискання «їло» лише центр.
+       Співвідношення ~ як колишні max: 300 : 720 : 320 → 15fr : 36fr : 16fr. */
+    grid-template-columns:
+      minmax(10.25rem, 15fr)
+      minmax(18.5rem, 36fr)
+      minmax(10.25rem, 16fr);
+  }
+
+  .wordle-page__kbd {
+    min-width: 0;
   }
 
   @media (max-height: 820px) {
@@ -1474,16 +1660,25 @@ onUnmounted(() => {
     }
 
     .wordle-page__kbd :deep(.wordle-page__kbd-key) {
-      padding: clamp(0.05rem, 0.7cqw, 0.18rem) clamp(0.03rem, 0.45cqw, 0.12rem);
-      font-size: 0.66rem;
-      font-size: min(0.7rem, 6.5cqw, calc(100cqw / 15));
-      max-width: 2.55rem;
-      max-height: 2.55rem;
+      height: 42px;
+      min-width: 34px;
+      font-size: 14px;
+      padding: 0 0.2rem;
     }
 
-    .wordle-page__kbd :deep(.wordle-page__kbd-action) {
-      padding: 0.34rem 0.55rem;
-      font-size: 0.68rem;
+    .wordle-page__kbd :deep(.wordle-page__kbd-side-action) {
+      min-width: 48px;
+      max-width: 4rem;
+      height: 40px;
+      padding: 0 0.22rem;
+      font-size: 0.6rem;
+    }
+
+    .wordle-page__kbd-row--actions .wordle-page__len-btn--kbd {
+      height: 40px;
+      min-width: 1.85rem;
+      max-width: 2.5rem;
+      font-size: 0.78rem;
     }
 
     .wordle-page__game {
@@ -1492,41 +1687,102 @@ onUnmounted(() => {
   }
 }
 
-@media (max-width: 1100px) {
+/* Мобільний / планшетний стек: одна колонка, скрол сторінки; порядок блоків фіксований. */
+@media (max-width: 1200px) {
+  .page-route {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .wordle-page {
+    flex: 0 1 auto;
+    min-height: auto;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    padding-block: var(--sa-space-2) max(var(--sa-space-7), calc(var(--sa-space-5) + env(safe-area-inset-bottom, 0px)));
+    max-width: min(68rem, 100%);
+  }
+
   .wordle-page__grid {
-    grid-template-columns: 1fr;
-    min-height: 0;
-    gap: var(--sa-space-3);
-    align-items: stretch;
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-height: auto;
+    height: auto;
+    gap: 16px;
   }
 
-  /* Лідерборд / «ти» зверху, потім гра, внизу чат. */
-  .wordle-page__stack--leader {
-    order: -2;
+  .wordle-page__grid > .wordle-page__stack,
+  .wordle-page__grid > .wordle-page__chat-mobile-trigger {
+    flex: 0 0 auto;
+    min-height: auto;
+    height: auto;
+    max-height: none;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+    overflow-y: visible;
   }
 
-  .wordle-page__stack--game {
-    order: -1;
+  .wordle-page__grid > .wordle-page__stack--leader {
+    order: 1;
   }
 
-  .wordle-page__stack--chat {
-    order: 0;
+  .wordle-page__grid > .wordle-page__stack--game {
+    order: 2;
+  }
+
+  .wordle-page__grid > .wordle-page__chat-mobile-trigger {
+    order: 3;
+    display: none;
+  }
+
+  .wordle-page__grid > .wordle-page__stack--chat {
+    order: 4;
+  }
+
+  .wordle-page__grid > .wordle-page__stack--leader {
+    flex: 0 0 auto;
+    align-self: stretch;
+    overflow: visible;
   }
 
   .wordle-page__game {
+    flex: 0 0 auto;
+    min-height: auto;
+    height: auto;
     justify-content: flex-start;
+    max-width: 100%;
+    overflow: visible;
+  }
+
+  .wordle-page__stack--leader > .wordle-page__leader-stack {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--sa-space-3);
+    flex: 0 0 auto;
+    min-height: auto;
+    height: auto;
+  }
+
+  .wordle-page__stack--chat > .wordle-page__chat-shell {
+    flex: 0 0 auto;
+    min-height: auto;
+    height: auto;
+  }
+
+  .wordle-page__grid :deep(.wordle-page__stack) {
+    flex: 0 0 auto;
+    min-height: auto;
+    height: auto;
   }
 
   .wordle-page__grid :deep(.wordle-page__stack--chat) {
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     max-height: none;
-  }
-
-  .wordle-page__chat-feed {
-    flex: 0 1 auto;
-    min-height: max(280px, 16rem);
-    max-height: min(56vh, 34rem);
-    height: min(56vh, 34rem);
+    scroll-margin-top: var(--sa-space-4);
   }
 
   .wordle-page__leader-stack .wordle-page__leader {
@@ -1536,81 +1792,135 @@ onUnmounted(() => {
   }
 
   .wordle-page__leader-stack {
-    flex: 0 1 auto;
-    min-height: 0;
+    flex: 0 0 auto;
+    min-height: auto;
+    height: auto;
+    gap: var(--sa-space-3);
+  }
+
+  .wordle-page__global-lb {
+    flex: 0 0 auto;
+    align-items: stretch;
+    padding-top: 0;
   }
 
   .wordle-page__glb-scroll {
-    max-height: min(42vh, 19rem);
+    flex: 0 0 auto;
+    min-height: auto;
+    max-height: none;
+    overflow-y: auto;
   }
 
   .wordle-page__grid :deep(.wordle-page__stack--game > .wordle-page__game) {
     flex: 0 0 auto;
+    min-height: auto;
+    height: auto;
+  }
+
+  .wordle-page__stack--leader > .wordle-page__side-tools {
+    flex: 0 0 auto;
+    margin: 0;
+  }
+
+  .wordle-page__glb-tabs {
+    margin-inline: auto;
+  }
+
+  .wordle-page__chat-feed {
+    flex: 0 0 auto;
+    min-height: 12rem;
+    height: auto;
   }
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1200px) {
   .wordle-page {
     padding-block: var(--sa-space-2) var(--sa-space-4);
-    padding-inline: var(--sa-space-3);
-    --wordle-gap: 6px;
-    --wordle-cell: min(
-      3.35rem,
-      calc(
-        (
-            100vw - 4.5rem - (var(--wordle-len-css, 5) - 1) * var(--wordle-gap)
-          ) / var(--wordle-len-css, 5)
-      )
-    );
+    padding-inline: clamp(0.65rem, 2.8vw, var(--sa-space-3));
+    --wordle-gap: clamp(4px, 1.2vw, 8px);
     overflow-x: clip;
   }
 
+  .wordle-page__grid :deep(.wordle-page__stack--game) {
+    max-width: 100%;
+    overflow: visible;
+  }
+}
+
+@supports (width: 1cqi) {
+  @media (max-width: 1200px) {
+    /* Один плавний режим для всіх <=1200px, без окремого "перелому" на 960px. */
+    .wordle-page--len5 .wordle-page__game {
+      --wordle-cell: min(
+        clamp(3rem, 6.6vw, 4.75rem),
+        calc((100cqi - (var(--wordle-len-css, 5) - 1) * var(--wordle-gap)) / var(--wordle-len-css, 5))
+      );
+    }
+
+    .wordle-page--len6 .wordle-page__game {
+      --wordle-cell: min(
+        clamp(2.5rem, 5.5vw, 4rem),
+        calc((100cqi - (var(--wordle-len-css, 6) - 1) * var(--wordle-gap)) / var(--wordle-len-css, 6))
+      );
+    }
+
+    .wordle-page--len7 .wordle-page__game {
+      --wordle-cell: min(
+        clamp(2.1rem, 4.7vw, 3.4rem),
+        calc((100cqi - (var(--wordle-len-css, 7) - 1) * var(--wordle-gap)) / var(--wordle-len-css, 7))
+      );
+    }
+  }
+}
+
+@supports not (width: 1cqi) {
+  @media (max-width: 1200px) {
+    .wordle-page--len5 .wordle-page__game {
+      --wordle-cell: min(
+        clamp(3rem, 6.6vw, 4.75rem),
+        calc((100% - (var(--wordle-len-css, 5) - 1) * var(--wordle-gap)) / var(--wordle-len-css, 5))
+      );
+    }
+
+    .wordle-page--len6 .wordle-page__game {
+      --wordle-cell: min(
+        clamp(2.5rem, 5.5vw, 4rem),
+        calc((100% - (var(--wordle-len-css, 6) - 1) * var(--wordle-gap)) / var(--wordle-len-css, 6))
+      );
+    }
+
+    .wordle-page--len7 .wordle-page__game {
+      --wordle-cell: min(
+        clamp(2.1rem, 4.7vw, 3.4rem),
+        calc((100% - (var(--wordle-len-css, 7) - 1) * var(--wordle-gap)) / var(--wordle-len-css, 7))
+      );
+    }
+  }
 }
 
 @media (max-width: 520px) {
   .wordle-page {
     padding-inline: var(--sa-space-2);
-    --wordle-cell: min(
-      2.75rem,
-      calc(
-        (
-            100vw - 3.75rem - (var(--wordle-len-css, 5) - 1) * var(--wordle-gap)
-          ) / var(--wordle-len-css, 5)
-      )
-    );
-  }
-
-  .wordle-page__kbd :deep(.wordle-page__kbd-key) {
-    padding: clamp(0.04rem, 0.65cqw, 0.16rem) clamp(0.02rem, 0.4cqw, 0.1rem);
-    font-size: 0.58rem;
-    font-size: min(0.62rem, 6.2cqw, calc(100cqw / 16));
-    max-width: 2.2rem;
-    max-height: 2.2rem;
   }
 
   .wordle-page__kbd-row--actions {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    justify-content: center;
-    align-items: center;
     gap: 0.45rem;
-    max-width: 100%;
     padding-inline: 0.25rem;
+    margin-top: 4px;
   }
 
-  .wordle-page__kbd :deep(.wordle-page__kbd-action) {
-    flex: 1 1 0;
+  .wordle-page__len-btn--kbd {
+    flex: 0 1 auto;
     min-width: 0;
-    max-width: 9.5rem;
-    width: auto;
-    padding: 0.3rem 0.45rem;
-    font-size: 0.62rem;
+    max-width: none;
+    padding-inline: 0.35rem;
+    font-size: 0.72rem;
   }
 
   .wordle-page__chat-feed {
-    min-height: max(260px, 15rem);
-    height: min(58vh, 32rem);
-    max-height: min(58vh, 32rem);
+    min-height: 10rem;
+    max-height: none;
+    height: auto;
   }
 }
 
@@ -1640,14 +1950,21 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
-@media (min-width: 1101px) {
+@media (min-width: 1201px) {
+  .wordle-page__grid :deep(.wordle-page__stack--leader),
+  .wordle-page__grid :deep(.wordle-page__stack--chat) {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
   .wordle-page__grid :deep(.wordle-page__stack) {
     min-height: 0;
+    height: 100%;
   }
 
   .wordle-page__grid :deep(.wordle-page__stack--game) {
-    overflow-x: clip;
-    overflow-y: visible;
+    max-width: 100%;
+    overflow: visible;
     min-height: 0;
   }
 
@@ -1656,31 +1973,54 @@ onUnmounted(() => {
     min-height: 0;
     justify-content: center;
   }
+
+  .wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__leader-stack) {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .wordle-page__stack--leader .wordle-page__global-lb {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .wordle-page__stack--leader .wordle-page__glb-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  /* Триколонка: колонка чату тягнеться по висоті рядка; шапка fixed, повідомлення — scroll. */
+  .wordle-page__grid :deep(.wordle-page__stack--chat) {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .wordle-page__stack--chat > .wordle-page__chat-shell {
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .wordle-page__chat-feed {
+    flex: 1 1 0;
+    min-height: min(12rem, 42dvh);
+    overflow-y: auto;
+  }
 }
 
 .wordle-page__grid :deep(.wordle-page__stack--chat) {
   gap: var(--sa-space-2);
 }
 
-.wordle-page__stack--chat > .wordle-page__chat-shell {
-  flex: 1 1 0;
-  min-height: 0;
-}
-
 .wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__side-tools) {
   flex-shrink: 0;
 }
 
-.wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__len-bar) {
-  flex-shrink: 0;
-  margin-top: auto;
-  margin-bottom: 0;
-}
-
 .wordle-page__grid :deep(.wordle-page__stack--leader > .wordle-page__leader-stack) {
-  flex: 1 1 0;
-  min-height: 0;
+  /* `flex` лише в медіа: ≤1024 — за контентом; ≥1025 — тягнеться в колонці сітки (не перезаписувати пізнішим правилом). */
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--sa-space-2);
@@ -1693,36 +2033,13 @@ onUnmounted(() => {
   color: var(--sa-color-text-main);
 }
 
-.wordle-page__len-bar {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sa-space-2);
-  margin: 0 0 var(--sa-space-3);
-}
-
-.wordle-page__stack--leader > .wordle-page__len-bar {
-  justify-content: center;
-}
-
-.wordle-page__stack--leader .wordle-page__len-buttons {
-  display: flex;
-  gap: var(--sa-space-2);
-  flex-wrap: wrap;
-  justify-content: center;
-  width: 100%;
-}
-
-.wordle-page__len-buttons {
-  display: flex;
-  gap: var(--sa-space-1);
-  flex-wrap: wrap;
-}
-
 .wordle-page__len-btn {
   min-width: 2.5rem;
+}
+
+.wordle-page__len-btn--kbd {
+  flex: 0 1 auto;
+  max-width: 3.25rem;
 }
 
 .wordle-page__side-tools {
@@ -1771,19 +2088,20 @@ onUnmounted(() => {
   margin: 0;
   padding: 0;
   flex: 0 0 auto;
-  max-height: 12rem;
-  overflow-y: auto;
+  max-height: none;
+  overflow-y: visible;
 }
 
 .wordle-page__global-lb {
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   /* Розділювач лише знизу рядка «ти» (.wordle-page__leader-row), без другого border-top — інакше дві лінії підряд. */
   padding-top: var(--sa-space-6);
+  overflow-x: clip;
 }
 
 .wordle-page__glb-title {
@@ -1905,11 +2223,10 @@ onUnmounted(() => {
 }
 
 .wordle-page__glb-scroll {
-  flex: 1 1 0;
+  flex: 0 1 auto;
   align-self: stretch;
   width: 100%;
   min-width: 0;
-  min-height: 0;
   /* Лише вертикальний скрол: таблиця інколи на 1–2px ширша за контейнер і дає зайвий горизонтальний скрол. */
   overflow-x: hidden;
   overflow-y: auto;
@@ -2103,9 +2420,15 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   gap: var(--sa-space-3);
+  flex: 1 1 auto;
   width: 100%;
+  max-width: 100%;
   justify-content: center;
   min-height: 0;
+  min-width: 0;
+  box-sizing: border-box;
+  container-type: inline-size;
+  container-name: wordle-game;
 }
 
 .wordle-page__wordle-board {
@@ -2283,46 +2606,66 @@ onUnmounted(() => {
   container-type: inline-size;
   container-name: wordle-kbd;
   width: 100%;
-  max-width: min(
-    100%,
-    calc(var(--wordle-len, 5) * var(--wordle-cell) + (var(--wordle-len, 5) - 1) * var(--wordle-gap) + 24px)
-  );
+  /* Ширина поля слова < мінімуму рядка клавіатури (11 літер) — не обмежувати клавіатуру сіткою, інакше flex + min-width ріжуть краї. */
+  max-width: 100%;
   margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: var(--sa-space-2);
   align-items: center;
+  flex-shrink: 0;
   min-width: 0;
+  min-height: 160px;
+  overflow: visible;
+}
+
+.wordle-page__kbd-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.wordle-page__kbd-main {
+  flex: 0 1 auto;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sa-space-2);
+  align-items: center;
 }
 
 .wordle-page__kbd-row {
   display: flex;
   flex-wrap: nowrap;
-  gap: 5px;
+  gap: 6px;
   justify-content: center;
   width: 100%;
   min-width: 0;
 }
 
 .wordle-page__kbd-row--mid {
-  padding-inline: min(1.25rem, 3vw);
+  padding-inline: min(1rem, 2.5vw);
 }
 
 .wordle-page__kbd :deep(.wordle-page__kbd-key) {
-  min-width: 0;
-  min-height: 0;
+  box-sizing: border-box;
   flex: 1 1 0;
-  max-width: 2.85rem;
-  aspect-ratio: 1;
-  max-height: 2.85rem;
+  width: 0;
+  min-width: 40px;
+  height: 48px;
+  max-height: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: clamp(0.06rem, 0.8cqw, 0.22rem) clamp(0.04rem, 0.5cqw, 0.14rem);
+  padding: 0 0.25rem;
   overflow: hidden;
   line-height: 1;
-  font-size: 0.72rem;
-  font-size: min(0.76rem, 7cqw, calc(100cqw / 14));
+  font-size: 16px;
   font-weight: 700;
   text-transform: none;
 }
@@ -2345,20 +2688,129 @@ onUnmounted(() => {
 }
 
 .wordle-page__kbd-row--actions {
-  flex-wrap: wrap;
-  gap: var(--sa-space-2);
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
   padding-top: 2px;
+  max-width: 100%;
 }
 
-.wordle-page__kbd :deep(.wordle-page__kbd-action) {
+.wordle-page__kbd-row--actions .wordle-page__len-btn--kbd {
+  box-sizing: border-box;
+  flex: 0 1 auto;
+  min-width: 2.25rem;
+  max-width: 3.25rem;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wordle-page__kbd :deep(.wordle-page__kbd-side-action) {
+  box-sizing: border-box;
   flex: 0 0 auto;
-  min-width: 4.25rem;
-  max-width: 10rem;
-  padding: 0.42rem 0.75rem;
-  font-size: 0.74rem;
+  min-width: 56px;
+  max-width: 5rem;
+  width: auto;
+  height: 48px;
+  min-height: 0;
+  max-height: none;
+  padding: 0 0.35rem;
+  font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+
+@media (min-width: 1201px) {
+  .wordle-page__kbd :deep(.wordle-page__kbd-key) {
+    height: 42px;
+    min-width: 30px;
+    font-size: 14px;
+    padding: 0 0.1rem;
+  }
+
+  .wordle-page__kbd-row--actions .wordle-page__len-btn--kbd {
+    height: 42px;
+    min-width: 2.05rem;
+    max-width: 2.85rem;
+    font-size: 0.82rem;
+  }
+
+  .wordle-page__kbd :deep(.wordle-page__kbd-side-action) {
+    height: 42px;
+    min-width: 52px;
+    max-width: 4.75rem;
+    font-size: 0.62rem;
+    padding: 0 0.28rem;
+  }
+}
+
+@media (max-width: 1200px) {
+  .wordle-page__kbd {
+    gap: clamp(0.35rem, 0.8vw, var(--sa-space-2));
+  }
+
+  .wordle-page__kbd-inner {
+    gap: clamp(4px, 0.65vw, 6px);
+  }
+
+  .wordle-page__kbd-row {
+    gap: clamp(3px, 0.6vw, 6px);
+  }
+
+  .wordle-page__kbd-row--mid {
+    padding-inline: clamp(0.2rem, 1vw, 0.7rem);
+  }
+
+  .wordle-page__kbd :deep(.wordle-page__kbd-key) {
+    height: clamp(34px, 3.4vw, 42px);
+    min-width: clamp(24px, 2.8vw, 34px);
+    font-size: clamp(11px, 1.1vw, 14px);
+    padding: 0 clamp(0.08rem, 0.28vw, 0.2rem);
+  }
+
+  .wordle-page__kbd :deep(.wordle-page__kbd-side-action) {
+    min-width: clamp(36px, 4.3vw, 48px);
+    max-width: clamp(3rem, 5.5vw, 4.25rem);
+    height: clamp(34px, 3.4vw, 42px);
+    font-size: clamp(0.54rem, 0.8vw, 0.62rem);
+    padding: 0 clamp(0.14rem, 0.35vw, 0.28rem);
+  }
+
+  .wordle-page__kbd-row--actions .wordle-page__len-btn--kbd {
+    height: clamp(34px, 3.4vw, 42px);
+    min-width: clamp(1.5rem, 2vw, 2rem);
+    max-width: clamp(2rem, 3vw, 2.75rem);
+    font-size: clamp(0.68rem, 0.95vw, 0.78rem);
+  }
+}
+
+@media (max-width: 520px) {
+  .wordle-page__kbd-row {
+    gap: 4px;
+  }
+
+  .wordle-page__kbd-row--mid {
+    padding-inline: 0;
+  }
+
+  .wordle-page__kbd :deep(.wordle-page__kbd-key) {
+    min-width: 22px;
+    font-size: 10.5px;
+  }
+
+  .wordle-page__kbd :deep(.wordle-page__kbd-side-action) {
+    min-width: 36px;
+  }
+
+  .wordle-page__kbd-row--actions .wordle-page__len-btn--kbd {
+    min-width: 1.5rem;
+    max-width: 2rem;
+  }
 }
 
 .wordle-page__sr-only {
@@ -2438,11 +2890,24 @@ onUnmounted(() => {
   flex-direction: column;
   gap: var(--sa-space-2);
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
 }
 
 .wordle-page__chat-head {
   flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wordle-page__chat-irc-banner {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--sa-color-text-muted) 55%, #f59e0b 45%);
 }
 
 .wordle-page__chat-head-row {
@@ -2450,6 +2915,13 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--sa-space-2);
+}
+
+.wordle-page__chat-len-hint {
+  margin: 0 0 var(--sa-space-2);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--sa-color-text-body) 88%, var(--sa-color-primary) 12%);
 }
 
 .wordle-page__chat-title {
@@ -2489,6 +2961,9 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--sa-space-2);
   margin-top: 0.15rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .wordle-page__chat-channel-pill {
@@ -2499,16 +2974,6 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--sa-color-primary-soft) 42%, var(--sa-color-surface-raised) 58%);
   border: 1px solid color-mix(in srgb, var(--sa-color-primary) 32%, var(--sa-color-border));
   color: var(--sa-color-text-main);
-}
-
-.wordle-page__chat-feed-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 0.62rem;
-  font-weight: 600;
-  color: color-mix(in srgb, var(--sa-color-primary) 38%, var(--sa-color-text-muted));
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
 .wordle-page__chat-external {
@@ -2531,10 +2996,26 @@ onUnmounted(() => {
   color: var(--sa-color-text-main);
 }
 
+@media (max-width: 640px) {
+  .wordle-page__chat-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .wordle-page__chat-external {
+    margin-left: 0;
+  }
+
+  .wordle-page__side-tools-row {
+    flex-direction: column;
+  }
+}
+
 .wordle-page__chat-feed {
-  flex: 1 1 0;
+  /* У колонці ≤1024 не тягнути висоту через `flex:1` + dvh — це перебивало правила вище й давало накладання на ігровий блок. */
+  flex: 0 1 auto;
   width: 100%;
-  min-height: 300px;
+  min-height: 8rem;
   overflow: auto;
   border-radius: var(--sa-radius-md);
   border: 1px solid color-mix(in srgb, var(--sa-color-primary) 24%, var(--sa-color-border));
@@ -2695,5 +3176,63 @@ onUnmounted(() => {
   font-size: 0.75rem;
   color: var(--sa-color-text-body);
   margin: var(--sa-space-2) 0 0;
+}
+
+@media (max-width: 1200px) {
+  .wordle-page__stack--leader > .wordle-page__leader-stack {
+    display: block;
+    flex: none;
+    min-height: auto;
+    height: auto;
+  }
+
+  .wordle-page__stack--leader > .wordle-page__leader-stack > .wordle-page__global-lb {
+    display: flex;
+    flex: none;
+    align-items: stretch;
+    padding-top: var(--sa-space-3);
+    margin-top: 0;
+    min-height: auto;
+  }
+
+  .wordle-page__stack--leader > .wordle-page__leader-stack > .wordle-page__global-lb > .wordle-page__glb-scroll {
+    flex: none;
+    min-height: auto;
+    max-height: none;
+  }
+
+  .wordle-page__stack--leader > .wordle-page__side-tools {
+    margin-top: var(--sa-space-3);
+  }
+
+  .wordle-page__stack--game > .wordle-page__game,
+  .wordle-page__stack--chat > .wordle-page__chat-shell,
+  .wordle-page__stack--chat .wordle-page__chat-feed {
+    flex: none;
+    min-height: auto;
+    height: auto;
+    max-height: none;
+  }
+}
+
+@media (min-width: 1201px) {
+  .wordle-page__stack--chat {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .wordle-page__stack--chat > .wordle-page__chat-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .wordle-page__stack--chat .wordle-page__chat-feed {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    max-height: none;
+    overflow-y: auto;
+  }
 }
 </style>

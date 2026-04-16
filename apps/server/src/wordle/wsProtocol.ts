@@ -13,6 +13,8 @@ export const WordleWs = {
   newGame: 'wordle:new-game',
   /** Server → client: Twitch chat relay line */
   twitchChat: 'wordle:twitch-chat',
+  /** Server → client: Twitch IRC ingest link state (relay up/down for UX) */
+  ircStatus: 'wordle:irc-status',
   /** Server → client: auth + admin flags */
   session: 'wordle:session',
   /** Server → client */

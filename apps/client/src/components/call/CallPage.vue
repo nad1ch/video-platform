@@ -500,6 +500,7 @@ watch(
                 :is-local="tile.isLocal"
                 :video-enabled="tile.videoEnabled"
                 :audio-enabled="tile.audioEnabled"
+                :video-fill-cover="tile.videoFillCover !== false"
                 :play-rev="tile.playRev"
                 :size-tier="sizeTier"
                 :active-speaker="activeSpeakerPeerId === tile.peerId"
@@ -875,12 +876,13 @@ watch(
 }
 
 .call-page__shell {
+  width: 100%;
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  padding: 1rem 1.25rem 2rem;
+  padding: 1rem 0 2rem;
   box-sizing: border-box;
 }
 
@@ -1050,6 +1052,7 @@ watch(
   flex-direction: column;
   width: 100%;
   overflow: hidden;
+  padding: 20px;
 }
 
 .call-page__grid {

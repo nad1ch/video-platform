@@ -3,7 +3,7 @@ import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { STREAM_APP_BRAND_NAME } from '@/eat-first/constants/brand.js'
+import { STREAM_APP_BRAND_NAME, STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import { useAuth } from '@/composables/useAuth'
 import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
 
@@ -12,6 +12,10 @@ const route = useRoute()
 const router = useRouter()
 const { isAuthenticated, refresh } = useAuth()
 const { openStreamAuthModal } = useStreamAuthModal()
+
+const defaultWordleStreamer =
+  (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
+  STREAMER_NICK
 
 const needLoginBanner = computed(() => route.query.needLogin === '1')
 const authRedirectTarget = computed(() => {
@@ -65,7 +69,10 @@ watch(
           </RouterLink>
         </li>
         <li class="home__nav-pills__item">
-          <RouterLink :to="{ name: 'wordle' }" class="home__pill home__pill--ghost">
+          <RouterLink
+            :to="{ name: 'wordle-streamer', params: { streamer: defaultWordleStreamer } }"
+            class="home__pill home__pill--ghost"
+          >
             <span class="home__pill__title">{{ t('home.wordleTitle') }}</span>
             <span class="home__pill__desc">{{ t('home.wordleDesc') }}</span>
           </RouterLink>

@@ -11,6 +11,8 @@ export class Peer {
   private readonly transports = new Map<string, WebRtcTransport>()
   private readonly producers = new Map<string, Producer>()
   private readonly consumers = new Map<string, Consumer>()
+  /** Outbound video semantic (`replaceTrack` does not change id). */
+  private readonly videoProducerSourceById = new Map<string, 'camera' | 'screen'>()
 
   constructor(id: string, socket: WebSocket, roomId: string, displayName: string) {
     this.id = id
@@ -52,6 +54,9 @@ export class Peer {
 
   addProducer(producer: Producer): void {
     this.producers.set(producer.id, producer)
+    if (producer.kind === 'video' && !this.videoProducerSourceById.has(producer.id)) {
+      this.videoProducerSourceById.set(producer.id, 'camera')
+    }
   }
 
   getProducer(producerId: string): Producer | undefined {
@@ -64,6 +69,19 @@ export class Peer {
       producer.close()
     }
     this.producers.delete(producerId)
+    this.videoProducerSourceById.delete(producerId)
+  }
+
+  getVideoProducerSource(producerId: string): 'camera' | 'screen' | undefined {
+    return this.videoProducerSourceById.get(producerId)
+  }
+
+  setVideoProducerSource(producerId: string, source: 'camera' | 'screen'): void {
+    const producer = this.producers.get(producerId)
+    if (!producer || producer.closed || producer.kind !== 'video') {
+      return
+    }
+    this.videoProducerSourceById.set(producerId, source)
   }
 
   getProducers(): Producer[] {
@@ -104,6 +122,7 @@ export class Peer {
       }
     }
     this.producers.clear()
+    this.videoProducerSourceById.clear()
 
     for (const transport of [...this.transports.values()]) {
       if (!transport.closed) {

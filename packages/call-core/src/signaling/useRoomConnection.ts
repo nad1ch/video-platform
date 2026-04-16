@@ -7,6 +7,8 @@ export type RemoteProducerInfo = {
   producerId: string
   peerId: string
   kind: 'audio' | 'video'
+  /** When `kind === 'video'`: camera vs screen (`replaceTrack` on same producer). */
+  videoSource?: 'camera' | 'screen'
 }
 
 export type RoomPeerInfo = {
@@ -138,17 +140,24 @@ function parseServerMessage(data: unknown): ServerMessage | null {
         if (!row || typeof row !== 'object') {
           continue
         }
-        const r = row as { producerId?: unknown; peerId?: unknown; kind?: unknown }
+        const r = row as { producerId?: unknown; peerId?: unknown; kind?: unknown; videoSource?: unknown }
         if (
           typeof r.producerId === 'string' &&
           typeof r.peerId === 'string' &&
           (r.kind === 'audio' || r.kind === 'video')
         ) {
-          existingProducers.push({
+          const entry: RemoteProducerInfo = {
             producerId: r.producerId,
             peerId: r.peerId,
             kind: r.kind,
-          })
+          }
+          if (
+            r.kind === 'video' &&
+            (r.videoSource === 'camera' || r.videoSource === 'screen')
+          ) {
+            entry.videoSource = r.videoSource
+          }
+          existingProducers.push(entry)
         }
       }
     }
@@ -240,7 +249,14 @@ function tryParseNewProducerNotice(data: unknown): RemoteProducerInfo | null {
   ) {
     return null
   }
-  return { producerId, peerId, kind }
+  const out: RemoteProducerInfo = { producerId, peerId, kind }
+  if (
+    kind === 'video' &&
+    (payload.videoSource === 'camera' || payload.videoSource === 'screen')
+  ) {
+    out.videoSource = payload.videoSource
+  }
+  return out
 }
 
 export function useRoomConnection(wsUrl?: string) {

@@ -9,14 +9,11 @@ import type {
 } from 'mediasoup-client/types'
 import { computed, onUnmounted, shallowRef } from 'vue'
 import type { SendTransportRoomApi } from '../transport/useSendTransport'
+import type { RemoteProducerInfo } from '../signaling/useRoomConnection'
 import { waitForSignalingMessage } from '../signaling/signalingWait'
 import type { NetworkQualityClass } from './webrtcLinkStats'
 
-export type RemoteProducerInfo = {
-  producerId: string
-  peerId: string
-  kind: 'audio' | 'video'
-}
+export type { RemoteProducerInfo }
 
 const TIMEOUT_MS = 45_000
 
@@ -91,7 +88,7 @@ function isConsumeFailedForProducer(
   return typeof p.producerId === 'string' && p.producerId === producerId && typeof p.reason === 'string'
 }
 
-function parseProducerSyncPayload(data: unknown): RemoteProducerInfo[] | null {
+function parseProducerSyncPayload(data: unknown): { producers: RemoteProducerInfo[]; forceResync: boolean } | null {
   if (!data || typeof data !== 'object') {
     return null
   }
@@ -103,25 +100,52 @@ function parseProducerSyncPayload(data: unknown): RemoteProducerInfo[] | null {
   if (!payload || typeof payload !== 'object') {
     return null
   }
-  const raw = (payload as { producers?: unknown }).producers
+  const raw = (payload as { producers?: unknown; syncReason?: unknown }).producers
   if (!Array.isArray(raw)) {
     return null
   }
+  const syncReason = (payload as { syncReason?: unknown }).syncReason
+  const forceResync = syncReason === 'client-refresh'
   const list: RemoteProducerInfo[] = []
   for (const row of raw) {
     if (!row || typeof row !== 'object') {
       continue
     }
-    const r = row as { producerId?: unknown; peerId?: unknown; kind?: unknown }
+    const r = row as { producerId?: unknown; peerId?: unknown; kind?: unknown; videoSource?: unknown }
     if (
       typeof r.producerId === 'string' &&
       typeof r.peerId === 'string' &&
       (r.kind === 'audio' || r.kind === 'video')
     ) {
-      list.push({ producerId: r.producerId, peerId: r.peerId, kind: r.kind })
+      const rowInfo: RemoteProducerInfo = { producerId: r.producerId, peerId: r.peerId, kind: r.kind }
+      if (r.kind === 'video' && (r.videoSource === 'camera' || r.videoSource === 'screen')) {
+        rowInfo.videoSource = r.videoSource
+      }
+      list.push(rowInfo)
     }
   }
-  return list.length > 0 ? list : null
+  return { producers: list, forceResync }
+}
+
+function isProducerVideoSourceChanged(
+  data: unknown,
+): data is {
+  type: 'producer-video-source-changed'
+  payload: { producerId: string; peerId: string; source: 'camera' | 'screen' }
+} {
+  if (!data || typeof data !== 'object') {
+    return false
+  }
+  const msg = data as { type?: string; payload?: unknown }
+  if (msg.type !== 'producer-video-source-changed' || !msg.payload || typeof msg.payload !== 'object') {
+    return false
+  }
+  const p = msg.payload as { producerId?: unknown; peerId?: unknown; source?: unknown }
+  return (
+    typeof p.producerId === 'string' &&
+    typeof p.peerId === 'string' &&
+    (p.source === 'camera' || p.source === 'screen')
+  )
 }
 
 function isConsumedForProducer(
@@ -237,6 +261,8 @@ export function useRemoteMedia() {
   const consumedProducerIds = new Set<string>()
   /** In-flight consume per producerId (sync vs new-producer overlap). */
   const consumingProducerIds = new Set<string>()
+  /** Coalesce parallel `consumeProducer` for the same id — second caller must await the first (not return early). */
+  const inflightConsumeByProducerId = new Map<string, Promise<void>>()
   const consumersByProducerId = new Map<string, Consumer>()
   const producerInfoById = new Map<string, RemoteProducerInfo>()
   const peerVisibility = shallowRef(new Map<string, boolean>())
@@ -251,6 +277,27 @@ export function useRemoteMedia() {
   const videoSpatialLayerSignalingEnabled = shallowRef(false)
   let unsubscribeNewProducer: (() => void) | null = null
   let unsubscribeProducerSync: (() => void) | null = null
+  let unsubscribeProducerVideoSource: (() => void) | null = null
+
+  /**
+   * Remote outbound video semantic for layout (camera vs screen).
+   * Keyed by `peerId` — correct while each peer has at most one video producer (`replaceTrack`).
+   * For multi-stream (camera + screen producers), switch to `Map<producerId, source>` and derive UI per producer.
+   */
+  const remoteVideoSourceByPeerId = shallowRef(new Map<string, 'camera' | 'screen'>())
+
+  function applyPeerVideoSource(peerId: string, source: 'camera' | 'screen'): void {
+    const next = new Map(remoteVideoSourceByPeerId.value)
+    next.set(peerId, source)
+    remoteVideoSourceByPeerId.value = next
+  }
+
+  function syncPeerVideoSourceFromInfo(info: RemoteProducerInfo): void {
+    if (info.kind !== 'video') {
+      return
+    }
+    applyPeerVideoSource(info.peerId, info.videoSource ?? 'camera')
+  }
 
   /**
    * Reserved for future UI; transport BWE polling is disabled (quality-first baseline).
@@ -399,14 +446,19 @@ export function useRemoteMedia() {
         console.log('[track] ended', track.id, { peerId })
       }
     }
-    if (import.meta.env.DEV) {
-      track.onmute = () => {
-        console.log('[track] muted', track.id)
+    /** `track.muted` is not a Vue reactive source — tiles must re-run readiness when RTP starts (unmute). */
+    track.addEventListener('unmute', () => {
+      if (import.meta.env.DEV) {
+        console.log('[track] unmuted', track.id, { peerId, kind: track.kind })
       }
-      track.onunmute = () => {
-        console.log('[track] unmuted', track.id)
+      bumpRemotePeerPlayRev(peerId)
+    })
+    track.addEventListener('mute', () => {
+      if (import.meta.env.DEV) {
+        console.log('[track] muted', track.id, { peerId, kind: track.kind })
       }
-    }
+      bumpRemotePeerPlayRev(peerId)
+    })
   }
 
   function upsertRemoteTrack(peerId: string, track: MediaStreamTrack): void {
@@ -556,11 +608,13 @@ export function useRemoteMedia() {
           paused: consumer.paused,
           trackMuted: consumer.track.muted,
         })
+        console.log('[consumer] recreated', { producerId, peerId, kind: consumer.kind })
       }
 
       consumersByProducerId.set(producerId, consumer)
       upsertRemoteTrack(peerId, consumer.track)
       if (consumer.kind === 'video') {
+        syncPeerVideoSourceFromInfo(info)
         void logInboundVideoDebug(consumer, peerId)
         // Apply target spatial layer immediately — default consumer layer can sit on low simulcast until debounce fires.
         flushPreferredLayersToServer()
@@ -581,17 +635,36 @@ export function useRemoteMedia() {
     if (consumedProducerIds.has(producerId)) {
       return
     }
-    if (consumingProducerIds.has(producerId)) {
+
+    const existing = inflightConsumeByProducerId.get(producerId)
+    if (existing) {
+      await existing
       return
     }
-    consumingProducerIds.add(producerId)
+
+    const task = (async (): Promise<void> => {
+      if (consumedProducerIds.has(producerId)) {
+        return
+      }
+      consumingProducerIds.add(producerId)
+      try {
+        if (import.meta.env.DEV) {
+          console.log('[consume] CONSUMING PRODUCER', producerId, info.peerId, info.kind)
+        }
+        await runConsumeProducer(device, room, info)
+      } catch (e) {
+        consumedProducerIds.delete(producerId)
+        throw e
+      } finally {
+        consumingProducerIds.delete(producerId)
+      }
+    })()
+
+    inflightConsumeByProducerId.set(producerId, task)
     try {
-      await runConsumeProducer(device, room, info)
-    } catch (e) {
-      consumedProducerIds.delete(producerId)
-      throw e
+      await task
     } finally {
-      consumingProducerIds.delete(producerId)
+      inflightConsumeByProducerId.delete(producerId)
     }
   }
 
@@ -605,6 +678,12 @@ export function useRemoteMedia() {
         producerId: data.payload.producerId,
         peerId: data.payload.peerId,
         kind: data.payload.kind,
+      }
+      if (info.kind === 'video') {
+        const vs = (data.payload as { videoSource?: unknown }).videoSource
+        if (vs === 'camera' || vs === 'screen') {
+          info.videoSource = vs
+        }
       }
       producerInfoById.set(info.producerId, info)
 
@@ -624,6 +703,71 @@ export function useRemoteMedia() {
     return [...map.values()]
   }
 
+  /** Drop all recv-side consumers and remote composite streams (recv transport stays). */
+  function teardownAllRemoteConsumers(): void {
+    for (const consumer of consumersByProducerId.values()) {
+      if (!consumer.closed) {
+        lastSentSpatialByConsumerId.delete(consumer.id)
+        consumer.close()
+      }
+    }
+    consumersByProducerId.clear()
+    producerInfoById.clear()
+    consumedProducerIds.clear()
+    consumingProducerIds.clear()
+    inflightConsumeByProducerId.clear()
+    remoteVideoSourceByPeerId.value = new Map()
+    const peerIdsToBump = new Set(streamsByPeerId.keys())
+    for (const stream of streamsByPeerId.values()) {
+      for (const t of [...stream.getTracks()]) {
+        stream.removeTrack(t)
+        t.stop()
+      }
+    }
+    syncRemotePeerStreamsRef()
+    for (const peerId of peerIdsToBump) {
+      bumpRemotePeerPlayRev(peerId)
+    }
+    if (import.meta.env.DEV) {
+      console.log('[resync] tore down remote recv consumers')
+    }
+  }
+
+  /**
+   * Tab visible / focus: **soft** producer list only (`resetConsumers: false` → no teardown).
+   * Hard teardown + re-consume was killing RTP before `track.muted` cleared → black tiles + flicker.
+   */
+  function requestForcedProducerResync(): void {
+    const room = signalingRoom
+    if (!room) {
+      return
+    }
+    try {
+      if (import.meta.env.DEV) {
+        console.log('[resync] soft producer list (no teardown)')
+      }
+      room.sendJson({ type: 'request-producer-sync', payload: { resetConsumers: false } })
+    } catch (e) {
+      console.warn('[resync] request-producer-sync failed', e)
+    }
+  }
+
+  /** Explicit recovery: full recv teardown then `client-refresh` sync (use sparingly). */
+  function requestHardProducerResync(): void {
+    const room = signalingRoom
+    if (!room) {
+      return
+    }
+    try {
+      if (import.meta.env.DEV) {
+        console.log('[resync] hard producer sync (teardown)')
+      }
+      room.sendJson({ type: 'request-producer-sync', payload: { resetConsumers: true } })
+    } catch (e) {
+      console.warn('[resync] hard request-producer-sync failed', e)
+    }
+  }
+
   async function syncExistingProducers(
     device: Device,
     room: SendTransportRoomApi,
@@ -634,6 +778,7 @@ export function useRemoteMedia() {
     }
     for (const item of list) {
       producerInfoById.set(item.producerId, item)
+      syncPeerVideoSourceFromInfo(item)
     }
     for (const item of list) {
       try {
@@ -655,19 +800,37 @@ export function useRemoteMedia() {
     signalingRoom = room
     await ensureRecvTransport(device, room)
     startNewProducerListener(device, room)
-    unsubscribeProducerSync?.()
-    unsubscribeProducerSync = room.addMessageListener((data) => {
-      const list = parseProducerSyncPayload(data)
-      if (!list) {
+    unsubscribeProducerVideoSource?.()
+    unsubscribeProducerVideoSource = room.addMessageListener((data) => {
+      if (!isProducerVideoSourceChanged(data)) {
         return
       }
+      const { peerId, producerId, source } = data.payload
+      applyPeerVideoSource(peerId, source)
+      const info = producerInfoById.get(producerId)
+      if (info?.kind === 'video') {
+        producerInfoById.set(producerId, { ...info, videoSource: source })
+      }
+      bumpRemotePeerPlayRev(peerId)
+    })
+    unsubscribeProducerSync?.()
+    unsubscribeProducerSync = room.addMessageListener((data) => {
+      const parsed = parseProducerSyncPayload(data)
+      if (!parsed) {
+        return
+      }
+      const { producers, forceResync } = parsed
       if (import.meta.env.DEV) {
         console.log('[producer-sync]', {
-          count: list.length,
-          kinds: list.map((p) => p.kind),
+          count: producers.length,
+          kinds: producers.map((p) => p.kind),
+          forceResync,
         })
       }
-      void syncExistingProducers(device, room, list).catch((e) => {
+      if (forceResync) {
+        teardownAllRemoteConsumers()
+      }
+      void syncExistingProducers(device, room, producers).catch((e) => {
         console.error('[producer-sync] consume failed', e)
       })
     })
@@ -724,6 +887,10 @@ export function useRemoteMedia() {
    * Prevents stale tiles and frozen frames after `peer-left`.
    */
   function removeRemotePeer(peerId: string): void {
+    const nextSrc = new Map(remoteVideoSourceByPeerId.value)
+    nextSrc.delete(peerId)
+    remoteVideoSourceByPeerId.value = nextSrc
+
     const producerIds: string[] = []
     for (const [producerId, info] of producerInfoById.entries()) {
       if (info.peerId === peerId) {
@@ -740,6 +907,7 @@ export function useRemoteMedia() {
       producerInfoById.delete(producerId)
       consumedProducerIds.delete(producerId)
       consumingProducerIds.delete(producerId)
+      inflightConsumeByProducerId.delete(producerId)
     }
 
     const stream = streamsByPeerId.get(peerId)
@@ -817,6 +985,9 @@ export function useRemoteMedia() {
     unsubscribeNewProducer = null
     unsubscribeProducerSync?.()
     unsubscribeProducerSync = null
+    unsubscribeProducerVideoSource?.()
+    unsubscribeProducerVideoSource = null
+    remoteVideoSourceByPeerId.value = new Map()
     for (const consumer of consumersByProducerId.values()) {
       if (!consumer.closed) {
         consumer.close()
@@ -834,6 +1005,7 @@ export function useRemoteMedia() {
     remotePeerPlayRevs.value = new Map()
     consumedProducerIds.clear()
     consumingProducerIds.clear()
+    inflightConsumeByProducerId.clear()
     lastSentSpatialByConsumerId.clear()
     if (preferredLayersDebounceTimer) {
       clearTimeout(preferredLayersDebounceTimer)
@@ -874,5 +1046,8 @@ export function useRemoteMedia() {
     removeRemotePeer,
     stopRemoteMedia,
     collectInboundVideoDebugStats,
+    remoteVideoSourceByPeerId,
+    requestForcedProducerResync,
+    requestHardProducerResync,
   }
 }

@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from 'express'
+import { Prisma } from '@prisma/client'
 import { prisma } from './prisma'
 import { isSessionAdminFromCookie } from './auth/session/isAdminRequest'
 
@@ -25,27 +26,41 @@ export function mountAdminRoutes(app: Express): void {
       return
     }
     try {
-      const rows = await prisma.user.findMany({
-        take: 250,
-        orderBy: { updatedAt: 'desc' },
-        select: {
-          id: true,
-          displayName: true,
-          avatarUrl: true,
-          provider: true,
-          role: true,
-          stats: { select: { wins: true, gamesPlayed: true } },
-        },
+      const [rows, wordleAgg] = await Promise.all([
+        prisma.user.findMany({
+          take: 250,
+          orderBy: { updatedAt: 'desc' },
+          select: {
+            id: true,
+            displayName: true,
+            avatarUrl: true,
+            provider: true,
+            role: true,
+          },
+        }),
+        prisma.userStreamerStats.groupBy({
+          by: ['userId'],
+          _sum: { wins: true, gamesPlayed: true },
+        }),
+      ])
+      const wordleByUser = new Map(
+        wordleAgg.map((g) => [
+          g.userId,
+          { wins: g._sum.wins ?? 0, gamesPlayed: g._sum.gamesPlayed ?? 0 },
+        ]),
+      )
+      const users = rows.map((u) => {
+        const w = wordleByUser.get(u.id)
+        return {
+          id: u.id,
+          displayName: u.displayName,
+          avatar: u.avatarUrl?.trim() ? u.avatarUrl.trim() : undefined,
+          provider: u.provider,
+          role: u.role === 'admin' ? 'admin' : 'user',
+          wins: w?.wins ?? 0,
+          gamesPlayed: w?.gamesPlayed ?? 0,
+        }
       })
-      const users = rows.map((u) => ({
-        id: u.id,
-        displayName: u.displayName,
-        avatar: u.avatarUrl?.trim() ? u.avatarUrl.trim() : undefined,
-        provider: u.provider,
-        role: u.role === 'admin' ? 'admin' : 'user',
-        wins: u.stats?.wins ?? 0,
-        gamesPlayed: u.stats?.gamesPlayed ?? 0,
-      }))
       res.json({ databaseConfigured: true, users })
     } catch (e) {
       console.error('[admin] GET /api/admin/users', e)
@@ -70,44 +85,40 @@ export function mountAdminRoutes(app: Express): void {
       return
     }
     try {
-      const [userCount, wordleRounds, agg, topWinners, statsRows] = await Promise.all([
+      const [userCount, wordleRounds, agg, topWinnersRaw, statsGrouped] = await Promise.all([
         prisma.user.count(),
         prisma.gameRound.count(),
-        prisma.userStats.aggregate({ _sum: { wins: true, gamesPlayed: true } }),
-        prisma.user.findMany({
-          where: { stats: { isNot: null } },
-          orderBy: { stats: { wins: 'desc' } },
-          take: 8,
-          select: {
-            id: true,
-            displayName: true,
-            stats: { select: { wins: true, gamesPlayed: true } },
-          },
-        }),
-        prisma.user.findMany({
-          where: { stats: { isNot: null } },
-          select: {
-            id: true,
-            displayName: true,
-            stats: { select: { wins: true, gamesPlayed: true } },
-          },
+        prisma.userStreamerStats.aggregate({ _sum: { wins: true, gamesPlayed: true } }),
+        prisma.$queryRaw<Array<{ userId: string; displayName: string; wins: number }>>(
+          Prisma.sql`
+            SELECT u."id" AS "userId", u."displayName", SUM(uss."wins")::int AS wins
+            FROM "UserStreamerStats" uss
+            INNER JOIN "User" u ON u.id = uss."userId"
+            GROUP BY u.id, u."displayName"
+            ORDER BY SUM(uss."wins") DESC
+            LIMIT 8
+          `,
+        ),
+        prisma.userStreamerStats.groupBy({
+          by: ['userId'],
+          _sum: { wins: true, gamesPlayed: true },
         }),
       ])
 
-      const topWins = topWinners.map((u) => ({
-        userId: u.id,
-        displayName: u.displayName,
-        wins: u.stats?.wins ?? 0,
+      const topWins = topWinnersRaw.map((r) => ({
+        userId: r.userId,
+        displayName: r.displayName,
+        wins: r.wins,
       }))
 
-      const rated = statsRows
-        .map((u) => {
-          const wins = u.stats?.wins ?? 0
-          const played = u.stats?.gamesPlayed ?? 0
+      const rated = statsGrouped
+        .map((g) => {
+          const wins = g._sum.wins ?? 0
+          const played = g._sum.gamesPlayed ?? 0
           const losses = Math.max(0, played - wins)
           return {
-            userId: u.id,
-            displayName: u.displayName,
+            userId: g.userId,
+            displayName: g.userId,
             rating: wins - losses,
             wins,
             losses,
@@ -116,6 +127,15 @@ export function mountAdminRoutes(app: Express): void {
         .filter((x) => x.wins + x.losses > 0)
         .sort((a, b) => b.rating - a.rating || b.wins - a.wins)
         .slice(0, 8)
+
+      const displayNames = await prisma.user.findMany({
+        where: { id: { in: rated.map((r) => r.userId) } },
+        select: { id: true, displayName: true },
+      })
+      const nameById = new Map(displayNames.map((u) => [u.id, u.displayName]))
+      for (const r of rated) {
+        r.displayName = nameById.get(r.userId) ?? r.userId
+      }
 
       res.json({
         databaseConfigured: true,

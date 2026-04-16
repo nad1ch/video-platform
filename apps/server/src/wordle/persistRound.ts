@@ -8,6 +8,7 @@ export type WordleRoundPlayer = {
 }
 
 export type PersistWordleRoundInput = {
+  streamerId: string
   winnerUserId: string
   players: WordleRoundPlayer[]
 }
@@ -36,21 +37,29 @@ async function resolveDbUserId(
 }
 
 /**
- * Persists a finished Wordle round (winner known), updates UserStats for registered users.
+ * Persists a finished Wordle round (winner known), updates {@link UserStreamerStats} for registered users.
  * Swallows errors — must never break live game / websocket flow.
  */
 export async function persistWordleRound(input: PersistWordleRoundInput): Promise<void> {
   if (!isDatabaseConfigured()) {
     return
   }
-  const { winnerUserId, players } = input
-  if (!winnerUserId || !Array.isArray(players) || players.length === 0) {
+  const { streamerId, winnerUserId, players } = input
+  if (!streamerId || !winnerUserId || !Array.isArray(players) || players.length === 0) {
     return
   }
   try {
     await prisma.$transaction(async (tx) => {
+      const streamer = await tx.streamer.findFirst({
+        where: { id: streamerId, isActive: true },
+        select: { id: true },
+      })
+      if (!streamer) {
+        console.warn('[wordle][persist] skip persist: unknown or inactive streamerId', streamerId)
+        return
+      }
       const round = await tx.gameRound.create({
-        data: { winnerUserId },
+        data: { winnerUserId, streamerId },
       })
       await tx.gameResult.createMany({
         data: players.map((p) => ({
@@ -66,17 +75,26 @@ export async function persistWordleRound(input: PersistWordleRoundInput): Promis
         if (!dbUserId) {
           continue
         }
-        await tx.userStats.upsert({
-          where: { userId: dbUserId },
+        const update: { gamesPlayed: { increment: number }; wins?: { increment: number } } = {
+          gamesPlayed: { increment: 1 },
+        }
+        if (p.isWinner) {
+          update.wins = { increment: 1 }
+        }
+        await tx.userStreamerStats.upsert({
+          where: {
+            userId_streamerId: {
+              userId: dbUserId,
+              streamerId,
+            },
+          },
           create: {
             userId: dbUserId,
+            streamerId,
             gamesPlayed: 1,
             wins: p.isWinner ? 1 : 0,
           },
-          update: {
-            gamesPlayed: { increment: 1 },
-            ...(p.isWinner ? { wins: { increment: 1 } } : {}),
-          },
+          update,
         })
       }
     })

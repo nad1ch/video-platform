@@ -6,6 +6,12 @@ import {
 } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { registerEatFirstRouterGuards } from '@/eat-first/router.js'
+import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
+
+/** Twitch login slug for `/wordle` → `/wordle/:streamer` redirect and default home link. */
+const DEFAULT_WORDLE_STREAMER =
+  (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
+  STREAMER_NICK
 
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -29,6 +35,17 @@ export const router = createRouter({
         {
           path: 'wordle',
           name: 'wordle',
+          redirect: { name: 'wordle-streamer', params: { streamer: DEFAULT_WORDLE_STREAMER } },
+        },
+        {
+          path: 'wordle/:streamer',
+          name: 'wordle-streamer',
+          meta: { appTitleKey: 'routes.wordle', footerContext: 'wordle' },
+          component: () => import('./pages/WordleStreamPage.vue'),
+        },
+        {
+          path: 'app/:streamer',
+          name: 'app-streamer',
           meta: { appTitleKey: 'routes.wordle', footerContext: 'wordle' },
           component: () => import('./pages/WordleStreamPage.vue'),
         },

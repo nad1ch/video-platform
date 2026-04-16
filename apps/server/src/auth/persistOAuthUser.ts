@@ -22,6 +22,10 @@ export async function persistTwitchOAuthUser(profile: TwitchProfileForSession): 
       id: profile.id,
       twitchId: profile.id,
     })
+    const linkedStreamer = await prisma.streamer.findFirst({
+      where: { twitchId: profile.id, isActive: true },
+      select: { id: true },
+    })
     await prisma.user.upsert({
       where: {
         provider_providerUserId: {
@@ -37,6 +41,7 @@ export async function persistTwitchOAuthUser(profile: TwitchProfileForSession): 
         avatarUrl: profile.profile_image_url || null,
         role,
         twitchId: profile.id,
+        streamerId: linkedStreamer?.id ?? null,
         stats: { create: {} },
       },
       update: {
@@ -44,6 +49,7 @@ export async function persistTwitchOAuthUser(profile: TwitchProfileForSession): 
         avatarUrl: profile.profile_image_url || null,
         role,
         twitchId: profile.id,
+        ...(linkedStreamer ? { streamerId: linkedStreamer.id } : {}),
       },
     })
   } catch (e) {

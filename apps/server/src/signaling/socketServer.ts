@@ -13,7 +13,10 @@ import {
   handleDisconnect,
   handleJoinRoom,
   handleProduce,
+  handleProducerVideoSource,
+  handleSetOutboundVideoPaused,
   handleRaiseHand,
+  handleRequestProducerSync,
   handleSetConsumerPreferredLayers,
   handleUpdateDisplayName,
   sendServerMessage,
@@ -107,8 +110,26 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'produce': {
-              const { transportId, kind, rtpParameters, requestId } = parsed.data.payload
-              await handleProduce(socket, transportId, kind, rtpParameters, requestId, deps)
+              const { transportId, kind, rtpParameters, requestId, videoSource } = parsed.data.payload
+              await handleProduce(
+                socket,
+                transportId,
+                kind,
+                rtpParameters,
+                requestId,
+                deps,
+                videoSource,
+              )
+              break
+            }
+            case 'producer-video-source': {
+              const { producerId, source } = parsed.data.payload
+              await handleProducerVideoSource(socket, producerId, source, deps)
+              break
+            }
+            case 'set-outbound-video-paused': {
+              const { paused } = parsed.data.payload
+              await handleSetOutboundVideoPaused(socket, paused, deps)
               break
             }
             case 'consume': {
@@ -129,6 +150,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             case 'raise-hand': {
               const { raised } = parsed.data.payload
               handleRaiseHand(socket, raised, deps)
+              break
+            }
+            case 'request-producer-sync': {
+              handleRequestProducerSync(socket, deps, parsed.data.payload)
               break
             }
             default:

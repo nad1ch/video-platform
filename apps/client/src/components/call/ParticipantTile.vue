@@ -31,6 +31,8 @@ const props = defineProps<{
   remoteListenMuted?: boolean
   /** “Raise hand” from signaling (call room). */
   raiseHand?: boolean
+  /** Local webcam in grid: cover; screen share / remotes: contain (default false). */
+  videoFillCover?: boolean
 }>()
 
 const menuOpen = ref(false)
@@ -159,17 +161,33 @@ onUnmounted(() => {
   clearSplitHolder(audioSplitStream)
 })
 
-const hasAnyVideoTrack = computed(
-  () => Boolean(props.stream && props.stream.getVideoTracks().length > 0),
-)
-
-const hasLiveRemoteVideo = computed(() => {
-  if (!props.stream || props.isLocal) {
+const hasLiveLocalVideo = computed(() => {
+  if (!props.stream || !props.isLocal) {
     return false
   }
   return props.stream
     .getVideoTracks()
-    .some((t) => t.enabled && t.readyState === 'live')
+    .some((t) => t.readyState === 'live' && t.enabled)
+})
+
+/** Inbound WebRTC video: `enabled` is not a reliable signal for “sender has frames” (e.g. camera off
+ *  then screen-share `replaceTrack` on the same producer). Prefer `muted` + `live`. */
+const hasLiveRemoteVideo = computed(() => {
+  if (!props.stream || props.isLocal) {
+    return false
+  }
+  // `MediaStreamTrack.muted` does not trigger Vue deps — call-core bumps `playRev` on track mute/unmute.
+  void props.playRev
+  const t = props.stream.getVideoTracks()[0]
+  if (!t || t.readyState !== 'live' || t.muted) {
+    return false
+  }
+  // Webcam: some stacks keep `muted=false` while the sender track is disabled → black tile; require `enabled`.
+  // Screen share uses `videoFillCover=false` and should stay permissive.
+  if (props.videoFillCover) {
+    return t.enabled
+  }
+  return true
 })
 
 const showVideo = computed(() => {
@@ -177,7 +195,7 @@ const showVideo = computed(() => {
     return false
   }
   if (props.isLocal) {
-    return hasAnyVideoTrack.value
+    return props.videoEnabled && hasLiveLocalVideo.value
   }
   return props.videoEnabled && hasLiveRemoteVideo.value
 })
@@ -204,8 +222,9 @@ const isFrozen = computed(() => {
   if (props.isLocal || !showVideo.value || !props.stream) {
     return false
   }
+  void props.playRev
   const v = props.stream.getVideoTracks().find((t) => t.kind === 'video')
-  if (!v || v.readyState !== 'live' || !v.enabled) {
+  if (!v || v.readyState !== 'live' || v.muted) {
     return false
   }
   const rs = videoUi.value.readyState
@@ -221,18 +240,25 @@ const placeholderHint = computed(() => {
     if (!props.stream) {
       return t('callPage.tileConnecting')
     }
-    if (!hasAnyVideoTrack.value) {
+    if (!props.videoEnabled) {
       return t('callPage.tileCameraOff')
+    }
+    if (!hasLiveLocalVideo.value) {
+      return t('callPage.tileConnecting')
     }
     return ''
   }
-  if (!props.videoEnabled) {
-    return t('callPage.tileNoVideo')
-  }
-  if (!hasLiveRemoteVideo.value) {
+  if (!props.stream) {
     return t('callPage.tileConnecting')
   }
-  return ''
+  const v = props.stream.getVideoTracks()[0]
+  if (!v) {
+    return t('callPage.tileNoVideo')
+  }
+  if (!props.videoEnabled) {
+    return t('callPage.tileCameraOff')
+  }
+  return t('callPage.tileConnecting')
 })
 
 const volumePercentUi = computed(() =>
@@ -282,6 +308,7 @@ function toggleMenu(): void {
             :play-rev="playRev"
             :report-video-ui="!isLocal"
             fill
+            :fill-cover="Boolean(videoFillCover)"
             @video-ui="onVideoUi"
           />
         </div>
@@ -330,43 +357,89 @@ function toggleMenu(): void {
             </span>
           </span>
         </div>
-        <div v-if="!isLocal" ref="menuRoot" class="tile-menu">
-          <button
-            type="button"
-            class="tile-menu__trigger"
-            :aria-expanded="menuOpen"
-            :aria-label="t('callPage.participantMenu')"
-            @click.stop="toggleMenu"
-          >
-            ⋯
-          </button>
-          <div v-if="menuOpen" class="tile-menu__dropdown">
-            <label class="tile-menu__row">
-              <span class="tile-menu__label">{{ t('callPage.listenVolume') }}</span>
-              <span class="tile-menu__pct">{{ volumePercentUi }}%</span>
-            </label>
+      </div>
+      <div v-if="showVideo && !isLocal" ref="menuRoot" class="tile-menu">
+        <button
+          type="button"
+          class="tile-menu__trigger"
+          :aria-expanded="menuOpen"
+          :aria-label="t('callPage.participantMenu')"
+          @click.stop="toggleMenu"
+        >
+          ⋯
+        </button>
+        <div v-if="menuOpen" class="tile-menu__dropdown">
+          <label class="tile-menu__row">
+            <span class="tile-menu__label">{{ t('callPage.listenVolume') }}</span>
+            <span class="tile-menu__pct">{{ volumePercentUi }}%</span>
+          </label>
+          <input
+            class="tile-menu__range"
+            type="range"
+            min="0"
+            max="200"
+            :value="volumePercentUi"
+            @input="onVolumeSliderInput"
+          />
+          <label class="tile-menu__row tile-menu__row--check">
             <input
-              class="tile-menu__range"
-              type="range"
-              min="0"
-              max="200"
-              :value="volumePercentUi"
-              @input="onVolumeSliderInput"
+              type="checkbox"
+              :checked="remoteListenMuted ?? false"
+              @change="onMuteCheckboxChange"
             />
-            <label class="tile-menu__row tile-menu__row--check">
-              <input
-                type="checkbox"
-                :checked="remoteListenMuted ?? false"
-                @change="onMuteCheckboxChange"
-              />
-              <span>{{ t('callPage.listenMuteLocal') }}</span>
-            </label>
-          </div>
+            <span>{{ t('callPage.listenMuteLocal') }}</span>
+          </label>
         </div>
       </div>
-      <div v-else class="tile-placeholder">
-        <span class="tile-placeholder-avatar">{{ initials(displayName) }}</span>
-        <span class="tile-placeholder-hint">{{ placeholderHint }}</span>
+      <div v-if="!showVideo" class="tile-placeholder">
+        <div class="tile-placeholder__main">
+          <span class="tile-placeholder-avatar">{{ initials(displayName) }}</span>
+          <span class="tile-placeholder-hint">{{ placeholderHint }}</span>
+        </div>
+        <div class="tile-overlay tile-overlay--on-placeholder" aria-hidden="false">
+          <span class="tile-overlay__name">{{ displayName }}</span>
+          <span class="tile-overlay__icons" aria-hidden="true">
+            <span v-if="raiseHand" class="tile-overlay__hand" :title="t('callPage.raiseHandBadge')" aria-hidden="true"
+              >✋</span
+            >
+            <span class="tile-overlay__mic" :class="{ 'tile-overlay__mic--off': !audioEnabled }">
+              <svg
+                v-if="audioEnabled"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+                width="15"
+                height="15"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 3c-1.66 0-3 1.2-3 2.7v4.6c0 1.5 1.34 2.7 3 2.7s3-1.2 3-2.7V5.7C15 4.2 13.66 3 12 3Z"
+                />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v3" />
+              </svg>
+              <svg
+                v-else
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                width="15"
+                height="15"
+              >
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+                <path d="M12 19v3" />
+                <path d="M3 3l18 18" />
+              </svg>
+            </span>
+          </span>
+        </div>
       </div>
     </div>
   </div>
@@ -380,6 +453,7 @@ function toggleMenu(): void {
   min-width: 0;
   min-height: 0;
   border-radius: 14px;
+  overflow: hidden;
   background: transparent;
   border: 1px solid var(--call-tile-border, #2e303a);
   transition:
@@ -393,6 +467,11 @@ function toggleMenu(): void {
   box-shadow:
     0 12px 32px rgb(0 0 0 / 0.45),
     0 0 0 1px color-mix(in srgb, var(--sa-color-border, #2e303a) 80%, transparent);
+}
+
+.tile--menu-open {
+  overflow: visible;
+  z-index: 4;
 }
 
 .tile--active-speaker {
@@ -422,6 +501,7 @@ function toggleMenu(): void {
   flex: 1;
   min-height: 0;
   background: transparent;
+  border-radius: 14px;
 }
 
 .tile-audio {
@@ -437,6 +517,8 @@ function toggleMenu(): void {
   z-index: 1;
   background: #000;
   border-radius: 14px;
+  /* Clips video/overlay; participant menu is a sibling under `.tile-media` so it is not clipped here. */
+  overflow: hidden;
 }
 
 .tile-video-clip {
@@ -445,11 +527,14 @@ function toggleMenu(): void {
   border-radius: inherit;
   overflow: hidden;
   z-index: 0;
+  /* `overflow:hidden` alone often leaves square bottom corners on <video>; clip-path forces a rounded mask. */
+  clip-path: inset(0 round 14px);
 }
 
 .tile-video-wrap :deep(.stream-video) {
   width: 100%;
   height: 100%;
+  border-radius: inherit;
 }
 
 .tile-freeze {
@@ -478,6 +563,8 @@ function toggleMenu(): void {
   padding: 0.5rem 0.65rem 0.55rem;
   background: linear-gradient(to top, rgb(0 0 0 / 0.82), rgb(0 0 0 / 0.05));
   pointer-events: none;
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 14px;
 }
 
 .tile-overlay__name {
@@ -561,6 +648,7 @@ function toggleMenu(): void {
 .tile-menu__dropdown {
   position: absolute;
   top: calc(100% + 8px);
+  bottom: auto;
   right: 0;
   min-width: 13rem;
   max-width: min(17rem, calc(100vw - 1.5rem));
@@ -628,24 +716,38 @@ function toggleMenu(): void {
 .tile-placeholder {
   position: absolute;
   inset: 0;
+  z-index: 1;
+  border-radius: 14px;
+  overflow: hidden;
+  clip-path: inset(0 round 14px);
+  background: #000;
+  color: var(--text-h, #f3f4f6);
+}
+
+.tile-placeholder__main {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: transparent;
-  color: var(--text-h, #f3f4f6);
-  z-index: 1;
-  border-radius: 14px;
-  overflow: hidden;
+  padding: 0.75rem 0.75rem 3.25rem;
+  min-height: 0;
+  text-align: center;
+}
+
+.tile-overlay--on-placeholder {
+  z-index: 2;
 }
 
 .tile-placeholder-avatar {
   width: 3rem;
   height: 3rem;
   border-radius: 50%;
-  background: var(--accent-bg, rgba(192, 132, 252, 0.2));
-  color: var(--accent, #c084fc);
+  background: rgb(255 255 255 / 0.08);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  color: #f3f4f6;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -661,6 +763,9 @@ function toggleMenu(): void {
 
 .tile-placeholder-hint {
   font-size: 0.75rem;
-  opacity: 0.75;
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.72);
+  max-width: 12rem;
+  line-height: 1.35;
 }
 </style>

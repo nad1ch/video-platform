@@ -79,3 +79,4 @@ export {
 } from './transport/useSendTransport'
 
 export { waitForCondition } from './utils/waitForCondition'
+export { newCallTabPeerId, readOrCreateCallDeviceId } from './utils/callTabPeerId'

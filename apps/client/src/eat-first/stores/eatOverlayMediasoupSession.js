@@ -1,14 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-
-function randomPeerId() {
-  return `peer-${Math.random().toString(36).slice(2, 10)}`
-}
+import { newCallTabPeerId } from 'call-core'
 
 /** Окремий session slice для Eat overlay — не змішується з Video call (`callSession`). */
 export const useEatOverlayMediasoupSession = defineStore('eatOverlayMediasoup', () => {
   const roomId = ref('')
-  const selfPeerId = ref(randomPeerId())
+  const selfPeerId = ref(newCallTabPeerId())
   const selfDisplayName = ref('Spectator')
   const inCall = ref(false)
   const remoteDisplayNames = ref(/** @type {Record<string, string>} */ ({}))

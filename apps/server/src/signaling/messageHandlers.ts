@@ -69,6 +69,22 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       kind: z.enum(['audio', 'video']),
       rtpParameters: z.unknown(),
       requestId: z.string().min(1),
+      /** Outbound video semantic; default `camera` on server. */
+      videoSource: z.enum(['camera', 'screen']).optional(),
+    }),
+  }),
+  z.object({
+    type: z.literal('producer-video-source'),
+    payload: z.object({
+      producerId: z.string().min(1),
+      source: z.enum(['camera', 'screen']),
+    }),
+  }),
+  /** Pause/resume this peer's outbound video producers so remotes get `track.muted`, not a black tile. */
+  z.object({
+    type: z.literal('set-outbound-video-paused'),
+    payload: z.object({
+      paused: z.boolean(),
     }),
   }),
   z.object({
@@ -103,6 +119,18 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       raised: z.boolean(),
     }),
   }),
+  z.object({
+    type: z.literal('request-producer-sync'),
+    payload: z
+      .object({
+        /**
+         * When true (default): client may `teardownAllRemoteConsumers` before re-consuming (tab refresh / recovery).
+         * When false: merge-only catch-up — same producer list semantics as `recv-connected` (post-join race fix).
+         */
+        resetConsumers: z.boolean().optional(),
+      })
+      .optional(),
+  }),
 ])
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>
@@ -121,6 +149,8 @@ export type ExistingProducerInfo = {
   producerId: string
   peerId: string
   kind: MediaKind
+  /** When `kind === 'video'`: what `replaceTrack` is showing (signaling-only). */
+  videoSource?: 'camera' | 'screen'
 }
 
 export type RoomPeerInfo = {
@@ -146,7 +176,19 @@ export type ServerMessage =
     }
   | { type: 'transport-connected'; payload: { transportId: string } }
   | { type: 'produced'; payload: { id: string; requestId: string } }
-  | { type: 'new-producer'; payload: { producerId: string; peerId: string; kind: MediaKind } }
+  | {
+      type: 'new-producer'
+      payload: {
+        producerId: string
+        peerId: string
+        kind: MediaKind
+        videoSource?: 'camera' | 'screen'
+      }
+    }
+  | {
+      type: 'producer-video-source-changed'
+      payload: { producerId: string; peerId: string; source: 'camera' | 'screen' }
+    }
   | {
       type: 'consumed'
       payload: {
@@ -156,7 +198,14 @@ export type ServerMessage =
         rtpParameters: RtpParameters
       }
     }
-  | { type: 'producer-sync'; payload: { producers: ExistingProducerInfo[] } }
+  | {
+      type: 'producer-sync'
+      payload: {
+        producers: ExistingProducerInfo[]
+        /** `client-refresh` = tab woke / explicit resync; recv transport may still be connected. */
+        syncReason?: 'recv-connected' | 'client-refresh'
+      }
+    }
   | { type: 'consume-failed'; payload: { producerId: string; reason: string } }
   | { type: 'active-speaker'; payload: { peerId: string | null } }
   | { type: 'server-pong'; payload: Record<string, never> }
@@ -208,7 +257,11 @@ function collectExistingProducers(room: Room, excludePeerId: string): ExistingPr
       if (producer.closed) {
         continue
       }
-      list.push({ producerId: producer.id, peerId: p.id, kind: producer.kind })
+      const row: ExistingProducerInfo = { producerId: producer.id, peerId: p.id, kind: producer.kind }
+      if (producer.kind === 'video') {
+        row.videoSource = p.getVideoProducerSource(producer.id) ?? 'camera'
+      }
+      list.push(row)
     }
   }
   return list
@@ -222,6 +275,30 @@ function findProducerInRoom(room: Room, producerId: string): Producer | undefine
     }
   }
   return undefined
+}
+
+/**
+ * After outbound `replaceTrack` (same producer id), remotes may receive RTP without a decodable keyframe.
+ * Ask each mediasoup video Consumer for this producer to request PLI/FIR toward the publisher.
+ */
+function requestVideoKeyframesForProducerConsumers(room: Room, producerId: string): void {
+  for (const p of room.getPeers()) {
+    for (const c of p.getConsumers()) {
+      if (c.closed || c.kind !== 'video' || c.producerId !== producerId) {
+        continue
+      }
+      void c.requestKeyFrame().catch((err: unknown) => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[mediasoup] consumer.requestKeyFrame failed', {
+            producerId,
+            consumerId: c.id,
+            consumerPeerId: p.id,
+            err,
+          })
+        }
+      })
+    }
+  }
 }
 
 function transportDirection(transport: WebRtcTransport): string | undefined {
@@ -282,6 +359,11 @@ function replaceDuplicatePeerId(room: Room, incomingSocket: WsSocket, peerId: st
   if (!existing || existing.socket === incomingSocket) {
     return
   }
+
+  console.warn('[signaling] duplicate peerId in room; closing previous socket (open a new tab with a fresh peer id)', {
+    roomId: room.id,
+    peerId,
+  })
 
   detachPeerAudioProducersFromLevelObserver(existing, room)
   existing.closeAllMedia()
@@ -499,12 +581,101 @@ export async function handleConnectTransport(
         const producers = collectExistingProducers(r, peer.id)
         sendServerMessage(socket, {
           type: 'producer-sync',
-          payload: { producers },
+          payload: { producers, syncReason: 'recv-connected' },
         })
       }
     }
   } catch (err) {
     console.error('connect-transport failed', err)
+  }
+}
+
+/** Client asks for a fresh producer list (e.g. tab became visible after background throttling). */
+export function handleRequestProducerSync(
+  socket: WsSocket,
+  deps: SignalingDeps,
+  payload?: { resetConsumers?: boolean },
+): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  const producers = collectExistingProducers(room, peer.id)
+  const resetConsumers = payload?.resetConsumers !== false
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[signaling] request-producer-sync', {
+      roomId: room.id,
+      peerId: peer.id,
+      producerCount: producers.length,
+      resetConsumers,
+    })
+  }
+  sendServerMessage(socket, {
+    type: 'producer-sync',
+    payload: {
+      producers,
+      syncReason: resetConsumers ? 'client-refresh' : 'recv-connected',
+    },
+  })
+}
+
+export async function handleSetOutboundVideoPaused(
+  socket: WsSocket,
+  paused: boolean,
+  deps: SignalingDeps,
+): Promise<void> {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  for (const p of peer.getProducers()) {
+    if (p.closed || p.kind !== 'video') {
+      continue
+    }
+    try {
+      if (paused) {
+        if (!p.paused) {
+          await p.pause()
+        }
+      } else if (p.paused) {
+        await p.resume()
+      }
+    } catch (e) {
+      console.warn('[signaling] set-outbound-video-paused failed', { peerId: peer.id, producerId: p.id }, e)
+    }
+  }
+}
+
+export async function handleProducerVideoSource(
+  socket: WsSocket,
+  producerId: string,
+  source: 'camera' | 'screen',
+  deps: SignalingDeps,
+): Promise<void> {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const producer = peer.getProducer(producerId)
+  if (!producer || producer.closed || producer.kind !== 'video') {
+    return
+  }
+  peer.setVideoProducerSource(producerId, source)
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  requestVideoKeyframesForProducerConsumers(room, producerId)
+  const notice: ServerMessage = {
+    type: 'producer-video-source-changed',
+    payload: { producerId, peerId: peer.id, source },
+  }
+  for (const p of room.getPeers()) {
+    p.sendJson(notice)
   }
 }
 
@@ -515,6 +686,7 @@ export async function handleProduce(
   rtpParameters: unknown,
   requestId: string,
   deps: SignalingDeps,
+  videoSource?: 'camera' | 'screen',
 ): Promise<void> {
   const peer = getPeerForSocket(socket, deps)
   if (!peer) {
@@ -535,9 +707,15 @@ export async function handleProduce(
     const previousAudioProducers =
       kind === 'audio' ? peer.getProducers().filter((p) => p.kind === 'audio') : []
 
+    const initialVideoSource =
+      kind === 'video' ? (videoSource === 'screen' || videoSource === 'camera' ? videoSource : 'camera') : undefined
+
     const producer = await transport.produce({
       kind,
       rtpParameters: rtpParameters as RtpParameters,
+      ...(kind === 'video' && initialVideoSource
+        ? { appData: { source: initialVideoSource } as Record<string, unknown> }
+        : {}),
     })
     if (producer.paused) {
       await producer.resume()
@@ -552,8 +730,16 @@ export async function handleProduce(
 
     peer.addProducer(producer)
 
+    if (producer.kind === 'video' && initialVideoSource) {
+      peer.setVideoProducerSource(producer.id, initialVideoSource)
+    }
+
     if (producer.kind === 'audio') {
       await room.addAudioProducerToLevelObserver(producer.id)
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[mediasoup] SERVER PRODUCER', producer.kind, producer.id)
     }
 
     sendServerMessage(socket, {
@@ -563,7 +749,14 @@ export async function handleProduce(
 
     const notice: ServerMessage = {
       type: 'new-producer',
-      payload: { producerId: producer.id, peerId: peer.id, kind: producer.kind },
+      payload: {
+        producerId: producer.id,
+        peerId: peer.id,
+        kind: producer.kind,
+        ...(producer.kind === 'video'
+          ? { videoSource: peer.getVideoProducerSource(producer.id) ?? 'camera' }
+          : {}),
+      },
     }
     for (const p of room.getPeers()) {
       if (p.id === peer.id) {
@@ -645,15 +838,11 @@ export async function handleConsume(
       })
     }
 
-    await consumer.resume()
+    peer.addConsumer(consumer)
 
     if (process.env.NODE_ENV !== 'production') {
-      console.log('[consume] after consumer.resume', {
-        consumerPaused: consumer.paused,
-      })
+      console.log('[mediasoup] SERVER CONSUMER', consumer.producerId, consumer.kind, consumer.id)
     }
-
-    peer.addConsumer(consumer)
 
     sendServerMessage(socket, {
       type: 'consumed',
@@ -664,6 +853,22 @@ export async function handleConsume(
         rtpParameters: consumer.rtpParameters,
       },
     })
+
+    // Resume after signaling so the browser can apply `transport.consume()` first; reduces stuck
+    // `track.muted` / no inbound RTP when SFU starts forwarding slightly before the recv path is ready.
+    await consumer.resume()
+
+    if (consumer.kind === 'video') {
+      void consumer.requestKeyFrame().catch(() => {
+        /* optional: codec / timing */
+      })
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[consume] after consumer.resume', {
+        consumerPaused: consumer.paused,
+      })
+    }
   } catch (err) {
     console.error('consume failed', err)
     sendConsumeFailed(socket, producerId, 'server_consume_error')

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { isVideoQualityPreset, type VideoQualityPreset } from '../media/videoQualityPreset'
+import { newCallTabPeerId } from '../utils/callTabPeerId'
 
 const LS_VIDEO_PRESET = 'streamassist_call_video_quality_preset'
 /** When `'1'`, the user chose economy / balanced / HD (or migrated from older persisted preset). */
@@ -38,15 +39,11 @@ function readCallDebugOverlay(): boolean {
   }
 }
 
-function randomPeerId(): string {
-  return `peer-${Math.random().toString(36).slice(2, 10)}`
-}
-
 export type RoomPeerEntry = { peerId: string; displayName: string }
 
 export const useCallSessionStore = defineStore('callSession', () => {
   const roomId = ref('demo')
-  const selfPeerId = ref(randomPeerId())
+  const selfPeerId = ref(newCallTabPeerId())
   const selfDisplayName = ref('You')
   const inCall = ref(false)
   /** Economy / balanced / HD — UI selection; encoding uses `videoPublishTier` (see `videoQualityExplicit`). */
@@ -137,7 +134,7 @@ export const useCallSessionStore = defineStore('callSession', () => {
   }
 
   function resetSessionIdentity(): void {
-    selfPeerId.value = randomPeerId()
+    selfPeerId.value = newCallTabPeerId()
   }
 
   return {

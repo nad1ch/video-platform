@@ -5,6 +5,17 @@ import { computeFeedback, generateWord, isValidGuessShape, normalizeWord } from 
 
 const MAX_ATTEMPTS_PER_ROUND = 6
 
+const stores = new Map<string, Store>()
+
+function storeFor(streamerId: string): Store {
+  let s = stores.get(streamerId)
+  if (!s) {
+    s = createStore()
+    stores.set(streamerId, s)
+  }
+  return s
+}
+
 function newGame(): Game {
   const raw = generateWord()
   return {
@@ -21,8 +32,6 @@ function createStore(): Store {
   }
 }
 
-let store: Store = createStore()
-
 function playerToPublic(p: PlayerState): GameStatePayload['players'][number] {
   return {
     userId: p.userId,
@@ -33,16 +42,16 @@ function playerToPublic(p: PlayerState): GameStatePayload['players'][number] {
   }
 }
 
-export function getCurrentWordLength(): number {
-  return [...store.currentGame.word].length
+export function getCurrentWordLength(streamerId: string): number {
+  return [...storeFor(streamerId).currentGame.word].length
 }
 
-export function getCurrentGameId(): string {
-  return store.currentGame.id
+export function getCurrentGameId(streamerId: string): string {
+  return storeFor(streamerId).currentGame.id
 }
 
-export function getGameStatePayload(): GameStatePayload {
-  const { currentGame, players } = store
+export function getGameStatePayload(streamerId: string): GameStatePayload {
+  const { currentGame, players } = storeFor(streamerId)
   return {
     gameId: currentGame.id,
     wordLength: [...currentGame.word].length,
@@ -51,8 +60,8 @@ export function getGameStatePayload(): GameStatePayload {
   }
 }
 
-export function getLeaderboardPayload(): { entries: LeaderboardEntry[] } {
-  const list = Object.values(store.players)
+export function getLeaderboardPayload(streamerId: string): { entries: LeaderboardEntry[] } {
+  const list = Object.values(storeFor(streamerId).players)
   list.sort((a, b) => {
     if (a.guessed !== b.guessed) {
       return a.guessed ? -1 : 1
@@ -89,11 +98,13 @@ export type GuessResult =
   | { ok: false; reason: 'invalid_shape' | 'already_solved' | 'max_attempts' | 'wrong_game' }
 
 export function submitGuess(
+  streamerId: string,
   userId: string,
   displayName: string,
   rawGuess: string,
   expectedGameId?: string,
 ): GuessResult {
+  const store = storeFor(streamerId)
   const game = store.currentGame
   if (expectedGameId !== undefined && expectedGameId !== game.id) {
     return { ok: false, reason: 'wrong_game' }
@@ -152,12 +163,13 @@ export function submitGuess(
   }
 }
 
-export function adminStartNewGame(): { gameId: string; wordLength: number; startedAt: number } {
-  store = {
+export function adminStartNewGame(streamerId: string): { gameId: string; wordLength: number; startedAt: number } {
+  const next: Store = {
     currentGame: newGame(),
     players: {},
   }
-  const g = store.currentGame
+  stores.set(streamerId, next)
+  const g = next.currentGame
   return {
     gameId: g.id,
     wordLength: [...g.word].length,
@@ -166,16 +178,20 @@ export function adminStartNewGame(): { gameId: string; wordLength: number; start
 }
 
 /** Snapshot for DB persistence after a winning guess (in-memory store still holds all participants). */
-export function buildWordleRoundPersistencePayload(winnerUserId: string): PersistWordleRoundInput | null {
+export function buildWordleRoundPersistencePayload(
+  streamerId: string,
+  winnerUserId: string,
+): PersistWordleRoundInput | null {
   const w = String(winnerUserId ?? '').trim()
   if (!w) {
     return null
   }
-  const players = Object.values(store.players)
+  const players = Object.values(storeFor(streamerId).players)
   if (players.length === 0) {
     return null
   }
   return {
+    streamerId,
     winnerUserId: w,
     players: players.map((p) => ({
       userId: p.userId,
@@ -184,4 +200,3 @@ export function buildWordleRoundPersistencePayload(winnerUserId: string): Persis
     })),
   }
 }
-
