@@ -15,6 +15,8 @@ import { mountStreamerApiRoutes } from './wordle/streamerApiRouter'
 import { mountTwitchWordleAuth } from './wordle/twitchAuthRouter'
 import { startTwitchChatIngest, stopTwitchChatIngest } from './wordle/tmiChat'
 import { attachWordleSocketServer } from './wordle/wordleSocket'
+import { attachEatFirstSocketServer } from './eatFirst/broadcast'
+import { mountEatFirstRoutes } from './eatFirst/router'
 
 async function bootstrap(): Promise<void> {
   let shuttingDown = false
@@ -61,13 +63,22 @@ async function bootstrap(): Promise<void> {
 
   const wssSignaling = new WebSocketServer({ noServer: true })
   const wssWordle = new WebSocketServer({ noServer: true })
+  const wssEatFirst = new WebSocketServer({ noServer: true })
 
   attachSocketServer(wssSignaling, roomManager)
   attachWordleSocketServer(wssWordle)
+  attachEatFirstSocketServer(wssEatFirst)
 
   server.on('upgrade', (request, socket, head) => {
     const host = request.headers.host ?? 'localhost'
     const pathname = new URL(request.url ?? '/', `http://${host}`).pathname
+
+    if (pathname === '/eat-first-ws') {
+      wssEatFirst.handleUpgrade(request, socket, head, (ws) => {
+        wssEatFirst.emit('connection', ws, request)
+      })
+      return
+    }
 
     if (pathname === '/wordle-ws') {
       wssWordle.handleUpgrade(request, socket, head, (ws) => {
@@ -91,6 +102,7 @@ async function bootstrap(): Promise<void> {
   mountTwitchWordleAuth(app)
   mountLeaderboardRoutes(app)
   mountAdminRoutes(app)
+  mountEatFirstRoutes(app)
 
   app.get('/health', (_req, res) => {
     res.json({
@@ -129,18 +141,20 @@ async function bootstrap(): Promise<void> {
       })
     }
 
-    closeWss(wssWordle, 'wordle', () => {
-      closeWss(wssSignaling, 'signaling', () => {
-        server.close((httpErr) => {
-          if (httpErr) {
-            console.error('HTTP server close error', httpErr)
-          }
-          try {
-            worker.close()
-          } catch (err) {
-            console.error('worker.close failed', err)
-          }
-          process.exit(0)
+    closeWss(wssEatFirst, 'eat-first', () => {
+      closeWss(wssWordle, 'wordle', () => {
+        closeWss(wssSignaling, 'signaling', () => {
+          server.close((httpErr) => {
+            if (httpErr) {
+              console.error('HTTP server close error', httpErr)
+            }
+            try {
+              worker.close()
+            } catch (err) {
+              console.error('worker.close failed', err)
+            }
+            process.exit(0)
+          })
         })
       })
     })

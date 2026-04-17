@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'user'
+export type UserRole = 'admin' | 'user' | 'host'
 
 /** Stored in JWT / cookie payload (snake_case for backward-compatible tokens). */
 export type SessionUser = {

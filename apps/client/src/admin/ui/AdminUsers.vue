@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAdminUsersState, type AdminUserRow } from '@/admin'
+import { apiFetch } from '@/utils/apiFetch'
 
 const { t, locale } = useI18n()
 
@@ -11,6 +12,8 @@ const searchQuery = ref('')
 const sortKey = ref<'name' | 'wins' | 'rating'>('name')
 const copyFeedbackId = ref<string | null>(null)
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null
+const rolePatchingId = ref<string | null>(null)
+const rolePatchError = ref<string | null>(null)
 
 const rating = (u: AdminUserRow) => u.wins - Math.max(0, u.gamesPlayed - u.wins)
 
@@ -95,6 +98,34 @@ function exportCsv() {
   URL.revokeObjectURL(url)
 }
 
+async function onRoleChange(u: AdminUserRow, ev: Event) {
+  const sel = ev.target as HTMLSelectElement
+  const next = sel.value
+  if (u.role === 'admin') return
+  if (next !== 'user' && next !== 'host') return
+  if (next === u.role) return
+  rolePatchError.value = null
+  rolePatchingId.value = u.id
+  try {
+    const r = await apiFetch(`/api/admin/users/${encodeURIComponent(u.id)}/role`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: next }),
+    })
+    if (!r.ok) {
+      rolePatchError.value = t('adminPanel.usersRolePatchError')
+      sel.value = u.role === 'host' ? 'host' : 'user'
+      return
+    }
+    await load()
+  } catch {
+    rolePatchError.value = t('adminPanel.usersRolePatchError')
+    sel.value = u.role === 'host' ? 'host' : 'user'
+  } finally {
+    rolePatchingId.value = null
+  }
+}
+
 async function copyId(id: string) {
   try {
     await navigator.clipboard.writeText(id)
@@ -166,6 +197,7 @@ onMounted(() => {
     <p v-else-if="empty" class="text-sm text-slate-400">{{ t('adminPanel.usersEmpty') }}</p>
 
     <template v-else>
+      <p v-if="rolePatchError" class="mb-2 text-sm text-rose-300/90">{{ rolePatchError }}</p>
       <div
         v-if="summary"
         class="grid gap-3 sm:grid-cols-3"
@@ -265,7 +297,18 @@ onMounted(() => {
                   {{ copyFeedbackId === u.id ? t('adminPanel.usersCopied') : t('adminPanel.usersCopyId') }}
                 </button>
                 <span>· {{ u.provider }} ·</span>
-                <span :class="u.role === 'admin' ? 'text-cyan-300' : 'text-slate-400'">{{ u.role }}</span>
+                <select
+                  v-if="u.role !== 'admin'"
+                  class="rounded border border-slate-700/80 bg-slate-950/80 px-1 py-0.5 text-[10px] font-medium text-slate-200 focus:border-cyan-600/50 focus:outline-none"
+                  :disabled="rolePatchingId === u.id"
+                  :value="u.role === 'host' ? 'host' : 'user'"
+                  :aria-label="t('adminPanel.usersRoleAria')"
+                  @change="onRoleChange(u, $event)"
+                >
+                  <option value="user">{{ t('adminPanel.roleUser') }}</option>
+                  <option value="host">{{ t('adminPanel.roleHost') }}</option>
+                </select>
+                <span v-else class="text-cyan-300">admin</span>
               </p>
             </div>
           </div>

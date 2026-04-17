@@ -16,6 +16,10 @@ services:
       - /app/node_modules
     environment:
       NODE_ENV: development
+      # Local Twitch OAuth callback on the published API port (register same URL in Twitch console).
+      TWITCH_AUTH_REDIRECT_URI: http://localhost:3000/api/auth/twitch/callback
+      TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
+      TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
       # Example when `coturn` service is up (same compose network):
       # ICE_SERVERS_JSON: '[{"urls":["turn:coturn:3478?transport=udp","turn:coturn:3478?transport=tcp"],"username":"webrtc","credential":"change-me"}]'
     command: npm run dev

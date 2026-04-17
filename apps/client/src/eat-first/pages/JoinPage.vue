@@ -7,10 +7,6 @@ import { setJoinSessionToken } from '../utils/joinSessionToken.js'
 import { useI18n } from 'vue-i18n'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
-import { callableApiEnabled } from '../api/callableApi.js'
-import { ensureAnonymousAuth } from '../services/authBootstrap.js'
-import { callLinkPlayerSlot } from '../api/callableClient.js'
-
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
@@ -184,15 +180,6 @@ async function runClaimSlot(id, displayName) {
       return
     }
     setJoinSessionToken(gameId.value, id, res.token)
-    if (callableApiEnabled()) {
-      try {
-        await ensureAnonymousAuth()
-        await callLinkPlayerSlot(gameId.value, id, res.token)
-      } catch (e) {
-        showJoinToast(e instanceof Error ? e.message : String(e))
-        return
-      }
-    }
     router.push({
       name: 'eat',
       query: { view: 'control', game: gameId.value, player: id, token: res.token },

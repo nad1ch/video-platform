@@ -1,11 +1,13 @@
-import { isEatFirstFirebaseEnabled } from '../firebase.js'
-import { callableApiEnabledFromFlags, trimFunctionsRegionEnv } from './callableApiPure.js'
+import { trimFunctionsRegionEnv } from './callableApiPure.js'
 
-/** Регіон deploy Cloud Functions (наприклад europe-west1). Якщо порожньо — легасі-прямі записи у Firestore. */
 export function callableRegion() {
   return trimFunctionsRegionEnv(import.meta.env.VITE_FUNCTIONS_REGION)
 }
 
+/**
+ * Firebase Callable + Firestore path is retired — eat-first uses `/api/eat-first` + Postgres.
+ * Kept as `false` so legacy branches stay dead without importing Firebase.
+ */
 export function callableApiEnabled() {
-  return callableApiEnabledFromFlags(isEatFirstFirebaseEnabled, callableRegion())
+  return false
 }

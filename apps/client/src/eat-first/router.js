@@ -1,6 +1,5 @@
 import { ref } from 'vue'
-import { ADMIN_KEY, HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from './config/access.js'
-import { getValidatedPersistedHostKey } from './utils/persistedHostSession.js'
+import { HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from './config/access.js'
 import { getPersistedGameId } from './utils/persistedGameId.js'
 import { trackPageView } from './analytics/bootstrap.js'
 import { normalizeEatView } from './state/eatFirstRouteUtils.js'
@@ -67,10 +66,11 @@ export function registerEatFirstRouterGuards(router) {
  *
  * @param {import('vue-router').Router} router
  * @param {import('vue-router').RouteLocationNormalizedLoaded} route
+ * @param {boolean} canEatFirstHost — admin or host role from GET /api/auth/me
  */
-export function redirectAdminToControlIfAuthed(router, route) {
+export function redirectAdminToControlIfAuthed(router, route, canEatFirstHost) {
   if (normalizeEatView(route.query.view) !== 'admin') return
-  if (!getValidatedPersistedHostKey(ADMIN_KEY)) return
+  if (!canEatFirstHost) return
   router.replace({
     name: 'eat',
     query: {

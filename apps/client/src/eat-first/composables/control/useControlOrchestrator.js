@@ -2,6 +2,7 @@
  * Control page orchestrator: composes access + URL helpers + core setup (Firestore, voting, editor, …).
  */
 import { createLogger } from '@/utils/logger'
+import { useAuth } from '@/composables/useAuth'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { eatViewFromRoute } from '../../state/eatFirstRouteUtils.js'
@@ -70,7 +71,6 @@ import { playRevealFlipSound, playVoteSubmitSound } from '../../utils/voteUiSoun
 import { syncHostControlChrome, clearHostControlChrome } from '../hostControlChrome.js'
 import { debugDelete } from '../../utils/debugDelete.js'
 import { normalizePlayerSlotId } from '../../utils/playerSlot.js'
-import { clearHostAccessSession } from '../../utils/persistedHostSession.js'
 import { getJoinSessionToken } from '../../utils/joinSessionToken.js'
 import {
   saveLastPlayerSlot,
@@ -82,7 +82,6 @@ import {
   saveHostSessionStats,
   clearHostSessionStats,
 } from '../../utils/hostSessionStatsStorage.js'
-import { deleteField } from 'firebase/firestore'
 
 const controlOrchLog = createLogger('control:orchestrator')
 
@@ -90,11 +89,10 @@ export function useControlOrchestrator() {
   const route = useRoute()
   const router = useRouter()
   const { t, te } = useI18n()
+  const auth = useAuth()
 
   const {
     hostModeRequested,
-    urlKey,
-    adminKeyOk,
     isAdmin,
     adminAccessDenied,
     gameId,
@@ -105,7 +103,7 @@ export function useControlOrchestrator() {
     overlayHrefGlobal,
     overlayHrefPersonal,
     draftGameId,
-  } = useControlAccessContext({ route, t })
+  } = useControlAccessContext({ route, t, authUser: auth.user, authLoaded: auth.loaded })
 
   const { controlQuery, navigateQuery } = useControlUrlPersistence({
     route,
@@ -470,7 +468,7 @@ async function hostApplyBallotFromNominations() {
         ballotRound: roomRoundLive.value,
         ballotSource: 'nominations',
         slotDurationSec: slotDur,
-        voteSlotStartedAt: deleteField(),
+        voteSlotStartedAt: null,
       },
     })
     showToast(t('toast.ballotOrderSet', { count: order.length }))
@@ -1525,7 +1523,7 @@ async function hostFinishVoting() {
           targetPlayer: nextTarget,
           ballotQueue: ballotQ,
           ballotIndex: nextIdx,
-          voteSlotStartedAt: deleteField(),
+          voteSlotStartedAt: null,
         },
       })
       await clearAllVotes(gameId.value)
@@ -1563,7 +1561,7 @@ async function hostFinishVoting() {
           ballotIndex: 0,
           ballotRunId: `tie-${Date.now()}`,
           slotDurationSec: slotSec,
-          voteSlotStartedAt: deleteField(),
+          voteSlotStartedAt: null,
         },
       })
       showToast(t('toast.votingTiePickDefense'))
@@ -2144,7 +2142,6 @@ function goToPlayer(id) {
 }
 
 function hostForgetSavedAndLeave() {
-  clearHostAccessSession()
   router.push({ name: 'eat', query: { view: 'join', game: gameId.value } })
 }
 
@@ -2329,7 +2326,10 @@ watch(
 )
 
 const showControlPageLoader = computed(
-  () => !adminAccessDenied.value && !bootstrappedControl.value,
+  () =>
+    !adminAccessDenied.value &&
+    !bootstrappedControl.value &&
+    !(hostModeRequested.value && !auth.loaded.value),
 )
 
 onUnmounted(() => {
@@ -2461,7 +2461,6 @@ function rerollActiveCardOnly() {
     activeCardPanelKey,
     adminAccessDenied,
     adminClearTimer,
-    adminKeyOk,
     adminNextSpeaker,
     adminPauseTimerOnly,
     adminResumeTimer,
@@ -2659,7 +2658,6 @@ function rerollActiveCardOnly() {
     toast,
     toastTimer,
     unsubCharacter,
-    urlKey,
     votes,
     votesLiveRound,
     votesLiveRoundVoterIds,

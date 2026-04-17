@@ -17,6 +17,7 @@ import {
   isOnboardingDismissed,
   resolveOnboardingTourKeyFromRoute,
 } from '@/eat-first/utils/onboardingStorage.js'
+import { useAuth } from '@/composables/useAuth'
 import { redirectAdminToControlIfAuthed } from '@/eat-first/router.js'
 import {
   BRAND_LOGO_COMPACT_PNG,
@@ -31,6 +32,11 @@ import '@/eat-first/styles/motion.css'
 const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
+const auth = useAuth()
+const canEatFirstHost = computed(() => {
+  const r = auth.user.value?.role
+  return r === 'admin' || r === 'host'
+})
 const { theme, setTheme, toggleTheme } = useTheme()
 
 const isEatRoute = computed(() => route.path.startsWith('/eat'))
@@ -154,11 +160,10 @@ function onOnboardingDismissSave() {
 }
 
 watch(
-  () => route.fullPath,
+  [() => route.fullPath, () => auth.loaded.value, () => auth.user.value?.role],
   () => {
-    if (isEatRoute.value) {
-      redirectAdminToControlIfAuthed(router, route)
-    }
+    if (!isEatRoute.value || !auth.loaded.value) return
+    redirectAdminToControlIfAuthed(router, route, canEatFirstHost.value)
   },
   { immediate: true },
 )

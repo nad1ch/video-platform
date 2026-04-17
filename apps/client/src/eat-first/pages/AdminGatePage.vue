@@ -1,22 +1,15 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ADMIN_KEY, HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from '../config/access.js'
+import { useAuth } from '@/composables/useAuth'
+import { HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from '../config/access.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
-import { saveHostAccessSession, clearHostAccessSession } from '../utils/persistedHostSession.js'
-import { callableApiEnabled } from '../api/callableApi.js'
-import { ensureAnonymousAuth } from '../services/authBootstrap.js'
-import { callPromoteToHost } from '../api/callableClient.js'
-import { auth } from '../firebase.js'
 
 const { t } = useI18n()
-
 const route = useRoute()
 const router = useRouter()
-
-const keyInput = ref('')
-const err = ref('')
+const { user, loaded, isAuthenticated, ensureAuthLoaded, loginWithTwitch, loginWithGoogle } = useAuth()
 
 const gameId = computed(() => {
   const g = String(route.query.game ?? '').trim()
@@ -26,10 +19,16 @@ const gameId = computed(() => {
   return 'test1'
 })
 
+const canHost = computed(() => {
+  const r = user.value?.role
+  return r === 'admin' || r === 'host'
+})
+
 watch(gameId, (g) => setPersistedGameId(g))
 
 onMounted(() => {
   if (typeof window === 'undefined') return
+  void ensureAuthLoaded()
   const g = route.query.game
   if (g != null && String(g).trim()) return
   const p = getPersistedGameId()
@@ -37,56 +36,20 @@ onMounted(() => {
 })
 
 watch(
-  () => route.query.game,
+  [loaded, canHost, gameId],
   () => {
-    err.value = ''
+    if (!loaded.value || !canHost.value) return
+    router.replace({
+      name: 'eat',
+      query: {
+        view: 'control',
+        game: gameId.value,
+        [HOST_PANEL_QUERY_KEY]: HOST_PANEL_QUERY_VALUE,
+      },
+    })
   },
+  { immediate: true },
 )
-
-async function submit() {
-  err.value = ''
-  const key = String(keyInput.value).trim()
-
-  if (callableApiEnabled()) {
-    try {
-      await ensureAnonymousAuth()
-      await callPromoteToHost(key)
-      await auth?.currentUser?.getIdToken(true)
-      saveHostAccessSession(key)
-      router.replace({
-        name: 'eat',
-        query: {
-          view: 'control',
-          game: gameId.value,
-          [HOST_PANEL_QUERY_KEY]: HOST_PANEL_QUERY_VALUE,
-        },
-      })
-    } catch {
-      err.value = t('admin.wrongKey')
-    }
-    return
-  }
-
-  if (key !== ADMIN_KEY) {
-    err.value = t('admin.wrongKey')
-    return
-  }
-  saveHostAccessSession(ADMIN_KEY)
-  router.replace({
-    name: 'eat',
-    query: {
-      view: 'control',
-      game: gameId.value,
-      [HOST_PANEL_QUERY_KEY]: HOST_PANEL_QUERY_VALUE,
-    },
-  })
-}
-
-function forgetSavedHost() {
-  clearHostAccessSession()
-  keyInput.value = ''
-  err.value = ''
-}
 
 function backJoin() {
   router.push({ name: 'eat', query: { view: 'join', game: gameId.value } })
@@ -99,15 +62,28 @@ function backJoin() {
     <h1 class="title">{{ t('admin.title') }}</h1>
     <p class="hint">{{ t('admin.room') }} <strong>{{ gameId }}</strong></p>
 
-    <form class="form" @submit.prevent="submit">
-      <label class="lbl" for="k">{{ t('admin.key') }}</label>
-      <input id="k" v-model="keyInput" type="password" class="inp" autocomplete="off" />
-      <p v-if="err" class="err">{{ err }}</p>
-      <button type="submit" class="btn">{{ t('admin.submit') }}</button>
-    </form>
+    <template v-if="!loaded">
+      <p class="status">{{ t('admin.loading') }}</p>
+    </template>
+    <template v-else-if="canHost">
+      <p class="status">{{ t('admin.redirecting') }}</p>
+    </template>
+    <template v-else-if="isAuthenticated">
+      <p class="err">{{ t('admin.needHostRole') }}</p>
+    </template>
+    <template v-else>
+      <p class="sign-hint">{{ t('admin.signInHint') }}</p>
+      <div class="login-row">
+        <button type="button" class="btn btn--secondary" @click="loginWithTwitch(route.fullPath)">
+          Twitch
+        </button>
+        <button type="button" class="btn btn--secondary" @click="loginWithGoogle(route.fullPath)">
+          Google
+        </button>
+      </div>
+    </template>
 
     <button type="button" class="link-back" @click="backJoin">{{ t('admin.back') }}</button>
-    <button type="button" class="link-forget" @click="forgetSavedHost">{{ t('admin.forgetSaved') }}</button>
   </div>
 </template>
 
@@ -154,43 +130,46 @@ function backJoin() {
   color: var(--text-heading);
 }
 
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.status {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
 }
 
-.lbl {
-  font-size: 0.65rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.inp {
-  padding: 0.65rem 0.75rem;
-  border-radius: 12px;
-  border: 1px solid var(--border-input);
-  background: var(--bg-input);
-  color: var(--text-body);
-  font-size: 0.95rem;
+.sign-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
 .err {
-  margin: 0;
-  font-size: 0.8rem;
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
   color: var(--error-text);
 }
 
+.login-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 .btn {
-  margin-top: 0.35rem;
-  padding: 0.7rem 1rem;
+  padding: 0.65rem 1rem;
   border-radius: 12px;
   border: 1px solid var(--accent);
   background: var(--accent-fill);
   color: var(--text-main);
   font-weight: 700;
   cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn--secondary {
+  background: var(--bg-input);
+  color: var(--text-body);
+  border-color: var(--border-input);
 }
 
 .link-back {
@@ -208,23 +187,5 @@ function backJoin() {
 
 .link-back:hover {
   color: var(--text-heading);
-}
-
-.link-forget {
-  margin-top: 0.65rem;
-  align-self: flex-start;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-  opacity: 0.85;
-}
-
-.link-forget:hover {
-  color: var(--error-text);
 }
 </style>

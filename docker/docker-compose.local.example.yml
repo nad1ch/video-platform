@@ -8,11 +8,20 @@
 #
 # Postgres + API with bind mounts (hot reload). Published :5432 for host Prisma / GUI tools.
 #
+# Twitch OAuth: copy docker/.env.example → docker/.env and set TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET.
+#
 # From repo root:
 #   docker compose -f docker/docker-compose.local.yml up -d
 #
 # Prisma (host Node, first time — DB must be up):
 #   cd apps/server && npm run db:migrate:dev && npm run db:seed
+#
+# If the API dies with Cannot find module 'wordle-core' after changing Dockerfile.local,
+# reset the server node_modules volume and recreate (compose project name is usually the
+# compose file’s parent folder, e.g. docker → volume docker_server_node_modules_local):
+#   docker compose -f docker/docker-compose.local.yml rm -sf server
+#   docker volume rm docker_server_node_modules_local
+#   docker compose -f docker/docker-compose.local.yml up -d --build server
 # =============================================================================
 
 services:
@@ -36,8 +45,9 @@ services:
 
   server:
     build:
-      context: ../apps/server
-      dockerfile: Dockerfile.local
+      # Repo root so `packages/wordle-core` is available for apps/server (file:../../packages/wordle-core).
+      context: ..
+      dockerfile: apps/server/Dockerfile.local
     container_name: video-platform-server-local
     restart: unless-stopped
     depends_on:
@@ -50,7 +60,7 @@ services:
       - "52000-52199:52000-52199/udp"
     volumes:
       - ../apps/server:/app
-      - /app/node_modules
+      - server_node_modules_local:/app/node_modules
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://streamassist:streamassist@db:5432/streamassist
@@ -58,6 +68,13 @@ services:
       WORDLE_JWT_SECRET: local-docker-dev-secret-min-16-chars
       AUTH_JWT_SECRET: local-docker-dev-secret-min-16-chars
       WORDLE_CLIENT_ORIGIN: http://localhost:5173
+      # Must match Twitch Developer Console → OAuth Redirect URLs (localhost API, published :3000).
+      TWITCH_AUTH_REDIRECT_URI: http://localhost:3000/api/auth/twitch/callback
+      # Set in `docker/.env` (same folder as this compose file) or export before `docker compose`:
+      #   TWITCH_CLIENT_ID=...
+      #   TWITCH_CLIENT_SECRET=...
+      TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
+      TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
       MEDIASOUP_ANNOUNCED_ADDRESS: 127.0.0.1
       MEDIASOUP_RTC_MIN_PORT: "52000"
       MEDIASOUP_RTC_MAX_PORT: "52199"
@@ -65,3 +82,4 @@ services:
 
 volumes:
   pgdata_local:
+  server_node_modules_local:

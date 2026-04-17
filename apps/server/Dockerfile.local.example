@@ -3,8 +3,9 @@
 # =============================================================================
 #   cp apps/server/Dockerfile.local.example apps/server/Dockerfile.local
 #
-# Used only by docker/docker-compose.local.yml (after you copy the compose example).
-# Keeps the default repo Dockerfile free for CI / other environments.
+# Build context MUST be the repo root (see docker/docker-compose.local.yml).
+# Server depends on workspace package `wordle-core` at ../../packages/wordle-core;
+# from WORKDIR /app that resolves to /packages/wordle-core (POSIX /app/../../packages).
 # =============================================================================
 
 FROM node:20-bullseye
@@ -19,15 +20,18 @@ RUN apt-get update && apt-get install -y \
   ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
+# Linked from apps/server via file:../../packages/wordle-core
+COPY packages/wordle-core /packages/wordle-core
+
 WORKDIR /app
 
-COPY package*.json ./
-# `postinstall` runs `scripts/prisma-generate-retry.cjs` — copy it + schema before `npm install`.
-COPY prisma ./prisma/
-COPY scripts/prisma-generate-retry.cjs ./scripts/prisma-generate-retry.cjs
+# Omit apps/server/package-lock.json when it is stale vs package.json (workspace installs use the root lockfile).
+COPY apps/server/package.json ./
+COPY apps/server/prisma ./prisma/
+COPY apps/server/scripts ./scripts/
 RUN npm install
 
-COPY . .
+COPY apps/server/. .
 
 EXPOSE 3000
 # Match docker-compose.local UDP publish + MEDIASOUP_RTC_* (default local example uses 52000–52199).

@@ -1,9 +1,8 @@
-import { collection, getDocs } from 'firebase/firestore'
 import { CORE_FIELD_KEYS } from '../characterState.js'
 import { normalizeTraitText, rollFieldValue } from '../data/randomPools.js'
 import { ACTIVE_CARD_EFFECT_IDS } from '../data/activeCards.js'
-import { db } from '../firebase.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
+import { efSnapshot } from './eatFirstTransport.js'
 import { applyGlobalAction, fetchCharacter, saveCharacter } from './gameService.js'
 
 function pick(arr) {
@@ -110,16 +109,13 @@ export async function applyActiveCardEffect(gameId, playerId, effectId, scenario
 }
 
 async function rerollOne(gameId, playerId, key, scenarioId, reveal) {
-  if (!db) return { ok: false, message: 'Firestore не налаштовано' }
   const data = await fetchCharacter(gameId, playerId)
   if (!data) return { ok: false, message: 'Немає даних гравця' }
   const pid = normalizePlayerSlotId(playerId)
-  const colRef = collection(db, 'games', gameId, 'players')
-  const snapshot = await getDocs(colRef)
+  const snap = await efSnapshot(String(gameId ?? '').trim())
   const exclude = new Set()
-  for (const d of snapshot.docs) {
-    if (normalizePlayerSlotId(d.id) === pid) continue
-    const pl = d.data()
+  for (const pl of snap.players || []) {
+    if (normalizePlayerSlotId(pl.id) === pid) continue
     const v = normalizeTraitText(pl[key]?.value)
     if (v) exclude.add(v)
   }

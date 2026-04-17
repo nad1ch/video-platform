@@ -6,6 +6,8 @@ dist/
 dist-ssr/
 build/
 *.tsbuildinfo
+# Legacy: server `tsc` output — build in CI/Docker, do not commit
+apps/server/dist/
 
 # Env and secrets
 .env
@@ -13,6 +15,7 @@ build/
 !.env.example
 !.env.production.example
 !.env.local.example
+!docker/.env.example
 
 # Logs
 logs/
@@ -25,6 +28,8 @@ pnpm-debug.log*
 # OS / editor
 .DS_Store
 Thumbs.db
+# Windows reserved device name — must not exist as a file (breaks `git add`)
+nul
 .idea/
 .vscode/*
 !.vscode/extensions.json

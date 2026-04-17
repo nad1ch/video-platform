@@ -27,7 +27,16 @@ export default defineConfig({
         target: 'ws://localhost:3000',
         ws: true,
       },
+      '/eat-first-ws': {
+        target: 'ws://localhost:3000',
+        ws: true,
+      },
       '/app/wordle-ws': {
+        target: 'ws://localhost:3000',
+        ws: true,
+        rewrite: (p) => p.replace(/^\/app/, ''),
+      },
+      '/app/eat-first-ws': {
         target: 'ws://localhost:3000',
         ws: true,
         rewrite: (p) => p.replace(/^\/app/, ''),

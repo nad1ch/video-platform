@@ -17,11 +17,24 @@ export async function persistTwitchOAuthUser(profile: TwitchProfileForSession): 
     return
   }
   try {
-    const role = resolveUserRole({
+    const allowlistRole = resolveUserRole({
       provider: 'twitch',
       id: profile.id,
       twitchId: profile.id,
     })
+    const existing = await prisma.user.findUnique({
+      where: {
+        provider_providerUserId: {
+          provider: 'twitch',
+          providerUserId: profile.id,
+        },
+      },
+      select: { role: true },
+    })
+    let storedRole: string = allowlistRole
+    if (existing?.role === 'host' && allowlistRole === 'user') {
+      storedRole = 'host'
+    }
     const linkedStreamer = await prisma.streamer.findFirst({
       where: { twitchId: profile.id, isActive: true },
       select: { id: true },
@@ -39,7 +52,7 @@ export async function persistTwitchOAuthUser(profile: TwitchProfileForSession): 
         email: null,
         displayName: profile.display_name,
         avatarUrl: profile.profile_image_url || null,
-        role,
+        role: storedRole,
         twitchId: profile.id,
         streamerId: linkedStreamer?.id ?? null,
         stats: { create: {} },
@@ -47,7 +60,7 @@ export async function persistTwitchOAuthUser(profile: TwitchProfileForSession): 
       update: {
         displayName: profile.display_name,
         avatarUrl: profile.profile_image_url || null,
-        role,
+        role: storedRole,
         twitchId: profile.id,
         ...(linkedStreamer ? { streamerId: linkedStreamer.id } : {}),
       },
@@ -63,11 +76,24 @@ export async function persistGoogleOAuthUser(profile: GoogleProfileForSession): 
   }
   try {
     const email = profile.email ?? null
-    const role = resolveUserRole({
+    const allowlistRole = resolveUserRole({
       provider: 'google',
       id: profile.id,
       email: profile.email,
     })
+    const existing = await prisma.user.findUnique({
+      where: {
+        provider_providerUserId: {
+          provider: 'google',
+          providerUserId: profile.id,
+        },
+      },
+      select: { role: true },
+    })
+    let storedRole: string = allowlistRole
+    if (existing?.role === 'host' && allowlistRole === 'user') {
+      storedRole = 'host'
+    }
     await prisma.user.upsert({
       where: {
         provider_providerUserId: {
@@ -81,7 +107,7 @@ export async function persistGoogleOAuthUser(profile: GoogleProfileForSession): 
         email,
         displayName: profile.display_name,
         avatarUrl: profile.profile_image_url?.trim() ? profile.profile_image_url : null,
-        role,
+        role: storedRole,
         twitchId: null,
         stats: { create: {} },
       },
@@ -89,7 +115,7 @@ export async function persistGoogleOAuthUser(profile: GoogleProfileForSession): 
         ...(email ? { email } : {}),
         displayName: profile.display_name,
         avatarUrl: profile.profile_image_url?.trim() ? profile.profile_image_url : null,
-        role,
+        role: storedRole,
       },
     })
   } catch (e) {

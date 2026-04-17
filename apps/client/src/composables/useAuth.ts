@@ -10,7 +10,7 @@ export type AppUser = {
   displayName: string
   avatar?: string
   provider: 'twitch' | 'google' | 'apple' | 'email' | null
-  role: 'admin' | 'user'
+  role: 'admin' | 'user' | 'host'
   /** Helix user id when provider is Twitch (same as `id`). */
   twitchId?: string
   /** Linked Wordle streamer row (owner or same Twitch channel). */
@@ -95,7 +95,8 @@ function parseUser(raw: unknown): AppUser | null {
   const provider =
     p === 'twitch' || p === 'google' || p === 'apple' || p === 'email' ? p : null
   const roleRaw = u.role
-  const role = roleRaw === 'admin' || roleRaw === 'user' ? roleRaw : 'user'
+  const role =
+    roleRaw === 'admin' || roleRaw === 'user' || roleRaw === 'host' ? roleRaw : 'user'
   let twitchId: string | undefined
   if (typeof u.twitchId === 'string' && u.twitchId.length > 0) {
     twitchId = u.twitchId
@@ -198,6 +199,10 @@ function logOAuthTargetWhenDevApiAmbiguous(target: string): void {
 export function useAuth() {
   const isAuthenticated = computed(() => Boolean(user.value))
   const isAdmin = computed(() => user.value?.role === 'admin')
+  const canEatFirstHost = computed(() => {
+    const r = user.value?.role
+    return r === 'admin' || r === 'host'
+  })
 
   function loginWithTwitch(redirectPath?: string): void {
     const q = encodeURIComponent(safeOAuthRedirectPath(redirectPath))
@@ -302,6 +307,7 @@ export function useAuth() {
     loaded,
     isAuthenticated,
     isAdmin,
+    canEatFirstHost,
     refresh,
     ensureAuthLoaded,
     loginWithTwitch,

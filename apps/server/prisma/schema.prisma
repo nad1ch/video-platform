@@ -99,3 +99,34 @@ model GameResult {
   @@index([roundId])
   @@index([userId])
 }
+
+// Eat-first (party game): replaces client Firestore — room doc + players + votes in Postgres.
+model EatFirstGame {
+  id        String           @id
+  room      Json             @default("{}")
+  updatedAt DateTime         @updatedAt
+  players   EatFirstPlayer[]
+  votes     EatFirstVote[]
+}
+
+model EatFirstPlayer {
+  id     String       @id @default(cuid())
+  gameId String
+  game   EatFirstGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  slotId String
+  data   Json         @default("{}")
+
+  @@unique([gameId, slotId])
+  @@index([gameId])
+}
+
+model EatFirstVote {
+  id          String       @id @default(cuid())
+  gameId      String
+  game        EatFirstGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  voterSlotId String
+  data        Json         @default("{}")
+
+  @@unique([gameId, voterSlotId])
+  @@index([gameId])
+}

@@ -52,12 +52,14 @@ export function mountAdminRoutes(app: Express): void {
       )
       const users = rows.map((u) => {
         const w = wordleByUser.get(u.id)
+        const role =
+          u.role === 'admin' ? 'admin' : u.role === 'host' ? 'host' : 'user'
         return {
           id: u.id,
           displayName: u.displayName,
           avatar: u.avatarUrl?.trim() ? u.avatarUrl.trim() : undefined,
           provider: u.provider,
-          role: u.role === 'admin' ? 'admin' : 'user',
+          role,
           twitchId: u.twitchId ?? undefined,
           wins: w?.wins ?? 0,
           gamesPlayed: w?.gamesPlayed ?? 0,
@@ -67,6 +69,39 @@ export function mountAdminRoutes(app: Express): void {
     } catch (e) {
       console.error('[admin] GET /api/admin/users', e)
       res.status(500).json({ error: 'server_error', users: [] })
+    }
+  })
+
+  app.patch('/api/admin/users/:userId/role', async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) {
+      return
+    }
+    if (!isDatabaseConfigured()) {
+      res.status(503).json({ error: 'database_unconfigured' })
+      return
+    }
+    const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : ''
+    const body = req.body as { role?: unknown }
+    const nextRole = typeof body.role === 'string' ? body.role.trim() : ''
+    if (!userId || (nextRole !== 'user' && nextRole !== 'host')) {
+      res.status(400).json({ error: 'invalid_role' })
+      return
+    }
+    try {
+      const row = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true } })
+      if (!row) {
+        res.status(404).json({ error: 'not_found' })
+        return
+      }
+      if (row.role === 'admin') {
+        res.status(400).json({ error: 'cannot_change_admin_role' })
+        return
+      }
+      await prisma.user.update({ where: { id: userId }, data: { role: nextRole } })
+      res.status(204).end()
+    } catch (e) {
+      console.error('[admin] PATCH /api/admin/users/:userId/role', e)
+      res.status(500).json({ error: 'server_error' })
     }
   })
 

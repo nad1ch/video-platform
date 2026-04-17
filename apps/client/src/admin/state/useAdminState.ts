@@ -26,7 +26,7 @@ export type AdminUserRow = {
   displayName: string
   avatar?: string
   provider: string
-  role: 'admin' | 'user'
+  role: 'admin' | 'user' | 'host'
   wins: number
   gamesPlayed: number
 }

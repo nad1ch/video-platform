@@ -23,7 +23,6 @@ const {
   activeCardPanelKey,
   adminAccessDenied,
   adminClearTimer,
-  adminKeyOk,
   adminNextSpeaker,
   adminPauseTimerOnly,
   adminResumeTimer,
@@ -221,7 +220,6 @@ const {
   toast,
   toastTimer,
   unsubCharacter,
-  urlKey,
   votes,
   votesLiveRound,
   votesLiveRoundVoterIds,
@@ -232,7 +230,7 @@ const {
 <template>
   <div v-if="adminAccessDenied" class="access-denied">
     <h1 class="denied-title">{{ t('control.accessDenied') }}</h1>
-    <p class="denied-text">{{ t('control.deniedBefore') }}<code>key</code>{{ t('control.deniedAfter') }}</p>
+    <p class="denied-text">{{ t('control.deniedHostRole') }}</p>
   </div>
 
   <div v-else-if="playerSlotAccessBlocked" class="access-denied">
@@ -265,7 +263,7 @@ const {
           {{ t('control.hostExpandAll') }}
         </button>
         <button type="button" class="host-forget-btn" @click="hostForgetSavedAndLeave">
-          {{ t('control.hostForgetKey') }}
+          {{ t('control.hostLeavePanel') }}
         </button>
       </div>
     </div>

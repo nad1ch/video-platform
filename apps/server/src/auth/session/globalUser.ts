@@ -21,14 +21,21 @@ function effectiveSessionRole(session: SessionPayload): UserRole {
   })
 }
 
-export function sessionToGlobalAuthUser(session: SessionPayload): GlobalAuthUser {
+function meRoleFromAllowlistAndDb(allowlistRole: UserRole, dbRole: string | null | undefined): UserRole {
+  if (allowlistRole === 'admin') return 'admin'
+  const d = typeof dbRole === 'string' ? dbRole.trim() : ''
+  if (d === 'host') return 'host'
+  return 'user'
+}
+
+export function sessionToGlobalAuthUser(session: SessionPayload, dbRole?: string | null): GlobalAuthUser {
   const provider = session.provider
   const p =
     provider === 'twitch' || provider === 'google' || provider === 'apple' || provider === 'email'
       ? provider
       : null
   const trimmed = session.profile_image_url.trim()
-  const role = effectiveSessionRole(session)
+  const role = meRoleFromAllowlistAndDb(effectiveSessionRole(session), dbRole)
   const twitchId =
     p === 'twitch' ? (session.twitch_id ?? session.id) : undefined
   return {
@@ -47,7 +54,7 @@ export function sessionToLegacyApiUser(session: SessionPayload): {
   display_name: string
   profile_image_url: string
   provider: 'twitch' | 'google' | 'apple' | 'email' | null
-  role: 'admin' | 'user'
+  role: UserRole
   twitch_id?: string
 } {
   const role = effectiveSessionRole(session)
