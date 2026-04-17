@@ -20,6 +20,7 @@ Core rules:
 - Do not mix domain logic with transport logic, DOM logic, or framework lifecycle code.
 
 Before coding:
+- Show the `git diff` (or equivalent) for the files you plan to modify so the scope of change is explicit.
 - Read all directly related files first.
 - Check whether a helper / composable / API module already exists.
 - Check whether tests already cover the area.
@@ -41,8 +42,10 @@ Validation rules:
   - run `npm run test:eat-first`
 - If touching shared client pure logic / admin pure logic:
   - run `npm run test:client`
+- If touching `packages/call-core` pure logic / call-core-consistency tests:
+  - run `npm run test:call`
 - Before finalizing:
-  - run `npm run ci`
+  - run `npm run ci` (or at minimum `npm run test:call`, `npm run test:ci`, `npm run build -w client`, and `npm run lint` when call-core or client integration is involved)
 
 Failure rules:
 - If tests, lint, or build fail, stop and explain the failure.

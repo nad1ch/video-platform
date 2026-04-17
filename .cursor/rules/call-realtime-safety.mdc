@@ -11,6 +11,8 @@ alwaysApply: true
 
 This area is high risk. Prefer safety over cleanup.
 
+If runtime behavior changes or new errors appear after edits: **STOP** and explain. Do not continue refactoring or stacking changes until the cause is understood and agreed.
+
 Hard rules:
 - Do not change mediasoup / WebRTC / reconnect behavior unless the task explicitly targets it.
 - Do not merge or rewrite connection flows broadly.
