@@ -95,9 +95,24 @@ function normalizeTwitchLogin(raw: string | null | undefined): string | null {
 
 const route = useRoute()
 const { t, locale } = useI18n()
+const { isAuthenticated, user, isAdmin, ensureAuthLoaded } = useAuth()
 
-/** Per-streamer local prefs (URL slug until API resolves). */
-const wordleStorageScope = computed(() => normalizeTwitchLogin(String(route.params.streamer || '')) || 'default')
+/**
+ * URL `/wordle/:name` targets a streamer room; if the signed-in user has a linked `Streamer` row,
+ * their own room (chat + `streamerId`) is always used.
+ */
+const effectiveWordleSlug = computed((): string | null => {
+  const u = user.value
+  const fromAccount =
+    u && typeof u.wordleStreamerName === 'string' ? normalizeTwitchLogin(u.wordleStreamerName) : null
+  if (fromAccount) {
+    return fromAccount
+  }
+  return normalizeTwitchLogin(String(route.params.streamer || ''))
+})
+
+/** Per-streamer local prefs (effective slug). */
+const wordleStorageScope = computed(() => effectiveWordleSlug.value || 'default')
 
 const wordlePublicConfig = shallowRef<WordlePublicConfig | null>(null)
 
@@ -113,7 +128,7 @@ const streamerLoadError = ref<string | null>(null)
 
 async function loadStreamerCard(): Promise<void> {
   streamerLoadError.value = null
-  const slug = normalizeTwitchLogin(String(route.params.streamer || ''))
+  const slug = effectiveWordleSlug.value
   if (!slug) {
     streamerProfile.value = null
     streamerLoadError.value = 'Invalid streamer'
@@ -219,8 +234,6 @@ type WordleGlobalRatingRow = {
   losses: number
 }
 
-const { isAuthenticated, user, isAdmin } = useAuth()
-
 const gameState = shallowRef<GameStatePayload | null>(null)
 const leaderboard = ref<LeaderboardEntry[]>([])
 const chatLines = ref<ChatLine[]>([])
@@ -263,7 +276,7 @@ const effectiveTwitchChannel = computed(() => {
   if (typeof fromApi === 'string' && fromApi.length > 0) {
     return fromApi.toLowerCase()
   }
-  return normalizeTwitchLogin(String(route.params.streamer || '')) ?? DEMO_TWITCH_CHANNEL
+  return effectiveWordleSlug.value ?? DEMO_TWITCH_CHANNEL
 })
 
 function formatCooldownHint(ms: number): string {
@@ -429,13 +442,13 @@ const localGuesses = ref<LocalGuessRow[]>([])
 const gameStatus = ref<'playing' | 'won' | 'lost'>('playing')
 const localRoundId = ref(0)
 /** Уникає повторного POST /api/wins за один локальний раунд (скидання з `localRoundId`). */
-const hasWon = ref(false)
+const soloLbPosted = ref(false)
 const localStats = ref<LocalWinStats>({ won: 0, lost: 0 })
 /** Для стріму: тимчасово показати загадане слово. */
 const secretPeekVisible = ref(false)
 
 watch(localRoundId, () => {
-  hasWon.value = false
+  soloLbPosted.value = false
 })
 
 /** Довжина слова для підказки в чаті: з WS-стану раунду (як на сервері для Twitch), інакше локальна сітка. */
@@ -448,7 +461,7 @@ const chatTargetWordLength = computed(() => {
 })
 
 watch(
-  () => normalizeTwitchLogin(String(route.params.streamer || '')) || 'default',
+  () => effectiveWordleSlug.value || 'default',
   async (scope) => {
     const len = loadWordLength(scope)
     wordLength.value = len
@@ -700,8 +713,8 @@ function kbdBackspace(): void {
   guessInput.value = chars.join('')
 }
 
-async function postWinToLeaderboard(): Promise<void> {
-  if (hasWon.value) {
+async function postSoloRoundToLeaderboard(result: 'win' | 'lose'): Promise<void> {
+  if (!isAuthenticated.value || soloLbPosted.value) {
     return
   }
   const streamerId = streamerProfile.value?.id
@@ -709,25 +722,28 @@ async function postWinToLeaderboard(): Promise<void> {
     return
   }
   const attempts = localGuesses.value.length
-  if (attempts < 1 || attempts > MAX_ATTEMPTS) {
+  if (result === 'win') {
+    if (attempts < 1 || attempts > MAX_ATTEMPTS) {
+      return
+    }
+  } else if (attempts !== MAX_ATTEMPTS) {
     return
   }
-  hasWon.value = true
-  console.log('[WIN] sending win', { streamerId, attempts })
+  soloLbPosted.value = true
   try {
     const res = await fetch(apiUrl('/api/wins'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamerId, attempts }),
+      body: JSON.stringify({ streamerId, result, attempts }),
     })
     if (!res.ok) {
-      hasWon.value = false
+      soloLbPosted.value = false
       return
     }
     void loadGlobalLbActive()
   } catch {
-    hasWon.value = false
+    soloLbPosted.value = false
   }
 }
 
@@ -750,7 +766,6 @@ function submitGuess(): void {
   if (guess === secretWord.value) {
     gameStatus.value = 'won'
     secretPeekVisible.value = false
-    void postWinToLeaderboard()
   } else if (localGuesses.value.length >= MAX_ATTEMPTS) {
     gameStatus.value = 'lost'
     secretPeekVisible.value = false
@@ -846,10 +861,12 @@ watch(gameStatus, (next, prev) => {
     const s = { ...localStats.value, won: localStats.value.won + 1 }
     localStats.value = s
     persistLocalStats(wordleStorageScope.value, s)
+    void postSoloRoundToLeaderboard('win')
   } else if (next === 'lost') {
     const s = { ...localStats.value, lost: localStats.value.lost + 1 }
     localStats.value = s
     persistLocalStats(wordleStorageScope.value, s)
+    void postSoloRoundToLeaderboard('lose')
   }
 })
 
@@ -862,7 +879,7 @@ function scrollWordleChatIntoView(): void {
   document.getElementById(WORDLE_STREAM_CHAT_ANCHOR_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-const globalLbTab = ref<'wins' | 'streak' | 'rating'>('wins')
+const globalLbTab = ref<'wins' | 'streak' | 'rating'>('rating')
 const globalLbWinsRows = ref<WordleGlobalWinsRow[]>([])
 const globalLbStreakRows = ref<WordleGlobalStreakRow[]>([])
 const globalLbRatingRows = ref<WordleGlobalRatingRow[]>([])
@@ -896,7 +913,7 @@ function globalLeaderboardQuery(): string {
   if (typeof id === 'string' && id.length > 0) {
     return `?streamerId=${encodeURIComponent(id)}`
   }
-  const slug = normalizeTwitchLogin(String(route.params.streamer || ''))
+  const slug = effectiveWordleSlug.value
   if (slug) {
     return `?streamer=${encodeURIComponent(slug)}`
   }
@@ -1039,6 +1056,7 @@ function globalLbScoreFor(row: WordleGlobalWinsRow | WordleGlobalStreakRow | Wor
 onMounted(() => {
   wordleWsDisposed = false
   document.documentElement.classList.add(WORDLE_ROUTE_HTML_CLASS)
+  void ensureAuthLoaded()
   void loadGlobalLbActive()
   window.addEventListener('keydown', onWindowKeydown)
 })

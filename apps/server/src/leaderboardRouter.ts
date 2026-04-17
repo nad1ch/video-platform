@@ -1,7 +1,11 @@
 import type { Express, Request, Response } from 'express'
 import { Prisma } from '@prisma/client'
 import { prisma } from './prisma'
-import { readSessionFromCookie, type SessionPayload } from './auth/session/sessionJwt'
+import { resolvePrismaUserIdFromSession } from './auth/resolvePrismaUserFromSession'
+import { readSessionFromCookie } from './auth/session/sessionJwt'
+
+/** Matches `MAX_ATTEMPTS` in client `wordleLogic` / solo board rows. */
+const SOLO_MAX_ATTEMPTS = 6
 
 function isDatabaseConfigured(): boolean {
   const u = process.env.DATABASE_URL
@@ -71,30 +75,6 @@ function consecutiveWinStreakFromNewestFirst(rows: { isWinner: boolean }[]): num
   return n
 }
 
-async function winsLeaderboardGlobal(): Promise<
-  Array<{ rank: number; userId: string; displayName: string; avatarUrl: string | null; wins: number }>
-> {
-  const grouped = await prisma.userStreamerStats.groupBy({
-    by: ['userId'],
-    _sum: { wins: true },
-    having: { wins: { _sum: { gt: 0 } } },
-    orderBy: { _sum: { wins: 'desc' } },
-    take: 100,
-  })
-  const sorted = [...grouped].sort(
-    (a, b) =>
-      (b._sum.wins ?? 0) - (a._sum.wins ?? 0) || a.userId.localeCompare(b.userId),
-  )
-  const display = await buildParticipantDisplayMap(sorted.map((g) => g.userId))
-  return sorted.map((g, i) => ({
-    rank: i + 1,
-    userId: g.userId,
-    displayName: display.get(g.userId)?.displayName ?? g.userId,
-    avatarUrl: display.get(g.userId)?.avatarUrl ?? null,
-    wins: g._sum.wins ?? 0,
-  }))
-}
-
 async function winsLeaderboardForStreamer(
   streamerId: string,
 ): Promise<Array<{ rank: number; userId: string; displayName: string; avatarUrl: string | null; wins: number }>> {
@@ -111,19 +91,6 @@ async function winsLeaderboardForStreamer(
     avatarUrl: r.user.avatarUrl,
     wins: r.wins,
   }))
-}
-
-async function streakLeaderboardGlobal(): Promise<
-  Array<{ rank: number; userId: string; displayName: string; avatarUrl: string | null; streak: number }>
-> {
-  const raw = await prisma.gameResult.findMany({
-    select: {
-      userId: true,
-      isWinner: true,
-      round: { select: { createdAt: true } },
-    },
-  })
-  return streakFromRows(raw)
 }
 
 async function streakLeaderboardForStreamer(
@@ -191,50 +158,6 @@ async function streakFromRows(
   })
 }
 
-async function ratingLeaderboardGlobal(): Promise<
-  Array<{
-    rank: number
-    userId: string
-    displayName: string
-    avatarUrl: string | null
-    rating: number
-    wins: number
-    losses: number
-  }>
-> {
-  const grouped = await prisma.userStreamerStats.groupBy({
-    by: ['userId'],
-    _sum: { wins: true, gamesPlayed: true },
-  })
-
-  const scored = grouped
-    .map((g) => {
-      const wins = g._sum.wins ?? 0
-      const played = g._sum.gamesPlayed ?? 0
-      const losses = Math.max(0, played - wins)
-      const rating = wins - losses
-      return { userId: g.userId, wins, played, losses, rating }
-    })
-    .filter((x) => x.played > 0)
-    .sort(
-      (a, b) =>
-        b.rating - a.rating || b.wins - a.wins || a.userId.localeCompare(b.userId),
-    )
-    .slice(0, 100)
-
-  const display = await buildParticipantDisplayMap(scored.map((s) => s.userId))
-
-  return scored.map((x, i) => ({
-    rank: i + 1,
-    userId: x.userId,
-    displayName: display.get(x.userId)?.displayName ?? x.userId,
-    avatarUrl: display.get(x.userId)?.avatarUrl ?? null,
-    rating: x.rating,
-    wins: x.wins,
-    losses: x.losses,
-  }))
-}
-
 async function ratingLeaderboardForStreamer(streamerId: string): Promise<
   Array<{
     rank: number
@@ -283,34 +206,10 @@ async function ratingLeaderboardForStreamer(streamerId: string): Promise<
   }))
 }
 
-async function resolvePrismaUserIdForSession(session: SessionPayload): Promise<string | null> {
-  const byId = await prisma.user.findUnique({
-    where: { id: session.id },
-    select: { id: true },
-  })
-  if (byId) {
-    return byId.id
-  }
-  const tid =
-    session.provider === 'twitch'
-      ? typeof session.twitch_id === 'string' && session.twitch_id.length > 0
-        ? session.twitch_id
-        : session.id
-      : null
-  if (typeof tid === 'string' && tid.length > 0) {
-    const byTwitch = await prisma.user.findFirst({
-      where: { twitchId: tid },
-      select: { id: true },
-    })
-    return byTwitch?.id ?? null
-  }
-  return null
-}
-
 export function mountLeaderboardRoutes(app: Express): void {
   /**
-   * Records a solo Wordle win for the signed-in Prisma user (OAuth-linked row).
-   * Body: { streamerId, attempts } — increments UserStreamerStats (gamesPlayed + wins).
+   * Records a solo Wordle result for any signed-in user with a linked `User` row.
+   * Body: { streamerId, result?: 'win' | 'lose', attempts } — rating uses wins − (gamesPlayed − wins).
    */
   app.post('/api/wins', async (req: Request, res: Response) => {
     if (!isDatabaseConfigured()) {
@@ -322,12 +221,12 @@ export function mountLeaderboardRoutes(app: Express): void {
       res.status(401).json({ error: 'unauthorized' })
       return
     }
-    const userId = await resolvePrismaUserIdForSession(session)
+    const userId = await resolvePrismaUserIdFromSession(session)
     if (!userId) {
-      res.status(403).json({ error: 'account_not_linked' })
+      res.status(401).json({ error: 'account_not_linked' })
       return
     }
-    const body = req.body as { streamerId?: unknown; attempts?: unknown }
+    const body = req.body as { streamerId?: unknown; attempts?: unknown; result?: unknown }
     const streamerId = typeof body.streamerId === 'string' ? body.streamerId.trim() : ''
     const attemptsRaw = body.attempts
     const attempts =
@@ -336,7 +235,27 @@ export function mountLeaderboardRoutes(app: Express): void {
         : typeof attemptsRaw === 'string'
           ? Number.parseInt(attemptsRaw, 10)
           : NaN
-    if (!streamerId || !Number.isFinite(attempts) || attempts < 1 || attempts > 6) {
+    const resultRaw = body.result
+    const result =
+      resultRaw === 'lose'
+        ? 'lose'
+        : resultRaw === 'win' || resultRaw === undefined
+          ? 'win'
+          : null
+    if (result === null) {
+      res.status(400).json({ error: 'invalid_body' })
+      return
+    }
+    if (!streamerId) {
+      res.status(400).json({ error: 'invalid_body' })
+      return
+    }
+    if (result === 'win') {
+      if (!Number.isFinite(attempts) || attempts < 1 || attempts > SOLO_MAX_ATTEMPTS) {
+        res.status(400).json({ error: 'invalid_body' })
+        return
+      }
+    } else if (!Number.isFinite(attempts) || attempts !== SOLO_MAX_ATTEMPTS) {
       res.status(400).json({ error: 'invalid_body' })
       return
     }
@@ -349,21 +268,38 @@ export function mountLeaderboardRoutes(app: Express): void {
         res.status(404).json({ error: 'streamer_not_found' })
         return
       }
-      await prisma.userStreamerStats.upsert({
-        where: {
-          userId_streamerId: { userId, streamerId },
-        },
-        create: {
-          userId,
-          streamerId,
-          gamesPlayed: 1,
-          wins: 1,
-        },
-        update: {
-          gamesPlayed: { increment: 1 },
-          wins: { increment: 1 },
-        },
-      })
+      if (result === 'win') {
+        await prisma.userStreamerStats.upsert({
+          where: {
+            userId_streamerId: { userId, streamerId },
+          },
+          create: {
+            userId,
+            streamerId,
+            gamesPlayed: 1,
+            wins: 1,
+          },
+          update: {
+            gamesPlayed: { increment: 1 },
+            wins: { increment: 1 },
+          },
+        })
+      } else {
+        await prisma.userStreamerStats.upsert({
+          where: {
+            userId_streamerId: { userId, streamerId },
+          },
+          create: {
+            userId,
+            streamerId,
+            gamesPlayed: 1,
+            wins: 0,
+          },
+          update: {
+            gamesPlayed: { increment: 1 },
+          },
+        })
+      }
       res.status(204).end()
     } catch (e) {
       console.error('[leaderboard] POST /api/wins', e)
@@ -378,7 +314,11 @@ export function mountLeaderboardRoutes(app: Express): void {
     }
     try {
       const scope = await resolveStreamerScopeFromQuery(req)
-      const entries = scope ? await winsLeaderboardForStreamer(scope) : await winsLeaderboardGlobal()
+      if (!scope) {
+        res.json({ entries: [] })
+        return
+      }
+      const entries = await winsLeaderboardForStreamer(scope)
       res.json({ entries })
     } catch (e) {
       console.error('[leaderboard] GET /api/leaderboard/wins', e)
@@ -393,7 +333,11 @@ export function mountLeaderboardRoutes(app: Express): void {
     }
     try {
       const scope = await resolveStreamerScopeFromQuery(req)
-      const entries = scope ? await streakLeaderboardForStreamer(scope) : await streakLeaderboardGlobal()
+      if (!scope) {
+        res.json({ entries: [] })
+        return
+      }
+      const entries = await streakLeaderboardForStreamer(scope)
       res.json({ entries })
     } catch (e) {
       console.error('[leaderboard] GET /api/leaderboard/streak', e)
@@ -401,7 +345,7 @@ export function mountLeaderboardRoutes(app: Express): void {
     }
   })
 
-  /** Рейтинг: +1 за перемогу, −1 за поразку (wins − (gamesPlayed − wins)). */
+  /** Rating: +1 per win, −1 per loss (wins − (gamesPlayed − wins)). */
   app.get('/api/leaderboard/rating', async (req: Request, res: Response) => {
     if (!isDatabaseConfigured()) {
       res.json({ entries: [] })
@@ -409,7 +353,11 @@ export function mountLeaderboardRoutes(app: Express): void {
     }
     try {
       const scope = await resolveStreamerScopeFromQuery(req)
-      const entries = scope ? await ratingLeaderboardForStreamer(scope) : await ratingLeaderboardGlobal()
+      if (!scope) {
+        res.json({ entries: [] })
+        return
+      }
+      const entries = await ratingLeaderboardForStreamer(scope)
       res.json({ entries })
     } catch (e) {
       console.error('[leaderboard] GET /api/leaderboard/rating', e)

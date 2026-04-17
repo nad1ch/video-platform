@@ -23,4 +23,8 @@ export type GlobalAuthUser = {
   role: UserRole
   /** Present when the user signed in with Twitch (Helix user id). */
   twitchId?: string
+  /** When this account matches an active `Streamer` row (owner or same Twitch id). */
+  wordleStreamerId?: string
+  /** Public `/wordle/:name` slug for that streamer. */
+  wordleStreamerName?: string
 }

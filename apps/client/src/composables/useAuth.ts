@@ -10,6 +10,9 @@ export type AppUser = {
   role: 'admin' | 'user'
   /** Helix user id when provider is Twitch (same as `id`). */
   twitchId?: string
+  /** Linked Wordle streamer row (owner or same Twitch channel). */
+  wordleStreamerId?: string
+  wordleStreamerName?: string
 }
 
 const user: Ref<AppUser | null> = ref(null)
@@ -94,6 +97,14 @@ function parseUser(raw: unknown): AppUser | null {
   } else if (provider === 'twitch' && id.length > 0) {
     twitchId = id
   }
+  let wordleStreamerId: string | undefined
+  if (typeof u.wordleStreamerId === 'string' && u.wordleStreamerId.length > 0) {
+    wordleStreamerId = u.wordleStreamerId
+  }
+  let wordleStreamerName: string | undefined
+  if (typeof u.wordleStreamerName === 'string' && u.wordleStreamerName.length > 0) {
+    wordleStreamerName = u.wordleStreamerName
+  }
   return {
     id,
     displayName,
@@ -101,6 +112,8 @@ function parseUser(raw: unknown): AppUser | null {
     provider,
     role,
     ...(twitchId ? { twitchId } : {}),
+    ...(wordleStreamerId ? { wordleStreamerId } : {}),
+    ...(wordleStreamerName ? { wordleStreamerName } : {}),
   }
 }
 
