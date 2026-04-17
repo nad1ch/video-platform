@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { isVideoQualityPreset, type VideoQualityPreset } from '../media/videoQualityPreset'
+import { guestDisplayNameForPeerId } from '../utils/participantsMapper'
 import { newCallTabPeerId } from '../utils/callTabPeerId'
 
 const LS_VIDEO_PRESET = 'streamassist_call_video_quality_preset'
@@ -84,6 +85,10 @@ export const useCallSessionStore = defineStore('callSession', () => {
     remoteDisplayNames.value = {}
   }
 
+  /**
+   * Non-UI helper (debug / legacy callers). Call UI must use `buildCallParticipantMap` +
+   * `resolvePeerDisplayNameForUi` and presence `displayName` snapshots — not this.
+   */
   function labelFor(peerId: string): string {
     if (peerId === selfPeerId.value) {
       const dn = selfDisplayName.value
@@ -94,7 +99,7 @@ export const useCallSessionStore = defineStore('callSession', () => {
     if (fromServer) {
       return fromServer
     }
-    return `Guest ${peerId.length > 6 ? peerId.slice(-6) : peerId}`
+    return guestDisplayNameForPeerId(peerId)
   }
 
   function setInCall(v: boolean): void {

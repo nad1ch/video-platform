@@ -5,7 +5,9 @@ import type { CallChatLine } from 'call-core'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import {
-  useCallEngine,
+  buildCallParticipantMap,
+  resolvePeerDisplayNameForUi,
+  useCallOrchestrator,
   VIDEO_QUALITY_PRESETS,
   type InboundVideoDebugRow,
   type VideoQualityPreset,
@@ -73,9 +75,22 @@ const {
   toggleRaiseHand,
   screenSharing,
   toggleScreenShare,
-} = useCallEngine({ allowManualVideoQuality })
+} = useCallOrchestrator({ allowManualVideoQuality })
 
-const { selfPeerId } = storeToRefs(session)
+const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
+
+/** SSOT for call UI names: tiles + remote-only peers (see `buildCallParticipantMap`). */
+const participantsByPeerId = computed(() =>
+  buildCallParticipantMap(tiles.value, { ...remoteDisplayNames.value }, selfPeerId.value),
+)
+
+/** Single resolver for all call UI names — participants map + same pure fallbacks as `resolveParticipantDisplayName`. */
+function peerDisplayName(peerId: string): string {
+  return resolvePeerDisplayNameForUi(peerId, participantsByPeerId.value, {
+    selfPeerId: selfPeerId.value,
+    selfDisplayName: selfDisplayName.value,
+  })
+}
 
 const videoQualityChoice = computed({
   get(): VideoQualityUiChoice {
@@ -112,10 +127,11 @@ watch(
       return
     }
     lastPresenceToastSourceId = last.id
+    const name = last.displayName
     const text =
       last.kind === 'join'
-        ? t('callPage.presenceJoined', { name: last.displayName })
-        : t('callPage.presenceLeft', { name: last.displayName })
+        ? t('callPage.presenceJoined', { name })
+        : t('callPage.presenceLeft', { name })
     const id = `toast-${last.id}`
     callToasts.value = [...callToasts.value, { id, text, kind: last.kind }]
     window.setTimeout(() => {
@@ -498,7 +514,7 @@ watch(
               <ParticipantTile
                 class="call-page__tile-inner"
                 :peer-id="tile.peerId"
-                :display-name="tile.displayName"
+                :display-name="peerDisplayName(tile.peerId)"
                 :stream="tile.stream"
                 :is-local="tile.isLocal"
                 :video-enabled="tile.videoEnabled"
@@ -785,7 +801,7 @@ watch(
                   :class="{ 'call-page__chat-li--self': isSelfChatLine(line) }"
                 >
                   <span class="call-page__chat-meta">
-                    <span class="call-page__chat-name">{{ line.displayName }}</span>
+                    <span class="call-page__chat-name">{{ peerDisplayName(line.peerId) }}</span>
                     <time class="call-page__chat-time" :datetime="String(line.at)">{{ formatChatTime(line.at) }}</time>
                   </span>
                   <span class="call-page__chat-text">{{ line.text }}</span>

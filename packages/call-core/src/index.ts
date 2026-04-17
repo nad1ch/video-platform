@@ -1,6 +1,6 @@
 /**
- * Reusable mediasoup/WebRTC call stack. Prefer `useCallEngine()` as the single entry point;
- * import submodules for custom compositions.
+ * Reusable mediasoup/WebRTC call stack. Prefer `useCallOrchestrator()` from app code (facade);
+ * use `useCallEngine()` when composing inside this package or for tests. Submodules are for custom compositions.
  */
 export {
   useCallEngine,
@@ -10,6 +10,8 @@ export {
   type CallSessionStore,
   type CallTile,
 } from './useCallEngine'
+
+export { useCallOrchestrator } from './useCallOrchestrator'
 
 export { useCallSessionStore, type RoomPeerEntry } from './stores/callSession'
 
@@ -30,8 +32,24 @@ export {
   DEFAULT_CALL_VIDEO_CONSTRAINTS,
   getVideoConstraintsForPreset,
 } from './media/defaultMediaConstraints'
+export type { ConsumerLifecycleStatus, ConsumerState } from './media/consumeLifecycle'
 export { useLocalMedia, type CallMediaDeviceOption, type UseLocalMediaOptions } from './media/useLocalMedia'
 export { gridSizeTierFromParticipantCount } from './media/gridTier'
+export { mergeProducerLists } from './media/mergeProducerLists'
+export {
+  buildCallParticipantMap,
+  guestDisplayNameForPeerId,
+  mapTilesToParticipants,
+  resolveParticipantDisplayName,
+  type CallParticipant,
+  type Participant,
+  type ParticipantTileInput,
+  type TileLike,
+} from './utils/participantsMapper'
+export {
+  resolvePeerDisplayNameForUi,
+  type ResolvePeerDisplayNameForUiOptions,
+} from './utils/resolvePeerDisplayName'
 export {
   ACTIVE_CAMERA_SMALL_ROOM_MAX,
   AUTO_LARGE_ROOM_VIDEO_CAPTURE,
@@ -71,6 +89,8 @@ export {
   type WsStatus,
 } from './signaling/useRoomConnection'
 
+export { parseProducerSyncPayload } from './signaling/producerSyncPayload'
+
 export {
   useSendTransport,
   type PendingProducerNotice,
@@ -79,5 +99,6 @@ export {
 } from './transport/useSendTransport'
 
 export { waitForCondition } from './utils/waitForCondition'
+export { tryConsumeProducerOnce, type ConsumeOnceResult } from './utils/consumerDedup'
 export { newCallTabPeerId, readOrCreateCallDeviceId } from './utils/callTabPeerId'
 export { replyJsonPingIfNeeded } from './utils/jsonWsPing'

@@ -51,7 +51,8 @@ export function useEatOverlayMediasoup(options) {
         const labels = pl && typeof pl === 'object' ? pl : {}
         const entry = {
           identity: id,
-          label: labels[id] ?? id,
+          // Game slot label overrides; else engine tile `displayName` (call-core SSOT), not raw peerId.
+          label: labels[id] ?? t.displayName ?? id,
           mediaStream: stream,
           isLocal: t.isLocal,
           showVideo: v ? v.enabled : false,

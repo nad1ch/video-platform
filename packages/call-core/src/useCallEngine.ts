@@ -17,6 +17,13 @@ import {
 } from './media/videoQualityPreset'
 import { shouldUseVideoSimulcastForRoom } from './media/videoSimulcast'
 import { useSendTransport } from './transport/useSendTransport'
+import { buildRequestProducerSyncPayload } from './media/recoveryCoordinator'
+import {
+  decideAfterDocumentBecameVisible,
+  decideAfterSocketStatusChange,
+  decideAfterWindowFocus,
+} from './reconnectOrchestrationPolicy'
+import { resolveParticipantDisplayName } from './utils/participantsMapper'
 import { waitForCondition } from './utils/waitForCondition'
 import { newCallTabPeerId } from './utils/callTabPeerId'
 
@@ -46,7 +53,11 @@ export type CallEngineOptions = {
   allowManualVideoQuality?: Ref<boolean> | ComputedRef<boolean>
 }
 
-/** One grid tile: dumb UI maps this to `ParticipantTile`. */
+/**
+ * One grid tile: dumb UI maps this to `ParticipantTile`.
+ * `displayName` feeds `mapTilesToParticipants` / `buildCallParticipantMap` (same strings as
+ * `resolveParticipantDisplayName`); call UI should use `resolvePeerDisplayNameForUi` / presence `displayName`.
+ */
 export type CallTile = {
   peerId: string
   stream: MediaStream | null
@@ -145,8 +156,15 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   const session = options?.session ?? useCallSessionStore()
-  const { roomId, selfPeerId, selfDisplayName, inCall, videoQualityPreset, videoQualityExplicit } =
-    storeToRefs(session)
+  const {
+    roomId,
+    selfPeerId,
+    selfDisplayName,
+    inCall,
+    videoQualityPreset,
+    videoQualityExplicit,
+    remoteDisplayNames,
+  } = storeToRefs(session)
 
   const {
     lastRoomState,
@@ -230,7 +248,9 @@ export function useCallEngine(options?: CallEngineOptions) {
   } = useRemoteMedia()
 
   const remoteListenPrefs = shallowRef(new Map<string, RemoteListenEntry>())
-  const callPresenceMessages = ref<{ id: string; at: number; kind: 'join' | 'leave'; displayName: string }[]>([])
+  const callPresenceMessages = ref<
+    { id: string; at: number; kind: 'join' | 'leave'; peerId: string; displayName: string }[]
+  >([])
 
   const callChatMessages = ref<CallChatLine[]>([])
   const peerHandRaised = ref<Record<string, boolean>>({})
@@ -300,9 +320,18 @@ export function useCallEngine(options?: CallEngineOptions) {
     persistListenPrefs()
   }
 
-  function pushCallPresence(kind: 'join' | 'leave', displayName: string): void {
+  function pushCallPresence(kind: 'join' | 'leave', peerId: string): void {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    callPresenceMessages.value = [...callPresenceMessages.value, { id, at: Date.now(), kind, displayName }].slice(-12)
+    const displayName = resolveParticipantDisplayName(
+      peerId,
+      '',
+      peerId === selfPeerId.value,
+      remoteDisplayNames.value,
+    )
+    callPresenceMessages.value = [
+      ...callPresenceMessages.value,
+      { id, at: Date.now(), kind, peerId, displayName },
+    ].slice(-12)
   }
 
   const unsubPeerPresence = addMessageListener((data) => {
@@ -317,7 +346,8 @@ export function useCallEngine(options?: CallEngineOptions) {
       }
       const name =
         typeof p.displayName === 'string' && p.displayName.trim() ? p.displayName.trim() : p.peerId
-      pushCallPresence('join', name)
+      session.upsertRemoteDisplayName(p.peerId, name)
+      pushCallPresence('join', p.peerId)
       return
     }
     if (m.type === 'peer-left') {
@@ -326,9 +356,7 @@ export function useCallEngine(options?: CallEngineOptions) {
         return
       }
       const peerId = p.peerId
-      const name =
-        lastRoomState.value?.peers.find((x) => x.peerId === peerId)?.displayName ?? session.labelFor(peerId)
-      pushCallPresence('leave', name)
+      pushCallPresence('leave', peerId)
       removeRemotePeer(peerId)
       if (peerHandRaised.value[peerId]) {
         const next = { ...peerHandRaised.value }
@@ -493,7 +521,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     // Merge-only producer list from server (no consumer teardown). Catches join races where
     // `new-producer` / `recv-connected` producer-sync overlapped initial `existingProducers` consume.
     try {
-      sendJson({ type: 'request-producer-sync', payload: { resetConsumers: false } })
+      sendJson({ type: 'request-producer-sync', payload: buildRequestProducerSyncPayload('soft') })
     } catch {
       /* ws closed */
     }
@@ -501,6 +529,11 @@ export function useCallEngine(options?: CallEngineOptions) {
     startSignalingKeepAlive()
   }
 
+  /**
+   * Single-flight reconnect timer (same backoff formula for all reasons). Also used from
+   * `tryReconnectSignalingAndMedia` via `'after-error'`. Policy covers the `wsStatus` watcher path;
+   * joining/timer guards stay here for all callers (including tab-foreground reconnect).
+   */
   function scheduleReconnectSignaling(reason: string): void {
     if (intentionalLeave.value || !inCall.value) {
       return
@@ -617,7 +650,7 @@ export function useCallEngine(options?: CallEngineOptions) {
       remoteTiles.push({
         peerId,
         stream,
-        displayName: session.labelFor(peerId),
+        displayName: resolveParticipantDisplayName(peerId, '', false, remoteDisplayNames.value),
         isLocal: false,
         videoEnabled: isRemoteVideoActive(v, remoteSource),
         audioEnabled: a ? a.enabled : true,
@@ -944,17 +977,23 @@ export function useCallEngine(options?: CallEngineOptions) {
     teardownMedia()
   }
 
+  /** Signaling socket drop → backoff reconnect. Decisions: `reconnectOrchestrationPolicy`. */
   watch(wsStatus, (st, prev) => {
-    if (intentionalLeave.value || !inCall.value) {
-      return
-    }
-    if (prev === 'open' && (st === 'closed' || st === 'error')) {
-      scheduleReconnectSignaling('socket-not-open')
+    const decision = decideAfterSocketStatusChange(prev, st, {
+      intentionalLeave: intentionalLeave.value,
+      inCall: inCall.value,
+      joining: joining.value,
+      wsStatus: st,
+      reconnectTimerActive: reconnectTimer !== null,
+    })
+    if (decision.kind === 'schedule-reconnect') {
+      scheduleReconnectSignaling(decision.reason)
     }
   })
 
   let tabVisibleRecvResyncTimer: ReturnType<typeof setTimeout> | null = null
 
+  /** Debounced `requestForcedProducerResync`; policy only chooses visibility vs focus vs reconnect-before-resync. */
   function scheduleRecvResyncAfterTabForeground(source: 'visibility' | 'focus'): void {
     if (intentionalLeave.value || !inCall.value) {
       return
@@ -990,18 +1029,34 @@ export function useCallEngine(options?: CallEngineOptions) {
     if (document.visibilityState !== 'visible') {
       return
     }
-    if (intentionalLeave.value || !inCall.value) {
+    const decision = decideAfterDocumentBecameVisible({
+      intentionalLeave: intentionalLeave.value,
+      inCall: inCall.value,
+      joining: joining.value,
+      wsStatus: wsStatus.value,
+      reconnectTimerActive: reconnectTimer !== null,
+    })
+    if (decision.kind === 'noop') {
       return
     }
-    if (wsStatus.value !== 'open') {
-      scheduleReconnectSignaling('tab-visible-again')
+    if (decision.kind === 'schedule-reconnect') {
+      scheduleReconnectSignaling(decision.reason)
       return
     }
-    scheduleRecvResyncAfterTabForeground('visibility')
+    scheduleRecvResyncAfterTabForeground(decision.source)
   }
 
   function onWindowFocusForRecvResync(): void {
-    scheduleRecvResyncAfterTabForeground('focus')
+    const decision = decideAfterWindowFocus({
+      intentionalLeave: intentionalLeave.value,
+      inCall: inCall.value,
+      joining: joining.value,
+      wsStatus: wsStatus.value,
+      reconnectTimerActive: reconnectTimer !== null,
+    })
+    if (decision.kind === 'soft-resync') {
+      scheduleRecvResyncAfterTabForeground(decision.source)
+    }
   }
 
   if (typeof document !== 'undefined') {
