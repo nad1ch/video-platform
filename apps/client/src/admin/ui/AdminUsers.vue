@@ -1,31 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { apiUrl } from '@/utils/apiUrl'
+import { useAdminUsersState, type AdminUserRow } from '@/admin'
 
 const { t, locale } = useI18n()
 
-type Row = {
-  id: string
-  displayName: string
-  avatar?: string
-  provider: string
-  role: 'admin' | 'user'
-  wins: number
-  gamesPlayed: number
-}
+const { users, loading, errorKey, databaseConfigured, lastUpdated, load } = useAdminUsersState()
 
-const users = ref<Row[]>([])
-const loading = ref(true)
-const errorKey = ref<'load' | 'forbidden' | null>(null)
-const databaseConfigured = ref(true)
 const searchQuery = ref('')
 const sortKey = ref<'name' | 'wins' | 'rating'>('name')
-const lastUpdated = ref<Date | null>(null)
 const copyFeedbackId = ref<string | null>(null)
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 
-const rating = (u: Row) => u.wins - Math.max(0, u.gamesPlayed - u.wins)
+const rating = (u: AdminUserRow) => u.wins - Math.max(0, u.gamesPlayed - u.wins)
 
 const empty = computed(() => !loading.value && !errorKey.value && users.value.length === 0)
 
@@ -120,33 +107,6 @@ async function copyId(id: string) {
     copyFeedbackId.value = null
     copyFeedbackTimer = null
   }, 1600)
-}
-
-async function load() {
-  loading.value = true
-  errorKey.value = null
-  try {
-    const r = await fetch(apiUrl('/api/admin/users'), { credentials: 'include' })
-    if (r.status === 403) {
-      errorKey.value = 'forbidden'
-      users.value = []
-      return
-    }
-    if (!r.ok) {
-      errorKey.value = 'load'
-      users.value = []
-      return
-    }
-    const j = (await r.json()) as { databaseConfigured?: boolean; users?: Row[] }
-    databaseConfigured.value = j.databaseConfigured !== false
-    users.value = Array.isArray(j.users) ? j.users : []
-    lastUpdated.value = new Date()
-  } catch {
-    errorKey.value = 'load'
-    users.value = []
-  } finally {
-    loading.value = false
-  }
 }
 
 onMounted(() => {

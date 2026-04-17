@@ -1,5 +1,8 @@
 import { computed, ref, type Ref } from 'vue'
+import { apiFetch } from '@/utils/apiFetch'
 import { apiBase, apiUrl } from '@/utils/apiUrl'
+import { createLogger } from '@/utils/logger'
+import { safeOAuthRedirectPath } from '@/utils/safeOAuthRedirectPath'
 
 /** Global auth user (GET /api/auth/me). */
 export type AppUser = {
@@ -14,6 +17,8 @@ export type AppUser = {
   wordleStreamerId?: string
   wordleStreamerName?: string
 }
+
+const authLog = createLogger('auth')
 
 const user: Ref<AppUser | null> = ref(null)
 const loaded = ref(false)
@@ -133,7 +138,7 @@ async function refresh(options?: RefreshAuthOptions): Promise<void> {
   }
 
   try {
-    const r = await fetch(apiUrl('/api/auth/me'), { credentials: 'include' })
+    const r = await apiFetch('/api/auth/me')
     if (r.status === 401) {
       user.value = null
       writeDisplayCache(null)
@@ -151,7 +156,7 @@ async function refresh(options?: RefreshAuthOptions): Promise<void> {
             if (typeof sessionStorage !== 'undefined') {
               sessionStorage.setItem(DEV_TWITCH_ID_LOG_KEY, next.id)
             }
-            console.info(
+            authLog.info(
               '[StreamAssist dev] Twitch user id (додай у ADMIN_TWITCH_IDS у apps/server/.env):',
               next.id,
             )
@@ -184,47 +189,37 @@ export function ensureAuthLoaded(): Promise<void> {
   return inflight
 }
 
+function logOAuthTargetWhenDevApiAmbiguous(target: string): void {
+  if (import.meta.env.DEV && !apiBase()) {
+    authLog.info('OAuth →', target, '(set VITE_API_URL in prod when API is not same-origin)')
+  }
+}
+
 export function useAuth() {
   const isAuthenticated = computed(() => Boolean(user.value))
   const isAdmin = computed(() => user.value?.role === 'admin')
 
   function loginWithTwitch(redirectPath?: string): void {
-    const path =
-      typeof redirectPath === 'string' && redirectPath.startsWith('/') && !redirectPath.startsWith('//')
-        ? redirectPath
-        : '/'
-    const q = encodeURIComponent(path)
+    const q = encodeURIComponent(safeOAuthRedirectPath(redirectPath))
     const target = apiUrl(`/api/auth/twitch?redirect=${q}`)
-    if (import.meta.env.DEV && !apiBase()) {
-      console.info('[auth] OAuth →', target, '(set VITE_API_URL in prod when API is not same-origin)')
-    }
+    logOAuthTargetWhenDevApiAmbiguous(target)
     window.location.assign(target)
   }
 
   /** Full browser navigation; session is httpOnly cookie only (no localStorage tokens). */
   function loginWithGoogle(redirectPath?: string): void {
-    const path =
-      typeof redirectPath === 'string' && redirectPath.startsWith('/') && !redirectPath.startsWith('//')
-        ? redirectPath
-        : '/'
-    const q = encodeURIComponent(path)
+    const q = encodeURIComponent(safeOAuthRedirectPath(redirectPath))
     const target = apiUrl(`/api/auth/google?redirect=${q}`)
-    if (import.meta.env.DEV && !apiBase()) {
-      console.info('[auth] OAuth →', target, '(set VITE_API_URL in prod when API is not same-origin)')
-    }
-    window.location.href = target
+    logOAuthTargetWhenDevApiAmbiguous(target)
+    window.location.assign(target)
   }
 
   async function logout(options?: { navigateHome?: boolean }): Promise<void> {
     try {
-      const r = await fetch(apiUrl('/api/auth/logout'), { method: 'POST', credentials: 'include' })
-      if (import.meta.env.DEV) {
-        console.log('[auth] logout', r.status)
-      }
+      const r = await apiFetch('/api/auth/logout', { method: 'POST' })
+      authLog.debug('logout', r.status)
     } catch (e) {
-      if (import.meta.env.DEV) {
-        console.warn('[auth] logout request failed', e)
-      }
+      authLog.warn('logout request failed', e)
     }
     user.value = null
     loaded.value = false
@@ -264,9 +259,8 @@ export function useAuth() {
       password,
       ...(displayName != null && displayName.trim().length > 0 ? { displayName: displayName.trim() } : {}),
     }
-    const reg = await fetch(apiUrl('/api/auth/register'), {
+    const reg = await apiFetch('/api/auth/register', {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
@@ -279,9 +273,8 @@ export function useAuth() {
       return { ok: true, outcome: 'registered', user: u }
     }
     if (reg.status === 409) {
-      const loginRes = await fetch(apiUrl('/api/auth/login'), {
+      const loginRes = await apiFetch('/api/auth/login', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: body.email, password: body.password }),
       })

@@ -7,9 +7,27 @@ exports.attachSocketServer = attachSocketServer;
 const ws_1 = __importDefault(require("ws"));
 const messageHandlers_1 = require("./messageHandlers");
 const WS_PING_INTERVAL_MS = 45_000;
+/** JSON frames so reverse proxies that ignore WS-level ping still see traffic. */
+const WS_JSON_PING_INTERVAL_MS = 25_000;
 function attachSocketServer(wss, roomManager) {
     const socketPeer = new Map();
     const deps = { roomManager, socketPeer };
+    const jsonPing = setInterval(() => {
+        for (const socket of wss.clients) {
+            if (socket.readyState !== ws_1.default.OPEN) {
+                continue;
+            }
+            try {
+                socket.send(JSON.stringify({ type: 'ping' }));
+            }
+            catch {
+                /* ignore */
+            }
+        }
+    }, WS_JSON_PING_INTERVAL_MS);
+    if (typeof jsonPing.unref === 'function') {
+        jsonPing.unref();
+    }
     const heartbeat = setInterval(() => {
         for (const socket of wss.clients) {
             const s = socket;
@@ -29,6 +47,7 @@ function attachSocketServer(wss, roomManager) {
     }
     wss.on('close', () => {
         clearInterval(heartbeat);
+        clearInterval(jsonPing);
     });
     wss.on('connection', (socket) => {
         const ext = socket;
@@ -58,6 +77,9 @@ function attachSocketServer(wss, roomManager) {
                             (0, messageHandlers_1.sendServerMessage)(socket, { type: 'server-pong', payload: {} });
                             break;
                         }
+                        case 'pong': {
+                            break;
+                        }
                         case 'join-room': {
                             const { roomId, peerId, displayName } = parsed.data.payload;
                             await (0, messageHandlers_1.handleJoinRoom)(socket, roomId, peerId, displayName, deps);
@@ -79,8 +101,18 @@ function attachSocketServer(wss, roomManager) {
                             break;
                         }
                         case 'produce': {
-                            const { transportId, kind, rtpParameters, requestId } = parsed.data.payload;
-                            await (0, messageHandlers_1.handleProduce)(socket, transportId, kind, rtpParameters, requestId, deps);
+                            const { transportId, kind, rtpParameters, requestId, videoSource } = parsed.data.payload;
+                            await (0, messageHandlers_1.handleProduce)(socket, transportId, kind, rtpParameters, requestId, deps, videoSource);
+                            break;
+                        }
+                        case 'producer-video-source': {
+                            const { producerId, source } = parsed.data.payload;
+                            await (0, messageHandlers_1.handleProducerVideoSource)(socket, producerId, source, deps);
+                            break;
+                        }
+                        case 'set-outbound-video-paused': {
+                            const { paused } = parsed.data.payload;
+                            await (0, messageHandlers_1.handleSetOutboundVideoPaused)(socket, paused, deps);
                             break;
                         }
                         case 'consume': {
@@ -91,6 +123,20 @@ function attachSocketServer(wss, roomManager) {
                         case 'set-consumer-preferred-layers': {
                             const { consumerId, spatialLayer } = parsed.data.payload;
                             await (0, messageHandlers_1.handleSetConsumerPreferredLayers)(socket, consumerId, spatialLayer, deps);
+                            break;
+                        }
+                        case 'call-chat': {
+                            const { text } = parsed.data.payload;
+                            (0, messageHandlers_1.handleCallChat)(socket, text, deps);
+                            break;
+                        }
+                        case 'raise-hand': {
+                            const { raised } = parsed.data.payload;
+                            (0, messageHandlers_1.handleRaiseHand)(socket, raised, deps);
+                            break;
+                        }
+                        case 'request-producer-sync': {
+                            (0, messageHandlers_1.handleRequestProducerSync)(socket, deps, parsed.data.payload);
                             break;
                         }
                         default:

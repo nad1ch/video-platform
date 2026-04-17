@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Game, GameStatePayload, GuessRow, LeaderboardEntry, PlayerState, Store } from './types'
 import type { PersistWordleRoundInput } from './persistRound'
-import { computeFeedback, generateWord, isValidGuessShape, normalizeWord } from './wordleLogic'
+import { computeFeedback, generateWord, isValidGuessShape, normalizeWord, wordGraphemeCount } from './wordleLogic'
 
 const MAX_ATTEMPTS_PER_ROUND = 6
 
@@ -43,7 +43,7 @@ function playerToPublic(p: PlayerState): GameStatePayload['players'][number] {
 }
 
 export function getCurrentWordLength(streamerId: string): number {
-  return [...storeFor(streamerId).currentGame.word].length
+  return wordGraphemeCount(storeFor(streamerId).currentGame.word)
 }
 
 export function getCurrentGameId(streamerId: string): string {
@@ -54,7 +54,7 @@ export function getGameStatePayload(streamerId: string): GameStatePayload {
   const { currentGame, players } = storeFor(streamerId)
   return {
     gameId: currentGame.id,
-    wordLength: [...currentGame.word].length,
+    wordLength: wordGraphemeCount(currentGame.word),
     startedAt: currentGame.startedAt,
     players: Object.values(players).map(playerToPublic),
   }
@@ -111,8 +111,8 @@ export function submitGuess(
   }
 
   const guess = normalizeWord(rawGuess)
-  const secretLen = [...game.word].length
-  if ([...guess].length !== secretLen) {
+  const secretLen = wordGraphemeCount(game.word)
+  if (wordGraphemeCount(guess) !== secretLen) {
     return { ok: false, reason: 'invalid_shape' }
   }
   if (!isValidGuessShape(guess, secretLen)) {
@@ -172,7 +172,7 @@ export function adminStartNewGame(streamerId: string): { gameId: string; wordLen
   const g = next.currentGame
   return {
     gameId: g.id,
-    wordLength: [...g.word].length,
+    wordLength: wordGraphemeCount(g.word),
     startedAt: g.startedAt,
   }
 }

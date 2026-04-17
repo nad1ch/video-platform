@@ -29,6 +29,49 @@ export default tseslint.config(
       globals: globals.browser,
     },
   },
+  {
+    files: ['apps/client/src/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.es2021,
+      },
+    },
+  },
+  {
+    files: ['apps/client/scripts/**/*.mjs'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    files: ['apps/client/*.config.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    files: ['apps/server/**/*.cjs'],
+    languageOptions: {
+      globals: globals.node,
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  {
+    files: ['packages/wordle-core/**/*.cjs'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    files: ['apps/client/src/eat-first/pages/ControlPage.vue'],
+    rules: {
+      // Orchestrator exposes a wide surface; this page’s template uses a subset. Trimming destructuring is high-churn.
+      '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
   ...pluginVue.configs['flat/essential'],
   {
     files: ['**/*.vue'],

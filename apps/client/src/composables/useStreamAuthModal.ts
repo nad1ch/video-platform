@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { safeOAuthRedirectPath } from '@/utils/safeOAuthRedirectPath'
 
 const modalOpen = ref(false)
 /** Path after OAuth (must start with `/`). */
@@ -6,11 +7,7 @@ const redirectAfterAuth = ref('/')
 
 export function useStreamAuthModal() {
   function openStreamAuthModal(redirectPath = '/'): void {
-    const p =
-      typeof redirectPath === 'string' && redirectPath.startsWith('/') && !redirectPath.startsWith('//')
-        ? redirectPath
-        : '/'
-    redirectAfterAuth.value = p
+    redirectAfterAuth.value = safeOAuthRedirectPath(redirectPath)
     modalOpen.value = true
   }
 

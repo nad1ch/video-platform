@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { createLogger } from '@/utils/logger'
+
+const streamVideoLog = createLogger('stream-video')
 
 const props = withDefaults(
   defineProps<{
@@ -152,7 +155,7 @@ async function bindStream(): Promise<void> {
     try {
       await v.play()
     } catch (err) {
-      console.warn('[StreamVideo] play failed', err)
+      streamVideoLog.warn('play failed', err)
     }
     // Same bound track can go muted→unmuted (RTP start); re-emit so tiles leave “connecting” / frozen UI.
     if (props.reportVideoUi) {
@@ -195,7 +198,7 @@ async function bindStream(): Promise<void> {
   try {
     await v.play()
   } catch (err) {
-    console.warn('[StreamVideo] play failed', err)
+    streamVideoLog.warn('play failed', err)
   }
 
   attachInboundVideoTrackListeners(v, s)

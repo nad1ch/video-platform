@@ -14,6 +14,8 @@ class Peer {
     transports = new Map();
     producers = new Map();
     consumers = new Map();
+    /** Outbound video semantic (`replaceTrack` does not change id). */
+    videoProducerSourceById = new Map();
     constructor(id, socket, roomId, displayName) {
         this.id = id;
         this.socket = socket;
@@ -48,6 +50,9 @@ class Peer {
     }
     addProducer(producer) {
         this.producers.set(producer.id, producer);
+        if (producer.kind === 'video' && !this.videoProducerSourceById.has(producer.id)) {
+            this.videoProducerSourceById.set(producer.id, 'camera');
+        }
     }
     getProducer(producerId) {
         return this.producers.get(producerId);
@@ -58,6 +63,17 @@ class Peer {
             producer.close();
         }
         this.producers.delete(producerId);
+        this.videoProducerSourceById.delete(producerId);
+    }
+    getVideoProducerSource(producerId) {
+        return this.videoProducerSourceById.get(producerId);
+    }
+    setVideoProducerSource(producerId, source) {
+        const producer = this.producers.get(producerId);
+        if (!producer || producer.closed || producer.kind !== 'video') {
+            return;
+        }
+        this.videoProducerSourceById.set(producerId, source);
     }
     getProducers() {
         return [...this.producers.values()];
@@ -91,6 +107,7 @@ class Peer {
             }
         }
         this.producers.clear();
+        this.videoProducerSourceById.clear();
         for (const transport of [...this.transports.values()]) {
             if (!transport.closed) {
                 transport.close();

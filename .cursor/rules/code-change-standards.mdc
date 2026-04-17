@@ -1,0 +1,61 @@
+---
+description: Safe code change standards for the repository
+globs:
+  - "apps/client/src/**/*"
+  - "apps/server/src/**/*"
+  - "packages/**/*"
+alwaysApply: true
+---
+
+You are working in a production codebase. Follow these rules on every change.
+
+Core rules:
+- Preserve behavior unless the task explicitly requires a behavior change.
+- Prefer small, atomic diffs over broad rewrites.
+- Reuse existing helpers instead of duplicating logic.
+- Do not introduce new abstractions unless duplication is already clear.
+- Keep public module barrels narrow and explicit.
+- Internal modules/composables must not import from their own domain barrel if that can create cycles.
+- UI components should stay dumb when possible; move pure logic into pure helpers or composables.
+- Do not mix domain logic with transport logic, DOM logic, or framework lifecycle code.
+
+Before coding:
+- Read all directly related files first.
+- Check whether a helper / composable / API module already exists.
+- Check whether tests already cover the area.
+- If no tests cover changed pure logic, add targeted fast tests first or alongside the change.
+
+During coding:
+- Keep the same runtime semantics unless the task explicitly changes them.
+- Do not silently change error handling, fallback values, or HTTP semantics.
+- For shared logic, use the canonical implementation already established in the repo.
+- For type-only imports, prefer deep imports over wide domain barrels when this avoids cycle risk.
+- Do not expand barrels with internal-only exports.
+- Avoid speculative cleanup outside the touched scope.
+
+Validation rules:
+- After every meaningful change, run the narrowest relevant checks first.
+- If touching Wordle:
+  - run `npm run test:wordle`
+- If touching eat-first pure logic / tests:
+  - run `npm run test:eat-first`
+- If touching shared client pure logic / admin pure logic:
+  - run `npm run test:client`
+- Before finalizing:
+  - run `npm run ci`
+
+Failure rules:
+- If tests, lint, or build fail, stop and explain the failure.
+- Do not continue stacking more refactors on top of a failing state.
+- Do not claim success unless checks actually passed.
+
+Code style:
+- Prefer explicit imports/exports over `export *` in public barrels.
+- Keep logs behind the project logger, not raw `console.*`.
+- Prefer pure helpers for deterministic logic.
+- Prefer composables as wiring layers, not dumping grounds.
+- Keep comments short and useful; explain invariants and contracts, not obvious syntax.
+
+Refactor safety:
+- Refactor means structure changes only, not user-visible behavior changes.
+- If changing a contract is unavoidable, state it explicitly before applying the change.

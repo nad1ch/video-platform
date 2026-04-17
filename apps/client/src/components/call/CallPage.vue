@@ -11,6 +11,9 @@ import {
   type VideoQualityPreset,
 } from 'call-core'
 import { useAuth } from '@/composables/useAuth'
+import { createLogger } from '@/utils/logger'
+
+const callPageLog = createLogger('call-page')
 import ParticipantTile from './ParticipantTile.vue'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -159,7 +162,7 @@ async function pickAudioInput(deviceId: string): Promise<void> {
   try {
     await setCallAudioInputDevice(deviceId)
   } catch (err) {
-    console.warn('[CallPage] audio input', err)
+    callPageLog.warn('audio input', err)
   }
 }
 
@@ -168,7 +171,7 @@ async function pickVideoInput(deviceId: string): Promise<void> {
   try {
     await setCallVideoInputDevice(deviceId)
   } catch (err) {
-    console.warn('[CallPage] video input', err)
+    callPageLog.warn('video input', err)
   }
 }
 

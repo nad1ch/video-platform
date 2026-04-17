@@ -1,144 +1,30 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { apiUrl } from '@/utils/apiUrl'
+import { useAdminStreamersState } from '@/admin'
+import { appConfirm } from '@/utils/appConfirm'
 
 const { t, locale } = useI18n()
 
-type OwnerOption = {
-  id: string
-  displayName: string
-  twitchId?: string
-}
-
-type StreamerRow = {
-  id: string
-  name: string
-  username: string
-  twitchId: string
-  isActive: boolean
-  ownerId: string | null
-  owner: { id: string; displayName: string; email: string | null } | null
-}
-
-const streamers = ref<StreamerRow[]>([])
-const owners = ref<OwnerOption[]>([])
-const loading = ref(true)
-const saving = ref(false)
-const errorKey = ref<'load' | 'forbidden' | 'save' | null>(null)
-const databaseConfigured = ref(true)
-
-const slug = ref('')
-const ownerId = ref('')
-
-const ownersWithTwitch = computed(() => owners.value.filter((o) => Boolean(o.twitchId?.trim())))
-
-async function loadUsers() {
-  const r = await fetch(apiUrl('/api/admin/users'), { credentials: 'include' })
-  if (r.status === 403) {
-    throw new Error('forbidden')
-  }
-  const data = (await r.json()) as {
-    databaseConfigured?: boolean
-    users?: Array<{ id: string; displayName: string; twitchId?: string }>
-  }
-  if (data.databaseConfigured === false) {
-    databaseConfigured.value = false
-    owners.value = []
-    return
-  }
-  databaseConfigured.value = true
-  owners.value =
-    data.users?.map((u) => ({
-      id: u.id,
-      displayName: u.displayName,
-      twitchId: u.twitchId,
-    })) ?? []
-}
-
-async function loadStreamers() {
-  const r = await fetch(apiUrl('/api/admin/streamers'), { credentials: 'include' })
-  if (r.status === 403) {
-    throw new Error('forbidden')
-  }
-  const data = (await r.json()) as { databaseConfigured?: boolean; streamers?: StreamerRow[] }
-  if (data.databaseConfigured === false) {
-    databaseConfigured.value = false
-    streamers.value = []
-    return
-  }
-  databaseConfigured.value = true
-  streamers.value = data.streamers ?? []
-}
-
-async function refresh() {
-  loading.value = true
-  errorKey.value = null
-  try {
-    await Promise.all([loadUsers(), loadStreamers()])
-  } catch {
-    errorKey.value = 'load'
-  } finally {
-    loading.value = false
-  }
-}
-
-async function createStreamer() {
-  saving.value = true
-  errorKey.value = null
-  try {
-    const r = await fetch(apiUrl('/api/admin/streamers'), {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: slug.value.trim(),
-        ownerId: ownerId.value,
-      }),
-    })
-    if (r.status === 403) {
-      errorKey.value = 'forbidden'
-      return
-    }
-    if (!r.ok) {
-      errorKey.value = 'save'
-      return
-    }
-    slug.value = ''
-    ownerId.value = ''
-    await loadStreamers()
-  } catch {
-    errorKey.value = 'save'
-  } finally {
-    saving.value = false
-  }
-}
+const {
+  streamers,
+  loading,
+  saving,
+  errorKey,
+  databaseConfigured,
+  slug,
+  ownerId,
+  ownersWithTwitch,
+  refresh,
+  createStreamer,
+  removeStreamer: removeStreamerRequest,
+} = useAdminStreamersState()
 
 async function removeStreamer(id: string) {
-  if (!window.confirm(t('adminPanel.streamersDeleteConfirm'))) {
+  if (!appConfirm(t('adminPanel.streamersDeleteConfirm'))) {
     return
   }
-  saving.value = true
-  errorKey.value = null
-  try {
-    const r = await fetch(apiUrl(`/api/admin/streamers/${encodeURIComponent(id)}`), {
-      method: 'DELETE',
-      credentials: 'include',
-    })
-    if (r.status === 403) {
-      errorKey.value = 'forbidden'
-      return
-    }
-    if (!r.ok && r.status !== 204) {
-      errorKey.value = 'save'
-      return
-    }
-    await loadStreamers()
-  } catch {
-    errorKey.value = 'save'
-  } finally {
-    saving.value = false
-  }
+  await removeStreamerRequest(id)
 }
 
 onMounted(() => {

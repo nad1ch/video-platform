@@ -13,7 +13,9 @@ const RoomManager_1 = require("./rooms/RoomManager");
 const socketServer_1 = require("./signaling/socketServer");
 const clientOrigin_1 = require("./auth/clientOrigin");
 const oauthRouter_1 = require("./auth/oauthRouter");
+const adminRouter_1 = require("./adminRouter");
 const leaderboardRouter_1 = require("./leaderboardRouter");
+const streamerApiRouter_1 = require("./wordle/streamerApiRouter");
 const twitchAuthRouter_1 = require("./wordle/twitchAuthRouter");
 const tmiChat_1 = require("./wordle/tmiChat");
 const wordleSocket_1 = require("./wordle/wordleSocket");
@@ -73,22 +75,28 @@ async function bootstrap() {
         socket.destroy();
     });
     (0, oauthRouter_1.mountGlobalAuth)(app);
+    (0, streamerApiRouter_1.mountStreamerApiRoutes)(app);
     (0, twitchAuthRouter_1.mountTwitchWordleAuth)(app);
     (0, leaderboardRouter_1.mountLeaderboardRoutes)(app);
+    (0, adminRouter_1.mountAdminRoutes)(app);
     app.get('/health', (_req, res) => {
         res.json({
             status: 'ok',
             service: 'mediasoup-server',
         });
     });
-    (0, tmiChat_1.startTwitchChatIngest)();
+    void (0, tmiChat_1.startTwitchChatIngest)().catch((err) => {
+        console.error('[wordle] startTwitchChatIngest failed', err);
+    });
     const shutdown = () => {
         if (shuttingDown) {
             return;
         }
         shuttingDown = true;
         console.info('Server shutting down…');
-        (0, tmiChat_1.stopTwitchChatIngest)();
+        void (0, tmiChat_1.stopTwitchChatIngest)().catch((err) => {
+            console.error('[wordle] stopTwitchChatIngest failed', err);
+        });
         try {
             roomManager.disposeAllRooms();
         }

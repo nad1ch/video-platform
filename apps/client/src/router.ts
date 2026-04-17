@@ -62,32 +62,32 @@ export const router = createRouter({
             appTitleKey: 'routes.admin',
             footerContext: 'home',
           },
-          component: () => import('./admin/AdminPage.vue'),
+          component: () => import('./admin/ui/AdminPage.vue'),
           children: [
             {
               path: '',
               name: 'admin-users',
-              component: () => import('./admin/AdminUsers.vue'),
+              component: () => import('./admin/ui/AdminUsers.vue'),
             },
             {
               path: 'streamers',
               name: 'admin-streamers',
-              component: () => import('./admin/AdminStreamers.vue'),
+              component: () => import('./admin/ui/AdminStreamers.vue'),
             },
             {
               path: 'games',
               name: 'admin-games',
-              component: () => import('./admin/AdminGames.vue'),
+              component: () => import('./admin/ui/AdminGames.vue'),
             },
             {
               path: 'stats',
               name: 'admin-stats',
-              component: () => import('./admin/AdminStats.vue'),
+              component: () => import('./admin/ui/AdminStats.vue'),
             },
             {
               path: 'debug',
               name: 'admin-debug',
-              component: () => import('./admin/AdminDebug.vue'),
+              component: () => import('./admin/ui/AdminDebug.vue'),
             },
           ],
         },

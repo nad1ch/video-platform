@@ -1,73 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { apiUrl } from '@/utils/apiUrl'
+import { useAdminStatsState } from '@/admin'
 
 const { t } = useI18n()
 
-type StatsPayload = {
-  databaseConfigured?: boolean
-  userCount?: number
-  wordleRounds?: number
-  totalWinsRecorded?: number
-  totalGamesPlayed?: number
-  topWins?: { userId: string; displayName: string; wins: number }[]
-  topRating?: { userId: string; displayName: string; rating: number; wins: number; losses: number }[]
-}
-
-const data = ref<StatsPayload | null>(null)
-const loading = ref(true)
-const errorKey = ref<'load' | 'forbidden' | null>(null)
-const reloading = ref(false)
-
-const databaseConfigured = computed(() => data.value?.databaseConfigured !== false)
-
-async function fetchAdminStats() {
-  const r = await fetch(apiUrl('/api/admin/stats'), { credentials: 'include' })
-  if (r.status === 403) {
-    errorKey.value = 'forbidden'
-    data.value = null
-    return
-  }
-  if (!r.ok) {
-    errorKey.value = 'load'
-    data.value = null
-    return
-  }
-  errorKey.value = null
-  try {
-    data.value = (await r.json()) as StatsPayload
-  } catch {
-    errorKey.value = 'load'
-    data.value = null
-  }
-}
-
-async function load() {
-  loading.value = true
-  errorKey.value = null
-  try {
-    await fetchAdminStats()
-  } catch {
-    errorKey.value = 'load'
-    data.value = null
-  } finally {
-    loading.value = false
-  }
-}
-
-async function reload() {
-  reloading.value = true
-  errorKey.value = null
-  try {
-    await fetchAdminStats()
-  } catch {
-    errorKey.value = 'load'
-    data.value = null
-  } finally {
-    reloading.value = false
-  }
-}
+const { data, loading, errorKey, reloading, databaseConfigured, load, reload } = useAdminStatsState()
 
 onMounted(() => {
   void load()

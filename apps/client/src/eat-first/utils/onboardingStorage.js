@@ -1,5 +1,6 @@
 import { HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from '../config/access.js'
-import { eatViewFromRoute } from '../eatFirstRouteUtils.js'
+import { eatViewFromRoute } from '../state/eatFirstRouteUtils.js'
+import { readStorageJson, writeStorageJson } from '@/utils/storageJson.js'
 
 const STORAGE_KEY = 'eat-first:onboarding-dismissed:v1'
 
@@ -22,23 +23,13 @@ export function resolveOnboardingTourKeyFromRoute(route) {
 /** @returns {Record<string, boolean>} */
 function readMap() {
   if (typeof localStorage === 'undefined') return {}
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return {}
-    const o = JSON.parse(raw)
-    return o && typeof o === 'object' ? o : {}
-  } catch {
-    return {}
-  }
+  const o = readStorageJson(localStorage, STORAGE_KEY, {})
+  return o && typeof o === 'object' ? o : {}
 }
 
 function writeMap(m) {
   if (typeof localStorage === 'undefined') return
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(m))
-  } catch {
-    /* ignore quota */
-  }
+  writeStorageJson(localStorage, STORAGE_KEY, m)
 }
 
 /** @param {string} tourKey join | controlHost | controlPlayer | overlay */

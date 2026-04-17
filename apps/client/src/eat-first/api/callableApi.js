@@ -1,10 +1,11 @@
 import { isEatFirstFirebaseEnabled } from '../firebase.js'
+import { callableApiEnabledFromFlags, trimFunctionsRegionEnv } from './callableApiPure.js'
 
 /** Регіон deploy Cloud Functions (наприклад europe-west1). Якщо порожньо — легасі-прямі записи у Firestore. */
 export function callableRegion() {
-  return String(import.meta.env.VITE_FUNCTIONS_REGION ?? '').trim()
+  return trimFunctionsRegionEnv(import.meta.env.VITE_FUNCTIONS_REGION)
 }
 
 export function callableApiEnabled() {
-  return isEatFirstFirebaseEnabled && Boolean(callableRegion())
+  return callableApiEnabledFromFlags(isEatFirstFirebaseEnabled, callableRegion())
 }

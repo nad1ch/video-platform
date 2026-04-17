@@ -12,13 +12,13 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { ADMIN_KEY } from '../config/access.js'
-import { callableApiEnabled } from './callableApi.js'
+import { callableApiEnabled } from '../api/callableApi.js'
 import {
   callSubmitVote,
   callHostClearVotes,
   callHostDeleteVote,
   callHostSetGamePhase,
-} from './callableClient.js'
+} from '../api/callableClient.js'
 import { pickRandomActiveCardTemplateAvoiding } from '../data/activeCards.js'
 import {
   buildRandomPlayerDocument,

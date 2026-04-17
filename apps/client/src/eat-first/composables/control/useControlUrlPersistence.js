@@ -1,7 +1,7 @@
 import { watch } from 'vue'
 import { ADMIN_KEY, HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from '../../config/access.js'
 import { saveHostAccessSession } from '../../utils/persistedHostSession.js'
-import { eatViewFromRoute } from '../../eatFirstRouteUtils.js'
+import { eatViewFromRoute } from '../../state/eatFirstRouteUtils.js'
 
 /**
  * controlQuery / navigateQuery plus URL sync watches (host key cleanup, game from persistence).

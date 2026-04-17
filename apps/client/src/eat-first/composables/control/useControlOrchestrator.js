@@ -1,9 +1,10 @@
 /**
  * Control page orchestrator: composes access + URL helpers + core setup (Firestore, voting, editor, …).
  */
+import { createLogger } from '@/utils/logger'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { eatViewFromRoute } from '../../eatFirstRouteUtils.js'
+import { eatViewFromRoute } from '../../state/eatFirstRouteUtils.js'
 import { useI18n } from 'vue-i18n'
 import { useControlAccessContext } from './useControlAccessContext.js'
 import { useControlUrlPersistence } from './useControlUrlPersistence.js'
@@ -64,8 +65,6 @@ import {
   reviveAllEliminatedPlayers,
 } from '../../services/gameService'
 import { millisFromFirestore } from '../../utils/firestoreTime.js'
-import ShowDeskHeader from '../../components/showdesk/ShowDeskHeader.vue'
-import ShowPlayersRoster from '../../components/showdesk/ShowPlayersRoster.vue'
 import { formatGenderDisplay } from '../../utils/genderDisplay.js'
 import { playRevealFlipSound, playVoteSubmitSound } from '../../utils/voteUiSound.js'
 import { syncHostControlChrome, clearHostControlChrome } from '../hostControlChrome.js'
@@ -84,9 +83,8 @@ import {
   clearHostSessionStats,
 } from '../../utils/hostSessionStatsStorage.js'
 import { deleteField } from 'firebase/firestore'
-import AppPageLoader from '../../ui/molecules/AppPageLoader.vue'
-import ConfirmDialog from '../../ui/molecules/ConfirmDialog.vue'
-import UiMenuSelect from '../../ui/molecules/UiMenuSelect.vue'
+
+const controlOrchLog = createLogger('control:orchestrator')
 
 export function useControlOrchestrator() {
   const route = useRoute()
@@ -623,7 +621,7 @@ watch(hostTimerRemaining, async (left, prev) => {
   try {
     await clearSpeakingTimer(gameId.value)
   } catch (e) {
-    console.error('[autoClearSpeaker]', e)
+    controlOrchLog.error('[autoClearSpeaker]', e)
   }
 })
 
@@ -2268,7 +2266,7 @@ watch(
           try {
             await saveCharacter(og, op, snapshotCharacter(characterState))
           } catch (e) {
-            console.warn('[control] save before switching editor slot', e)
+            controlOrchLog.warn('save before switching editor slot', e)
           }
         }
       }

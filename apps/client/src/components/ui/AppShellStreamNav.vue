@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { eatViewFromRoute } from '@/eat-first/eatFirstRouteUtils.js'
+import { eatViewFromRoute } from '@/eat-first'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import { useAuth } from '@/composables/useAuth'
 

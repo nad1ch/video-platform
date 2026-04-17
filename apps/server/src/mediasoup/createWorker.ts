@@ -26,7 +26,7 @@ function resolveRtcPortRange(log: pino.Logger): { rtcMinPort: number; rtcMaxPort
   const rawMax = process.env.MEDIASOUP_RTC_MAX_PORT?.trim()
   const parsedMin = rawMin != null && rawMin.length > 0 ? Number.parseInt(rawMin, 10) : NaN
   const parsedMax = rawMax != null && rawMax.length > 0 ? Number.parseInt(rawMax, 10) : NaN
-  let rtcMinPort =
+  const rtcMinPort =
     Number.isFinite(parsedMin) && parsedMin >= 1024 && parsedMin <= 64999 ? parsedMin : DEFAULT_RTC_MIN
   let rtcMaxPort =
     Number.isFinite(parsedMax) && parsedMax >= rtcMinPort && parsedMax <= 65_535 ? parsedMax : DEFAULT_RTC_MAX

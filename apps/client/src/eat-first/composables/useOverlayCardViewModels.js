@@ -181,22 +181,23 @@ export function useOverlayCardViewModels(ctx) {
       return
     }
 
-    nominationsRoomSlice.value
-    handsMap.value
-    votes.value
-    roomRound.value
-    activeSpotlightId.value
-    speakerForTimerId.value
-    speakerTimeLeft.value
-    speakerTimerTotal.value
-    cinemaGrid.value
-    dramaMode.value
-    votingActive.value
-    votingTargetId.value
-    nominatedPlayerId.value
-    nominatedById.value
-    handsClusterMode.value
-    unref(gameId)
+    // Read refs so watchEffect re-runs when mosaic-driving state changes (void satisfies no-unused-expressions).
+    void nominationsRoomSlice.value
+    void handsMap.value
+    void votes.value
+    void roomRound.value
+    void activeSpotlightId.value
+    void speakerForTimerId.value
+    void speakerTimeLeft.value
+    void speakerTimerTotal.value
+    void cinemaGrid.value
+    void dramaMode.value
+    void votingActive.value
+    void votingTargetId.value
+    void nominatedPlayerId.value
+    void nominatedById.value
+    void handsClusterMode.value
+    void unref(gameId)
 
     const order = playersDisplayOrderedRef.value
     const map = mosaicRowById.value

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { createLogger } from '@/utils/logger'
 import {
   BRAND_LOGO_COMPACT_PNG,
   BRAND_LOGO_PNG,
@@ -8,6 +9,8 @@ import {
   STREAMER_NICK,
   STREAMER_TWITCH_URL,
 } from '../../constants/brand.js'
+
+const brandLinkLog = createLogger('streamer-brand-link')
 
 const props = defineProps({
   ariaLabel: { type: String, required: true },
@@ -28,9 +31,7 @@ const imgSrc = ref(BRAND_LOGO_PNG)
 function onLogoError(ev: Event) {
   const el = ev.target
   const src = el instanceof HTMLImageElement ? el.currentSrc || el.src : ''
-  if (typeof console !== 'undefined' && console.warn) {
-    console.warn('[StreamerBrandLink] logo image failed to load:', src || '(unknown src)')
-  }
+  brandLinkLog.warn('logo image failed to load:', src || '(unknown src)')
   if (imgSrc.value === BRAND_LOGO_PNG) {
     imgSrc.value = BRAND_LOGO_COMPACT_PNG
     return

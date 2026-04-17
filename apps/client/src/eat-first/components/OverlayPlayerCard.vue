@@ -5,6 +5,9 @@ import { fieldConfig } from '../characterState'
 import { formatGenderDisplay } from '../utils/genderDisplay.js'
 import { saveVote } from '../services/gameService'
 import { playVoteSubmitSound } from '../utils/voteUiSound.js'
+import { createLogger } from '@/utils/logger'
+
+const overlayPlayerCardLog = createLogger('overlay:player-card')
 const HUD_LEFT = ['profession', 'health', 'phobia']
 const HUD_RIGHT = ['luggage', 'fact', 'quirk']
 
@@ -383,7 +386,7 @@ async function submitVote(choice) {
       playVoteSubmitSound(0.14)
     }
   } catch (e) {
-    console.error('[saveVote]', e)
+    overlayPlayerCardLog.error('[saveVote]', e)
   } finally {
     voteBusy.value = false
   }

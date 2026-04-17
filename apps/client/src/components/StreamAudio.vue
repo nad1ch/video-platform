@@ -5,6 +5,9 @@ import {
   playAllPageAudioThrottled,
 } from 'call-core'
 import { getSharedCallPlaybackContext, resumeSharedCallPlaybackContext } from '@/audio/callPlaybackAudioContext'
+import { createLogger } from '@/utils/logger'
+
+const streamAudioLog = createLogger('stream-audio')
 
 const props = withDefaults(
   defineProps<{
@@ -111,7 +114,7 @@ async function bindAudioGraph(): Promise<void> {
       })
     }
   } catch (err) {
-    console.warn('[StreamAudio] Web Audio path failed, falling back to element', err)
+    streamAudioLog.warn('Web Audio path failed, falling back to element', err)
     teardownWebAudio()
     await bindElementFallback(s)
   }
@@ -132,7 +135,7 @@ async function bindElementFallback(s: MediaStream): Promise<void> {
   try {
     await a.play()
   } catch (e) {
-    console.warn('[StreamAudio] play failed', e)
+    streamAudioLog.warn('play failed', e)
     const isNotAllowed =
       e instanceof DOMException
         ? e.name === 'NotAllowedError'

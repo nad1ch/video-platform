@@ -1,10 +1,9 @@
 import { ref } from 'vue'
+import { eatFirstThemeFromStorageValue } from '@/eat-first/state/eatFirstThemePreference.js'
 
 function readStoredTheme() {
   if (typeof localStorage === 'undefined') return 'dark'
-  const s = localStorage.getItem('eat-first:theme')
-  if (s === 'light' || s === 'dark') return s
-  return 'dark'
+  return eatFirstThemeFromStorageValue(localStorage.getItem('eat-first:theme'))
 }
 
 const theme = ref(readStoredTheme())

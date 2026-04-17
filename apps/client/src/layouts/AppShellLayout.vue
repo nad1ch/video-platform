@@ -9,10 +9,9 @@ import AppShellChromeToolbar from '@/components/ui/AppShellChromeToolbar.vue'
 import AppHeaderToolbar from '@/eat-first/ui/organisms/AppHeaderToolbar.vue'
 import HostControlChromeBar from '@/eat-first/components/showdesk/HostControlChromeBar.vue'
 import OnboardingTourModal from '@/eat-first/ui/organisms/OnboardingTourModal.vue'
-import { useTheme } from '@/eat-first/composables/useTheme.js'
+import { eatViewFromRoute, useTheme } from '@/eat-first'
 import { hostControlChromeStore } from '@/eat-first/composables/hostControlChrome.js'
 import { persistLocale, LOCALE_OPTIONS } from '@/eat-first/i18n'
-import { eatViewFromRoute } from '@/eat-first/eatFirstRouteUtils.js'
 import {
   dismissOnboardingTour,
   isOnboardingDismissed,

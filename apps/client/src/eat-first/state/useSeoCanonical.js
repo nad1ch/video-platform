@@ -1,7 +1,8 @@
 import { watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { buildCanonicalAbsoluteUrl, trimCanonicalOrigin } from './seoCanonicalUrl.js'
 
-const ORIGIN = (import.meta.env.VITE_PUBLIC_CANONICAL_ORIGIN || '').replace(/\/$/, '')
+const ORIGIN = trimCanonicalOrigin(import.meta.env.VITE_PUBLIC_CANONICAL_ORIGIN ?? '')
 
 /**
  * Оновлює rel=canonical та og:url під поточний маршрут (path + query), щоб SEO не вважав усі сторінки головною.
@@ -11,8 +12,8 @@ export function useSeoCanonical() {
 
   function sync() {
     if (!ORIGIN || typeof document === 'undefined') return
-    const path = route.fullPath || '/'
-    const url = `${ORIGIN}${path.startsWith('/') ? path : `/${path}`}`
+    const url = buildCanonicalAbsoluteUrl(ORIGIN, route.fullPath)
+    if (!url) return
 
     let link = document.querySelector('link[rel="canonical"]')
     if (!link) {

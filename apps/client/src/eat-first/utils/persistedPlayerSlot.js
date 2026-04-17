@@ -1,4 +1,5 @@
 import { normalizePlayerSlotId } from './playerSlot.js'
+import { readStorageJson, writeStorageJson } from '@/utils/storageJson.js'
 
 /** Як довго пам’ятати останній слот гравця для кімнати. */
 export const PLAYER_SLOT_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -14,29 +15,23 @@ export function saveLastPlayerSlot(gameId, playerId) {
   const sk = storageKey(gameId)
   if (!sk || typeof localStorage === 'undefined') return
   const p = normalizePlayerSlotId(playerId)
-  try {
-    localStorage.setItem(sk, JSON.stringify({ v: 1, exp: Date.now() + PLAYER_SLOT_TTL_MS, p }))
-  } catch {
-    /* ignore */
-  }
+  writeStorageJson(localStorage, sk, { v: 1, exp: Date.now() + PLAYER_SLOT_TTL_MS, p })
 }
 
 export function getValidatedLastPlayerSlot(gameId) {
   const sk = storageKey(gameId)
   if (!sk || typeof localStorage === 'undefined') return null
-  try {
-    const raw = localStorage.getItem(sk)
-    if (!raw) return null
-    const o = JSON.parse(raw)
-    if (!o || o.v !== 1 || typeof o.exp !== 'number' || typeof o.p !== 'string') return null
-    if (Date.now() > o.exp) {
+  const o = readStorageJson(localStorage, sk, null)
+  if (!o || o.v !== 1 || typeof o.exp !== 'number' || typeof o.p !== 'string') return null
+  if (Date.now() > o.exp) {
+    try {
       localStorage.removeItem(sk)
-      return null
+    } catch {
+      /* ignore */
     }
-    return normalizePlayerSlotId(o.p)
-  } catch {
     return null
   }
+  return normalizePlayerSlotId(o.p)
 }
 
 export function clearLastPlayerSlot(gameId) {

@@ -7,9 +7,9 @@ import { setJoinSessionToken } from '../utils/joinSessionToken.js'
 import { useI18n } from 'vue-i18n'
 import { normalizeGameRoomPayload } from '../utils/gameRoomNormalize.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
-import { callableApiEnabled } from '../services/callableApi.js'
+import { callableApiEnabled } from '../api/callableApi.js'
 import { ensureAnonymousAuth } from '../services/authBootstrap.js'
-import { callLinkPlayerSlot } from '../services/callableClient.js'
+import { callLinkPlayerSlot } from '../api/callableClient.js'
 
 const route = useRoute()
 const router = useRouter()

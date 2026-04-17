@@ -21,6 +21,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "wordle-core": "file:../../packages/wordle-core",
     "@prisma/client": "5.22.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.9.0",

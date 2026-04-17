@@ -1,3 +1,4 @@
+import { computeFeedback, wordGraphemeCount } from 'wordle-core'
 import {
   WORDS_UK_5_ALLOWED,
   WORDS_UK_5_SECRET_POOL,
@@ -24,8 +25,13 @@ const PACK: Record<WordLength, { allowed: Set<string>; secret: readonly string[]
   7: { allowed: new Set(WORDS_UK_7_ALLOWED), secret: WORDS_UK_7_SECRET_POOL },
 }
 
+/**
+ * Server is the canonical implementation — keep in sync with
+ * `apps/server/src/wordle/wordleLogic.ts`. Contract: `packages/wordle-consistency` (`npm run test:wordle`).
+ * `wordGraphemeCount` and `computeFeedback` are shared via `wordle-core`.
+ */
 export function normalizeWord(word: string): string {
-  return word.trim().toLocaleLowerCase('uk-UA').normalize('NFC')
+  return word.trim().normalize('NFC').toLocaleLowerCase('uk-UA')
 }
 
 export function randomWord(length: WordLength): string {
@@ -35,38 +41,10 @@ export function randomWord(length: WordLength): string {
 
 export function isAllowedGuess(word: string, length: WordLength): boolean {
   const n = normalizeWord(word)
-  if ([...n].length !== length) {
+  if (wordGraphemeCount(n) !== length) {
     return false
   }
   return PACK[length].allowed.has(n)
 }
 
-/**
- * Класичний Wordle: спочатку correct, потім present (жодна літера двічі не «зʼїдається»).
- */
-export function computeFeedback(secret: string, guess: string): Feedback[] {
-  const result: Feedback[] = Array.from({ length: guess.length }, () => 'absent')
-  const secretArr: (string | null)[] = [...secret]
-  const guessArr = [...guess]
-
-  for (let i = 0; i < guessArr.length; i++) {
-    if (guessArr[i] === secretArr[i]) {
-      result[i] = 'correct'
-      secretArr[i] = null
-    }
-  }
-
-  for (let i = 0; i < guessArr.length; i++) {
-    if (result[i] === 'correct') {
-      continue
-    }
-    const ch = guessArr[i]!
-    const idx = secretArr.indexOf(ch)
-    if (idx !== -1) {
-      result[i] = 'present'
-      secretArr[idx] = null
-    }
-  }
-
-  return result
-}
+export { computeFeedback, wordGraphemeCount }

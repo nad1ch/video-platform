@@ -1,6 +1,9 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
+import { createLogger } from '@/utils/logger'
 import { millisFromFirestore } from '../utils/firestoreTime.js'
 import { clearSpeakingTimer } from '../services/gameService.js'
+
+const overlaySpeakerLog = createLogger('overlay:speaker-countdown')
 
 const DEFAULT_TICK_MS = 500
 
@@ -70,7 +73,7 @@ export function useOverlaySpeakerCountdown(gameRoomRef, gameIdRef, options = {})
     try {
       await clearSpeakingTimer(gameIdRef.value)
     } catch (e) {
-      console.error('[autoClearSpeaker]', e)
+      overlaySpeakerLog.error('[autoClearSpeaker]', e)
     }
   })
 

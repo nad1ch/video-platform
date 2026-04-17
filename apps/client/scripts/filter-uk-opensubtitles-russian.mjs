@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* global console, process */
 /**
  * Прибирає з uk_opensubtitles_50k.txt російські токени (суржик із субтитрів).
  *

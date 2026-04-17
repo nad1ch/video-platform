@@ -3,7 +3,7 @@ import { ADMIN_KEY, HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from './confi
 import { getValidatedPersistedHostKey } from './utils/persistedHostSession.js'
 import { getPersistedGameId } from './utils/persistedGameId.js'
 import { trackPageView } from './analytics/bootstrap.js'
-import { normalizeEatView } from './eatFirstRouteUtils.js'
+import { normalizeEatView } from './state/eatFirstRouteUtils.js'
 
 /** Instant transition between admin and control views (no login form flash). */
 export const adminControlTransitionInstant = ref(false)

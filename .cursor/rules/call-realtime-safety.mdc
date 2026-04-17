@@ -1,0 +1,48 @@
+---
+description: Extra safety rules for call / video / realtime code
+globs:
+  - "packages/call-core/**/*"
+  - "apps/client/src/**/*Call*"
+  - "apps/client/src/**/*StreamVideo*"
+  - "apps/client/src/**/*StreamAudio*"
+  - "apps/client/src/**/*mediasoup*"
+alwaysApply: true
+---
+
+This area is high risk. Prefer safety over cleanup.
+
+Hard rules:
+- Do not change mediasoup / WebRTC / reconnect behavior unless the task explicitly targets it.
+- Do not merge or rewrite connection flows broadly.
+- Do not change message protocol shapes unless explicitly requested.
+- Do not change transport sequencing casually (`join`, `room-state`, `wire`, `teardown`, `replaceTrack`, reconnect).
+- Do not move side effects across lifecycle boundaries unless strictly necessary.
+- Do not change cleanup order without a very clear reason.
+
+Preferred approach:
+- Extract only pure helpers first.
+- Add or extend fast deterministic tests for pure logic.
+- Keep realtime wiring thin and explicit.
+- Preserve ordering, retries, backoff, ping/pong, and teardown semantics.
+- If a change touches reconnect or track replacement logic, explain the exact invariant being preserved.
+
+Validation:
+- If touching client call integration:
+  - run `npm run build -w client`
+  - run `npm run lint`
+- If touching shared pure logic in `packages/call-core`, add tests where feasible.
+- Before finalizing, run `npm run ci` at minimum unless the task is strictly isolated and cheaper validation is enough.
+
+Logging:
+- Do not add raw `console.*`.
+- Use the established logger pattern.
+- Keep verbose logs DEV-only, errors always visible only where appropriate.
+
+Refactor red flags:
+- changing teardown order
+- changing reconnect timing semantics
+- changing subscription / unsubscription lifecycle
+- moving DOM/video playback logic into transport layers
+- combining unrelated concerns into one composable
+
+If any of the above is required, stop and describe the risk before proceeding.

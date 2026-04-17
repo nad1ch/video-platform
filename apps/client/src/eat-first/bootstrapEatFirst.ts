@@ -1,5 +1,8 @@
-import { callableApiEnabled } from './services/callableApi.js'
+import { callableApiEnabled } from './api/callableApi.js'
 import { ensureAnonymousAuth } from './services/authBootstrap.js'
+import { createLogger } from '@/utils/logger'
+
+const eatFirstBootstrapLog = createLogger('eat-first:bootstrap')
 
 let authOnce = false
 
@@ -13,9 +16,6 @@ export async function bootstrapEatFirstAuthOnce(): Promise<void> {
   } catch (e) {
     authOnce = false
     const code = e && typeof e === 'object' && 'code' in e ? String((e as { code?: string }).code) : ''
-    console.warn(
-      '[eat-first] Anonymous sign-in failed (needed for Cloud Functions).',
-      code || e,
-    )
+    eatFirstBootstrapLog.warn('Anonymous sign-in failed (needed for Cloud Functions).', code || e)
   }
 }

@@ -1,5 +1,8 @@
+import { createLogger } from '@/utils/logger'
 import { getApp, getApps, initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
+
+const eatFirstFirebaseLog = createLogger('eat-first:firebase')
 import {
   initializeFirestore,
   memoryLocalCache,
@@ -51,9 +54,9 @@ if (isEatFirstFirebaseEnabled) {
 
   _db =
     globalThis[firestoreSingletonKey] ?? (globalThis[firestoreSingletonKey] = createFirestore())
-} else if (import.meta.env.DEV && typeof console !== 'undefined' && console.warn) {
-  console.warn(
-    '[eat-first] Firebase disabled (missing VITE_FIREBASE_API_KEY). Lobby/game features need .env.local.',
+} else if (import.meta.env.DEV) {
+  eatFirstFirebaseLog.warn(
+    'Firebase disabled (missing VITE_FIREBASE_API_KEY). Lobby/game features need .env.local.',
   )
 }
 

@@ -267,7 +267,6 @@ const scrimLeft = computed(() => {
 const scrimRight = computed(() => {
   const h = hole.value
   if (!h.active) return { display: 'none' }
-  const vw = typeof window !== 'undefined' ? window.innerWidth : 0
   return {
     top: `${h.top}px`,
     left: `${h.left + h.width}px`,
@@ -278,7 +277,6 @@ const scrimRight = computed(() => {
 const scrimBottom = computed(() => {
   const h = hole.value
   if (!h.active) return { display: 'none' }
-  const vh = typeof window !== 'undefined' ? window.innerHeight : 0
   return {
     top: `${h.top + h.height}px`,
     left: 0,

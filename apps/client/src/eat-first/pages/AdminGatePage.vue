@@ -5,9 +5,9 @@ import { useI18n } from 'vue-i18n'
 import { ADMIN_KEY, HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from '../config/access.js'
 import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId.js'
 import { saveHostAccessSession, clearHostAccessSession } from '../utils/persistedHostSession.js'
-import { callableApiEnabled } from '../services/callableApi.js'
+import { callableApiEnabled } from '../api/callableApi.js'
 import { ensureAnonymousAuth } from '../services/authBootstrap.js'
-import { callPromoteToHost } from '../services/callableClient.js'
+import { callPromoteToHost } from '../api/callableClient.js'
 import { auth } from '../firebase.js'
 
 const { t } = useI18n()

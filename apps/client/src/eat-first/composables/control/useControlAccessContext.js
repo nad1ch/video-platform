@@ -1,8 +1,9 @@
 import { computed, ref, watch } from 'vue'
 import { ADMIN_KEY, HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from '../../config/access.js'
-import { callableApiEnabled } from '../../services/callableApi.js'
+import { createLogger } from '@/utils/logger'
+import { callableApiEnabled } from '../../api/callableApi.js'
 import { ensureAnonymousAuth } from '../../services/authBootstrap.js'
-import { callLinkPlayerSlot } from '../../services/callableClient.js'
+import { callLinkPlayerSlot } from '../../api/callableClient.js'
 import { getPersistedGameId, setPersistedGameId } from '../../utils/persistedGameId.js'
 import {
   saveLastPlayerSlot,
@@ -10,6 +11,8 @@ import {
 import { getValidatedPersistedHostKey } from '../../utils/persistedHostSession.js'
 import { normalizePlayerSlotId } from '../../utils/playerSlot.js'
 import { getJoinSessionToken } from '../../utils/joinSessionToken.js'
+
+const controlAccessLog = createLogger('control:access')
 
 /**
  * Host/player gate, game & slot identity from route, overlay links, join linking.
@@ -73,7 +76,7 @@ export function useControlAccessContext({ route, t }) {
         await ensureAnonymousAuth()
         await callLinkPlayerSlot(gid, pid, tok)
       } catch (e) {
-        console.warn('[control] linkPlayerSlot', e)
+        controlAccessLog.warn('linkPlayerSlot', e)
       }
     },
     { immediate: true, flush: 'post' },

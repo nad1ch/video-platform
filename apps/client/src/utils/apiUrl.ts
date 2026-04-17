@@ -1,3 +1,5 @@
+import { buildApiUrl, sameOriginPrefixFromBaseUrl, trimApiBaseEnv } from '@/utils/apiUrlPure'
+
 /**
  * API origin for fetch() and OAuth full-page redirects.
  * - Dev (Vite proxy at site root): leave `VITE_API_URL` unset → `/api/...`.
@@ -6,11 +8,7 @@
  * - API on another host: `VITE_API_URL=https://api.example.com` → `https://api.example.com/api/...`.
  */
 export function apiBase(): string {
-  const raw = import.meta.env.VITE_API_URL
-  if (typeof raw === 'string' && raw.trim().length > 0) {
-    return raw.trim().replace(/\/$/, '')
-  }
-  return ''
+  return trimApiBaseEnv(import.meta.env.VITE_API_URL)
 }
 
 /**
@@ -18,20 +16,10 @@ export function apiBase(): string {
  * Prefer explicit `VITE_API_URL`; otherwise uses Vite `BASE_URL` when the app is not at `/` (e.g. `/app`).
  */
 export function sameOriginApiPrefix(): string {
-  const b = apiBase()
-  if (b) {
-    return b
-  }
-  const baseUrl = import.meta.env.BASE_URL ?? '/'
-  if (baseUrl === '/' || baseUrl === '') {
-    return ''
-  }
-  return baseUrl.replace(/\/$/, '')
+  return sameOriginPrefixFromBaseUrl(apiBase(), import.meta.env.BASE_URL ?? '/')
 }
 
 /** Absolute or same-origin URL. Always use this for OAuth `window.location` and credentialed `/api/*` calls. */
 export function apiUrl(path: string): string {
-  const p = path.startsWith('/') ? path : `/${path}`
-  const prefix = sameOriginApiPrefix()
-  return prefix ? `${prefix}${p}` : p
+  return buildApiUrl(sameOriginApiPrefix(), path)
 }
