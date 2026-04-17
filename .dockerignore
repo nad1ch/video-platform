@@ -1,0 +1,3 @@
+# Used when Docker build context is the repo root (e.g. docker-compose.local server).
+**/node_modules
+.git
