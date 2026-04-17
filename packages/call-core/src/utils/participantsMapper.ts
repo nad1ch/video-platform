@@ -9,6 +9,8 @@
  * ```
  */
 
+import { normalizeDisplayName } from './normalizeDisplayName'
+
 export type Participant = {
   peerId: string
   displayName: string
@@ -33,10 +35,6 @@ export type CallParticipant = Participant
 /** Back-compat alias — prefer `ParticipantTileInput`. */
 export type TileLike = ParticipantTileInput
 
-function trimDisplayName(value: string): string {
-  return typeof value === 'string' ? value.trim() : ''
-}
-
 /** Remote peer with no tile name and no server row — matches legacy `labelFor` guest string. */
 export function guestDisplayNameForPeerId(peerId: string): string {
   return `Guest ${peerId.length > 6 ? peerId.slice(-6) : peerId}`
@@ -52,7 +50,7 @@ export function resolveParticipantDisplayName(
   isLocal: boolean,
   remoteDisplayNames: Readonly<Record<string, string>>,
 ): string {
-  const fromTile = trimDisplayName(tileDisplayName)
+  const fromTile = normalizeDisplayName(tileDisplayName)
   if (fromTile) {
     return fromTile
   }
@@ -61,7 +59,7 @@ export function resolveParticipantDisplayName(
   }
   const fromRemote = remoteDisplayNames[peerId]
   if (typeof fromRemote === 'string') {
-    const t = trimDisplayName(fromRemote)
+    const t = normalizeDisplayName(fromRemote)
     if (t) {
       return t
     }
@@ -119,6 +117,9 @@ export function mapTilesToParticipants(
 /**
  * Tiles first, then any remote-only peers (e.g. joined in signaling before a recv tile exists).
  * Keeps `displayName` aligned with `resolveParticipantDisplayName` / `remoteDisplayNames`.
+ *
+ * **Call / overlay UI:** use this map + `resolvePeerDisplayNameForUi` as the single name path (do not
+ * read `tile.displayName` or ad-hoc fallbacks in templates).
  */
 export function buildCallParticipantMap(
   tiles: readonly ParticipantTileInput[],

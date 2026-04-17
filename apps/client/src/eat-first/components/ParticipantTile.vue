@@ -22,6 +22,8 @@ const props = defineProps({
    * Зелена «говоряча» рамка на батьківській клітинці (inset), не на ptile.
    */
   mosaicMode: { type: Boolean, default: false },
+  /** Optional profile image when `showVideo` is false (stable HTTPS URL; no generated URLs). */
+  avatarUrl: { type: String, default: '' },
 })
 
 const emit = defineEmits(['update:volume'])
@@ -96,6 +98,14 @@ function initials() {
   const s = String(props.label || props.identity || '')
   return s.slice(0, 2).toUpperCase()
 }
+
+const showAvatarImage = computed(() => {
+  const u = props.avatarUrl
+  return typeof u === 'string' && u.trim().length > 0
+})
+
+/** Stable src for `<img>` (trimmed once). */
+const avatarSrc = computed(() => (showAvatarImage.value ? props.avatarUrl.trim() : ''))
 </script>
 
 <template>
@@ -104,7 +114,8 @@ function initials() {
     <template v-if="mosaicMode && layer">
       <div class="ptile__video-stage" :class="{ 'ptile__video-stage--avatar-only': !showVideo }">
         <template v-if="showVideo">
-          <div class="ptile__video-wrap">
+          <!-- v-memo: name/volume row can update without touching <video> bindings. -->
+          <div class="ptile__video-wrap" v-memo="[mediaStream, showVideo, avatarSrc]">
             <video
               ref="videoRef"
               class="ptile__video ptile__video--mosaic"
@@ -113,21 +124,51 @@ function initials() {
             />
           </div>
         </template>
-        <div v-else class="ptile__avatar ptile__avatar--mosaic" aria-hidden="true">
-          <span class="ptile__mono">{{ initials() }}</span>
+        <div
+          v-else
+          class="ptile__avatar ptile__avatar--mosaic"
+          :class="{ 'ptile__avatar--photo': showAvatarImage }"
+          aria-hidden="true"
+        >
+          <img
+            v-if="showAvatarImage"
+            :src="avatarSrc"
+            alt=""
+            class="ptile__avatar-img"
+            loading="lazy"
+            decoding="async"
+          />
+          <span v-else class="ptile__mono">{{ initials() }}</span>
         </div>
       </div>
     </template>
     <template v-else>
-      <video
-        v-show="showVideo"
-        ref="videoRef"
-        class="ptile__video"
-        playsinline
-        autoplay
-      />
-      <div v-show="!showVideo" class="ptile__avatar" aria-hidden="true">
-        <span class="ptile__mono">{{ initials() }}</span>
+      <div class="ptile__media-slot" v-memo="[mediaStream, showVideo, isLocal, avatarSrc]">
+        <video
+          v-show="showVideo"
+          ref="videoRef"
+          class="ptile__video"
+          playsinline
+          autoplay
+        />
+        <div
+          v-show="!showVideo"
+          class="ptile__avatar"
+          :class="{ 'ptile__avatar--photo': showAvatarImage }"
+          aria-hidden="true"
+        >
+          <img
+            v-if="showAvatarImage"
+            :src="avatarSrc"
+            alt=""
+            class="ptile__avatar-img"
+            loading="lazy"
+            decoding="async"
+          />
+          <div v-else class="ptile__avatar-letter">
+            <span class="ptile__mono">{{ initials() }}</span>
+          </div>
+        </div>
       </div>
     </template>
     <div class="ptile__meta">
@@ -190,6 +231,34 @@ function initials() {
   height: 0;
   opacity: 0;
   pointer-events: none;
+}
+/* Fills tile like the former absolutely-positioned <video> (wrapper for v-memo + v-show). */
+.ptile__media-slot {
+  position: absolute;
+  inset: 0;
+}
+.ptile__media-slot .ptile__avatar {
+  position: absolute;
+  inset: 0;
+  flex: unset;
+}
+.ptile__avatar--photo {
+  padding: 0;
+  overflow: hidden;
+}
+.ptile__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}
+.ptile__avatar-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 .ptile--speaking {
   border-color: rgba(34, 197, 94, 0.75);

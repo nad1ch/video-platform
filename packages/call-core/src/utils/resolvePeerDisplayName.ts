@@ -1,4 +1,5 @@
 import { guestDisplayNameForPeerId, type Participant } from './participantsMapper'
+import { normalizeDisplayName } from './normalizeDisplayName'
 
 export type ResolvePeerDisplayNameForUiOptions = {
   selfPeerId: string
@@ -21,8 +22,24 @@ export function resolvePeerDisplayNameForUi(
     return row.displayName
   }
   if (peerId === opts.selfPeerId) {
-    const t = typeof opts.selfDisplayName === 'string' ? opts.selfDisplayName.trim() : ''
+    const t = typeof opts.selfDisplayName === 'string' ? normalizeDisplayName(opts.selfDisplayName) : ''
     return t || 'You'
   }
   return guestDisplayNameForPeerId(peerId)
+}
+
+/**
+ * One pass over `participants` keys → final UI label per peer (same strings as repeated
+ * `resolvePeerDisplayNameForUi` calls). Use in computed stores so templates do not invoke the
+ * resolver on every re-render when only unrelated UI state (e.g. mic toggles) changes.
+ */
+export function buildDisplayNameUiMap(
+  participants: ReadonlyMap<string, Participant>,
+  opts: ResolvePeerDisplayNameForUiOptions,
+): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const peerId of participants.keys()) {
+    out.set(peerId, resolvePeerDisplayNameForUi(peerId, participants, opts))
+  }
+  return out
 }

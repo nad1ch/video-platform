@@ -18,6 +18,11 @@ export const router = createRouter({
   routes: [
     {
       path: '/',
+      name: 'landing',
+      component: () => import('./pages/LandingPage.vue'),
+    },
+    {
+      path: '/app',
       component: () => import('./layouts/AppShellLayout.vue'),
       children: [
         {
@@ -40,12 +45,6 @@ export const router = createRouter({
         {
           path: 'wordle/:streamer',
           name: 'wordle-streamer',
-          meta: { appTitleKey: 'routes.wordle', footerContext: 'wordle' },
-          component: () => import('./pages/WordleStreamPage.vue'),
-        },
-        {
-          path: 'app/:streamer',
-          name: 'app-streamer',
           meta: { appTitleKey: 'routes.wordle', footerContext: 'wordle' },
           component: () => import('./pages/WordleStreamPage.vue'),
         },
@@ -91,39 +90,78 @@ export const router = createRouter({
             },
           ],
         },
+        /**
+         * Short Wordle URL: `/app/:streamer` (legacy). Static segments above take precedence:
+         * `call`, `wordle`, `wordle/:streamer`, `eat`, `admin` are reserved — a streamer slug matching
+         * those first segments cannot use this short path (e.g. `/app/call` is the Call page, not Wordle for "call").
+         */
+        {
+          path: ':streamer',
+          name: 'app-streamer',
+          meta: { appTitleKey: 'routes.wordle', footerContext: 'wordle' },
+          component: () => import('./pages/WordleStreamPage.vue'),
+        },
       ],
+    },
+    { path: '/call', redirect: '/app/call' },
+    {
+      path: '/wordle',
+      redirect: () => ({ name: 'wordle-streamer', params: { streamer: DEFAULT_WORDLE_STREAMER } }),
+    },
+    {
+      path: '/wordle/:streamer',
+      redirect: (to) => ({
+        path: `/app/wordle/${String(to.params.streamer)}`,
+        query: to.query,
+        hash: to.hash,
+      }),
+    },
+    {
+      path: '/eat',
+      redirect: (to) => ({ path: '/app/eat', query: to.query, hash: to.hash }),
     },
     {
       path: '/eat/join',
       redirect: (to: RouteLocationGeneric) => ({
-        path: '/eat',
+        path: '/app/eat',
         query: { ...to.query, view: 'join' },
       }),
     },
     {
       path: '/eat/admin',
       redirect: (to: RouteLocationGeneric) => ({
-        path: '/eat',
+        path: '/app/eat',
         query: { ...to.query, view: 'admin' },
       }),
     },
     {
       path: '/eat/control',
       redirect: (to: RouteLocationGeneric) => ({
-        path: '/eat',
+        path: '/app/eat',
         query: { ...to.query, view: 'control' },
       }),
     },
     {
       path: '/eat/overlay',
       redirect: (to: RouteLocationGeneric) => ({
-        path: '/eat',
+        path: '/app/eat',
         query: { ...to.query, view: 'overlay' },
       }),
     },
+    {
+      path: '/admin/:pathMatch(.*)*',
+      redirect: (to) => {
+        const rest = to.path.replace(/^\/admin\/?/, '') || ''
+        return {
+          path: `/app/admin${rest ? `/${rest}` : ''}`,
+          query: to.query,
+          hash: to.hash,
+        }
+      },
+    },
   ],
   scrollBehavior: ((to, from, savedPosition) => {
-    if (!to.path.startsWith('/eat')) {
+    if (!to.path.startsWith('/app/eat')) {
       if (savedPosition) return savedPosition
       return { top: 0 }
     }
@@ -147,7 +185,7 @@ router.beforeEach(async (to) => {
     const { ensureAuthLoaded, user } = useAuth()
     await ensureAuthLoaded()
     if (user.value?.role !== 'admin') {
-      return { path: '/' }
+      return { path: '/app' }
     }
   }
 
@@ -164,7 +202,7 @@ router.beforeEach(async (to) => {
   }
 
   return {
-    path: '/',
+    path: '/app',
     query: {
       needLogin: '1',
       authRedirect: to.fullPath,

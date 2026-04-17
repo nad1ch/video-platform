@@ -5,6 +5,25 @@
   "seo": {
     "metaDescription": "„Kogo zjemy pierwszego”: lobby, panel gracza i prowadzącego, nakładka OBS. Kanał Twitch {nick}."
   },
+  "landing": {
+    "documentTitle": "StreamAssist — rozmowy wideo, gry i nakładki na stream",
+    "heroTitle": "Interaktywne narzędzia na żywo",
+    "heroSubtitle": "Rozmowy wideo, gry z czatem i nakładka OBS — bez przebudowy całego stacku.",
+    "ctaOpenApp": "Otwórz aplikację",
+    "ctaTryWordle": "Wypróbuj Wordle",
+    "ctaEatLobby": "Lobby Eat First",
+    "ctaJoinCall": "Dołącz do rozmowy wideo",
+    "featuresAria": "Funkcje",
+    "featuresHeading": "Co dostajesz",
+    "featureCallsTitle": "Rozmowy wideo",
+    "featureCallsBody": "Pokoje dla współstreamów, gości i szybkiej synchronizacji — pod pracę streamera.",
+    "featureGamesTitle": "Gry interaktywne",
+    "featureGamesBody": "Rozgrywka w stylu Wordle z energią czatu — utrzymuj widzów między segmentami.",
+    "featureOverlayTitle": "Nakładka OBS",
+    "featureOverlayBody": "Warstwa przyjazna przeglądarce dla OBS — stan gry i branding na ekranie.",
+    "closingTitle": "Gotowi?",
+    "closingLead": "Wejdź do aplikacji lub wybierz tryb poniżej."
+  },
   "home": {
     "tagline": "Interaktywne narzędzia do streamów",
     "callTitle": "Połączenie wideo",

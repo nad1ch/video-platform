@@ -7,8 +7,10 @@ import OverlayMediaVideoLayer from '../OverlayMediaVideoLayer.vue'
 import ParticipantTile from '../ParticipantTile.vue'
 import OverlayPlayerCard from '../OverlayPlayerCard.vue'
 import OverlayStatusLayer from './OverlayStatusLayer.vue'
+import { useAuth } from '@/composables/useAuth'
 import { discordLikeGridDims } from '../../utils/discordLikeGrid.js'
 import { normalizePlayerSlotId } from '../../utils/playerSlot.js'
+import { overlayAvatarUrlForTile } from '../../utils/overlayParticipantDisplay.js'
 const props = defineProps({
   /** Mediasoup / VITE_SIGNALING_URL доступні — показувати відеошар. */
   mediaLayerEnabled: { type: Boolean, required: true },
@@ -49,6 +51,11 @@ const props = defineProps({
 
 const { t } = useI18n()
 const router = useRouter()
+const { user } = useAuth()
+
+function mosaicAvatarUrl(player, tile) {
+  return overlayAvatarUrlForTile(player, Boolean(tile?.isLocal), user.value?.avatar)
+}
 
 const globalMosaicEl = ref(null)
 const globalMosaicSize = ref({
@@ -237,6 +244,7 @@ function slotNumForBanner() {
                 :is-muted="row.tile.isMuted"
                 :is-speaking="row.tile.isSpeaking"
                 :volume="row.volume"
+                :avatar-url="mosaicAvatarUrl(row.player, row.tile)"
                 @update:volume="setMediaVolumeForPlayer(row.player, $event)"
               />
             </div>

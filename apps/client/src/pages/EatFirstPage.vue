@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import '@/eat-first/styles/motion.css'
 import { bootstrapEatFirstAuthOnce } from '@/eat-first/bootstrapEatFirst'
 import { adminControlTransitionInstant } from '@/eat-first/router.js'
-import { eatViewFromRoute, useSeoCanonical } from '@/eat-first'
+import { eatViewFromRoute } from '@/eat-first'
 import { getPersistedGameId } from '@/eat-first/utils/persistedGameId.js'
 import JoinPage from '@/eat-first/pages/JoinPage.vue'
 
@@ -18,8 +18,6 @@ const panelByView = {
   control: ControlPanel,
   overlay: OverlayPanel,
 } as const
-
-useSeoCanonical()
 
 const route = useRoute()
 

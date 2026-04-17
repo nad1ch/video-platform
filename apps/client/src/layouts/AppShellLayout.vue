@@ -9,7 +9,7 @@ import AppShellChromeToolbar from '@/components/ui/AppShellChromeToolbar.vue'
 import AppHeaderToolbar from '@/eat-first/ui/organisms/AppHeaderToolbar.vue'
 import HostControlChromeBar from '@/eat-first/components/showdesk/HostControlChromeBar.vue'
 import OnboardingTourModal from '@/eat-first/ui/organisms/OnboardingTourModal.vue'
-import { eatViewFromRoute, useTheme } from '@/eat-first'
+import { eatViewFromRoute, useSeoCanonical, useTheme } from '@/eat-first'
 import { hostControlChromeStore } from '@/eat-first/composables/hostControlChrome.js'
 import { persistLocale, LOCALE_OPTIONS } from '@/eat-first/i18n'
 import {
@@ -29,6 +29,8 @@ import '@/eat-first/styles/host-chrome.css'
 import PurpleLightningBackdrop from '@/components/ui/PurpleLightningBackdrop.vue'
 import '@/eat-first/styles/motion.css'
 
+useSeoCanonical()
+
 const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
@@ -39,7 +41,7 @@ const canEatFirstHost = computed(() => {
 })
 const { theme, setTheme, toggleTheme } = useTheme()
 
-const isEatRoute = computed(() => route.path.startsWith('/eat'))
+const isEatRoute = computed(() => route.path.startsWith('/app/eat'))
 
 /** Wordle/stream: контент у довгому вертикальному потоці — без мін-висоти viewport (інакше flex «тискає» блоки). */
 const isWordleStreamRoute = computed(
@@ -54,7 +56,7 @@ const showSiteFooter = computed(() => showChrome.value && route.name !== 'call')
 
 /** Стабільний ключ для Transition: без зайвих анімацій на дрібні зміни query (наприклад ?channel=). */
 const routeTransitionKey = computed(() => {
-  if (route.path.startsWith('/eat')) {
+  if (route.path.startsWith('/app/eat')) {
     const raw = route.query.view
     const view =
       typeof raw === 'string'

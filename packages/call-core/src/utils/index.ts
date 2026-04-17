@@ -1,3 +1,4 @@
+export { normalizeDisplayName } from './normalizeDisplayName'
 export { waitForCondition } from './waitForCondition'
 export { tryConsumeProducerOnce, type ConsumeOnceResult } from './consumerDedup'
 export {
@@ -11,6 +12,7 @@ export {
   type TileLike,
 } from './participantsMapper'
 export {
+  buildDisplayNameUiMap,
   resolvePeerDisplayNameForUi,
   type ResolvePeerDisplayNameForUiOptions,
 } from './resolvePeerDisplayName'

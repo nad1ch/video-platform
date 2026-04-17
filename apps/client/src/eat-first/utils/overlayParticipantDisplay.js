@@ -10,7 +10,7 @@
  * when absent, UI falls back to `CallTile.displayName` from the engine.
  */
 
-import { resolvePeerDisplayNameForUi } from 'call-core'
+import { normalizeDisplayName, resolvePeerDisplayNameForUi } from 'call-core'
 
 /**
  * Resolve a display label for a peer using the same rules as Video call UI / `session.labelFor`.
@@ -26,10 +26,37 @@ export function resolveOverlayPeerDisplayName(peerId, remoteDisplayNames, opts) 
   for (const [pid, dn] of Object.entries(remoteDisplayNames)) {
     participants.set(pid, { peerId: pid, displayName: typeof dn === 'string' ? dn : '' })
   }
-  const raw = opts.selfDisplayName
-  const selfDisplayName = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim()
+  const selfDisplayName = normalizeDisplayName(opts.selfDisplayName)
   return resolvePeerDisplayNameForUi(peerId, participants, {
     selfPeerId: opts.selfPeerId,
     selfDisplayName,
   })
+}
+
+/**
+ * Stable avatar URL for overlay tile when video is off (no generated URLs — avoids rerender churn).
+ *
+ * @param {Record<string, unknown> | null | undefined} player Firestore / game row
+ * @param {boolean} isLocalTile mediasoup tile is the signed-in overlay user
+ * @param {string | undefined} selfAvatarUrl from `useAuth().user.avatar`
+ * @returns {string} trimmed URL or empty
+ */
+export function overlayAvatarUrlForTile(player, isLocalTile, selfAvatarUrl) {
+  if (isLocalTile && typeof selfAvatarUrl === 'string' && selfAvatarUrl.trim().length > 0) {
+    return selfAvatarUrl.trim()
+  }
+  if (!player || typeof player !== 'object') {
+    return ''
+  }
+  const raw =
+    player.avatar ??
+    player.photoUrl ??
+    player.photoURL ??
+    player.profileImageUrl ??
+    player.profile_image_url ??
+    ''
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    return raw.trim()
+  }
+  return ''
 }

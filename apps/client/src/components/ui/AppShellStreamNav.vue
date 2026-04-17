@@ -20,7 +20,7 @@ const showHomeLink = computed(() => route.name !== 'home')
 
 /** У Eat на підвидах (не join) показуємо «Назад». */
 const showEatBack = computed(
-  () => route.path.startsWith('/eat') && eatViewFromRoute(route) !== 'join',
+  () => route.path.startsWith('/app/eat') && eatViewFromRoute(route) !== 'join',
 )
 
 function goEatBack() {
@@ -104,7 +104,7 @@ function goEatBack() {
       <RouterLink
         v-if="isAdmin"
         class="stream-nav__link"
-        :class="{ 'router-link-active stream-nav__link--active': route.path.startsWith('/admin') }"
+        :class="{ 'router-link-active stream-nav__link--active': route.path.startsWith('/app/admin') }"
         :to="{ name: 'admin-users' }"
         :title="t('routes.admin')"
         :aria-label="t('routes.admin')"

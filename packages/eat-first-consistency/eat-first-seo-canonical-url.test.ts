@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildCanonicalAbsoluteUrl,
+  canonicalRelativePathForSeo,
+  resolveCanonicalOriginForClient,
   trimCanonicalOrigin,
 } from '@/eat-first/state/seoCanonicalUrl.js'
 
@@ -24,5 +26,52 @@ describe('seoCanonicalUrl', () => {
 
   it('buildCanonicalAbsoluteUrl returns empty when origin empty', () => {
     expect(buildCanonicalAbsoluteUrl('', '/x')).toBe('')
+  })
+
+  it('resolveCanonicalOriginForClient: dev prefers window over VITE', () => {
+    expect(
+      resolveCanonicalOriginForClient({
+        dev: true,
+        vitePublicCanonicalOrigin: 'https://app.streamassist.net',
+        windowOrigin: 'http://localhost:5173',
+      }),
+    ).toBe('http://localhost:5173')
+  })
+
+  it('resolveCanonicalOriginForClient: prod prefers VITE when set', () => {
+    expect(
+      resolveCanonicalOriginForClient({
+        dev: false,
+        vitePublicCanonicalOrigin: 'https://app.streamassist.net',
+        windowOrigin: 'https://app.streamassist.net',
+      }),
+    ).toBe('https://app.streamassist.net')
+  })
+
+  it('resolveCanonicalOriginForClient: prod falls back to window when VITE empty', () => {
+    expect(
+      resolveCanonicalOriginForClient({
+        dev: false,
+        vitePublicCanonicalOrigin: '',
+        windowOrigin: 'https://preview.example.com',
+      }),
+    ).toBe('https://preview.example.com')
+  })
+
+  it('canonicalRelativePathForSeo keeps content query, strips tracking and auth modal keys', () => {
+    expect(canonicalRelativePathForSeo('/app/eat?view=join&utm_source=x&needLogin=1')).toBe(
+      '/app/eat?view=join',
+    )
+    expect(canonicalRelativePathForSeo('/app/wordle/foo?x=1')).toBe('/app/wordle/foo?x=1')
+  })
+
+  it('canonicalRelativePathForSeo drops hash (fragment not in canonical)', () => {
+    expect(canonicalRelativePathForSeo('/app/eat?view=overlay#panel')).toBe('/app/eat?view=overlay')
+  })
+
+  it('buildCanonicalAbsoluteUrl does not double-slash when origin is trimmed', () => {
+    expect(buildCanonicalAbsoluteUrl('https://app.streamassist.net', '/app/call')).toBe(
+      'https://app.streamassist.net/app/call',
+    )
   })
 })

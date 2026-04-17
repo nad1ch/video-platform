@@ -6,6 +6,8 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import {
   buildCallParticipantMap,
+  buildDisplayNameUiMap,
+  normalizeDisplayName,
   resolvePeerDisplayNameForUi,
   useCallOrchestrator,
   VIDEO_QUALITY_PRESETS,
@@ -84,12 +86,26 @@ const participantsByPeerId = computed(() =>
   buildCallParticipantMap(tiles.value, { ...remoteDisplayNames.value }, selfPeerId.value),
 )
 
-/** Single resolver for all call UI names — participants map + same pure fallbacks as `resolveParticipantDisplayName`. */
-function peerDisplayName(peerId: string): string {
-  return resolvePeerDisplayNameForUi(peerId, participantsByPeerId.value, {
+/** Precomputed labels per known peer — avoids N× `resolvePeerDisplayNameForUi` on unrelated re-renders (large grids). */
+const displayNameUiByPeerId = computed(() =>
+  buildDisplayNameUiMap(participantsByPeerId.value, {
     selfPeerId: selfPeerId.value,
     selfDisplayName: selfDisplayName.value,
-  })
+  }),
+)
+
+/** Single resolver: cache hit for peers in map; fallback for chat lines whose peer left the map. */
+function peerDisplayName(peerId: string): string {
+  const participants = participantsByPeerId.value
+  const opts = {
+    selfPeerId: selfPeerId.value,
+    selfDisplayName: selfDisplayName.value,
+  }
+  const hit = displayNameUiByPeerId.value.get(peerId)
+  if (hit !== undefined) {
+    return hit
+  }
+  return resolvePeerDisplayNameForUi(peerId, participants, opts)
 }
 
 const videoQualityChoice = computed({
@@ -127,6 +143,7 @@ watch(
       return
     }
     lastPresenceToastSourceId = last.id
+    /** Snapshot from engine at event time (stable for leave toasts if map updates before toast). */
     const name = last.displayName
     const text =
       last.kind === 'join'
@@ -304,6 +321,22 @@ const orderedTiles = computed(() => {
   return order.map((id) => map.get(id)!).filter(Boolean)
 })
 
+/** One name-resolution pass per grid row when order/tiles/participants change (large grids). */
+const orderedGridRows = computed(() => {
+  const participants = participantsByPeerId.value
+  const opts = {
+    selfPeerId: selfPeerId.value,
+    selfDisplayName: selfDisplayName.value,
+  }
+  const names = displayNameUiByPeerId.value
+  return orderedTiles.value.map((tile) => ({
+    tile,
+    displayName:
+      names.get(tile.peerId) ??
+      resolvePeerDisplayNameForUi(tile.peerId, participants, opts),
+  }))
+})
+
 const callGridModifier = computed(() => {
   const n = orderedTiles.value.length
   if (n <= 1) {
@@ -385,8 +418,8 @@ onMounted(() => {
   document.addEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
   void (async () => {
     await ensureAuthLoaded()
-    const authName = user.value?.displayName?.trim()
-    const cur = String(session.selfDisplayName ?? '').trim()
+    const authName = normalizeDisplayName(user.value?.displayName)
+    const cur = normalizeDisplayName(session.selfDisplayName)
     if (authName && (!cur || cur === 'You')) {
       session.selfDisplayName = authName
     }
@@ -495,13 +528,13 @@ watch(
         <div class="call-page__stage">
           <div class="call-page__grid" :class="[callGridModifier, { 'call-page__grid--fullbleed': stageFullBleed }]">
             <div
-              v-for="tile in orderedTiles"
-              :key="tile.peerId"
+              v-for="row in orderedGridRows"
+              :key="row.tile.peerId"
               class="call-page__tile-wrap"
-              :class="{ 'call-page__tile-wrap--over': dragOverPeerId === tile.peerId }"
-              @dragover.prevent="onTileDragOver($event, tile.peerId)"
-              @dragleave="onTileDragLeave(tile.peerId)"
-              @drop.prevent="onTileDrop(tile.peerId)"
+              :class="{ 'call-page__tile-wrap--over': dragOverPeerId === row.tile.peerId }"
+              @dragover.prevent="onTileDragOver($event, row.tile.peerId)"
+              @dragleave="onTileDragLeave(row.tile.peerId)"
+              @drop.prevent="onTileDrop(row.tile.peerId)"
               @dragend="onTileDragEnd"
             >
               <div
@@ -509,25 +542,25 @@ watch(
                 draggable="true"
                 :title="t('callPage.dragReorder')"
                 :aria-label="t('callPage.dragReorder')"
-                @dragstart="onTileDragStart($event, tile.peerId)"
+                @dragstart="onTileDragStart($event, row.tile.peerId)"
               />
               <ParticipantTile
                 class="call-page__tile-inner"
-                :peer-id="tile.peerId"
-                :display-name="peerDisplayName(tile.peerId)"
-                :stream="tile.stream"
-                :is-local="tile.isLocal"
-                :video-enabled="tile.videoEnabled"
-                :audio-enabled="tile.audioEnabled"
-                :video-fill-cover="tile.videoFillCover !== false"
-                :play-rev="tile.playRev"
+                :peer-id="row.tile.peerId"
+                :display-name="row.displayName"
+                :stream="row.tile.stream"
+                :is-local="row.tile.isLocal"
+                :video-enabled="row.tile.videoEnabled"
+                :audio-enabled="row.tile.audioEnabled"
+                :video-fill-cover="row.tile.videoFillCover !== false"
+                :play-rev="row.tile.playRev"
                 :size-tier="sizeTier"
-                :active-speaker="activeSpeakerPeerId === tile.peerId"
-                :remote-listen-volume="tile.remoteListenVolume"
-                :remote-listen-muted="tile.remoteListenMuted"
-                :raise-hand="Boolean(tile.handRaised)"
-                @update:listen-volume="setRemoteListenVolume(tile.peerId, $event)"
-                @update:listen-muted="setRemoteListenMuted(tile.peerId, $event)"
+                :active-speaker="activeSpeakerPeerId === row.tile.peerId"
+                :remote-listen-volume="row.tile.remoteListenVolume"
+                :remote-listen-muted="row.tile.remoteListenMuted"
+                :raise-hand="Boolean(row.tile.handRaised)"
+                @update:listen-volume="setRemoteListenVolume(row.tile.peerId, $event)"
+                @update:listen-muted="setRemoteListenMuted(row.tile.peerId, $event)"
               />
             </div>
           </div>

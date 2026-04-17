@@ -3,6 +3,8 @@
 import type { RtpCapabilities } from 'mediasoup-client/types'
 import { onUnmounted, ref, shallowRef } from 'vue'
 import { replyJsonPingIfNeeded } from '../utils/jsonWsPing'
+import { guestDisplayNameForPeerId } from '../utils/participantsMapper'
+import { normalizeDisplayName } from '../utils/normalizeDisplayName'
 
 export type RemoteProducerInfo = {
   producerId: string
@@ -101,17 +103,17 @@ function parseRoomPeerList(raw: unknown): RoomPeerInfo[] | null {
     if (typeof p === 'string') {
       out.push({
         peerId: p,
-        displayName: `Guest ${p.length > 6 ? p.slice(-6) : p}`,
+        displayName: guestDisplayNameForPeerId(p),
       })
       continue
     }
     if (p && typeof p === 'object') {
       const o = p as { peerId?: unknown; displayName?: unknown }
       if (typeof o.peerId === 'string') {
+        const raw =
+          typeof o.displayName === 'string' ? normalizeDisplayName(o.displayName) : ''
         const dn =
-          typeof o.displayName === 'string' && o.displayName.trim().length > 0
-            ? o.displayName.trim().slice(0, 64)
-            : `Guest ${o.peerId.length > 6 ? o.peerId.slice(-6) : o.peerId}`
+          raw.length > 0 ? raw.slice(0, 64) : guestDisplayNameForPeerId(o.peerId)
         out.push({ peerId: o.peerId, displayName: dn })
       }
     }
@@ -173,26 +175,24 @@ function parseServerMessage(data: unknown): ServerMessage | null {
   }
 
   if (data.type === 'peer-joined' && isRecord(payload) && typeof payload.peerId === 'string') {
+    const raw =
+      typeof payload.displayName === 'string' ? normalizeDisplayName(payload.displayName) : ''
     const displayName =
-      typeof payload.displayName === 'string' && payload.displayName.trim().length > 0
-        ? payload.displayName.trim().slice(0, 64)
-        : `Guest ${payload.peerId.length > 6 ? payload.peerId.slice(-6) : payload.peerId}`
+      raw.length > 0 ? raw.slice(0, 64) : guestDisplayNameForPeerId(payload.peerId)
     return { type: 'peer-joined', payload: { peerId: payload.peerId, displayName } }
   }
 
-  if (
-    data.type === 'peer-display-name' &&
-    isRecord(payload) &&
-    typeof payload.peerId === 'string' &&
-    typeof payload.displayName === 'string' &&
-    payload.displayName.trim().length > 0
-  ) {
-    return {
-      type: 'peer-display-name',
-      payload: {
-        peerId: payload.peerId,
-        displayName: payload.displayName.trim().slice(0, 64),
-      },
+  if (data.type === 'peer-display-name' && isRecord(payload) && typeof payload.peerId === 'string') {
+    const dn =
+      typeof payload.displayName === 'string' ? normalizeDisplayName(payload.displayName) : ''
+    if (dn.length > 0) {
+      return {
+        type: 'peer-display-name',
+        payload: {
+          peerId: payload.peerId,
+          displayName: dn.slice(0, 64),
+        },
+      }
     }
   }
 
@@ -486,9 +486,9 @@ export function useRoomConnection(wsUrl?: string) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not open; await connect() before joinRoom()')
     }
-    const trimmed = displayName?.trim()
+    const trimmed = typeof displayName === 'string' ? normalizeDisplayName(displayName) : undefined
     const payload: { roomId: string; peerId: string; displayName?: string } = { roomId, peerId }
-    if (trimmed && trimmed.length > 0) {
+    if (trimmed !== undefined && trimmed.length > 0) {
       payload.displayName = trimmed.slice(0, 64)
     }
     ws.send(JSON.stringify({ type: 'join-room', payload }))
@@ -499,7 +499,7 @@ export function useRoomConnection(wsUrl?: string) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       return
     }
-    const t = displayName.trim().slice(0, 64)
+    const t = normalizeDisplayName(displayName).slice(0, 64)
     if (!t) {
       return
     }

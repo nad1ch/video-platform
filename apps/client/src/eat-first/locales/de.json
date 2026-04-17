@@ -5,6 +5,25 @@
   "seo": {
     "metaDescription": "„Wen essen wir zuerst“: Lobby, Spieler- und Host-Pult, OBS-Browser-Overlay. Twitch-Kanal {nick}."
   },
+  "landing": {
+    "documentTitle": "StreamAssist — Videoanrufe, Spiele und Stream-Overlays",
+    "heroTitle": "Interaktive Tools für Livestreams",
+    "heroSubtitle": "Videoanrufe, Chat-Spiele und ein OBS-Overlay — ohne deinen Stack komplett umzubauen.",
+    "ctaOpenApp": "App öffnen",
+    "ctaTryWordle": "Wordle testen",
+    "ctaEatLobby": "Eat-First-Lobby",
+    "ctaJoinCall": "Videoanruf beitreten",
+    "featuresAria": "Funktionen",
+    "featuresHeading": "Was du bekommst",
+    "featureCallsTitle": "Videoanrufe",
+    "featureCallsBody": "Räume für Co-Streams, Gäste und schnelle Abstimmung — ausgerichtet auf Creator-Workflows.",
+    "featureGamesTitle": "Interaktive Spiele",
+    "featureGamesBody": "Wordle-ähnliches Spiel mit Chat-Energie — Zuschauer zwischen Segmenten binden.",
+    "featureOverlayTitle": "Overlay für OBS",
+    "featureOverlayBody": "Eine browserfreundliche Ebene für Shows mit On-Screen-Spielstand und Branding.",
+    "closingTitle": "Wenn du soweit bist",
+    "closingLead": "Spring in die App oder wähle unten einen Modus."
+  },
   "home": {
     "tagline": "Interaktive Tools für Streams",
     "callTitle": "Videoanruf",

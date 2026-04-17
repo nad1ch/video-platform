@@ -1,18 +1,28 @@
 import { watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { buildCanonicalAbsoluteUrl, trimCanonicalOrigin } from './seoCanonicalUrl.js'
-
-const ORIGIN = trimCanonicalOrigin(import.meta.env.VITE_PUBLIC_CANONICAL_ORIGIN ?? '')
+import {
+  buildCanonicalAbsoluteUrl,
+  canonicalRelativePathForSeo,
+  resolveCanonicalOriginForClient,
+} from './seoCanonicalUrl.js'
 
 /**
- * Оновлює rel=canonical та og:url під поточний маршрут (path + query), щоб SEO не вважав усі сторінки головною.
+ * Оновлює rel=canonical та og:url під поточний маршрут (path + контентні query; hash і шумові query прибираються).
+ * Origin: dev uses `window.location.origin`; prod prefers `VITE_PUBLIC_CANONICAL_ORIGIN` when set (see `resolveCanonicalOriginForClient`).
  */
 export function useSeoCanonical() {
   const route = useRoute()
 
   function sync() {
-    if (!ORIGIN || typeof document === 'undefined') return
-    const url = buildCanonicalAbsoluteUrl(ORIGIN, route.fullPath)
+    if (typeof document === 'undefined') return
+    const origin = resolveCanonicalOriginForClient({
+      dev: import.meta.env.DEV,
+      vitePublicCanonicalOrigin: import.meta.env.VITE_PUBLIC_CANONICAL_ORIGIN,
+      windowOrigin: typeof window !== 'undefined' ? window.location.origin : '',
+    })
+    if (!origin) return
+    const relative = canonicalRelativePathForSeo(route.fullPath)
+    const url = buildCanonicalAbsoluteUrl(origin, relative)
     if (!url) return
 
     let link = document.querySelector('link[rel="canonical"]')
@@ -32,5 +42,5 @@ export function useSeoCanonical() {
     og.setAttribute('content', url)
   }
 
-  watch(() => route.fullPath, sync, { immediate: true })
+  watch(() => route.fullPath, sync, { immediate: true, flush: 'post' })
 }

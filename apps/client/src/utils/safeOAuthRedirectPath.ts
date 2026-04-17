@@ -7,5 +7,5 @@ export function safeOAuthRedirectPath(redirectPath?: string): string {
     redirectPath.startsWith('/') &&
     !redirectPath.startsWith('//')
     ? redirectPath
-    : '/'
+    : '/app'
 }

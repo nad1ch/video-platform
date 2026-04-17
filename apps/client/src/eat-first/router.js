@@ -33,7 +33,7 @@ function eatViewTitle(view) {
 }
 
 function isEatPath(p) {
-  return typeof p === 'string' && p.startsWith('/eat')
+  return typeof p === 'string' && (p === '/app/eat' || p.startsWith('/app/eat/'))
 }
 
 function isAdminOrControlQuery(query) {

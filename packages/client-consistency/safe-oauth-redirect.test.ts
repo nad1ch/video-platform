@@ -8,13 +8,13 @@ describe('safeOAuthRedirectPath', () => {
   })
 
   it('blocks protocol-relative and non-relative', () => {
-    expect(safeOAuthRedirectPath('//evil.example/path')).toBe('/')
-    expect(safeOAuthRedirectPath('https://evil.example')).toBe('/')
-    expect(safeOAuthRedirectPath('relative-no-slash')).toBe('/')
+    expect(safeOAuthRedirectPath('//evil.example/path')).toBe('/app')
+    expect(safeOAuthRedirectPath('https://evil.example')).toBe('/app')
+    expect(safeOAuthRedirectPath('relative-no-slash')).toBe('/app')
   })
 
   it('defaults for missing or non-string', () => {
-    expect(safeOAuthRedirectPath(undefined)).toBe('/')
-    expect(safeOAuthRedirectPath('')).toBe('/')
+    expect(safeOAuthRedirectPath(undefined)).toBe('/app')
+    expect(safeOAuthRedirectPath('')).toBe('/app')
   })
 })

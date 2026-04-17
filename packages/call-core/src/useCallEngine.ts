@@ -23,6 +23,7 @@ import {
   decideAfterSocketStatusChange,
   decideAfterWindowFocus,
 } from './reconnectOrchestrationPolicy'
+import { normalizeDisplayName } from './utils/normalizeDisplayName'
 import { resolveParticipantDisplayName } from './utils/participantsMapper'
 import { waitForCondition } from './utils/waitForCondition'
 import { newCallTabPeerId } from './utils/callTabPeerId'
@@ -88,16 +89,6 @@ export type CallChatLine = {
 }
 
 const DISPLAY_NAME_DEBOUNCE_MS = 400
-
-function trimmedString(v: unknown): string {
-  if (typeof v === 'string') {
-    return v.trim()
-  }
-  if (v == null) {
-    return ''
-  }
-  return String(v).trim()
-}
 
 function stringValue(v: unknown): string {
   if (typeof v === 'string') {
@@ -291,7 +282,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   const MAX_CALL_CHAT = 200
 
   function roomStorageKey(): string {
-    return trimmedString(roomId.value) || 'demo'
+    return normalizeDisplayName(roomId.value) || 'demo'
   }
 
   function syncListenPrefsFromStorage(): void {
@@ -344,8 +335,8 @@ export function useCallEngine(options?: CallEngineOptions) {
       if (typeof p.peerId !== 'string' || p.peerId === selfPeerId.value) {
         return
       }
-      const name =
-        typeof p.displayName === 'string' && p.displayName.trim() ? p.displayName.trim() : p.peerId
+      const rawName = typeof p.displayName === 'string' ? normalizeDisplayName(p.displayName) : ''
+      const name = rawName || p.peerId
       session.upsertRemoteDisplayName(p.peerId, name)
       pushCallPresence('join', p.peerId)
       return
@@ -377,7 +368,7 @@ export function useCallEngine(options?: CallEngineOptions) {
       const displayName = typeof p.displayName === 'string' ? p.displayName : peerId || '—'
       const text = typeof p.text === 'string' ? p.text : ''
       const at = typeof p.at === 'number' && Number.isFinite(p.at) ? p.at : Date.now()
-      if (!peerId || !text.trim()) {
+      if (!peerId || !normalizeDisplayName(text)) {
         return
       }
       const id = `${at}-${Math.random().toString(36).slice(2, 8)}`
@@ -441,9 +432,9 @@ export function useCallEngine(options?: CallEngineOptions) {
 
   function callJoinRoomPayload(): { roomId: string; peerId: string; displayName: string } {
     return {
-      roomId: trimmedString(roomId.value) || 'demo',
+      roomId: normalizeDisplayName(roomId.value) || 'demo',
       peerId: stringValue(selfPeerId.value) || newCallTabPeerId(),
-      displayName: trimmedString(selfDisplayName.value) || 'You',
+      displayName: normalizeDisplayName(selfDisplayName.value) || 'You',
     }
   }
 
@@ -671,7 +662,7 @@ export function useCallEngine(options?: CallEngineOptions) {
       {
         peerId: selfId,
         stream: localSelfPreviewStream.value,
-        displayName: trimmedString(selfDisplayName.value) || 'You',
+        displayName: normalizeDisplayName(selfDisplayName.value) || 'You',
         isLocal: true,
         videoEnabled: screenSharing.value || camEnabled.value,
         audioEnabled: micEnabled.value,
@@ -722,7 +713,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
     displayNameDebounceTimer = setTimeout(() => {
       displayNameDebounceTimer = null
-      sendUpdateDisplayName(trimmedString(name) || 'You')
+      sendUpdateDisplayName(normalizeDisplayName(name) || 'You')
     }, DISPLAY_NAME_DEBOUNCE_MS)
   })
 
@@ -886,7 +877,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   )
 
   function sendChatMessage(text: string): void {
-    const t = trimmedString(text)
+    const t = normalizeDisplayName(text)
     if (!t || !inCall.value) {
       return
     }

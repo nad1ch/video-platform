@@ -20,7 +20,7 @@ const defaultWordleStreamer =
 const needLoginBanner = computed(() => route.query.needLogin === '1')
 const authRedirectTarget = computed(() => {
   const r = route.query.authRedirect
-  return typeof r === 'string' && r.startsWith('/') && !r.startsWith('//') ? r : '/call'
+  return typeof r === 'string' && r.startsWith('/') && !r.startsWith('//') ? r : '/app/call'
 })
 
 onMounted(() => {

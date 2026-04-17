@@ -3,7 +3,9 @@
  * Витягує поля з getTile(player) для ParticipantTile (mediasoup / MediaStream).
  */
 import { computed } from 'vue'
+import { useAuth } from '@/composables/useAuth'
 import ParticipantTile from './ParticipantTile.vue'
+import { overlayAvatarUrlForTile } from '../utils/overlayParticipantDisplay.js'
 
 const props = defineProps({
   player: { type: Object, required: true },
@@ -17,37 +19,55 @@ const props = defineProps({
 
 const emit = defineEmits(['update:volume'])
 
-const tile = computed(() => props.getTile(props.player))
+const { user } = useAuth()
 
-const mediaStream = computed(() =>
-  tile.value?.mediaStream instanceof MediaStream ? tile.value.mediaStream : null,
-)
-const identity = computed(() => tile.value?.identity ?? '')
-const label = computed(() => tile.value?.label ?? '')
-const isLocal = computed(() => tile.value?.isLocal ?? false)
-const showVideo = computed(() => tile.value?.showVideo ?? false)
-const isMuted = computed(() => tile.value?.isMuted ?? false)
-const isSpeaking = computed(() => tile.value?.isSpeaking ?? false)
-const volume = computed(() => props.getVolume(props.player))
+/**
+ * Single derived snapshot per player: one `getTile` + one `getVolume` per invalidation
+ * (avoids a chain of computeds each re-reading `tile.value` and extra dependency edges).
+ */
+const tileView = computed(() => {
+  const raw = props.getTile(props.player)
+  const volume = props.getVolume(props.player)
+  if (!raw || !(raw.mediaStream instanceof MediaStream)) {
+    return null
+  }
+  const v = typeof volume === 'number' && Number.isFinite(volume) ? volume : 1
+  return {
+    mediaStream: raw.mediaStream,
+    identity: raw.identity ?? '',
+    label: raw.label ?? '',
+    isLocal: Boolean(raw.isLocal),
+    showVideo: Boolean(raw.showVideo),
+    isMuted: Boolean(raw.isMuted),
+    isSpeaking: Boolean(raw.isSpeaking),
+    volume: v,
+  }
+})
 
-const ready = computed(() => Boolean(mediaStream.value))
+const avatarUrlForTile = computed(() => {
+  if (!tileView.value) {
+    return ''
+  }
+  return overlayAvatarUrlForTile(props.player, tileView.value.isLocal, user.value?.avatar)
+})
 </script>
 
 <template>
   <ParticipantTile
-    v-if="ready"
+    v-if="tileView"
     :layer="layer"
     :solo-fill="soloFill"
     :mosaic-mode="mosaicMode"
     :embed="embed"
-    :media-stream="mediaStream"
-    :identity="identity"
-    :label="label"
-    :is-local="isLocal"
-    :show-video="showVideo"
-    :is-muted="isMuted"
-    :is-speaking="isSpeaking"
-    :volume="volume"
+    :media-stream="tileView.mediaStream"
+    :identity="tileView.identity"
+    :label="tileView.label"
+    :is-local="tileView.isLocal"
+    :show-video="tileView.showVideo"
+    :is-muted="tileView.isMuted"
+    :is-speaking="tileView.isSpeaking"
+    :volume="tileView.volume"
+    :avatar-url="avatarUrlForTile"
     @update:volume="emit('update:volume', $event)"
   />
 </template>

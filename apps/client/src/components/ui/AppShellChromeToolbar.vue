@@ -10,6 +10,7 @@ import StreamAuthModal from '@/components/ui/StreamAuthModal.vue'
 import { useTheme } from '@/eat-first'
 import { persistLocale, LOCALE_OPTIONS } from '@/eat-first/i18n'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
+import { normalizeDisplayName } from 'call-core'
 import { useAuth } from '@/composables/useAuth'
 import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
 
@@ -41,7 +42,7 @@ const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.l
 const twitchChannelAria = computed(() => t('app.twitchAria', { nick: STREAMER_NICK }))
 
 function userAvatarInitial(displayName: string): string {
-  const s = displayName.trim()
+  const s = normalizeDisplayName(displayName)
   if (!s) {
     return '?'
   }

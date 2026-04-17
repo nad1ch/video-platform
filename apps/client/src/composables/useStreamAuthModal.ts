@@ -3,10 +3,10 @@ import { safeOAuthRedirectPath } from '@/utils/safeOAuthRedirectPath'
 
 const modalOpen = ref(false)
 /** Path after OAuth (must start with `/`). */
-const redirectAfterAuth = ref('/')
+const redirectAfterAuth = ref('/app')
 
 export function useStreamAuthModal() {
-  function openStreamAuthModal(redirectPath = '/'): void {
+  function openStreamAuthModal(redirectPath = '/app'): void {
     redirectAfterAuth.value = safeOAuthRedirectPath(redirectPath)
     modalOpen.value = true
   }

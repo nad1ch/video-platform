@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { normalizeDisplayName } from 'call-core'
 import StreamAudio from '../StreamAudio.vue'
 import StreamVideo from '../StreamVideo.vue'
 
@@ -96,8 +97,8 @@ onMounted(() => {
 })
 
 function initials(name: string): string {
-  const n = typeof name === 'string' ? name : String(name ?? '')
-  const parts = n.trim().split(/\s+/).filter(Boolean).slice(0, 2)
+  const n = normalizeDisplayName(name)
+  const parts = n.split(/\s+/).filter(Boolean).slice(0, 2)
   return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || '?'
 }
 
@@ -165,6 +166,8 @@ const hasLiveLocalVideo = computed(() => {
   if (!props.stream || !props.isLocal) {
     return false
   }
+  // `MediaStreamTrack.enabled` / readyState are not Vue deps — call-core bumps `playRev` on cam toggle.
+  void props.playRev
   return props.stream
     .getVideoTracks()
     .some((t) => t.readyState === 'live' && t.enabled)
@@ -265,6 +268,22 @@ const volumePercentUi = computed(() =>
   Math.min(200, Math.max(0, Math.round((props.remoteListenVolume ?? 1) * 100))),
 )
 
+/** Stable prop for StreamVideo (avoid inline `!isLocal` in template patch diffs). */
+const reportInboundVideoUi = computed(() => !props.isLocal)
+
+/**
+ * Remount `<video>` when `playRev` bumps (local cam toggle) so the element cannot keep a stale bitmap.
+ * `v-memo` on the clip previously skipped patches for the same `MediaStream` ref when only track.enabled changed.
+ */
+const streamVideoKey = computed(() => {
+  const rev = props.playRev ?? 0
+  if (props.isLocal) {
+    return `local:${rev}`
+  }
+  const id = typeof props.peerId === 'string' && props.peerId.length > 0 ? props.peerId : 'peer'
+  return `${id}:${rev}`
+})
+
 function onVolumeSliderInput(ev: Event): void {
   const t = ev.target as HTMLInputElement
   const pct = Math.min(200, Math.max(0, Number(t.value)))
@@ -292,9 +311,11 @@ function toggleMenu(): void {
     ]"
   >
     <div class="tile-media">
+      <!-- v-memo: label/activeSpeaker/etc. must not re-patch WebRTC elements when only metadata changes. -->
       <StreamAudio
         v-if="!isLocal && audioSplitStream"
         class="tile-audio"
+        v-memo="[audioSplitStream, playRev ?? 0, remoteListenVolume ?? 1, remoteListenMuted ?? false]"
         :stream="audioSplitStream"
         :play-rev="playRev"
         :listen-volume="remoteListenVolume ?? 1"
@@ -303,10 +324,11 @@ function toggleMenu(): void {
       <div v-if="showVideo" class="tile-video-wrap">
         <div class="tile-video-clip">
           <StreamVideo
+            :key="streamVideoKey"
             :stream="stream"
             muted
             :play-rev="playRev"
-            :report-video-ui="!isLocal"
+            :report-video-ui="reportInboundVideoUi"
             fill
             :fill-cover="Boolean(videoFillCover)"
             @video-ui="onVideoUi"

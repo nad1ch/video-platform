@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { buildCallParticipantMap, mapTilesToParticipants } from '../src/utils/participantsMapper'
-import { resolvePeerDisplayNameForUi } from '../src/utils/resolvePeerDisplayName'
+import {
+  buildDisplayNameUiMap,
+  resolvePeerDisplayNameForUi,
+} from '../src/utils/resolvePeerDisplayName'
 
 const uiOpts = (selfId: string) => ({
   selfPeerId: selfId,
@@ -27,5 +30,20 @@ describe('resolvePeerDisplayNameForUi', () => {
   it('uses self fallback when local row missing', () => {
     const map = buildCallParticipantMap([], {}, 'me')
     expect(resolvePeerDisplayNameForUi('me', map, { selfPeerId: 'me', selfDisplayName: '  ' })).toBe('You')
+  })
+})
+
+describe('buildDisplayNameUiMap', () => {
+  it('matches per-peer resolvePeerDisplayNameForUi for every key', () => {
+    const tiles = [
+      { peerId: 'a', displayName: 'Ann', stream: null, isLocal: false },
+      { peerId: 'me', displayName: '', stream: null, isLocal: true },
+    ]
+    const map = buildCallParticipantMap(tiles, { b: 'Bob' }, 'me')
+    const opts = { selfPeerId: 'me', selfDisplayName: 'Local' }
+    const ui = buildDisplayNameUiMap(map, opts)
+    for (const peerId of map.keys()) {
+      expect(ui.get(peerId)).toBe(resolvePeerDisplayNameForUi(peerId, map, opts))
+    }
   })
 })

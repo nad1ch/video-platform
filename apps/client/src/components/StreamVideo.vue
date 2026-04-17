@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { createLogger } from '@/utils/logger'
 
 const streamVideoLog = createLogger('stream-video')
@@ -30,6 +30,69 @@ const emit = defineEmits<{
 const el = ref<HTMLVideoElement | null>(null)
 
 /**
+ * Match ParticipantTile `showVideo` / hasLive*Video so we do not mount `<video>` when the track is off,
+ * avoiding play() racing element teardown (AbortError). `playRev` is listed so mute/unmute bumps recompute.
+ */
+const hasUsableVideoTrack = computed(() => {
+  void props.playRev
+  const s = props.stream
+  if (!s) {
+    return false
+  }
+  const t = s.getVideoTracks()[0]
+  if (!t || t.readyState !== 'live') {
+    return false
+  }
+  if (!props.reportVideoUi) {
+    return t.enabled
+  }
+  if (t.muted) {
+    return false
+  }
+  if (props.fillCover) {
+    return t.enabled
+  }
+  return true
+})
+
+function cleanupVideoElement(v: HTMLVideoElement | null): void {
+  if (!v) {
+    return
+  }
+  try {
+    v.pause()
+  } catch {
+    /* ignore */
+  }
+  try {
+    v.srcObject = null
+  } catch {
+    /* ignore */
+  }
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'name' in err &&
+    (err as { name?: string }).name === 'AbortError'
+  )
+}
+
+async function playIgnoringAbort(v: HTMLVideoElement): Promise<void> {
+  try {
+    await v.play()
+  } catch (err) {
+    if (isAbortError(err)) {
+      streamVideoLog.debug('play aborted (element detached or replaced)', err)
+      return
+    }
+    streamVideoLog.warn('play failed', err)
+  }
+}
+
+/**
  * Skip heavy work only when stream ref, video track id, and playRev are unchanged — then `play()` (+ UI emit).
  * When `playRev` bumps (e.g. track unmute / source change) on the **same** `MediaStream`, do not clear
  * `srcObject` (that aborts `play()` and fights mediasoup `replaceTrack`); refresh listeners and `play()` only.
@@ -39,6 +102,15 @@ let lastBoundPlayRev: number | undefined
 
 let detachUiListeners: (() => void) | null = null
 let detachInboundVideoListeners: (() => void) | null = null
+let detachLocalVideoEndedListener: (() => void) | null = null
+
+/** Cancels in-flight bind after `playRev`/stream churn (rapid cam toggle). */
+let bindStreamGeneration = 0
+
+function clearLocalVideoEndedListener(): void {
+  detachLocalVideoEndedListener?.()
+  detachLocalVideoEndedListener = null
+}
 
 function clearInboundVideoTrackListeners(): void {
   detachInboundVideoListeners?.()
@@ -122,7 +194,15 @@ function attachVideoUiListeners(v: HTMLVideoElement): void {
 }
 
 async function bindStream(): Promise<void> {
+  const generation = ++bindStreamGeneration
   await nextTick()
+  if (generation !== bindStreamGeneration) {
+    return
+  }
+  if (!hasUsableVideoTrack.value) {
+    return
+  }
+
   const v = el.value
   const s = props.stream
 
@@ -131,12 +211,13 @@ async function bindStream(): Promise<void> {
   }
 
   clearInboundVideoTrackListeners()
+  clearLocalVideoEndedListener()
 
-  if (!s) {
+  if (!s || s.getVideoTracks().length === 0) {
     lastBoundVideoTrackId = undefined
     lastBoundPlayRev = undefined
     detachVideoUi()
-    v.srcObject = null
+    cleanupVideoElement(v)
     if (props.reportVideoUi) {
       emit('videoUi', { readyState: -1, videoWidth: 0, videoHeight: 0 })
     }
@@ -146,16 +227,16 @@ async function bindStream(): Promise<void> {
   const vid = s.getVideoTracks()[0]
   const tid = vid?.id
   const rev = props.playRev ?? 0
+
   const samePlayRev = lastBoundPlayRev !== undefined && rev === lastBoundPlayRev
   const sameStreamAndTrack =
     v.srcObject === s && tid !== undefined && tid === lastBoundVideoTrackId && samePlayRev
 
   if (sameStreamAndTrack) {
     v.muted = Boolean(props.muted)
-    try {
-      await v.play()
-    } catch (err) {
-      streamVideoLog.warn('play failed', err)
+    await playIgnoringAbort(v)
+    if (generation !== bindStreamGeneration) {
+      return
     }
     // Same bound track can go muted→unmuted (RTP start); re-emit so tiles leave “connecting” / frozen UI.
     if (props.reportVideoUi) {
@@ -174,18 +255,14 @@ async function bindStream(): Promise<void> {
   detachVideoUi()
 
   if (vid?.muted && props.reportVideoUi) {
-    try {
-      v.pause()
-      v.srcObject = null
-    } catch {
-      /* ignore */
-    }
+    cleanupVideoElement(v)
     attachInboundVideoTrackListeners(v, s)
     emit('videoUi', { readyState: -1, videoWidth: 0, videoHeight: 0 })
     return
   }
 
   if (v.srcObject !== s) {
+    cleanupVideoElement(v)
     v.srcObject = s
   }
 
@@ -195,18 +272,51 @@ async function bindStream(): Promise<void> {
     attachVideoUiListeners(v)
   }
 
-  try {
-    await v.play()
-  } catch (err) {
-    streamVideoLog.warn('play failed', err)
+  await playIgnoringAbort(v)
+  if (generation !== bindStreamGeneration) {
+    return
+  }
+
+  if (!props.reportVideoUi && vid) {
+    clearLocalVideoEndedListener()
+    const onEnded = (): void => {
+      void bindStream()
+    }
+    vid.addEventListener('ended', onEnded)
+    detachLocalVideoEndedListener = () => {
+      vid.removeEventListener('ended', onEnded)
+      detachLocalVideoEndedListener = null
+    }
   }
 
   attachInboundVideoTrackListeners(v, s)
 }
 
+/** Before v-if removes the element: pause + clear so play() cannot race teardown. */
 watch(
-  () => [props.stream, props.playRev ?? 0, props.reportVideoUi] as const,
+  hasUsableVideoTrack,
+  (ok) => {
+    if (!ok) {
+      cleanupVideoElement(el.value)
+      clearInboundVideoTrackListeners()
+      clearLocalVideoEndedListener()
+      detachVideoUi()
+      if (props.reportVideoUi) {
+        emit('videoUi', { readyState: -1, videoWidth: 0, videoHeight: 0 })
+      }
+      lastBoundVideoTrackId = undefined
+      lastBoundPlayRev = undefined
+    }
+  },
+  { flush: 'sync' },
+)
+
+watch(
+  () => [props.stream, props.playRev ?? 0, props.reportVideoUi, hasUsableVideoTrack] as const,
   () => {
+    if (!hasUsableVideoTrack.value) {
+      return
+    }
     void bindStream()
   },
   { immediate: true, flush: 'post' },
@@ -238,8 +348,10 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  cleanupVideoElement(el.value)
   detachVideoUi()
   clearInboundVideoTrackListeners()
+  clearLocalVideoEndedListener()
   if (typeof document !== 'undefined') {
     document.removeEventListener('visibilitychange', onDocumentVisibleTryPlay)
   }
@@ -248,6 +360,7 @@ onUnmounted(() => {
 
 <template>
   <video
+    v-if="hasUsableVideoTrack"
     ref="el"
     class="stream-video"
     :class="{ 'stream-video--fill': fill, 'stream-video--fill-cover': fill && fillCover }"

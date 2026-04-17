@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { isVideoQualityPreset, type VideoQualityPreset } from '../media/videoQualityPreset'
 import { guestDisplayNameForPeerId } from '../utils/participantsMapper'
+import { normalizeDisplayName } from '../utils/normalizeDisplayName'
 import { newCallTabPeerId } from '../utils/callTabPeerId'
 
 const LS_VIDEO_PRESET = 'streamassist_call_video_quality_preset'
@@ -91,9 +92,7 @@ export const useCallSessionStore = defineStore('callSession', () => {
    */
   function labelFor(peerId: string): string {
     if (peerId === selfPeerId.value) {
-      const dn = selfDisplayName.value
-      const t = typeof dn === 'string' ? dn.trim() : String(dn ?? '').trim()
-      return t || 'You'
+      return normalizeDisplayName(selfDisplayName.value) || 'You'
     }
     const fromServer = remoteDisplayNames.value[peerId]
     if (fromServer) {

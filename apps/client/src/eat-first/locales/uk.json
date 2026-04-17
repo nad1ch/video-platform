@@ -5,6 +5,25 @@
   "seo": {
     "metaDescription": "Інтерфейс шоу «Кого ми з’їмо першим»: лобі, панель гравця та ведучого, overlay для OBS. Канал {nick}."
   },
+  "landing": {
+    "documentTitle": "StreamAssist — відеодзвінки, ігри та оверлей для стрімів",
+    "heroTitle": "Інтерактивні інструменти для лайв-стрімів",
+    "heroSubtitle": "Відеодзвінки, ігри з чатом і оверлей для OBS — без зайвої складності.",
+    "ctaOpenApp": "Відкрити застосунок",
+    "ctaTryWordle": "Спробувати Wordle",
+    "ctaEatLobby": "Лобі Eat First",
+    "ctaJoinCall": "До відеодзвінка",
+    "featuresAria": "Можливості",
+    "featuresHeading": "Що всередині",
+    "featureCallsTitle": "Відеодзвінки",
+    "featureCallsBody": "Кімнати для ко-стрімів, гостей і швидкого синку — під задачі стрімера.",
+    "featureGamesTitle": "Інтерактивні ігри",
+    "featureGamesBody": "Формат на кшталт Wordle з енергією чату — тримайте увагу між сегментами.",
+    "featureOverlayTitle": "Оверлей для OBS",
+    "featureOverlayBody": "Шар у браузері для джерела OBS — стан гри та брендинг на екрані.",
+    "closingTitle": "Готові почати",
+    "closingLead": "Зайдіть у застосунок або оберіть режим нижче."
+  },
   "home": {
     "tagline": "Інтерактивні інструменти для стрімів",
     "callTitle": "Відеодзвінок",

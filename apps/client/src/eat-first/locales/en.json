@@ -5,6 +5,25 @@
   "seo": {
     "metaDescription": "Eat First show: lobby, player and host desk, OBS browser overlay. Twitch channel {nick}."
   },
+  "landing": {
+    "documentTitle": "StreamAssist — video calls, games, and stream overlays",
+    "heroTitle": "Interactive tools for live streams",
+    "heroSubtitle": "Video calls, chat games, and an OBS overlay — without rebuilding your whole stack.",
+    "ctaOpenApp": "Open app",
+    "ctaTryWordle": "Try Wordle",
+    "ctaEatLobby": "Eat First lobby",
+    "ctaJoinCall": "Join video call",
+    "featuresAria": "Features",
+    "featuresHeading": "What you get",
+    "featureCallsTitle": "Video calls",
+    "featureCallsBody": "Low-friction rooms for co-streams, guests, and quick sync — tuned for stream workflows.",
+    "featureGamesTitle": "Interactive games",
+    "featureGamesBody": "Wordle-style play with chat energy — keep viewers engaged between segments.",
+    "featureOverlayTitle": "Overlay for OBS",
+    "featureOverlayBody": "A browser source-friendly layer for shows that need on-screen game state and branding.",
+    "closingTitle": "Ready when you are",
+    "closingLead": "Jump into the app, or open a single mode from the buttons below."
+  },
   "home": {
     "tagline": "Interactive tools for streams",
     "callTitle": "Video call",

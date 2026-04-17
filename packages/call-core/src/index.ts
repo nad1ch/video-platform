@@ -47,9 +47,11 @@ export {
   type TileLike,
 } from './utils/participantsMapper'
 export {
+  buildDisplayNameUiMap,
   resolvePeerDisplayNameForUi,
   type ResolvePeerDisplayNameForUiOptions,
 } from './utils/resolvePeerDisplayName'
+export { normalizeDisplayName } from './utils/normalizeDisplayName'
 export {
   ACTIVE_CAMERA_SMALL_ROOM_MAX,
   AUTO_LARGE_ROOM_VIDEO_CAPTURE,
