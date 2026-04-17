@@ -27,7 +27,9 @@ function applyDotEnvFile(filePath: string): void {
       continue
     }
 
-    if (process.env[key] === undefined) {
+    // Docker often injects `KEY=` (empty string). Treat as unset so a bind-mounted `.env` can still apply.
+    const existing = process.env[key]
+    if (existing === undefined || existing === '') {
       process.env[key] = value
     }
   }

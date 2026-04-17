@@ -5,24 +5,18 @@
 #   cp docker/docker-compose.local.example.yml docker/docker-compose.local.yml
 #   cp apps/server/Dockerfile.local.example apps/server/Dockerfile.local
 #   cp apps/server/.env.local.example apps/server/.env.local
+#   cp docker/.env.example docker/.env
 #
-# Postgres + API with bind mounts (hot reload). Published :5432 for host Prisma / GUI tools.
-#
-# Twitch OAuth: copy docker/.env.example → docker/.env and set TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET.
+# Postgres + API with bind mounts. mediasoup UDP 55000–55100 (often avoids Windows reserved 49xxx/50xxx).
 #
 # From repo root:
-#   docker compose -f docker/docker-compose.local.yml up -d
+#   docker compose -f docker/docker-compose.local.yml --profile turn up --build
 #
-# Prisma (host Node, first time — DB must be up):
-#   cd apps/server && npm run db:migrate:dev && npm run db:seed
-#
-# If the API dies with Cannot find module 'wordle-core' after changing Dockerfile.local,
-# reset the server node_modules volume and recreate (compose project name is usually the
-# compose file’s parent folder, e.g. docker → volume docker_server_node_modules_local):
-#   docker compose -f docker/docker-compose.local.yml rm -sf server
-#   docker volume rm docker_server_node_modules_local
-#   docker compose -f docker/docker-compose.local.yml up -d --build server
+# Prisma (first time — DB must be up):
+#   docker compose -f docker/docker-compose.local.yml exec server npx prisma migrate deploy
 # =============================================================================
+
+name: video-platform-local
 
 services:
   db:
@@ -45,19 +39,18 @@ services:
 
   server:
     build:
-      # Repo root so `packages/wordle-core` is available for apps/server (file:../../packages/wordle-core).
       context: ..
       dockerfile: apps/server/Dockerfile.local
     container_name: video-platform-server-local
     restart: unless-stopped
+    env_file:
+      - .env
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "3000:3000"
-      # Narrower UDP range avoids Windows "bind: forbidden by its access permissions" on large blocks.
-      # Must match MEDIASOUP_RTC_* below and apps/server createWorker (env overrides defaults).
-      - "52000-52199:52000-52199/udp"
+      - "55000-55100:55000-55100/udp"
     volumes:
       - ../apps/server:/app
       - server_node_modules_local:/app/node_modules
@@ -67,18 +60,38 @@ services:
       ADMIN_EMAILS: admin@local.streamassist
       WORDLE_JWT_SECRET: local-docker-dev-secret-min-16-chars
       AUTH_JWT_SECRET: local-docker-dev-secret-min-16-chars
-      WORDLE_CLIENT_ORIGIN: http://localhost:5173
-      # Must match Twitch Developer Console → OAuth Redirect URLs (localhost API, published :3000).
+      # Override in docker/.env when you open the SPA at http://<LAN-IP>:5173 (CORS / redirects).
+      WORDLE_CLIENT_ORIGIN: ${WORDLE_CLIENT_ORIGIN:-http://localhost:5173}
       TWITCH_AUTH_REDIRECT_URI: http://localhost:3000/api/auth/twitch/callback
-      # Set in `docker/.env` (same folder as this compose file) or export before `docker compose`:
-      #   TWITCH_CLIENT_ID=...
-      #   TWITCH_CLIENT_SECRET=...
-      TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
-      TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
-      MEDIASOUP_ANNOUNCED_ADDRESS: 127.0.0.1
-      MEDIASOUP_RTC_MIN_PORT: "52000"
-      MEDIASOUP_RTC_MAX_PORT: "52199"
+      GOOGLE_OAUTH_REDIRECT_URI: http://localhost:3000/api/auth/google/callback
+      # Docker: set to host LAN IP if remote video is black while signaling works (see docker/README.md).
+      MEDIASOUP_ANNOUNCED_ADDRESS: ${MEDIASOUP_ANNOUNCED_ADDRESS:-127.0.0.1}
+      MEDIASOUP_RTC_MIN_PORT: "55000"
+      MEDIASOUP_RTC_MAX_PORT: "55100"
+      ICE_SERVERS_JSON: ${ICE_SERVERS_JSON:-}
     command: npm run dev
+
+  coturn:
+    profiles: ["turn"]
+    image: coturn/coturn:4.6.2
+    container_name: video-platform-coturn-local
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "5349:5349/tcp"
+      - "49160-49200:49160-49200/udp"
+    command:
+      - -n
+      - --log-file=stdout
+      - --listening-port=3478
+      - --tls-listening-port=5349
+      - --min-port=49160
+      - --max-port=49200
+      - --fingerprint
+      - --lt-cred-mech
+      - --user=webrtc:change-me
+      - --realm=video-platform
+      - --no-cli
 
 volumes:
   pgdata_local:

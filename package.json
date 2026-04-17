@@ -18,14 +18,25 @@
     "db:migrate:dev": "npm run db:migrate:dev -w server",
     "db:migrate:dev:raw": "npm run db:migrate:dev:raw -w server",
     "db:seed": "npm run db:seed -w server",
-    "db:generate:server": "npm run db:generate -w server"
+    "db:generate:server": "npm run db:generate -w server",
+    "docker:mediasoup:up": "docker compose -f docker/docker-compose.yml up --build",
+    "docker:mediasoup:up:turn": "docker compose -f docker/docker-compose.yml --profile turn up --build",
+    "docker:mediasoup:config": "docker compose -f docker/docker-compose.yml config",
+    "docker:local:up": "docker compose -f docker/docker-compose.local.yml --profile turn up --build",
+    "docker:local:down": "docker compose -f docker/docker-compose.local.yml --profile turn down",
+    "docker:db:up": "docker compose -f docker/docker-compose.local.yml up -d db",
+    "docker:db:down": "docker compose -f docker/docker-compose.local.yml stop db",
+    "dev:local": "concurrently -k -n server,client -c green,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
+    "dev:all": "docker compose -f docker/docker-compose.local.yml up -d db && wait-on tcp:127.0.0.1:5432 && concurrently -k -n server,client -c green,magenta \"npm run dev -w server\" \"npm run dev -w client\""
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "concurrently": "^9.2.1",
     "eslint": "^10.2.0",
     "eslint-plugin-vue": "^10.8.0",
     "globals": "^17.5.0",
     "typescript-eslint": "^8.58.1",
-    "vue-eslint-parser": "^10.4.0"
+    "vue-eslint-parser": "^10.4.0",
+    "wait-on": "^9.0.5"
   }
 }

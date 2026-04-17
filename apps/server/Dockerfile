@@ -1,7 +1,9 @@
 FROM node:20-bullseye
 
+# python3-pip: mediasoup postinstall may build the worker if the prebuilt binary fails; build uses `pip` + `invoke`.
 RUN apt-get update && apt-get install -y \
   python3 \
+  python3-pip \
   make \
   g++ \
   build-essential \

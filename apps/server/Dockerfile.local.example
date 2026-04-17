@@ -34,7 +34,7 @@ RUN npm install
 COPY apps/server/. .
 
 EXPOSE 3000
-# Match docker-compose.local UDP publish + MEDIASOUP_RTC_* (default local example uses 52000–52199).
-EXPOSE 52000-52199/udp
+# Match docker-compose.local UDP publish + MEDIASOUP_RTC_* (default local example uses 55000–55100).
+EXPOSE 55000-55100/udp
 
 CMD ["npm", "run", "dev"]

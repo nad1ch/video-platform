@@ -1,8 +1,9 @@
-version: "3.9"
-
 # Default: API + mediasoup ports only.
 # With TURN: docker compose --profile turn up
 # Then set ICE_SERVERS_JSON or TURN_* on the server so browsers use coturn (see apps/server/env.example).
+#
+# Windows + Docker Desktop: binding/publishing a huge UDP range sometimes fails; use
+# docker-compose.local.example.yml (narrow RTC ports + matching MEDIASOUP_RTC_*).
 
 services:
   server:
@@ -16,12 +17,19 @@ services:
       - /app/node_modules
     environment:
       NODE_ENV: development
+      # Browsers must reach mediasoup ICE on the host — not the container’s private IP.
+      # Use your LAN IP if the SPA is opened as http://192.168.x.x:5173 (and match VITE_SIGNALING_URL).
+      MEDIASOUP_ANNOUNCED_ADDRESS: 127.0.0.1
+      # Must match published UDP range above and apps/server mediasoup createWorker.
+      MEDIASOUP_RTC_MIN_PORT: "40000"
+      MEDIASOUP_RTC_MAX_PORT: "49999"
       # Local Twitch OAuth callback on the published API port (register same URL in Twitch console).
       TWITCH_AUTH_REDIRECT_URI: http://localhost:3000/api/auth/twitch/callback
       TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
-      # Example when `coturn` service is up (same compose network):
-      # ICE_SERVERS_JSON: '[{"urls":["turn:coturn:3478?transport=udp","turn:coturn:3478?transport=tcp"],"username":"webrtc","credential":"change-me"}]'
+      # Optional TURN/STUN for browsers (see docker/.env.example). Browsers run on the HOST — use
+      # 127.0.0.1 or LAN IP, not the Docker service name `coturn`.
+      ICE_SERVERS_JSON: ${ICE_SERVERS_JSON:-}
     command: npm run dev
 
   coturn:
@@ -32,6 +40,7 @@ services:
       - "3478:3478/udp"
       - "3478:3478/tcp"
       - "5349:5349/tcp"
+      - "49160-49200:49160-49200/udp"
     command:
       - -n
       - --log-file=stdout
