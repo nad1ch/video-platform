@@ -28,6 +28,7 @@ import {
   STREAM_APP_BRAND_NAME,
 } from '@/eat-first/constants/brand.js'
 import '@/eat-first/styles/host-chrome.css'
+import LandingCosmicBackdrop from '@/components/ui/LandingCosmicBackdrop.vue'
 import PurpleLightningBackdrop from '@/components/ui/PurpleLightningBackdrop.vue'
 import '@/eat-first/styles/motion.css'
 
@@ -181,6 +182,7 @@ onMounted(() => {
 
 <template>
   <div class="app-shell-layout eat-first-root page-stack" :data-theme="theme">
+    <LandingCosmicBackdrop />
     <PurpleLightningBackdrop :light="theme === 'light'" />
     <div class="app-shell-layout__body app-layout">
       <AppHeader

@@ -186,17 +186,19 @@ function shuffleInPlace(arr: number[], rng: () => number): void {
 }
 
 /**
- * Сітка 9×4 = 36 комірок: рівномірне покриття, одна блискавка на комірку → не перетинаються.
- * Порядок комірок і варіантів форм перемішані — хаотично, але без «пустих кутів».
- * Масштаб: базовий × множник 0.8…1.1 (природна варіація).
+ * Сітка 6×3 = 18 комірок. `slice` заповнює весь viewport по ширині/висоті (на відміну від `meet`).
+ * На широких екранах slice обрізає верх/низ viewBox — тому Y лишаємо в смузі [yMin,yMax], щоб блискавки
+ * не зникали; X тягнемо майже на всю ширину (низький горизонтальний відступ).
  */
 function buildBolts(): Bolt[] {
-  const COLS = 9
-  const ROWS = 4
+  const COLS = 6
+  const ROWS = 3
   const CELLS = COLS * ROWS
-  const MARGIN = 4
-  const areaW = 100 - 2 * MARGIN
-  const areaH = 100 - 2 * MARGIN
+  const MARGIN_X = 1.1
+  const yMin = 22
+  const yMax = 78
+  const areaW = 100 - 2 * MARGIN_X
+  const areaH = yMax - yMin
   const cellW = areaW / COLS
   const cellH = areaH / ROWS
 
@@ -220,14 +222,14 @@ function buildBolts(): Bolt[] {
     const cell = cellOrder[k]!
     const col = cell % COLS
     const row = Math.floor(cell / COLS)
-    const cellMidX = MARGIN + col * cellW + cellW * 0.5
-    const cellMidY = MARGIN + row * cellH + cellH * 0.5
+    const cellMidX = MARGIN_X + col * cellW + cellW * 0.5
+    const cellMidY = yMin + row * cellH + cellH * 0.5
     const jitterMaxX = cellW * 0.18
     const jitterMaxY = cellH * 0.2
     const jx = (rngPos() - 0.5) * 2 * jitterMaxX
     const jy = (rngPos() - 0.5) * 2 * jitterMaxY
-    const cx = clamp(cellMidX + jx, 6.5, 93.5)
-    const cy = clamp(cellMidY + jy, 7.5, 92.5)
+    const cx = clamp(cellMidX + jx, 1.5, 98.5)
+    const cy = clamp(cellMidY + jy, yMin + 1.5, yMax - 1.5)
 
     const variantId = variantForBolt[k]!
     const shape = FORK_VARIANTS[variantId]!
@@ -237,9 +239,10 @@ function buildBolts(): Bolt[] {
     const baseSc = 0.3 + rngAnim() * 0.08
     const sc = baseSc * scaleMul
 
-    const dur = 2.35 + rngAnim() * 3.15
+    /* Трохи повільніше за базову формулу; швидше ніж попередній крок з 1.45×. */
+    const dur = (2.35 + rngAnim() * 3.15) * 1.22
     const delay = rngAnim() * 14.5
-    const branchLagBase = 0.038 + rngAnim() * 0.055
+    const branchLagBase = (0.038 + rngAnim() * 0.055) * 1.16
 
     out.push({
       main: shape.main,
@@ -273,12 +276,18 @@ function boltTransform(b: Bolt): string {
 
 <style scoped>
 .purple-lightning-backdrop {
-  position: absolute;
+  /*
+   * Fixed to the viewport so bolt positions (viewBox 0–100) map to the visible window.
+   * `absolute` on a tall page stretched the SVG to full document height — few bolts in the
+   * top viewport and clusters near the footer / below the fold.
+   */
+  position: fixed;
   inset: 0;
   /* hidden + drop-shadow на <g> обрізає праву частину SVG у Chrome — «усі зліва» */
   overflow: visible;
   pointer-events: none;
-  z-index: 0;
+  /* Above `LandingCosmicBackdrop` (z-index 0), below main chrome (z-index 1). */
+  z-index: 1;
 }
 
 .purple-lightning-backdrop__svg {
@@ -294,7 +303,7 @@ function boltTransform(b: Bolt): string {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   opacity: 0;
-  animation: purple-bolt-draw var(--bolt-dur, 3.4s) cubic-bezier(0.33, 0.02, 0.25, 1) infinite;
+  animation: purple-bolt-draw var(--bolt-dur, 4.6s) cubic-bezier(0.33, 0.02, 0.25, 1) infinite;
   animation-delay: var(--bolt-delay, 0s);
 }
 
@@ -308,7 +317,7 @@ function boltTransform(b: Bolt): string {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   opacity: 0;
-  animation: purple-bolt-draw-branch var(--bolt-dur, 3.4s) cubic-bezier(0.33, 0.02, 0.28, 1) infinite;
+  animation: purple-bolt-draw-branch var(--bolt-dur, 4.6s) cubic-bezier(0.33, 0.02, 0.28, 1) infinite;
   animation-delay: calc(var(--bolt-delay, 0s) + var(--branch-lag, 0.08s));
 }
 
