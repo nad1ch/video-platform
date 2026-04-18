@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watchEffect } from 'vue'
+import { computed, ref, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppPageLoader from '../../ui/molecules/AppPageLoader.vue'
@@ -91,6 +91,48 @@ const globalMosaicGridStyle = computed(() => {
 function slotNumForBanner() {
   return props.slotNumFromIdFn(props.votingTargetId)
 }
+
+/** Cached fns per slot — avoids new drag handler closures every mosaic re-render. */
+const mosaicDragOverBySlot = new Map()
+const mosaicDropBySlot = new Map()
+
+function mosaicDragOverForPlayerId(rawId) {
+  const id = normalizePlayerSlotId(rawId)
+  let h = mosaicDragOverBySlot.get(id)
+  if (!h) {
+    h = (e) => {
+      props.onMosaicDragOver(e)
+      props.onMosaicDragEnterPlayer({ id })
+    }
+    mosaicDragOverBySlot.set(id, h)
+  }
+  return h
+}
+
+function mosaicDropForPlayerId(rawId) {
+  const id = normalizePlayerSlotId(rawId)
+  let h = mosaicDropBySlot.get(id)
+  if (!h) {
+    h = (e) => {
+      props.onMosaicDrop({ id }, e)
+    }
+    mosaicDropBySlot.set(id, h)
+  }
+  return h
+}
+
+watch(
+  () => props.globalMosaicCardViewModels.map((r) => normalizePlayerSlotId(r.player.id)).join('\0'),
+  (key) => {
+    const ids = new Set(key ? key.split('\0') : [])
+    for (const k of mosaicDragOverBySlot.keys()) {
+      if (!ids.has(k)) mosaicDragOverBySlot.delete(k)
+    }
+    for (const k of mosaicDropBySlot.keys()) {
+      if (!ids.has(k)) mosaicDropBySlot.delete(k)
+    }
+  },
+)
 </script>
 
 <template>
@@ -210,13 +252,8 @@ function slotNumForBanner() {
                 normalizePlayerSlotId(mosaicDropTargetId) === normalizePlayerSlotId(row.player.id),
               'mosaic-cell--drag-source': mosaicDragSourceId === normalizePlayerSlotId(row.player.id),
             }"
-            @dragover="
-              (e) => {
-                onMosaicDragOver(e)
-                onMosaicDragEnterPlayer(row.player)
-              }
-            "
-            @drop="onMosaicDrop(row.player, $event)"
+            @dragover="mosaicDragOverForPlayerId(row.player.id)"
+            @drop="mosaicDropForPlayerId(row.player.id)"
           >
             <span
               class="mosaic-drag-handle"

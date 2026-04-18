@@ -1,4 +1,4 @@
-import { computed, watch, nextTick, shallowRef, reactive } from 'vue'
+import { computed, watch, nextTick, shallowRef, reactive, triggerRef } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   buildCallParticipantMap,
@@ -68,17 +68,19 @@ export function useEatOverlayMediasoup(options) {
         selfDisplayName: selfDisplayName.value,
       }
       const names = displayNameUiByPeerId.value
-      const m = new Map()
+      const pl = playerLabels.value
+      const labels = pl && typeof pl === 'object' ? pl : {}
+      const m = tileMapRef.value
+      const seen = new Set()
       const order = []
       let devNameFallbacks = 0
       for (const t of tiles.value) {
         const stream = t.stream
         if (!stream) continue
         const id = t.peerId
+        seen.add(id)
         const v = stream.getVideoTracks()[0]
         const a = stream.getAudioTracks()[0]
-        const pl = playerLabels.value
-        const labels = pl && typeof pl === 'object' ? pl : {}
         let label = labels[id] ?? names.get(id)
         if (label == null) {
           label = resolvePeerDisplayNameForUi(id, participants, nameOpts)
@@ -86,18 +88,32 @@ export function useEatOverlayMediasoup(options) {
             devNameFallbacks += 1
           }
         }
-        const entry = {
-          identity: id,
-          // Game slot label overrides; else precomputed UI map (same as Call page).
-          label,
-          mediaStream: stream,
-          isLocal: t.isLocal,
-          showVideo: v ? v.enabled : false,
-          isMuted: a ? !a.enabled : true,
-          isSpeaking: speaker === id,
+        let entry = m.get(id)
+        if (!entry) {
+          entry = {
+            identity: id,
+            label: '',
+            mediaStream: null,
+            isLocal: false,
+            showVideo: false,
+            isMuted: true,
+            isSpeaking: false,
+          }
+          m.set(id, entry)
         }
-        m.set(id, entry)
+        entry.identity = id
+        entry.label = label
+        entry.mediaStream = stream
+        entry.isLocal = t.isLocal
+        entry.showVideo = v ? v.enabled : false
+        entry.isMuted = a ? !a.enabled : true
+        entry.isSpeaking = speaker === id
         order.push({ identity: id, isSpeaking: entry.isSpeaking })
+      }
+      for (const id of [...m.keys()]) {
+        if (!seen.has(id)) {
+          m.delete(id)
+        }
       }
       if (
         import.meta.env.DEV &&
@@ -110,13 +126,12 @@ export function useEatOverlayMediasoup(options) {
           tiles: tiles.value.length,
         })
       }
-      tileMapRef.value = m
       orderTilesRef.value = order
+      triggerRef(tileMapRef)
     },
     /**
      * Shallow sources only: `tiles` is a fresh array from `useCallEngine` when deps change;
-     * `playerLabels` is a new object from overlay computed. Deep mode traversed MediaStream-backed
-     * tile rows on every flush and scaled poorly with 8–12 cameras.
+     * reuse Map entries + `triggerRef` so MediaStream-backed rows are not reallocated every tick.
      */
     { immediate: true, flush: 'post' },
   )

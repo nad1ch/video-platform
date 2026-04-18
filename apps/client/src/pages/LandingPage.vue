@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import heroSideAsset from '@/assets/landing-dev/hero-side.svg'
@@ -368,10 +368,6 @@ const footerAbout = Object.freeze(['About', 'Jobs', 'Brand', 'Newsroom', 'Develo
 
 const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
 
-function syncDocumentTitle() {
-  document.title = 'StreamAssist - where chat turns into the game'
-}
-
 type LandingLocaleCode = (typeof localeButtons)[number]['code']
 
 async function selectLocale(code: LandingLocaleCode) {
@@ -408,9 +404,6 @@ watch(
 const landingCanvasEl = ref<HTMLElement | null>(null)
 useLandingCosmicParallax(landingCanvasEl)
 
-onMounted(() => {
-  syncDocumentTitle()
-})
 </script>
 
 <template>
@@ -452,7 +445,7 @@ onMounted(() => {
         />
       </div>
 
-      <header class="landing-header">
+      <header class="landing-header" aria-label="Site header">
         <div class="landing-header__brand">
           <span class="landing-header__brand-mark" aria-hidden="true">
             <span />
@@ -475,7 +468,7 @@ onMounted(() => {
         </a>
       </header>
 
-      <div class="landing-auth">
+      <div class="landing-auth" aria-label="Account">
         <RouterLink class="landing-auth__link" :to="authRoute">Log In</RouterLink>
         <RouterLink class="landing-auth__link" :to="authRoute">Sing Up</RouterLink>
       </div>
@@ -615,7 +608,7 @@ onMounted(() => {
         </div>
       </section>
 
-      <footer id="footer" class="landing-footer">
+      <footer id="footer" class="landing-footer" aria-label="Site footer">
         <div class="landing-footer__languages" role="group" aria-label="Interface language">
           <button
             v-for="item in localeButtons"

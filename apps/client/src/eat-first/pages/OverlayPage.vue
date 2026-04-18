@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onUnmounted, provide, ref, watch } from 'vue'
+import { computed, onUnmounted, provide, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -94,7 +94,10 @@ const overlayCanPublish = computed(() => {
 
 const overlayEliminatedLocal = computed(() => singlePlayer.value?.eliminated === true)
 
-const overlayPlayerLabels = computed(() => {
+/** Ref updated only when slot ids/names change — avoids new object every tick for mediasoup overlay watch. */
+const overlayPlayerLabels = shallowRef({})
+
+function rebuildOverlayPlayerLabels() {
   const m = {}
   if (isPersonal.value && singlePlayer.value) {
     const id = normalizePlayerSlotId(singlePlayer.value.id)
@@ -107,8 +110,31 @@ const overlayPlayerLabels = computed(() => {
     const id = normalizePlayerSlotId(p.id)
     m[id] = typeof p.name === 'string' && p.name.trim() ? p.name : id
   }
-  return m
-})
+  const prev = overlayPlayerLabels.value
+  const prevKeys = Object.keys(prev)
+  const nextKeys = Object.keys(m)
+  if (
+    prevKeys.length === nextKeys.length &&
+    nextKeys.every((k) => prev[k] === m[k])
+  ) {
+    return
+  }
+  overlayPlayerLabels.value = m
+}
+
+watch(
+  [
+    isPersonal,
+    () => singlePlayer.value?.id,
+    () => singlePlayer.value?.name,
+    () =>
+      players.value
+        .map((p) => `${normalizePlayerSlotId(p.id)}:${typeof p.name === 'string' ? p.name : ''}`)
+        .join('|'),
+  ],
+  rebuildOverlayPlayerLabels,
+  { immediate: true },
+)
 
 let unsubscribe = null
 let unsubPlayersCount = null

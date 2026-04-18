@@ -65,6 +65,12 @@ describe('seoCanonicalUrl', () => {
     expect(canonicalRelativePathForSeo('/app/wordle/foo?x=1')).toBe('/app/wordle/foo?x=1')
   })
 
+  it('canonicalRelativePathForSeo drops empty query values and sorts keys', () => {
+    expect(canonicalRelativePathForSeo('/app/eat?empty=&view=join&z=9&a=1')).toBe(
+      '/app/eat?a=1&view=join&z=9',
+    )
+  })
+
   it('canonicalRelativePathForSeo drops hash (fragment not in canonical)', () => {
     expect(canonicalRelativePathForSeo('/app/eat?view=overlay#panel')).toBe('/app/eat?view=overlay')
   })

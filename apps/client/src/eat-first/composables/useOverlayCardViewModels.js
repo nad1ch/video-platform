@@ -72,6 +72,8 @@ export function useOverlayCardViewModels(ctx) {
   const mosaicRowById = shallowRef(new Map())
   /** Стабільний порядок id; не оновлюємо масив, якщо послідовність тих самих id не змінилась. */
   const mosaicOrderedIds = shallowRef([])
+  /** Рядки мозаїки — той самий масив-реф, поки membership/order row-рефів не змінився (менше v-for churn). */
+  const globalMosaicCardViewModels = shallowRef([])
 
   function slotNumFromId(id) {
     const s = String(id ?? '')
@@ -178,6 +180,9 @@ export function useOverlayCardViewModels(ctx) {
         map.clear()
         triggerRef(mosaicRowById)
       }
+      if (globalMosaicCardViewModels.value.length) {
+        globalMosaicCardViewModels.value = []
+      }
       return
     }
 
@@ -207,6 +212,9 @@ export function useOverlayCardViewModels(ctx) {
       if (map.size > 0) {
         map.clear()
         triggerRef(mosaicRowById)
+      }
+      if (globalMosaicCardViewModels.value.length) {
+        globalMosaicCardViewModels.value = []
       }
       return
     }
@@ -257,18 +265,32 @@ export function useOverlayCardViewModels(ctx) {
     if (mapMutated) {
       triggerRef(mosaicRowById)
     }
-  })
 
-  const globalMosaicCardViewModels = computed(() => {
     const ids = mosaicOrderedIds.value
-    const map = mosaicRowById.value
-    if (!ids.length) return []
-    const out = []
-    for (const id of ids) {
-      const row = map.get(id)
-      if (row) out.push(row)
+    const prevList = globalMosaicCardViewModels.value
+    if (!ids.length) {
+      if (prevList.length) {
+        globalMosaicCardViewModels.value = []
+      }
+      return
     }
-    return out
+    let same = prevList.length === ids.length
+    if (same) {
+      for (let i = 0; i < ids.length; i++) {
+        if (prevList[i] !== map.get(ids[i])) {
+          same = false
+          break
+        }
+      }
+    }
+    if (!same) {
+      const out = []
+      for (const id of ids) {
+        const row = map.get(id)
+        if (row) out.push(row)
+      }
+      globalMosaicCardViewModels.value = out
+    }
   })
 
   return {

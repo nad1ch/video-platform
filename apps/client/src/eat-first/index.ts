@@ -10,5 +10,5 @@ export {
   eatViewFromRoute,
   normalizeEatView,
 } from './state/eatFirstRouteUtils.js'
-export { useSeoCanonical } from './state/useSeoCanonical.js'
+export { useSeoApp, useSeoCanonical, useSeoMeta, useSeoOg } from './state/useSeoApp.js'
 export { useTheme } from './state/useTheme.js'

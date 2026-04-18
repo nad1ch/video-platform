@@ -1,6 +1,6 @@
 /**
  * Pure URL helpers for rel=canonical / og:url (no Vue, no DOM).
- * Composable `useSeoCanonical` delegates here for testability.
+ * `useSeoApp` delegates here for testability.
  */
 
 /** Strip trailing slash from configured origin (same as previous inline `.replace(/\/$/, '')`). */
@@ -60,11 +60,24 @@ export function canonicalRelativePathForSeo(routerFullPath) {
     return pathname
   }
   const params = new URLSearchParams(search)
-  for (const k of CANONICAL_NOISE_QUERY_KEYS) {
-    params.delete(k)
+  /** @type {Array<[string, string]>} */
+  const entries = []
+  for (const [k, v] of params.entries()) {
+    if (CANONICAL_NOISE_QUERY_KEYS.has(k)) {
+      continue
+    }
+    if (v === '' || v == null) {
+      continue
+    }
+    entries.push([k, v])
   }
-  const next = params.toString()
-  return `${pathname}${next ? `?${next}` : ''}`
+  entries.sort((a, b) => a[0].localeCompare(b[0]))
+  const next = new URLSearchParams()
+  for (const [k, v] of entries) {
+    next.append(k, v)
+  }
+  const q = next.toString()
+  return `${pathname}${q ? `?${q}` : ''}`
 }
 
 /**

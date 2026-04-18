@@ -1,7 +1,11 @@
 import type { VideoQualityPreset } from './videoQualityPreset'
 import { getCallVideoConstraints } from './videoQualityPreset'
 
-/** Voice-first defaults (widely supported). Optional `channelCount`/`sampleRate` can be added per-device if needed. */
+/**
+ * Voice/chat defaults (widely supported). We intentionally omit `sampleRate`, `sampleSize`, and
+ * `channelCount` so each browser + device can pick stable processing; forcing those can break
+ * niche headsets or add unnecessary resampling.
+ */
 export const DEFAULT_CALL_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: true,
   noiseSuppression: true,

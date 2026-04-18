@@ -108,6 +108,45 @@ function peerDisplayName(peerId: string): string {
   return resolvePeerDisplayNameForUi(peerId, participants, opts)
 }
 
+/** Stable handlers so grid re-renders do not allocate new fns per tile per frame. */
+const remoteListenVolumeByPeer = new Map<string, (v: number) => void>()
+const remoteListenMutedByPeer = new Map<string, (v: boolean) => void>()
+
+function remoteListenVolumeHandler(peerId: string) {
+  let h = remoteListenVolumeByPeer.get(peerId)
+  if (!h) {
+    h = (v: number) => {
+      setRemoteListenVolume(peerId, v)
+    }
+    remoteListenVolumeByPeer.set(peerId, h)
+  }
+  return h
+}
+
+function remoteListenMutedHandler(peerId: string) {
+  let h = remoteListenMutedByPeer.get(peerId)
+  if (!h) {
+    h = (v: boolean) => {
+      setRemoteListenMuted(peerId, v)
+    }
+    remoteListenMutedByPeer.set(peerId, h)
+  }
+  return h
+}
+
+watch(
+  () => tiles.value.map((t) => t.peerId).join(),
+  () => {
+    const ids = new Set(tiles.value.map((t) => t.peerId))
+    for (const id of remoteListenVolumeByPeer.keys()) {
+      if (!ids.has(id)) remoteListenVolumeByPeer.delete(id)
+    }
+    for (const id of remoteListenMutedByPeer.keys()) {
+      if (!ids.has(id)) remoteListenMutedByPeer.delete(id)
+    }
+  },
+)
+
 const videoQualityChoice = computed({
   get(): VideoQualityUiChoice {
     return session.videoQualityExplicit ? session.videoQualityPreset : 'auto'
@@ -135,9 +174,11 @@ type CallToast = { id: string; text: string; kind: 'join' | 'leave' }
 const callToasts = ref<CallToast[]>([])
 let lastPresenceToastSourceId = ''
 
+/** Only the last presence event drives toasts; avoid deep watch on the whole array. */
 watch(
-  callPresenceMessages,
-  (msgs) => {
+  () => callPresenceMessages.value[callPresenceMessages.value.length - 1]?.id,
+  () => {
+    const msgs = callPresenceMessages.value
     const last = msgs[msgs.length - 1]
     if (!last || last.id === lastPresenceToastSourceId) {
       return
@@ -155,7 +196,6 @@ watch(
       callToasts.value = callToasts.value.filter((x) => x.id !== id)
     }, 4200)
   },
-  { deep: true },
 )
 
 const chatOpen = ref(false)
@@ -559,8 +599,8 @@ watch(
                 :remote-listen-volume="row.tile.remoteListenVolume"
                 :remote-listen-muted="row.tile.remoteListenMuted"
                 :raise-hand="Boolean(row.tile.handRaised)"
-                @update:listen-volume="setRemoteListenVolume(row.tile.peerId, $event)"
-                @update:listen-muted="setRemoteListenMuted(row.tile.peerId, $event)"
+                @update:listen-volume="remoteListenVolumeHandler(row.tile.peerId)"
+                @update:listen-muted="remoteListenMutedHandler(row.tile.peerId)"
               />
             </div>
           </div>

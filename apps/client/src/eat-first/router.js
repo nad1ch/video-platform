@@ -15,23 +15,6 @@ function resolveAdminGateGameId(query) {
   return 'test1'
 }
 
-const DOC_TITLE_BASE = 'Кого ми з’їмо першим'
-
-function eatViewTitle(view) {
-  switch (normalizeEatView(view)) {
-    case 'join':
-      return `${DOC_TITLE_BASE} · Лобі`
-    case 'admin':
-      return `${DOC_TITLE_BASE} · Доступ ведучого`
-    case 'control':
-      return `${DOC_TITLE_BASE} · Панель`
-    case 'overlay':
-      return `${DOC_TITLE_BASE} · Overlay`
-    default:
-      return DOC_TITLE_BASE
-  }
-}
-
 function isEatPath(p) {
   return typeof p === 'string' && (p === '/app/eat' || p.startsWith('/app/eat/'))
 }
@@ -55,7 +38,6 @@ export function registerEatFirstRouterGuards(router) {
 
   router.afterEach((to) => {
     if (!isEatPath(to.path)) return
-    document.title = eatViewTitle(to.query?.view)
     trackPageView(to.fullPath)
   })
 }

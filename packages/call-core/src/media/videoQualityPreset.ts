@@ -17,7 +17,10 @@ export function isVideoQualityPreset(v: string): v is VideoQualityPreset {
   return v === 'economy' || v === 'balanced' || v === 'hd'
 }
 
-/** Multi-user capture (~1024×576 @ 25fps). */
+/**
+ * Large-room capture: ~576p ideal @ ~25fps for stability (many tiles / streams); max allows up to 720p
+ * when the browser/device can — no `exact` constraints, so downscale is still possible under load.
+ */
 export const AUTO_LARGE_ROOM_VIDEO_CAPTURE = {
   WIDTH_IDEAL: 1024,
   HEIGHT_IDEAL: 576,
@@ -102,7 +105,7 @@ export function getCallVideoConstraints(tier: VideoPublishTier): MediaTrackConst
       return {
         width: { ideal: 1280, max: 1920 },
         height: { ideal: 720, max: 1080 },
-        frameRate: { ideal: 30, max: 30 },
+        frameRate: { ideal: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL, max: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_MAX },
       }
     case 'economy':
       return {
@@ -132,7 +135,7 @@ export function getSingleLayerEncodingsForPreset(tier: VideoPublishTier): RtpEnc
     case 'auto_large_room':
       return [{ maxBitrate: AUTO_LARGE_SINGLE_LAYER_MAX_BITRATE_BPS, maxFramerate: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL }]
     case 'auto_small_room':
-      return [{ maxBitrate: 2_800_000, maxFramerate: 30 }]
+      return [{ maxBitrate: 2_800_000, maxFramerate: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL }]
     case 'economy':
       return [{ maxBitrate: 600_000, maxFramerate: 24 }]
     case 'hd':
@@ -146,7 +149,12 @@ export function getSingleLayerEncodingsForPreset(tier: VideoPublishTier): RtpEnc
 /** Outbound VP8 simulcast (large rooms). */
 export function getSimulcastEncodingsForPreset(tier: VideoPublishTier): RtpEncodingParameters[] {
   const fpsLarge = AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL
-  const fps = tier === 'auto_large_room' ? fpsLarge : tier === 'economy' ? 24 : 30
+  const fps =
+    tier === 'auto_large_room' || tier === 'auto_small_room'
+      ? fpsLarge
+      : tier === 'economy'
+        ? 24
+        : 30
   switch (tier) {
     case 'auto_large_room':
       return [

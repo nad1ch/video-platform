@@ -272,17 +272,22 @@ const volumePercentUi = computed(() =>
 const reportInboundVideoUi = computed(() => !props.isLocal)
 
 /**
- * Remount `<video>` when `playRev` bumps (local cam toggle) so the element cannot keep a stale bitmap.
- * `v-memo` on the clip previously skipped patches for the same `MediaStream` ref when only track.enabled changed.
+ * Stable DOM identity for `<StreamVideo>`: peer id only (no playRev/stream in key).
+ * Track/cam changes are handled inside `StreamVideo` via `playRev` + `bindStream`; remounting on every bump was redundant and costly at scale.
  */
-const streamVideoKey = computed(() => {
-  const rev = props.playRev ?? 0
-  if (props.isLocal) {
-    return `local:${rev}`
-  }
-  const id = typeof props.peerId === 'string' && props.peerId.length > 0 ? props.peerId : 'peer'
-  return `${id}:${rev}`
-})
+const streamVideoStableKey = computed(() =>
+  props.isLocal ? 'local' : typeof props.peerId === 'string' && props.peerId.length > 0 ? props.peerId : 'peer',
+)
+
+/** Memo deps for the video subtree — label/mic/activeSpeaker can change without patching WebRTC. */
+const streamVideoMemoDeps = computed(() => [
+  props.stream,
+  props.playRev ?? 0,
+  showVideo.value,
+  Boolean(props.videoFillCover),
+  props.isLocal,
+  reportInboundVideoUi.value,
+])
 
 function onVolumeSliderInput(ev: Event): void {
   const t = ev.target as HTMLInputElement
@@ -322,9 +327,9 @@ function toggleMenu(): void {
         :listen-muted="remoteListenMuted ?? false"
       />
       <div v-if="showVideo" class="tile-video-wrap">
-        <div class="tile-video-clip">
+        <div class="tile-video-clip" v-memo="streamVideoMemoDeps">
           <StreamVideo
-            :key="streamVideoKey"
+            :key="streamVideoStableKey"
             :stream="stream"
             muted
             :play-rev="playRev"
@@ -791,5 +796,6 @@ function toggleMenu(): void {
   line-height: 1.35;
 }
 </style>
+
 
 
