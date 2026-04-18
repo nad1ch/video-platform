@@ -41,7 +41,7 @@ function readCallDebugOverlay(): boolean {
   }
 }
 
-export type RoomPeerEntry = { peerId: string; displayName: string }
+export type RoomPeerEntry = { peerId: string; displayName: string; avatarUrl?: string }
 
 export const useCallSessionStore = defineStore('callSession', () => {
   const roomId = ref('demo')
@@ -56,34 +56,72 @@ export const useCallSessionStore = defineStore('callSession', () => {
   const callDebugOverlay = ref(readCallDebugOverlay())
   /** displayName from server (room-state / peer-joined / peer-display-name). */
   const remoteDisplayNames = ref<Record<string, string>>({})
+  /** Profile image URLs from server join/roster (http(s)); excludes self. */
+  const remoteAvatarUrls = ref<Record<string, string>>({})
 
   /** Replace remote name map from server peer list (excludes self). */
   function replaceRemoteDisplayNames(peers: RoomPeerEntry[]): void {
     const next: Record<string, string> = {}
+    const nextAv: Record<string, string> = {}
     for (const p of peers) {
       if (p.peerId === selfPeerId.value) {
         continue
       }
       next[p.peerId] = p.displayName
+      if (typeof p.avatarUrl === 'string' && p.avatarUrl.trim().length > 0) {
+        nextAv[p.peerId] = p.avatarUrl.trim()
+      }
     }
     remoteDisplayNames.value = next
+    remoteAvatarUrls.value = nextAv
   }
 
-  function upsertRemoteDisplayName(peerId: string, displayName: string): void {
+  /** Merge avatar + name rows from producer-sync peer roster (does not wipe peers missing from this slice). */
+  function mergeRemotePeersFromProducerSync(peers: RoomPeerEntry[]): void {
+    if (peers.length === 0) {
+      return
+    }
+    let names = remoteDisplayNames.value
+    let avatars = remoteAvatarUrls.value
+    let touched = false
+    for (const p of peers) {
+      if (p.peerId === selfPeerId.value) {
+        continue
+      }
+      touched = true
+      names = { ...names, [p.peerId]: p.displayName }
+      if (typeof p.avatarUrl === 'string' && p.avatarUrl.trim().length > 0) {
+        avatars = { ...avatars, [p.peerId]: p.avatarUrl.trim() }
+      }
+    }
+    if (touched) {
+      remoteDisplayNames.value = names
+      remoteAvatarUrls.value = avatars
+    }
+  }
+
+  function upsertRemoteDisplayName(peerId: string, displayName: string, avatarUrl?: string): void {
     if (peerId === selfPeerId.value) {
       return
     }
     remoteDisplayNames.value = { ...remoteDisplayNames.value, [peerId]: displayName }
+    if (typeof avatarUrl === 'string' && avatarUrl.trim().length > 0) {
+      remoteAvatarUrls.value = { ...remoteAvatarUrls.value, [peerId]: avatarUrl.trim() }
+    }
   }
 
   function removeRemoteDisplayName(peerId: string): void {
     const next = { ...remoteDisplayNames.value }
     delete next[peerId]
     remoteDisplayNames.value = next
+    const nextA = { ...remoteAvatarUrls.value }
+    delete nextA[peerId]
+    remoteAvatarUrls.value = nextA
   }
 
   function clearRemoteDisplayNames(): void {
     remoteDisplayNames.value = {}
+    remoteAvatarUrls.value = {}
   }
 
   /**
@@ -150,7 +188,9 @@ export const useCallSessionStore = defineStore('callSession', () => {
     videoQualityExplicit,
     callDebugOverlay,
     remoteDisplayNames,
+    remoteAvatarUrls,
     replaceRemoteDisplayNames,
+    mergeRemotePeersFromProducerSync,
     upsertRemoteDisplayName,
     removeRemoteDisplayName,
     clearRemoteDisplayNames,

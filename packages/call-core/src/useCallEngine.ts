@@ -1,6 +1,6 @@
 import { getActivePinia, storeToRefs } from 'pinia'
 import type { ComputedRef, Ref } from 'vue'
-import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { loadRemoteListeningPrefs, saveRemoteListeningPrefs } from './audio/remoteListeningPrefs'
 import type { RemoteListenEntry } from './audio/remoteListeningPrefs'
 import { gridSizeTierFromParticipantCount } from './media/gridTier'
@@ -10,6 +10,7 @@ import { useLocalMedia } from './media/useLocalMedia'
 import { useMediasoupDevice } from './media/useMediasoupDevice'
 import { useRemoteMedia } from './media/useRemoteMedia'
 import { useRoomConnection } from './signaling/useRoomConnection'
+import { parseProducerSyncPayload } from './signaling/producerSyncPayload'
 import {
   countActiveCameraPublishersAtWire,
   resolveOutgoingVideoPublishTier,
@@ -27,6 +28,7 @@ import { normalizeDisplayName } from './utils/normalizeDisplayName'
 import { resolveParticipantDisplayName } from './utils/participantsMapper'
 import { waitForCondition } from './utils/waitForCondition'
 import { newCallTabPeerId } from './utils/callTabPeerId'
+import { pickOutboundCameraVideoTrack } from './screenShare/outboundCameraTrack'
 import { useCallScreenShare } from './screenShare/useCallScreenShare'
 
 /** Pinia session store from this package (or a compatible drop-in). */
@@ -53,6 +55,10 @@ export type CallEngineOptions = {
    * so outbound quality follows automatic room profiles only.
    */
   allowManualVideoQuality?: Ref<boolean> | ComputedRef<boolean>
+  /**
+   * Http(s) profile URL mirrored in `join-room` for other participants; also used as local tile `avatarUrl` SSOT.
+   */
+  joinAvatarUrl?: Ref<string | undefined> | ComputedRef<string | undefined>
 }
 
 /**
@@ -79,8 +85,10 @@ export type CallTile = {
   remoteListenMuted?: boolean
   /** Signaled “raise hand” for this peer. */
   handRaised?: boolean
-  /** Camera vs screen for this tile (outbound `producer-video-source` / inbound mapping). */
-  videoPresentation?: 'camera' | 'screen'
+  /** Local outbound / remote inbound presentation (outbound SSOT or `remoteVideoSourceByPeerId`). */
+  videoPresentation?: 'camera' | 'screen' | 'none'
+  /** Profile image when video is off (`join-room` for local; server roster for remotes). */
+  avatarUrl?: string
 }
 
 export type CallChatLine = {
@@ -142,6 +150,17 @@ function readAllowManualVideoQuality(options: CallEngineOptions | undefined): bo
   return false
 }
 
+function readJoinAvatarUrl(options: CallEngineOptions | undefined): string {
+  const r = options?.joinAvatarUrl
+  if (r && typeof r === 'object' && 'value' in r) {
+    const v = (r as Ref<string | undefined>).value
+    if (typeof v === 'string' && v.trim().length > 0) {
+      return v.trim().slice(0, 2048)
+    }
+  }
+  return ''
+}
+
 export function useCallEngine(options?: CallEngineOptions) {
   if (getActivePinia() === undefined) {
     throw new Error(
@@ -158,6 +177,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     videoQualityPreset,
     videoQualityExplicit,
     remoteDisplayNames,
+    remoteAvatarUrls,
   } = storeToRefs(session)
 
   const {
@@ -197,7 +217,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     startLocalMedia,
     stopLocalMedia,
     toggleMic,
-    toggleCam,
+    toggleCam: toggleLocalCam,
     swapLocalAudioInput,
     swapLocalVideoInput,
   } = useLocalMedia({
@@ -230,6 +250,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     remotePeerStreams,
     remotePeerPlayRevs,
     remoteVideoSourceByPeerId,
+    remoteOutboundVideoPausedByPeerId,
     activeSpeakerPeerId,
     networkQuality,
     setupReceivePath,
@@ -251,14 +272,41 @@ export function useCallEngine(options?: CallEngineOptions) {
   /** Local user's raised-hand flag (also echoed from server). */
   const handRaised = ref(false)
 
+  /**
+   * Refreshes local camera capture if there is no live track (fresh `getUserMedia` via {@link swapLocalVideoInput}),
+   * so screen-share stop can always `replaceTrack` with a valid track when a device is available.
+   */
+  async function ensureOutboundCameraTrackForScreenShareRestore(): Promise<void> {
+    const picked = pickOutboundCameraVideoTrack(localStream.value)
+    if (picked && picked.readyState === 'live') {
+      return
+    }
+    const raw =
+      (typeof lastPickedVideoInputId.value === 'string' && lastPickedVideoInputId.value.trim()) ||
+      localStream.value?.getVideoTracks()[0]?.getSettings?.()?.deviceId?.trim() ||
+      ''
+    if (!raw) {
+      return
+    }
+    try {
+      await swapLocalVideoInput(raw)
+    } catch {
+      /* device unavailable */
+    }
+  }
+
   const {
+    outboundVideoSource,
     screenSharing,
+    activePreviewStream,
     stoppingScreenShare,
-    screenShareStream,
-    toggleScreenShare,
+    stopScreenShare,
+    toggleScreenShare: toggleScreenShareInternal,
     teardownScreenShare,
+    applyCamStateForOutbound,
   } = useCallScreenShare({
     localStream,
+    camEnabled,
     localPlayRev,
     replaceOutboundVideoTrack,
     notifyProducerVideoSource: (producerId, source) => {
@@ -269,7 +317,44 @@ export function useCallEngine(options?: CallEngineOptions) {
       }
     },
     canShareScreen: () => readEngineRole(options) === 'participant' && Boolean(inCall.value),
+    ensureOutboundCameraTrack: ensureOutboundCameraTrackForScreenShareRestore,
   })
+
+  /**
+   * Camera ↔ screen are mutually exclusive (Discord-style): toggling camera while sharing
+   * stops screen share first; outbound state stays consistent via {@link applyCamStateForOutbound}.
+   */
+  async function toggleCam(): Promise<void> {
+    if (readEngineRole(options) === 'participant' && inCall.value && outboundVideoSource.value === 'screen') {
+      await stopScreenShare()
+    }
+    toggleLocalCam()
+    applyCamStateForOutbound()
+  }
+
+  /**
+   * Starting screen share turns the physical webcam off if it was on, then starts capture.
+   * Stopping when already shared delegates to the composable (single toggle).
+   */
+  async function toggleScreenShare(): Promise<void> {
+    if (readEngineRole(options) !== 'participant' || !inCall.value) {
+      await toggleScreenShareInternal()
+      return
+    }
+    if (outboundVideoSource.value === 'screen') {
+      await toggleScreenShareInternal()
+      return
+    }
+    if (camEnabled.value) {
+      toggleLocalCam()
+    }
+    applyCamStateForOutbound()
+    await nextTick()
+    await toggleScreenShareInternal()
+  }
+
+  const isCameraActive = computed(() => outboundVideoSource.value === 'camera')
+  const isScreenActive = computed(() => outboundVideoSource.value === 'screen')
 
   async function setCallAudioInputDevice(deviceId: string): Promise<void> {
     lastPickedAudioInputId.value = deviceId.trim()
@@ -344,19 +429,28 @@ export function useCallEngine(options?: CallEngineOptions) {
     ].slice(-12)
   }
 
+  const unsubProducerSyncPeerMeta = addMessageListener((data) => {
+    const parsed = parseProducerSyncPayload(data as unknown)
+    if (parsed?.peers && parsed.peers.length > 0) {
+      session.mergeRemotePeersFromProducerSync(parsed.peers)
+    }
+  })
+
   const unsubPeerPresence = addMessageListener((data) => {
     if (!data || typeof data !== 'object') {
       return
     }
     const m = data as { type?: string; payload?: unknown }
     if (m.type === 'peer-joined') {
-      const p = m.payload as { peerId?: string; displayName?: string }
+      const p = m.payload as { peerId?: string; displayName?: string; avatarUrl?: string }
       if (typeof p.peerId !== 'string' || p.peerId === selfPeerId.value) {
         return
       }
       const rawName = typeof p.displayName === 'string' ? normalizeDisplayName(p.displayName) : ''
       const name = rawName || p.peerId
-      session.upsertRemoteDisplayName(p.peerId, name)
+      const av =
+        typeof p.avatarUrl === 'string' && p.avatarUrl.trim().length > 0 ? p.avatarUrl.trim() : undefined
+      session.upsertRemoteDisplayName(p.peerId, name, av)
       pushCallPresence('join', p.peerId)
       return
     }
@@ -449,11 +543,13 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
   }
 
-  function callJoinRoomPayload(): { roomId: string; peerId: string; displayName: string } {
+  function callJoinRoomPayload(): { roomId: string; peerId: string; displayName: string; avatarUrl?: string } {
+    const av = readJoinAvatarUrl(options)
     return {
       roomId: normalizeDisplayName(roomId.value) || 'demo',
       peerId: stringValue(selfPeerId.value) || newCallTabPeerId(),
       displayName: normalizeDisplayName(selfDisplayName.value) || 'You',
+      ...(av.length > 0 ? { avatarUrl: av } : {}),
     }
   }
 
@@ -526,6 +622,7 @@ export function useCallEngine(options?: CallEngineOptions) {
         videoSimulcast,
         videoPublishTier: wirePublishTier.value,
       })
+      applyCamStateForOutbound()
     }
 
     // Merge-only producer list from server (no consumer teardown). Catches join races where
@@ -581,7 +678,7 @@ export function useCallEngine(options?: CallEngineOptions) {
 
       await roomConnect()
       const p = callJoinRoomPayload()
-      joinRoom(p.roomId, p.peerId, p.displayName)
+      joinRoom(p.roomId, p.peerId, p.displayName, p.avatarUrl)
       await waitForCondition(() => lastRoomState.value != null, 15_000)
 
       await wireCallMediaAfterRoomState()
@@ -607,24 +704,12 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
   }
 
-  /**
-   * Local tile preview: must follow the **same** video track as outbound `replaceTrack`, not only
-   * `localStream` (camera). Use `screenShareStream` as soon as display capture exists — `screenSharing`
-   * is toggled for UI and may lag behind `replaceTrack`, which caused a black local tile.
-   */
-  const localSelfPreviewStream = computed<MediaStream | null>(() => {
-    if (readEngineRole(options) !== 'participant') {
-      return localStream.value
-    }
-    const dm = screenShareStream.value
-    const vt = dm?.getVideoTracks()[0]
-    if (vt && vt.readyState === 'live') {
-      // Preview the original display-capture stream directly. Re-wrapping the track into a synthetic
-      // MediaStream was causing black local previews in some browsers while outbound replaceTrack worked.
-      return dm
-    }
-    return localStream.value
-  })
+  /** Local tile preview: driven only by {@link outboundVideoSource} + streams (see `activePreviewStream`). */
+  const localSelfPreviewStream = computed<MediaStream | null>(() =>
+    readEngineRole(options) !== 'participant'
+      ? localStream.value
+      : activePreviewStream.value,
+  )
 
   function isRemoteVideoActive(
     track: MediaStreamTrack | undefined,
@@ -644,6 +729,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   const tiles = computed<CallTile[]>(() => {
     const selfId = selfPeerId.value
     const mode = readEngineRole(options)
+    const joinAvatarTrim = readJoinAvatarUrl(options)
 
     const remotes = [...remotePeerStreams.value]
       .filter((e) => e.peerId !== selfId)
@@ -657,12 +743,18 @@ export function useCallEngine(options?: CallEngineOptions) {
       const a = stream.getAudioTracks()[0]
       const v = stream.getVideoTracks()[0]
       const remoteSource = remoteVideoSourceByPeerId.value.get(peerId) ?? 'camera'
+      const outboundPaused = remoteOutboundVideoPausedByPeerId.value.get(peerId) === true
+      const remoteVideoOn =
+        remoteSource === 'screen'
+          ? isRemoteVideoActive(v, 'screen')
+          : !outboundPaused && isRemoteVideoActive(v, 'camera')
       remoteTiles.push({
         peerId,
         stream,
         displayName: resolveParticipantDisplayName(peerId, '', false, remoteDisplayNames.value),
+        avatarUrl: remoteAvatarUrls.value[peerId] ?? '',
         isLocal: false,
-        videoEnabled: isRemoteVideoActive(v, remoteSource),
+        videoEnabled: remoteVideoOn,
         audioEnabled: a ? a.enabled : true,
         /** Camera: cover in grid. Screen share (`replaceTrack`): contain so the whole desktop is visible. */
         videoFillCover: remoteSource === 'camera',
@@ -683,12 +775,13 @@ export function useCallEngine(options?: CallEngineOptions) {
         peerId: selfId,
         stream: localSelfPreviewStream.value,
         displayName: normalizeDisplayName(selfDisplayName.value) || 'You',
+        avatarUrl: joinAvatarTrim,
         isLocal: true,
-        videoEnabled: screenSharing.value || camEnabled.value,
+        videoEnabled: outboundVideoSource.value === 'screen' || camEnabled.value,
         audioEnabled: micEnabled.value,
-        /** Webcam grid: cover. Screen capture: same as remote — contain. */
-        videoFillCover: !screenSharing.value && camEnabled.value,
-        videoPresentation: screenSharing.value ? 'screen' : 'camera',
+        /** Webcam grid: cover. Screen share / no local video: contain or off. */
+        videoFillCover: outboundVideoSource.value === 'camera' && camEnabled.value,
+        videoPresentation: outboundVideoSource.value,
         playRev: localPlayRev.value,
         handRaised: handRaised.value,
       },
@@ -714,6 +807,36 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
     return 'call-page__grid--12'
   })
+
+  if (import.meta.env.DEV) {
+    watch(
+      () => tiles.value,
+      (list) => {
+        for (const row of list) {
+          if (row.isLocal) {
+            continue
+          }
+          const v = row.stream?.getVideoTracks()[0]
+          console.log('[call-engine] remote tile', {
+            peerId: row.peerId,
+            hasStream: Boolean(row.stream),
+            videoPresentation: row.videoPresentation,
+            videoEnabled: row.videoEnabled,
+            videoFillCover: row.videoFillCover,
+            playRev: row.playRev,
+            vt: v
+              ? {
+                  readyState: v.readyState,
+                  muted: v.muted,
+                  enabled: v.enabled,
+                }
+              : null,
+          })
+        }
+      },
+      { deep: true, flush: 'post' },
+    )
+  }
 
   watch(
     () => lastRoomState.value?.peers,
@@ -744,24 +867,40 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
   })
 
-  if (import.meta.env.DEV) {
-    watch(
-      () => localStream.value,
-      (s) => {
-        console.log('[localTile] localStream', s)
-        console.log('[localTile] videoTracks', s?.getVideoTracks())
-        console.log('[localTile] audioTracks', s?.getAudioTracks())
-      },
-      { immediate: true },
-    )
-    watch(
-      () => localPlayRev.value,
-      (v) => {
-        console.log('[localTile] localPlayRev', v)
-      },
-      { immediate: true },
-    )
-  }
+  watch(
+    () => [inCall.value, readEngineRole(options), camEnabled.value, localStream.value] as const,
+    async () => {
+      if (!inCall.value || readEngineRole(options) !== 'participant') {
+        return
+      }
+      if (outboundVideoSource.value === 'screen') {
+        return
+      }
+      applyCamStateForOutbound()
+      if (stoppingScreenShare.value) {
+        return
+      }
+      if (outboundVideoSource.value !== 'camera' || !camEnabled.value) {
+        return
+      }
+      const t = pickOutboundCameraVideoTrack(localStream.value)
+      if (!t || t.readyState !== 'live') {
+        return
+      }
+      try {
+        if (import.meta.env.DEV) {
+          console.log('[call-engine] sync outbound video producer with local camera', {
+            trackId: t.id,
+            label: t.label,
+          })
+        }
+        await replaceOutboundVideoTrack(t)
+      } catch {
+        /* producer not ready */
+      }
+    },
+    { flush: 'post' },
+  )
 
   /**
    * Local `track.enabled` alone does not stop RTP — remotes often keep `!muted` and draw black.
@@ -769,12 +908,12 @@ export function useCallEngine(options?: CallEngineOptions) {
    */
   watch(
     () =>
-      [inCall.value, readEngineRole(options), camEnabled.value, screenSharing.value] as const,
-    async ([inC, role, cam, screen]) => {
+      [inCall.value, readEngineRole(options), camEnabled.value, outboundVideoSource.value] as const,
+    async ([inC, role, cam, outbound]) => {
       if (!inC || role !== 'participant' || stoppingScreenShare.value) {
         return
       }
-      const wantPaused = !screen && !cam
+      const wantPaused = outbound !== 'screen' && !cam
       try {
         sendJson({
           type: 'set-outbound-video-paused',
@@ -849,7 +988,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     try {
       await roomConnect()
       const p = callJoinRoomPayload()
-      joinRoom(p.roomId, p.peerId, p.displayName)
+      joinRoom(p.roomId, p.peerId, p.displayName, p.avatarUrl)
       await waitForCondition(() => lastRoomState.value != null, 15_000)
 
       await wireCallMediaAfterRoomState()
@@ -962,6 +1101,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   onScopeDispose(() => {
+    unsubProducerSyncPeerMeta()
     unsubPeerPresence()
     unsubRoomChatAndHands()
     if (displayNameDebounceTimer !== null) {
@@ -1015,6 +1155,8 @@ export function useCallEngine(options?: CallEngineOptions) {
     handRaised,
     toggleRaiseHand,
     screenSharing,
+    isCameraActive,
+    isScreenActive,
     toggleScreenShare,
   }
 }

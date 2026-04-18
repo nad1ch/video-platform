@@ -41,6 +41,8 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       roomId: z.string().min(1),
       peerId: z.string().min(1),
       displayName: z.string().max(64).optional(),
+      /** Optional profile image (https) announced at join; broadcast to room with peer roster. */
+      avatarUrl: z.string().max(2048).optional(),
     }),
   }),
   z.object({
@@ -156,11 +158,15 @@ export type ExistingProducerInfo = {
   kind: MediaKind
   /** When `kind === 'video'`: what `replaceTrack` is showing (signaling-only). */
   videoSource?: 'camera' | 'screen'
+  /** mediasoup producer paused (camera off, not screen); clients hide frozen frames vs track heuristics. */
+  outboundVideoPaused?: boolean
 }
 
 export type RoomPeerInfo = {
   peerId: string
   displayName: string
+  /** Omitted when empty (no avatar at join). */
+  avatarUrl?: string
 }
 
 export type ServerMessage =
@@ -172,7 +178,7 @@ export type ServerMessage =
         existingProducers: ExistingProducerInfo[]
       }
     }
-  | { type: 'peer-joined'; payload: { peerId: string; displayName: string } }
+  | { type: 'peer-joined'; payload: { peerId: string; displayName: string; avatarUrl?: string } }
   | { type: 'peer-display-name'; payload: { peerId: string; displayName: string } }
   | { type: 'peer-left'; payload: { peerId: string } }
   | {
@@ -194,6 +200,7 @@ export type ServerMessage =
       type: 'producer-video-source-changed'
       payload: { producerId: string; peerId: string; source: 'camera' | 'screen' }
     }
+  | { type: 'peer-outbound-video-paused'; payload: { peerId: string; paused: boolean } }
   | {
       type: 'consumed'
       payload: {
@@ -207,6 +214,8 @@ export type ServerMessage =
       type: 'producer-sync'
       payload: {
         producers: ExistingProducerInfo[]
+        /** Other peers in room (excl. recipient): display + avatar for UI resync with producer list. */
+        peers?: RoomPeerInfo[]
         /** `client-refresh` = tab woke / explicit resync; recv transport may still be connected. */
         syncReason?: 'recv-connected' | 'client-refresh'
       }
@@ -265,6 +274,7 @@ function collectExistingProducers(room: Room, excludePeerId: string): ExistingPr
       const row: ExistingProducerInfo = { producerId: producer.id, peerId: p.id, kind: producer.kind }
       if (producer.kind === 'video') {
         row.videoSource = p.getVideoProducerSource(producer.id) ?? 'camera'
+        row.outboundVideoPaused = producer.paused
       }
       list.push(row)
     }
@@ -393,11 +403,44 @@ function sanitizeDisplayName(raw: string | undefined, peerId: string): string {
   return `Guest ${peerId.length > 6 ? peerId.slice(-6) : peerId}`
 }
 
+/** Client-announced profile URL — http(s) only, bounded length. */
+function sanitizeAvatarUrl(raw: string | undefined): string {
+  const t = raw?.trim() ?? ''
+  if (t.length === 0) {
+    return ''
+  }
+  if (t.length > 2048) {
+    return ''
+  }
+  try {
+    const u = new URL(t)
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') {
+      return ''
+    }
+    return t
+  } catch {
+    return ''
+  }
+}
+
+function roomPeerRow(p: Peer): RoomPeerInfo {
+  const row: RoomPeerInfo = { peerId: p.id, displayName: p.displayName }
+  if (p.avatarUrl.length > 0) {
+    row.avatarUrl = p.avatarUrl
+  }
+  return row
+}
+
+function peersInRoomExcept(room: Room, excludePeerId: string): RoomPeerInfo[] {
+  return room.getPeers().filter((x) => x.id !== excludePeerId).map(roomPeerRow)
+}
+
 export async function handleJoinRoom(
   socket: WsSocket,
   roomId: string,
   peerId: string,
   displayName: string | undefined,
+  avatarUrlRaw: string | undefined,
   deps: SignalingDeps,
 ): Promise<void> {
   disassociateSocketFromCurrentRoom(socket, deps)
@@ -407,14 +450,12 @@ export async function handleJoinRoom(
   room = await deps.roomManager.getOrCreateRoom(roomId)
 
   const name = sanitizeDisplayName(displayName, peerId)
-  const peer = new Peer(peerId, socket, room.id, name)
+  const avatarUrlSafe = sanitizeAvatarUrl(avatarUrlRaw)
+  const peer = new Peer(peerId, socket, room.id, name, avatarUrlSafe)
   room.addPeer(peer)
   deps.socketPeer.set(socket, peer)
 
-  const others: RoomPeerInfo[] = room
-    .getPeers()
-    .filter((p) => p.id !== peerId)
-    .map((p) => ({ peerId: p.id, displayName: p.displayName }))
+  const others = peersInRoomExcept(room, peerId)
 
   const routerRtpCapabilities: RtpCapabilities = room.getRouter().rtpCapabilities
   const existingProducers = collectExistingProducers(room, peerId)
@@ -444,7 +485,11 @@ export async function handleJoinRoom(
 
   const joinedMsg: ServerMessage = {
     type: 'peer-joined',
-    payload: { peerId, displayName: name },
+    payload: {
+      peerId,
+      displayName: name,
+      ...(avatarUrlSafe.length > 0 ? { avatarUrl: avatarUrlSafe } : {}),
+    },
   }
   for (const p of room.getPeers()) {
     if (p.id === peerId) {
@@ -584,9 +629,10 @@ export async function handleConnectTransport(
       const r = deps.roomManager.getRoom(peer.roomId)
       if (r) {
         const producers = collectExistingProducers(r, peer.id)
+        const peers = peersInRoomExcept(r, peer.id)
         sendServerMessage(socket, {
           type: 'producer-sync',
-          payload: { producers, syncReason: 'recv-connected' },
+          payload: { producers, peers, syncReason: 'recv-connected' },
         })
       }
     }
@@ -610,6 +656,7 @@ export function handleRequestProducerSync(
     return
   }
   const producers = collectExistingProducers(room, peer.id)
+  const peers = peersInRoomExcept(room, peer.id)
   const resetConsumers = payload?.resetConsumers !== false
   if (process.env.NODE_ENV !== 'production') {
     console.log('[signaling] request-producer-sync', {
@@ -623,6 +670,7 @@ export function handleRequestProducerSync(
     type: 'producer-sync',
     payload: {
       producers,
+      peers,
       syncReason: resetConsumers ? 'client-refresh' : 'recv-connected',
     },
   })
@@ -652,6 +700,17 @@ export async function handleSetOutboundVideoPaused(
     } catch (e) {
       console.warn('[signaling] set-outbound-video-paused failed', { peerId: peer.id, producerId: p.id }, e)
     }
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  const notice: ServerMessage = {
+    type: 'peer-outbound-video-paused',
+    payload: { peerId: peer.id, paused },
+  }
+  for (const other of room.getPeers()) {
+    other.sendJson(notice)
   }
 }
 
@@ -824,9 +883,8 @@ export async function handleConsume(
   }
 
   try {
-    if (sourceProducer.paused) {
-      await sourceProducer.resume()
-    }
+    // Never resume a paused outbound producer here. Camera-off intentionally keeps the SFU producer paused;
+    // resuming would restart RTP for everyone and breaks Meet-style mute. Consumers are still created fine.
 
     const consumer = await transport.consume({
       producerId,

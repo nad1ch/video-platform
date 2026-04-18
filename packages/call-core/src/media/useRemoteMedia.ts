@@ -246,6 +246,7 @@ export function useRemoteMedia() {
   let unsubscribeNewProducer: (() => void) | null = null
   let unsubscribeProducerSync: (() => void) | null = null
   let unsubscribeProducerVideoSource: (() => void) | null = null
+  let unsubscribePeerOutboundPaused: (() => void) | null = null
 
   /**
    * Remote outbound video semantic for layout (camera vs screen).
@@ -254,17 +255,30 @@ export function useRemoteMedia() {
    */
   const remoteVideoSourceByPeerId = shallowRef(new Map<string, 'camera' | 'screen'>())
 
+  /**
+   * SFU paused outbound camera (`set-outbound-video-paused`); avoids frozen last frame when track stays "live".
+   * Set/cleared from producer lists and `peer-outbound-video-paused` signaling.
+   */
+  const remoteOutboundVideoPausedByPeerId = shallowRef(new Map<string, true>())
+
   function applyPeerVideoSource(peerId: string, source: 'camera' | 'screen'): void {
     const next = new Map(remoteVideoSourceByPeerId.value)
     next.set(peerId, source)
     remoteVideoSourceByPeerId.value = next
   }
 
-  function syncPeerVideoSourceFromInfo(info: RemoteProducerInfo): void {
+  function syncPeerVideoMetadataFromInfo(info: RemoteProducerInfo): void {
     if (info.kind !== 'video') {
       return
     }
     applyPeerVideoSource(info.peerId, info.videoSource ?? 'camera')
+    const next = new Map(remoteOutboundVideoPausedByPeerId.value)
+    if (info.outboundVideoPaused === true) {
+      next.set(info.peerId, true)
+    } else if (info.outboundVideoPaused === false) {
+      next.delete(info.peerId)
+    }
+    remoteOutboundVideoPausedByPeerId.value = next
   }
 
   /**
@@ -584,7 +598,7 @@ export function useRemoteMedia() {
       consumersByProducerId.set(producerId, consumer)
       upsertRemoteTrack(peerId, consumer.track)
       if (consumer.kind === 'video') {
-        syncPeerVideoSourceFromInfo(info)
+        syncPeerVideoMetadataFromInfo(info)
         void logInboundVideoDebug(consumer, peerId)
         // Apply target spatial layer immediately — default consumer layer can sit on low simulcast until debounce fires.
         flushPreferredLayersToServer()
@@ -684,6 +698,7 @@ export function useRemoteMedia() {
     producerInfoById.clear()
     consumeLifecycle.resetAllLifecycle()
     remoteVideoSourceByPeerId.value = new Map()
+    remoteOutboundVideoPausedByPeerId.value = new Map()
     const peerIdsToBump = new Set(streamsByPeerId.keys())
     for (const stream of streamsByPeerId.values()) {
       for (const t of [...stream.getTracks()]) {
@@ -745,7 +760,7 @@ export function useRemoteMedia() {
     }
     for (const item of list) {
       producerInfoById.set(item.producerId, item)
-      syncPeerVideoSourceFromInfo(item)
+      syncPeerVideoMetadataFromInfo(item)
     }
     for (const item of list) {
       try {
@@ -814,6 +829,31 @@ export function useRemoteMedia() {
       }
       bumpRemotePeerPlayRev(peerId)
     })
+    unsubscribePeerOutboundPaused?.()
+    unsubscribePeerOutboundPaused = room.addMessageListener((data) => {
+      if (!data || typeof data !== 'object') {
+        return
+      }
+      const m = data as { type?: string; payload?: unknown }
+      if (m.type !== 'peer-outbound-video-paused') {
+        return
+      }
+      const p = m.payload
+      if (!p || typeof p !== 'object') {
+        return
+      }
+      const { peerId, paused } = p as { peerId?: unknown; paused?: unknown }
+      if (typeof peerId !== 'string' || typeof paused !== 'boolean') {
+        return
+      }
+      const next = new Map(remoteOutboundVideoPausedByPeerId.value)
+      if (paused) {
+        next.set(peerId, true)
+      } else {
+        next.delete(peerId)
+      }
+      remoteOutboundVideoPausedByPeerId.value = next
+    })
     unsubscribeProducerSync?.()
     unsubscribeProducerSync = room.addMessageListener((data) => {
       const parsed = parseProducerSyncPayload(data)
@@ -881,6 +921,9 @@ export function useRemoteMedia() {
     const nextSrc = new Map(remoteVideoSourceByPeerId.value)
     nextSrc.delete(peerId)
     remoteVideoSourceByPeerId.value = nextSrc
+    const nextPaused = new Map(remoteOutboundVideoPausedByPeerId.value)
+    nextPaused.delete(peerId)
+    remoteOutboundVideoPausedByPeerId.value = nextPaused
 
     const producerIds: string[] = []
     for (const [producerId, info] of producerInfoById.entries()) {
@@ -976,7 +1019,10 @@ export function useRemoteMedia() {
     unsubscribeProducerSync = null
     unsubscribeProducerVideoSource?.()
     unsubscribeProducerVideoSource = null
+    unsubscribePeerOutboundPaused?.()
+    unsubscribePeerOutboundPaused = null
     remoteVideoSourceByPeerId.value = new Map()
+    remoteOutboundVideoPausedByPeerId.value = new Map()
     for (const consumer of consumersByProducerId.values()) {
       if (!consumer.closed) {
         consumer.close()
@@ -1035,6 +1081,7 @@ export function useRemoteMedia() {
     stopRemoteMedia,
     collectInboundVideoDebugStats,
     remoteVideoSourceByPeerId,
+    remoteOutboundVideoPausedByPeerId,
     requestForcedProducerResync,
     requestHardProducerResync,
   }

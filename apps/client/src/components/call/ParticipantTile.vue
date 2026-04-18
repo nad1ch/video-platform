@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { normalizeDisplayName } from 'call-core'
+import { createLogger } from '@/utils/logger'
 import StreamAudio from '../StreamAudio.vue'
 import StreamVideo from '../StreamVideo.vue'
 
-const { t, locale } = useI18n()
+const tileLog = createLogger('participant-tile')
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   'update:listenVolume': [value: number]
   'update:listenMuted': [value: boolean]
+  /** Local-only label override (`name` null or empty clears). */
+  'commit-local-display-name': [payload: { peerId: string; name: string | null }]
 }>()
 
 const props = defineProps<{
@@ -32,14 +37,65 @@ const props = defineProps<{
   remoteListenMuted?: boolean
   /** “Raise hand” from signaling (call room). */
   raiseHand?: boolean
-  /** Local webcam in grid: cover; screen share / remotes: contain (default false). */
+  /** Passed to StreamVideo `fill-cover`; CallPage sets false so grid video uses contain (no crop). */
   videoFillCover?: boolean
-  /** Shown video is camera or screen capture (semantics / tests; no layout change). */
-  videoPresentation?: 'camera' | 'screen'
+  /** Outbound/inbound presentation; local may be `none` when outbound video is paused / no track. */
+  videoPresentation?: 'camera' | 'screen' | 'none'
+  /** Profile image when video is off (HTTPS URL from parent; never fetch here). */
+  avatarUrl?: string
 }>()
 
 const menuOpen = ref(false)
 const menuRoot = ref<HTMLElement | null>(null)
+
+const editingName = ref(false)
+const nameDraft = ref('')
+const nameInputRef = ref<HTMLInputElement | null>(null)
+
+function peerIdForNameEdit(): string {
+  return typeof props.peerId === 'string' ? props.peerId.trim() : ''
+}
+
+function startNameEdit(): void {
+  const id = peerIdForNameEdit()
+  if (!id) {
+    return
+  }
+  nameDraft.value = props.displayName
+  editingName.value = true
+  void nextTick(() => {
+    nameInputRef.value?.focus()
+    nameInputRef.value?.select()
+  })
+}
+
+function cancelNameEdit(): void {
+  editingName.value = false
+  nameDraft.value = props.displayName
+}
+
+function finishNameEdit(): void {
+  if (!editingName.value) {
+    return
+  }
+  editingName.value = false
+  const id = peerIdForNameEdit()
+  if (!id) {
+    return
+  }
+  const trimmed = normalizeDisplayName(nameDraft.value).slice(0, 64)
+  if (trimmed === normalizeDisplayName(props.displayName)) {
+    return
+  }
+  emit('commit-local-display-name', { peerId: id, name: trimmed.length > 0 ? trimmed : null })
+}
+
+function onNameInputEnter(ev: KeyboardEvent): void {
+  const el = ev.target
+  if (el instanceof HTMLInputElement) {
+    el.blur()
+  }
+}
 
 function persistVolumeMirror(gain: number): void {
   const id = typeof props.peerId === 'string' ? props.peerId.trim() : ''
@@ -168,36 +224,20 @@ const hasLiveLocalVideo = computed(() => {
   if (!props.stream || !props.isLocal) {
     return false
   }
-  // `MediaStreamTrack.enabled` / readyState are not Vue deps — call-core bumps `playRev` on cam toggle.
   void props.playRev
-  // Webcam: require `enabled` so a disabled cam does not render a black frame. Screen capture from
-  // `getDisplayMedia` can be `live` while `enabled` is false in some browsers — still show the tile.
-  if (props.videoPresentation === 'screen') {
-    return props.stream.getVideoTracks().some((t) => t.readyState === 'live')
+  if (props.videoPresentation === 'none') {
+    return false
   }
-  return props.stream
-    .getVideoTracks()
-    .some((t) => t.readyState === 'live' && t.enabled)
+  return props.stream.getVideoTracks().some((t) => t.readyState === 'live')
 })
 
-/** Inbound WebRTC video: `enabled` is not a reliable signal for “sender has frames” (e.g. camera off
- *  then screen-share `replaceTrack` on the same producer). Prefer `muted` + `live`. */
-const hasLiveRemoteVideo = computed(() => {
+/** Remote only: at least one video track with `readyState === 'live'` (do not use `muted` / `enabled`). */
+const hasLiveVideoTrack = computed(() => {
   if (!props.stream || props.isLocal) {
     return false
   }
-  // `MediaStreamTrack.muted` does not trigger Vue deps — call-core bumps `playRev` on track mute/unmute.
   void props.playRev
-  const t = props.stream.getVideoTracks()[0]
-  if (!t || t.readyState !== 'live' || t.muted) {
-    return false
-  }
-  // Webcam: some stacks keep `muted=false` while the sender track is disabled → black tile; require `enabled`.
-  // Screen share uses `videoFillCover=false` and should stay permissive.
-  if (props.videoFillCover) {
-    return t.enabled
-  }
-  return true
+  return props.stream.getVideoTracks().some((t) => t.readyState === 'live')
 })
 
 const showVideo = computed(() => {
@@ -207,76 +247,21 @@ const showVideo = computed(() => {
   if (props.isLocal) {
     return props.videoEnabled && hasLiveLocalVideo.value
   }
-  return props.videoEnabled && hasLiveRemoteVideo.value
+  return props.videoEnabled && hasLiveVideoTrack.value
 })
 
-const videoUi = shallowRef({ readyState: -1, videoWidth: 0, videoHeight: 0 })
-
-function onVideoUi(p: { readyState: number; videoWidth: number; videoHeight: number }): void {
-  if (props.isLocal) {
-    return
-  }
-  videoUi.value = p
-}
-
-watch(
-  () => showVideo.value,
-  (show) => {
-    if (!show) {
-      videoUi.value = { readyState: -1, videoWidth: 0, videoHeight: 0 }
-    }
-  },
-)
-
-const isFrozen = computed(() => {
-  if (props.isLocal || !showVideo.value || !props.stream) {
-    return false
-  }
-  void props.playRev
-  const v = props.stream.getVideoTracks().find((t) => t.kind === 'video')
-  if (!v || v.readyState !== 'live' || v.muted) {
-    return false
-  }
-  const rs = videoUi.value.readyState
-  if (rs < 0) {
-    return false
-  }
-  return rs === HTMLMediaElement.HAVE_NOTHING
+const resolvedAvatarUrl = computed(() => {
+  const u = props.avatarUrl
+  return typeof u === 'string' && u.trim().length > 0 ? u.trim() : ''
 })
 
-const placeholderHint = computed(() => {
-  void locale.value
-  if (props.isLocal) {
-    if (!props.stream) {
-      return t('callPage.tileConnecting')
-    }
-    if (!props.videoEnabled) {
-      return t('callPage.tileCameraOff')
-    }
-    if (!hasLiveLocalVideo.value) {
-      return t('callPage.tileConnecting')
-    }
-    return ''
-  }
-  if (!props.stream) {
-    return t('callPage.tileConnecting')
-  }
-  const v = props.stream.getVideoTracks()[0]
-  if (!v) {
-    return t('callPage.tileNoVideo')
-  }
-  if (!props.videoEnabled) {
-    return t('callPage.tileCameraOff')
-  }
-  return t('callPage.tileConnecting')
-})
+/** Video-off filler: OAuth avatar when provided, else initials (below). */
+const showAvatar = computed(() => !showVideo.value && resolvedAvatarUrl.value !== '')
+const showInitialsFallback = computed(() => !showVideo.value && resolvedAvatarUrl.value === '')
 
 const volumePercentUi = computed(() =>
   Math.min(200, Math.max(0, Math.round((props.remoteListenVolume ?? 1) * 100))),
 )
-
-/** Stable prop for StreamVideo (avoid inline `!isLocal` in template patch diffs). */
-const reportInboundVideoUi = computed(() => !props.isLocal)
 
 /**
  * Stable DOM identity for `<StreamVideo>`: peer id only (no playRev/stream in key).
@@ -291,9 +276,9 @@ const streamVideoMemoDeps = computed(() => [
   props.stream,
   props.playRev ?? 0,
   showVideo.value,
+  hasLiveVideoTrack.value,
   Boolean(props.videoFillCover),
   props.isLocal,
-  reportInboundVideoUi.value,
   props.videoPresentation,
 ])
 
@@ -313,11 +298,50 @@ function onMuteCheckboxChange(ev: Event): void {
 function toggleMenu(): void {
   menuOpen.value = !menuOpen.value
 }
+
+if (import.meta.env.DEV) {
+  watch(
+    () =>
+      [
+        props.peerId,
+        props.isLocal,
+        showVideo.value,
+        props.videoPresentation,
+        props.videoFillCover,
+        props.stream,
+        props.playRev,
+        hasLiveVideoTrack.value,
+        props.videoEnabled,
+      ] as const,
+    () => {
+      if (props.isLocal) {
+        return
+      }
+      const v = props.stream?.getVideoTracks()[0]
+      tileLog.debug('remote tile', {
+        peerId: props.peerId,
+        showVideo: showVideo.value,
+        videoPresentation: props.videoPresentation,
+        videoEnabled: props.videoEnabled,
+        hasLiveVideoTrack: hasLiveVideoTrack.value,
+        vt: v
+          ? {
+              readyState: v.readyState,
+              muted: v.muted,
+              enabled: v.enabled,
+            }
+          : null,
+      })
+    },
+    { flush: 'post' },
+  )
+}
 </script>
 
 <template>
   <div
     class="tile"
+    draggable="false"
     :data-video-presentation="videoPresentation"
     :class="[
       `tile--${sizeTier}`,
@@ -342,16 +366,34 @@ function toggleMenu(): void {
             :stream="stream"
             muted
             :play-rev="playRev"
-            :report-video-ui="reportInboundVideoUi"
-            :video-presentation="isLocal ? videoPresentation : undefined"
+            :report-video-ui="false"
+            :video-presentation="
+              videoPresentation && videoPresentation !== 'none' ? videoPresentation : undefined
+            "
             fill
             :fill-cover="Boolean(videoFillCover)"
-            @video-ui="onVideoUi"
           />
         </div>
-        <div v-if="isFrozen" class="tile-freeze" aria-live="polite">{{ t('callPage.tileReconnecting') }}</div>
         <div class="tile-overlay" aria-hidden="false">
-          <span class="tile-overlay__name">{{ displayName }}</span>
+          <span
+            v-if="!editingName"
+            class="tile-overlay__name tile-overlay__name--editable"
+            title="Double-click to rename (local only)"
+            @dblclick.stop="startNameEdit"
+            >{{ displayName }}</span
+          >
+          <input
+            v-else
+            ref="nameInputRef"
+            v-model="nameDraft"
+            class="tile-overlay__name tile-overlay__name-input"
+            type="text"
+            maxlength="64"
+            aria-label="Edit display name"
+            @blur="finishNameEdit"
+            @keydown.enter.prevent="onNameInputEnter"
+            @keydown.escape.prevent="cancelNameEdit"
+          />
           <span class="tile-overlay__icons" aria-hidden="true">
             <span v-if="raiseHand" class="tile-overlay__hand" :title="t('callPage.raiseHandBadge')" aria-hidden="true"
               >✋</span
@@ -395,10 +437,86 @@ function toggleMenu(): void {
           </span>
         </div>
       </div>
-      <div v-if="showVideo && !isLocal" ref="menuRoot" class="tile-menu">
+      <div v-if="!showVideo" class="tile-placeholder">
+        <div class="tile-placeholder__main">
+          <img
+            v-if="showAvatar"
+            class="tile-placeholder-avatar tile-placeholder-avatar--img"
+            :src="resolvedAvatarUrl"
+            alt=""
+            decoding="async"
+            loading="lazy"
+          />
+          <span v-else-if="showInitialsFallback" class="tile-placeholder-avatar">{{ initials(displayName) }}</span>
+        </div>
+        <div class="tile-overlay tile-overlay--on-placeholder" aria-hidden="false">
+          <span
+            v-if="!editingName"
+            class="tile-overlay__name tile-overlay__name--editable"
+            title="Double-click to rename (local only)"
+            @dblclick.stop="startNameEdit"
+            >{{ displayName }}</span
+          >
+          <input
+            v-else
+            ref="nameInputRef"
+            v-model="nameDraft"
+            class="tile-overlay__name tile-overlay__name-input"
+            type="text"
+            maxlength="64"
+            aria-label="Edit display name"
+            @blur="finishNameEdit"
+            @keydown.enter.prevent="onNameInputEnter"
+            @keydown.escape.prevent="cancelNameEdit"
+          />
+          <span class="tile-overlay__icons" aria-hidden="true">
+            <span v-if="raiseHand" class="tile-overlay__hand" :title="t('callPage.raiseHandBadge')" aria-hidden="true"
+              >✋</span
+            >
+            <span class="tile-overlay__mic" :class="{ 'tile-overlay__mic--off': !audioEnabled }">
+              <svg
+                v-if="audioEnabled"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+                width="15"
+                height="15"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 3c-1.66 0-3 1.2-3 2.7v4.6c0 1.5 1.34 2.7 3 2.7s3-1.2 3-2.7V5.7C15 4.2 13.66 3 12 3Z"
+                />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v3" />
+              </svg>
+              <svg
+                v-else
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                width="15"
+                height="15"
+              >
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+                <path d="M12 19v3" />
+                <path d="M3 3l18 18" />
+              </svg>
+            </span>
+          </span>
+        </div>
+      </div>
+      <div v-if="!isLocal" ref="menuRoot" class="tile-menu tile-menu--remote">
         <button
           type="button"
           class="tile-menu__trigger"
+          draggable="false"
           :aria-expanded="menuOpen"
           :aria-label="t('callPage.participantMenu')"
           @click.stop="toggleMenu"
@@ -428,56 +546,6 @@ function toggleMenu(): void {
           </label>
         </div>
       </div>
-      <div v-if="!showVideo" class="tile-placeholder">
-        <div class="tile-placeholder__main">
-          <span class="tile-placeholder-avatar">{{ initials(displayName) }}</span>
-          <span class="tile-placeholder-hint">{{ placeholderHint }}</span>
-        </div>
-        <div class="tile-overlay tile-overlay--on-placeholder" aria-hidden="false">
-          <span class="tile-overlay__name">{{ displayName }}</span>
-          <span class="tile-overlay__icons" aria-hidden="true">
-            <span v-if="raiseHand" class="tile-overlay__hand" :title="t('callPage.raiseHandBadge')" aria-hidden="true"
-              >✋</span
-            >
-            <span class="tile-overlay__mic" :class="{ 'tile-overlay__mic--off': !audioEnabled }">
-              <svg
-                v-if="audioEnabled"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="2"
-                stroke="currentColor"
-                width="15"
-                height="15"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M12 3c-1.66 0-3 1.2-3 2.7v4.6c0 1.5 1.34 2.7 3 2.7s3-1.2 3-2.7V5.7C15 4.2 13.66 3 12 3Z"
-                />
-                <path stroke-linecap="round" stroke-linejoin="round" d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v3" />
-              </svg>
-              <svg
-                v-else
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="2"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                width="15"
-                height="15"
-              >
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
-                <path d="M12 19v3" />
-                <path d="M3 3l18 18" />
-              </svg>
-            </span>
-          </span>
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -487,6 +555,7 @@ function toggleMenu(): void {
   position: relative;
   display: flex;
   flex-direction: column;
+  width: 100%;
   min-width: 0;
   min-height: 0;
   border-radius: 14px;
@@ -518,27 +587,16 @@ function toggleMenu(): void {
     0 12px 28px rgb(0 0 0 / 0.35);
 }
 
-.tile--lg .tile-media {
-  aspect-ratio: 16 / 10;
-  min-height: 200px;
-}
-
-.tile--md .tile-media {
-  aspect-ratio: 16 / 10;
-  min-height: 140px;
-}
-
-.tile--sm .tile-media {
-  aspect-ratio: 16 / 10;
-  min-height: 100px;
-}
-
 .tile-media {
   position: relative;
-  flex: 1;
+  flex: 0 0 auto;
+  width: 100%;
   min-height: 0;
-  background: transparent;
+  aspect-ratio: 16 / 9;
+  /* Matting behind `object-fit: contain` video (camera or screen); portrait phone feeds letterbox inside. */
+  background: #050508;
   border-radius: 14px;
+  container-type: size;
 }
 
 .tile-audio {
@@ -574,17 +632,14 @@ function toggleMenu(): void {
   border-radius: inherit;
 }
 
-.tile-freeze {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
-  color: var(--text-h, #f3f4f6);
-  font-size: 0.75rem;
-  z-index: 4;
-  pointer-events: none;
+/**
+ * Call grid uses `fill-cover=false` → StreamVideo `object-fit: contain` (camera + screen).
+ * Extra guard for narrow tiles if `fill-cover` ever changes.
+ */
+@media (max-width: 768px) {
+  .tile-video-clip :deep(.stream-video--fill) {
+    object-fit: contain !important;
+  }
 }
 
 .tile-overlay {
@@ -613,6 +668,26 @@ function toggleMenu(): void {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+.tile-overlay__name--editable {
+  pointer-events: auto;
+  cursor: text;
+}
+
+.tile-overlay__name-input {
+  pointer-events: auto;
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  font: inherit;
+  font-weight: 600;
+  color: #f9fafb;
+  background: rgb(0 0 0 / 0.5);
+  border: 1px solid rgb(255 255 255 / 0.22);
+  border-radius: 6px;
+  padding: 0.15rem 0.35rem;
+  outline: none;
 }
 
 .tile-overlay__icons {
@@ -645,16 +720,32 @@ function toggleMenu(): void {
   position: absolute;
   top: 0.4rem;
   right: 0.4rem;
-  z-index: 5;
-  opacity: 0;
-  pointer-events: none;
   transition: opacity 0.15s ease;
 }
 
-.tile:hover .tile-menu,
-.tile--menu-open .tile-menu {
-  opacity: 1;
-  pointer-events: auto;
+/** Remote menu above overlays; visibility: hover on desktop, always on touch / narrow viewports. */
+.tile-menu--remote {
+  z-index: 40;
+}
+
+@media (max-width: 768px), (hover: none) {
+  .tile-menu--remote {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (min-width: 769px) and (hover: hover) {
+  .tile-menu--remote {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .tile:hover .tile-menu--remote,
+  .tile--menu-open .tile-menu--remote {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .tile-menu__trigger {
@@ -687,6 +778,7 @@ function toggleMenu(): void {
   top: calc(100% + 8px);
   bottom: auto;
   right: 0;
+  z-index: 60;
   min-width: 13rem;
   max-width: min(17rem, calc(100vw - 1.5rem));
   padding: 10px 12px 12px;
@@ -765,13 +857,13 @@ function toggleMenu(): void {
   position: absolute;
   inset: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem 0.75rem 3.25rem;
+  padding: 0;
+  margin: 0;
   min-height: 0;
-  text-align: center;
+  min-width: 0;
+  pointer-events: none;
 }
 
 .tile-overlay--on-placeholder {
@@ -779,8 +871,14 @@ function toggleMenu(): void {
 }
 
 .tile-placeholder-avatar {
-  width: 3rem;
-  height: 3rem;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  /* Scales with the tile: cqmin tracks the smaller tile axis; cap relative to inline size. */
+  --tile-avatar-size: min(42cqmin, 32cqi, 7.5rem);
+  width: var(--tile-avatar-size);
+  height: var(--tile-avatar-size);
+  min-width: 2.5rem;
+  min-height: 2.5rem;
   border-radius: 50%;
   background: rgb(255 255 255 / 0.08);
   border: 1px solid rgb(255 255 255 / 0.14);
@@ -789,21 +887,14 @@ function toggleMenu(): void {
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: clamp(0.75rem, 9cqmin, 1.4rem);
 }
 
-.tile--sm .tile-placeholder-avatar {
-  width: 2.25rem;
-  height: 2.25rem;
-  font-size: 0.95rem;
-}
-
-.tile-placeholder-hint {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: rgb(255 255 255 / 0.72);
-  max-width: 12rem;
-  line-height: 1.35;
+.tile-placeholder-avatar--img {
+  display: block;
+  object-fit: cover;
+  padding: 0;
+  flex-shrink: 0;
 }
 </style>
 

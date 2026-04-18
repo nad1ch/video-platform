@@ -19,6 +19,8 @@ export {
   useScreenShare,
   type UseCallScreenShareDeps,
 } from './screenShare/useCallScreenShare'
+export { localPreviewStreamForOutbound } from './screenShare/previewStream'
+export type { OutboundVideoSource } from './screenShare/outboundVideoSource'
 
 export { useCallSessionStore, type RoomPeerEntry } from './stores/callSession'
 

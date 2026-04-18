@@ -12,6 +12,7 @@ import {
   getSingleLayerEncodingsForPreset,
   type VideoPublishTier,
 } from '../media/videoQualityPreset'
+import { ensureDisplayCaptureVideoTrackEnabled } from '../screenShare/displayCaptureVideoTrack'
 import { waitForSignalingMessage } from '../signaling/signalingWait'
 
 function isTransportCreatedMessage(
@@ -115,12 +116,23 @@ function outboundVideoGoogleStartBitrateKbps(tier: VideoPublishTier): number {
 /** Mild Opus cap — stable voice, not aggressive throttling. */
 const OUTBOUND_AUDIO_OPUS_MAX_AVG_BITRATE_BPS = 96_000
 
+type OutboundVideoPublishSnapshot = {
+  videoSimulcast: boolean
+  videoPublishTier: VideoPublishTier
+}
+
 export function useSendTransport() {
   const sendTransport = shallowRef<Transport | null>(null)
   /** First outbound camera producer (used for screen-share `replaceTrack`). */
   const outboundVideoProducer = shallowRef<Producer | null>(null)
   /** First outbound mic producer (`replaceTrack` when user switches input device). */
   const outboundAudioProducer = shallowRef<Producer | null>(null)
+
+  /** Last `publishLocalMedia` video options — used to recreate the producer if it was closed. */
+  let lastOutboundVideoPublish: OutboundVideoPublishSnapshot = {
+    videoSimulcast: false,
+    videoPublishTier: 'balanced',
+  }
 
   /** Serialize outbound video `replaceTrack` (screen ↔ camera spam, device swap + screen). */
   let outboundVideoReplaceChain: Promise<unknown> = Promise.resolve()
@@ -220,6 +232,10 @@ export function useSendTransport() {
     if (!transport || transport.closed) {
       throw new Error('Send transport required')
     }
+    lastOutboundVideoPublish = {
+      videoSimulcast: options?.videoSimulcast === true,
+      videoPublishTier: options?.videoPublishTier ?? 'balanced',
+    }
     for (const track of stream.getTracks()) {
       if (track.kind !== 'audio' && track.kind !== 'video') {
         continue
@@ -268,16 +284,68 @@ export function useSendTransport() {
     }
   }
 
-  async function replaceOutboundVideoTrack(track: MediaStreamTrack): Promise<string> {
+  async function createOutboundVideoProducerFromTrack(track: MediaStreamTrack): Promise<Producer> {
+    const transport = sendTransport.value
+    if (!transport || transport.closed) {
+      throw new Error('Send transport required to recreate video producer')
+    }
+    const { videoSimulcast, videoPublishTier } = lastOutboundVideoPublish
+    const encodings = videoSimulcast
+      ? getSimulcastEncodingsForPreset(videoPublishTier)
+      : getSingleLayerEncodingsForPreset(videoPublishTier)
+    if (import.meta.env.DEV) {
+      console.log('[produce] recreate outbound video producer', { trackId: track.id, videoPublishTier, videoSimulcast })
+    }
+    const producer = await transport.produce({
+      track,
+      encodings,
+      codecOptions: {
+        videoGoogleStartBitrate: outboundVideoGoogleStartBitrateKbps(videoPublishTier),
+      },
+    })
+    outboundVideoProducer.value = producer
+    return producer
+  }
+
+  async function replaceOutboundVideoTrack(track: MediaStreamTrack | null): Promise<string> {
     const job = outboundVideoReplaceChain.then(async (): Promise<string> => {
-      const p = outboundVideoProducer.value
+      let p = outboundVideoProducer.value
+
+      if (track && track.kind === 'video') {
+        if (!p || p.closed) {
+          p = await createOutboundVideoProducerFromTrack(track)
+          ensureDisplayCaptureVideoTrackEnabled(track)
+          if (import.meta.env.DEV) {
+            console.log('[produce] replaceOutboundVideoTrack (recreated producer)', { producerId: p.id, trackId: track.id })
+          }
+          return p.id
+        }
+        if (import.meta.env.DEV) {
+          console.log('[produce] replaceOutboundVideoTrack', { producerId: p.id, trackId: track.id })
+        }
+        await p.replaceTrack({ track })
+        ensureDisplayCaptureVideoTrackEnabled(track)
+        if (import.meta.env.DEV) {
+          console.log('[produce] replaceTrack applied', p.id)
+        }
+        return p.id
+      }
+
       if (!p || p.closed) {
         throw new Error('Outbound video producer is not ready')
       }
+      /**
+       * `replaceTrack({ track: null })` detaches the sender track — often **no new RTP** until a track
+       * is attached again. Remotes can keep an inbound `MediaStreamTrack` in `readyState === 'live'`
+       * with **no decoded frames** (last frame / black / pixel sum 0) until producer pause + UI align.
+       * For **camera off** while a device still exists, prefer attaching a **live** camera track with
+       * `track.enabled === false` and server `set-outbound-video-paused` (Meet-style), not null.
+       * Use null only when there is **no** usable camera track to publish (e.g. after screen share end).
+       */
       if (import.meta.env.DEV) {
-        console.log('[produce] replaceOutboundVideoTrack', { producerId: p.id, trackId: track.id })
+        console.log('[produce] replaceOutboundVideoTrack', { producerId: p.id, trackId: null })
       }
-      await p.replaceTrack({ track })
+      await p.replaceTrack({ track: null })
       if (import.meta.env.DEV) {
         console.log('[produce] replaceTrack applied', p.id)
       }

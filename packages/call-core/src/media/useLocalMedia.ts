@@ -1,6 +1,11 @@
 import { onUnmounted, ref, shallowRef } from 'vue'
 import { applyWebcamContentHint, DEFAULT_CALL_AUDIO_CONSTRAINTS } from './defaultMediaConstraints'
 import type { VideoPublishTier } from './videoQualityPreset'
+import {
+  persistVideoInputDeviceIdFromTrack,
+  readPreferredVideoInputDeviceId,
+  selectPreferredVideoInputDeviceId,
+} from './preferredVideoInputDevice'
 import { getCallVideoConstraints } from './videoQualityPreset'
 
 export type UseLocalMediaOptions = {
@@ -121,10 +126,22 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     }
     stopLocalMedia()
     const tier = resolveTier()
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { ...DEFAULT_CALL_AUDIO_CONSTRAINTS },
-      video: { ...getCallVideoConstraints(tier) },
-    })
+    const devices = await safeEnumerateDevices()
+    const preferred = selectPreferredVideoInputDeviceId(devices, readPreferredVideoInputDeviceId())
+    const videoConstraints = { ...getCallVideoConstraints(tier) }
+    const stream =
+      preferred !== undefined
+        ? await getUserMediaWithDeviceIdExactThenIdeal(
+            {
+              audio: { ...DEFAULT_CALL_AUDIO_CONSTRAINTS },
+              video: { ...videoConstraints, deviceId: { ideal: preferred } },
+            },
+            'video',
+          )
+        : await navigator.mediaDevices.getUserMedia({
+            audio: { ...DEFAULT_CALL_AUDIO_CONSTRAINTS },
+            video: videoConstraints,
+          })
     for (const t of stream.getVideoTracks()) {
       applyWebcamContentHint(t)
     }
@@ -141,6 +158,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
       )
     }
     localStream.value = stream
+    persistVideoInputDeviceIdFromTrack(stream.getVideoTracks()[0])
     for (const t of stream.getVideoTracks()) {
       t.enabled = false
     }
@@ -266,6 +284,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
       old.stop()
     }
     stream.addTrack(nt)
+    persistVideoInputDeviceIdFromTrack(nt)
     syncFlagsFromStream()
     localPlayRev.value += 1
     await refreshMediaDevices()

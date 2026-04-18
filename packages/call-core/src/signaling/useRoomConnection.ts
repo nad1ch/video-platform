@@ -12,11 +12,14 @@ export type RemoteProducerInfo = {
   kind: 'audio' | 'video'
   /** When `kind === 'video'`: camera vs screen (`replaceTrack` on same producer). */
   videoSource?: 'camera' | 'screen'
+  /** SFU producer paused (camera off); omit on older servers. */
+  outboundVideoPaused?: boolean
 }
 
 export type RoomPeerInfo = {
   peerId: string
   displayName: string
+  avatarUrl?: string
 }
 
 export type RoomStatePayload = {
@@ -27,7 +30,7 @@ export type RoomStatePayload = {
 
 type ServerMessage =
   | { type: 'room-state'; payload: RoomStatePayload }
-  | { type: 'peer-joined'; payload: { peerId: string; displayName: string } }
+  | { type: 'peer-joined'; payload: { peerId: string; displayName: string; avatarUrl?: string } }
   | { type: 'peer-left'; payload: { peerId: string } }
   | { type: 'peer-display-name'; payload: { peerId: string; displayName: string } }
   | {
@@ -108,13 +111,17 @@ function parseRoomPeerList(raw: unknown): RoomPeerInfo[] | null {
       continue
     }
     if (p && typeof p === 'object') {
-      const o = p as { peerId?: unknown; displayName?: unknown }
+      const o = p as { peerId?: unknown; displayName?: unknown; avatarUrl?: unknown }
       if (typeof o.peerId === 'string') {
         const raw =
           typeof o.displayName === 'string' ? normalizeDisplayName(o.displayName) : ''
         const dn =
           raw.length > 0 ? raw.slice(0, 64) : guestDisplayNameForPeerId(o.peerId)
-        out.push({ peerId: o.peerId, displayName: dn })
+        const row: RoomPeerInfo = { peerId: o.peerId, displayName: dn }
+        if (typeof o.avatarUrl === 'string' && o.avatarUrl.trim().length > 0) {
+          row.avatarUrl = o.avatarUrl.trim().slice(0, 2048)
+        }
+        out.push(row)
       }
     }
   }
@@ -143,7 +150,13 @@ function parseServerMessage(data: unknown): ServerMessage | null {
         if (!row || typeof row !== 'object') {
           continue
         }
-        const r = row as { producerId?: unknown; peerId?: unknown; kind?: unknown; videoSource?: unknown }
+        const r = row as {
+          producerId?: unknown
+          peerId?: unknown
+          kind?: unknown
+          videoSource?: unknown
+          outboundVideoPaused?: unknown
+        }
         if (
           typeof r.producerId === 'string' &&
           typeof r.peerId === 'string' &&
@@ -159,6 +172,9 @@ function parseServerMessage(data: unknown): ServerMessage | null {
             (r.videoSource === 'camera' || r.videoSource === 'screen')
           ) {
             entry.videoSource = r.videoSource
+          }
+          if (r.kind === 'video' && typeof r.outboundVideoPaused === 'boolean') {
+            entry.outboundVideoPaused = r.outboundVideoPaused
           }
           existingProducers.push(entry)
         }
@@ -179,7 +195,15 @@ function parseServerMessage(data: unknown): ServerMessage | null {
       typeof payload.displayName === 'string' ? normalizeDisplayName(payload.displayName) : ''
     const displayName =
       raw.length > 0 ? raw.slice(0, 64) : guestDisplayNameForPeerId(payload.peerId)
-    return { type: 'peer-joined', payload: { peerId: payload.peerId, displayName } }
+    const avatarRaw = payload.avatarUrl
+    const out: { type: 'peer-joined'; payload: { peerId: string; displayName: string; avatarUrl?: string } } = {
+      type: 'peer-joined',
+      payload: { peerId: payload.peerId, displayName },
+    }
+    if (typeof avatarRaw === 'string' && avatarRaw.trim().length > 0) {
+      out.payload.avatarUrl = avatarRaw.trim().slice(0, 2048)
+    }
+    return out
   }
 
   if (data.type === 'peer-display-name' && isRecord(payload) && typeof payload.peerId === 'string') {
@@ -256,6 +280,9 @@ function tryParseNewProducerNotice(data: unknown): RemoteProducerInfo | null {
     (payload.videoSource === 'camera' || payload.videoSource === 'screen')
   ) {
     out.videoSource = payload.videoSource
+  }
+  if (kind === 'video' && typeof payload.outboundVideoPaused === 'boolean') {
+    out.outboundVideoPaused = payload.outboundVideoPaused
   }
   return out
 }
@@ -354,14 +381,18 @@ export function useRoomConnection(wsUrl?: string) {
       return
     }
     if (message.type === 'peer-joined') {
-      const { peerId, displayName } = message.payload
+      const { peerId, displayName, avatarUrl } = message.payload
       if (!peers.value.includes(peerId)) {
         peers.value = [...peers.value, peerId]
       }
       if (lastRoomState.value && !lastRoomState.value.peers.some((p) => p.peerId === peerId)) {
+        const entry: RoomPeerInfo = { peerId, displayName }
+        if (typeof avatarUrl === 'string' && avatarUrl.length > 0) {
+          entry.avatarUrl = avatarUrl
+        }
         lastRoomState.value = {
           ...lastRoomState.value,
-          peers: [...lastRoomState.value.peers, { peerId, displayName }],
+          peers: [...lastRoomState.value.peers, entry],
         }
       }
       return
@@ -481,15 +512,19 @@ export function useRoomConnection(wsUrl?: string) {
     ws.send(JSON.stringify(obj))
   }
 
-  function joinRoom(roomId: string, peerId: string, displayName?: string): void {
+  function joinRoom(roomId: string, peerId: string, displayName?: string, avatarUrl?: string): void {
     const ws = wsRef.value
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not open; await connect() before joinRoom()')
     }
     const trimmed = typeof displayName === 'string' ? normalizeDisplayName(displayName) : undefined
-    const payload: { roomId: string; peerId: string; displayName?: string } = { roomId, peerId }
+    const payload: { roomId: string; peerId: string; displayName?: string; avatarUrl?: string } = { roomId, peerId }
     if (trimmed !== undefined && trimmed.length > 0) {
       payload.displayName = trimmed.slice(0, 64)
+    }
+    const av = typeof avatarUrl === 'string' ? avatarUrl.trim() : ''
+    if (av.length > 0) {
+      payload.avatarUrl = av.slice(0, 2048)
     }
     ws.send(JSON.stringify({ type: 'join-room', payload }))
   }

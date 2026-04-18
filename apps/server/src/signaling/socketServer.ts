@@ -107,8 +107,8 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'join-room': {
-              const { roomId, peerId, displayName } = parsed.data.payload
-              await handleJoinRoom(socket, roomId, peerId, displayName, deps)
+              const { roomId, peerId, displayName, avatarUrl } = parsed.data.payload
+              await handleJoinRoom(socket, roomId, peerId, displayName, avatarUrl, deps)
               break
             }
             case 'update-display-name': {

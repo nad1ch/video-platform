@@ -7,6 +7,8 @@ export class Peer {
   readonly roomId: string
   /** Shown to other participants (from join-room / update-display-name). */
   displayName: string
+  /** HTTPS profile URL from join-room (opaque to SFU). */
+  avatarUrl: string
 
   private readonly transports = new Map<string, WebRtcTransport>()
   private readonly producers = new Map<string, Producer>()
@@ -14,11 +16,12 @@ export class Peer {
   /** Outbound video semantic (`replaceTrack` does not change id). */
   private readonly videoProducerSourceById = new Map<string, 'camera' | 'screen'>()
 
-  constructor(id: string, socket: WebSocket, roomId: string, displayName: string) {
+  constructor(id: string, socket: WebSocket, roomId: string, displayName: string, avatarUrl = '') {
     this.id = id
     this.socket = socket
     this.roomId = roomId
     this.displayName = displayName
+    this.avatarUrl = avatarUrl
   }
 
   sendJson(payload: unknown): void {

@@ -14,11 +14,8 @@ const props = withDefaults(
     fillCover?: boolean
     /** When false, skip videoUi events (local preview). */
     reportVideoUi?: boolean
-    /**
-     * Local preview only (`reportVideoUi: false`): screen capture tracks may stay `live` with
-     * `enabled === false` in some browsers — still attach to `<video>` so screen share is visible.
-     */
-    videoPresentation?: 'camera' | 'screen'
+    /** Local preview: `none` = no outbound video (paused / no track). Remotes omit this prop. */
+    videoPresentation?: 'camera' | 'screen' | 'none'
   }>(),
   {
     muted: false,
@@ -35,8 +32,8 @@ const emit = defineEmits<{
 const el = ref<HTMLVideoElement | null>(null)
 
 /**
- * Match ParticipantTile `showVideo` / hasLive*Video so we do not mount `<video>` when the track is off,
- * avoiding play() racing element teardown (AbortError). `playRev` is listed so mute/unmute bumps recompute.
+ * Media-driven: mount `<video>` when there is a **live** video track. Inbound WebRTC `muted` / `enabled`
+ * can lag RTP — do not gate on them. `playRev` keeps this in sync when tracks change without stream ref churn.
  */
 const hasUsableVideoTrack = computed(() => {
   void props.playRev
@@ -45,23 +42,14 @@ const hasUsableVideoTrack = computed(() => {
   if (!s) {
     return false
   }
-  const t = s.getVideoTracks()[0]
-  if (!t || t.readyState !== 'live') {
+  if (props.videoPresentation === 'none') {
     return false
   }
-  if (!props.reportVideoUi) {
-    if (props.videoPresentation === 'screen') {
-      return true
-    }
-    return t.enabled
-  }
-  if (t.muted) {
+  const tracks = s.getVideoTracks()
+  if (tracks.length === 0) {
     return false
   }
-  if (props.fillCover) {
-    return t.enabled
-  }
-  return true
+  return tracks.some((t) => t.readyState === 'live')
 })
 
 function cleanupVideoElement(v: HTMLVideoElement | null): void {
@@ -131,40 +119,9 @@ function detachVideoUi(): void {
   detachUiListeners = null
 }
 
-/**
- * Inbound WebRTC video can stop RTP while the `<video>` element keeps the last decoded bitmap
- * (OBS / producer pause / second tab) — flush `srcObject` on `mute` so the UI can switch cleanly.
- */
-function attachInboundVideoTrackListeners(v: HTMLVideoElement, s: MediaStream): void {
+/** Reserved for inbound track lifecycle; do not clear `<video>` on `track.muted` (flag can disagree with RTP). */
+function attachInboundVideoTrackListeners(): void {
   clearInboundVideoTrackListeners()
-  if (!props.reportVideoUi) {
-    return
-  }
-  const track = s.getVideoTracks()[0]
-  if (!track) {
-    return
-  }
-  const flushLastFrame = (): void => {
-    if (!props.reportVideoUi || !track.muted) {
-      return
-    }
-    try {
-      v.pause()
-      v.srcObject = null
-    } catch {
-      /* ignore */
-    }
-    emit('videoUi', { readyState: -1, videoWidth: 0, videoHeight: 0 })
-  }
-  const onUnmute = (): void => {
-    void bindStream()
-  }
-  track.addEventListener('mute', flushLastFrame)
-  track.addEventListener('unmute', onUnmute)
-  detachInboundVideoListeners = () => {
-    track.removeEventListener('mute', flushLastFrame)
-    track.removeEventListener('unmute', onUnmute)
-  }
 }
 
 function attachVideoUiListeners(v: HTMLVideoElement): void {
@@ -255,7 +212,7 @@ async function bindStream(): Promise<void> {
         videoHeight: v.videoHeight,
       })
     }
-    attachInboundVideoTrackListeners(v, s)
+    attachInboundVideoTrackListeners()
     return
   }
 
@@ -263,11 +220,11 @@ async function bindStream(): Promise<void> {
   lastBoundPlayRev = rev
   detachVideoUi()
 
-  if (vid?.muted && props.reportVideoUi) {
-    cleanupVideoElement(v)
-    attachInboundVideoTrackListeners(v, s)
-    emit('videoUi', { readyState: -1, videoWidth: 0, videoHeight: 0 })
-    return
+  if (import.meta.env.DEV && props.reportVideoUi) {
+    streamVideoLog.debug('bindStream attach', {
+      trackId: tid,
+      fillCover: props.fillCover,
+    })
   }
 
   if (v.srcObject !== s) {
@@ -298,7 +255,7 @@ async function bindStream(): Promise<void> {
     }
   }
 
-  attachInboundVideoTrackListeners(v, s)
+  attachInboundVideoTrackListeners()
 }
 
 /** Before v-if removes the element: pause + clear so play() cannot race teardown. */

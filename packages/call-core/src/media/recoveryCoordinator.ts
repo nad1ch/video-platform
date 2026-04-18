@@ -1,5 +1,5 @@
 import { mergeProducerLists } from './mergeProducerLists'
-import type { RemoteProducerInfo } from '../signaling/useRoomConnection'
+import type { RemoteProducerInfo, RoomPeerInfo } from '../signaling/useRoomConnection'
 
 /**
  * Recovery coordination for recv-side producer lists (`producer-sync`, `new-producer`, outbound
@@ -12,6 +12,8 @@ export type ProducerSyncParsed = {
   producers: RemoteProducerInfo[]
   /** True when `syncReason === 'client-refresh'` (server-driven full resync). */
   forceResync: boolean
+  /** Optional roster rows (same as room-state peers) when server attaches peer metadata to sync. */
+  peers?: RoomPeerInfo[]
 }
 
 /** Inbound recovery signals the recv orchestrator may map from WS / setup. */

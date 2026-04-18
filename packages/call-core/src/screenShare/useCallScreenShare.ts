@@ -1,11 +1,13 @@
 import { computed, nextTick, type Ref, type ShallowRef, shallowRef, ref } from 'vue'
+import type { OutboundVideoSource } from './outboundVideoSource'
+import { ensureDisplayCaptureVideoTrackEnabled } from './displayCaptureVideoTrack'
+import { pickOutboundCameraVideoTrack } from './outboundCameraTrack'
+import { localPreviewStreamForOutbound } from './previewStream'
 
 type GetDisplayMediaConstraints = Parameters<MediaDevices['getDisplayMedia']>[0]
 
 /**
  * Display capture for outbound `replaceTrack` on the existing video producer.
- * Moderate fps range: lower ideal reduces encoder/CPU load for full-desktop capture.
- * No `exact` constraints — browsers may downscale further under load.
  */
 export const SCREEN_SHARE_GET_DISPLAY_MEDIA: GetDisplayMediaConstraints = {
   audio: false,
@@ -16,38 +18,61 @@ export const SCREEN_SHARE_GET_DISPLAY_MEDIA: GetDisplayMediaConstraints = {
 
 export type UseCallScreenShareDeps = {
   localStream: ShallowRef<MediaStream | null>
+  camEnabled: Ref<boolean>
   localPlayRev: Ref<number>
-  replaceOutboundVideoTrack: (track: MediaStreamTrack) => Promise<string>
-  /** Must not throw if WS is closing — wrap sendJson in caller if needed. */
+  replaceOutboundVideoTrack: (track: MediaStreamTrack | null) => Promise<string>
   notifyProducerVideoSource: (producerId: string, source: 'camera' | 'screen') => void
-  /** Typically: participant role and in-call. */
   canShareScreen: () => boolean
+  /**
+   * If the local video track is missing or not live, reacquire camera (e.g. `getUserMedia` via device swap)
+   * before `replaceTrack` so we never restore only from a stale `MediaStreamTrack` ref.
+   */
+  ensureOutboundCameraTrack?: () => Promise<void>
+}
+
+function stopAllTracks(stream: MediaStream | null): void {
+  if (!stream) {
+    return
+  }
+  for (const t of stream.getTracks()) {
+    try {
+      t.stop()
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /**
- * Isolated screen-share state + lifecycle for the call engine.
- * Outbound path reuses `replaceOutboundVideoTrack` (serialized in `useSendTransport`).
- *
- * Restore order: prefer the **current** live camera track on `localStream` (handles mid-share
- * device swap), then fall back to the snapshot taken before screen track replaced the producer.
+ * Screen-share controller: explicit {@link OutboundVideoSource}, serialized transitions,
+ * single `ended` listener, preview derived from outbound + streams only ({@link activePreviewStream}).
  */
 export function useCallScreenShare(deps: UseCallScreenShareDeps) {
-  const screenSharing = ref(false)
+  const outboundVideoSource = ref<OutboundVideoSource>('none')
   const screenShareStream = shallowRef<MediaStream | null>(null)
-  /** Snapshot before `replaceTrack(screen)` — backup if `localStream` has no live camera track. */
-  const lastCameraTrack = shallowRef<MediaStreamTrack | null>(null)
 
-  let detachEndedListener: (() => void) | null = null
-  /** True for the whole async `stopScreenShare` body (matches engine `set-outbound-video-paused` guard). */
+  let detachScreenTrackEnded: (() => void) | null = null
   const stoppingScreenShare = ref(false)
-  /** Prevents overlapping starts (getDisplayMedia) — stops are serialized via `opChain`. */
-  let startInFlight = false
+  let startOperationInFlight = false
 
-  /** Serialize start/stop/toggle + browser "ended" relative to each other. */
+  /** Serialize start / stop / browser-ended. */
   let opChain: Promise<void> = Promise.resolve()
 
   const screenTrack = computed(() => screenShareStream.value?.getVideoTracks()[0] ?? null)
-  const isReplacingCamera = computed(() => screenSharing.value)
+  const screenSharing = computed(() => outboundVideoSource.value === 'screen')
+
+  const activePreviewStream = computed<MediaStream | null>(() => {
+    void deps.localPlayRev.value
+    return localPreviewStreamForOutbound(
+      outboundVideoSource.value,
+      screenShareStream.value,
+      deps.localStream.value,
+    )
+  })
+
+  function bumpPlayRev(): void {
+    deps.localPlayRev.value += 1
+  }
 
   function enqueue<T>(fn: () => Promise<T>): Promise<T> {
     const job = opChain.then(() => fn())
@@ -58,119 +83,187 @@ export function useCallScreenShare(deps: UseCallScreenShareDeps) {
     return job
   }
 
-  function pickLiveCameraTrack(): MediaStreamTrack | undefined {
-    return deps.localStream.value?.getVideoTracks().find((t) => t.readyState === 'live')
+  function attachScreenTrackEndedListener(track: MediaStreamTrack): void {
+    detachScreenTrackEnded?.()
+    const onEnded = (): void => {
+      void enqueue(() => stopScreenShareBody())
+    }
+    track.addEventListener('ended', onEnded, { once: true })
+    detachScreenTrackEnded = (): void => {
+      track.removeEventListener('ended', onEnded)
+      detachScreenTrackEnded = null
+    }
   }
 
-  function stopDisplayTracks(stream: MediaStream | null): void {
-    if (!stream) {
+  /**
+   * Keeps SSOT in sync when not screen-sharing (wire, cam toggle, device change).
+   * Does nothing while outbound is `screen`.
+   */
+  function applyCamStateForOutbound(): void {
+    if (outboundVideoSource.value === 'screen') {
       return
     }
-    for (const t of stream.getTracks()) {
-      t.stop()
-    }
+    const live = pickOutboundCameraVideoTrack(deps.localStream.value)
+    outboundVideoSource.value =
+      deps.camEnabled.value && live !== undefined && live.readyState === 'live' && live.enabled
+        ? 'camera'
+        : 'none'
   }
 
   async function stopScreenShareBody(): Promise<void> {
     if (stoppingScreenShare.value) {
       return
     }
-    const dm = screenShareStream.value
-    const wasSharing = screenSharing.value
-    if (!dm && !wasSharing) {
+    if (outboundVideoSource.value !== 'screen' && !screenShareStream.value) {
       return
     }
+
     stoppingScreenShare.value = true
-    detachEndedListener?.()
-    detachEndedListener = null
+    detachScreenTrackEnded?.()
+    detachScreenTrackEnded = null
+
+    const dm = screenShareStream.value
 
     try {
-      if (wasSharing) {
-        screenSharing.value = false
-        try {
-          const currentCam = pickLiveCameraTrack()
-          const snap = lastCameraTrack.value
-          lastCameraTrack.value = null
-          const cam =
-            currentCam?.readyState === 'live'
-              ? currentCam
-              : snap && snap.readyState === 'live'
-                ? snap
-                : undefined
-          if (cam) {
-            const producerId = await deps.replaceOutboundVideoTrack(cam)
-            await nextTick()
-            deps.notifyProducerVideoSource(producerId, 'camera')
-          }
-        } catch {
-          /* producer may already be torn down */
-        }
+      await deps.ensureOutboundCameraTrack?.()
+      const liveCam = pickOutboundCameraVideoTrack(deps.localStream.value)
+      /** Prefer attaching any **live** local video track to the producer (even if `enabled === false`); server pause mirrors “cam off”. */
+      const hasLiveLocalVideo = liveCam !== undefined && liveCam.readyState === 'live'
+
+      if (import.meta.env.DEV) {
+        const vs = deps.localStream.value?.getVideoTracks() ?? []
+        console.log('[call-screen-share] stop restore candidates', {
+          localVideoTrackIds: vs.map((t) => ({ id: t.id, label: t.label, readyState: t.readyState, enabled: t.enabled })),
+          pickedForReplace: liveCam
+            ? { id: liveCam.id, label: liveCam.label, readyState: liveCam.readyState, enabled: liveCam.enabled }
+            : null,
+          hasLiveLocalVideo,
+        })
+      }
+
+      if (hasLiveLocalVideo && liveCam) {
+        const producerId = await deps.replaceOutboundVideoTrack(liveCam)
+        await nextTick()
+        deps.notifyProducerVideoSource(producerId, 'camera')
+        outboundVideoSource.value =
+          deps.camEnabled.value && liveCam.enabled
+            ? 'camera'
+            : 'none'
+      } else {
+        /** No **live** local camera track after `ensureOutboundCameraTrack` — last resort null (see useSendTransport note). */
+        const producerId = await deps.replaceOutboundVideoTrack(null)
+        await nextTick()
+        deps.notifyProducerVideoSource(producerId, 'camera')
+        outboundVideoSource.value = 'none'
       }
 
       if (dm) {
-        stopDisplayTracks(dm)
+        stopAllTracks(dm)
       }
       screenShareStream.value = null
-      deps.localPlayRev.value += 1
+      bumpPlayRev()
+
+      if (import.meta.env.DEV) {
+        const preview = localPreviewStreamForOutbound(
+          outboundVideoSource.value,
+          screenShareStream.value,
+          deps.localStream.value,
+        )
+        const pv = preview?.getVideoTracks()?.[0]
+        console.log('[call-screen-share] stopped', {
+          outbound: outboundVideoSource.value,
+          previewFirstVideo: pv
+            ? { id: pv.id, label: pv.label, readyState: pv.readyState }
+            : null,
+        })
+      }
+    } catch {
+      if (dm) {
+        stopAllTracks(dm)
+      }
+      screenShareStream.value = null
+      try {
+        await deps.ensureOutboundCameraTrack?.()
+        const liveCam = pickOutboundCameraVideoTrack(deps.localStream.value)
+        if (liveCam && liveCam.readyState === 'live') {
+          const producerId = await deps.replaceOutboundVideoTrack(liveCam)
+          deps.notifyProducerVideoSource(producerId, 'camera')
+          outboundVideoSource.value =
+            deps.camEnabled.value && liveCam.enabled ? 'camera' : 'none'
+        } else {
+          /** Same as main stop path: null only when no live camera track exists. */
+          const producerId = await deps.replaceOutboundVideoTrack(null)
+          deps.notifyProducerVideoSource(producerId, 'camera')
+          outboundVideoSource.value = 'none'
+        }
+      } catch {
+        /* producer torn down */
+      }
+      bumpPlayRev()
     } finally {
       stoppingScreenShare.value = false
     }
   }
 
   async function startScreenShareBody(): Promise<void> {
-    if (!deps.canShareScreen() || startInFlight || screenSharing.value) {
+    if (!deps.canShareScreen() || startOperationInFlight || outboundVideoSource.value === 'screen') {
       return
     }
-    startInFlight = true
-    lastCameraTrack.value = pickLiveCameraTrack() ?? null
+    startOperationInFlight = true
+
     try {
+      if (import.meta.env.DEV) {
+        const vs = deps.localStream.value?.getVideoTracks() ?? []
+        console.log('[call-screen-share] start (local camera before capture)', {
+          localVideoTrackIds: vs.map((t) => ({
+            id: t.id,
+            label: t.label,
+            readyState: t.readyState,
+            enabled: t.enabled,
+          })),
+        })
+      }
       const dm = await navigator.mediaDevices.getDisplayMedia(SCREEN_SHARE_GET_DISPLAY_MEDIA)
       const vt = dm.getVideoTracks()[0]
       if (!vt) {
-        stopDisplayTracks(dm)
-        lastCameraTrack.value = null
+        stopAllTracks(dm)
         return
       }
+
+      vt.enabled = true
+
       screenShareStream.value = dm
-      detachEndedListener?.()
-      const onEnded = () => {
-        void enqueue(() => stopScreenShareBody())
-      }
-      vt.addEventListener('ended', onEnded, { once: true })
-      detachEndedListener = () => {
-        vt.removeEventListener('ended', onEnded)
-      }
-      if (import.meta.env.DEV) {
-        console.log('[screen-share] display track acquired', {
-          id: vt.id,
-          readyState: vt.readyState,
-          enabled: vt.enabled,
-          muted: vt.muted,
-        })
-      }
-      screenSharing.value = true
-      deps.localPlayRev.value += 1
+      attachScreenTrackEndedListener(vt)
+      outboundVideoSource.value = 'screen'
+      bumpPlayRev()
       await nextTick()
 
       const producerId = await deps.replaceOutboundVideoTrack(vt)
-      if (import.meta.env.DEV) {
-        console.log('[screen-share] replaceTrack done; notify source', { producerId, source: 'screen' as const })
-      }
+      vt.enabled = true
+      ensureDisplayCaptureVideoTrackEnabled(vt)
       await nextTick()
       deps.notifyProducerVideoSource(producerId, 'screen')
-      deps.localPlayRev.value += 1
+      bumpPlayRev()
+
+      if (import.meta.env.DEV) {
+        console.log('[call-screen-share] started', {
+          producerId,
+          trackId: vt.id,
+          readyState: vt.readyState,
+          enabled: vt.enabled,
+        })
+      }
     } catch {
       const orphan = screenShareStream.value
       if (orphan) {
-        stopDisplayTracks(orphan)
+        stopAllTracks(orphan)
       }
-      detachEndedListener?.()
-      detachEndedListener = null
+      detachScreenTrackEnded?.()
+      detachScreenTrackEnded = null
       screenShareStream.value = null
-      screenSharing.value = false
-      lastCameraTrack.value = null
+      applyCamStateForOutbound()
     } finally {
-      startInFlight = false
+      startOperationInFlight = false
     }
   }
 
@@ -183,7 +276,7 @@ export function useCallScreenShare(deps: UseCallScreenShareDeps) {
       return Promise.resolve()
     }
     return enqueue(async () => {
-      if (screenSharing.value) {
+      if (outboundVideoSource.value === 'screen') {
         await stopScreenShareBody()
       } else {
         await startScreenShareBody()
@@ -192,29 +285,28 @@ export function useCallScreenShare(deps: UseCallScreenShareDeps) {
   }
 
   function teardownScreenShare(): void {
-    detachEndedListener?.()
-    detachEndedListener = null
-    stopDisplayTracks(screenShareStream.value)
+    detachScreenTrackEnded?.()
+    detachScreenTrackEnded = null
+    stopAllTracks(screenShareStream.value)
     screenShareStream.value = null
-    screenSharing.value = false
-    lastCameraTrack.value = null
+    outboundVideoSource.value = 'none'
     stoppingScreenShare.value = false
-    startInFlight = false
+    startOperationInFlight = false
     opChain = Promise.resolve()
   }
 
   return {
+    outboundVideoSource,
     screenSharing,
-    stoppingScreenShare,
     screenShareStream,
-    lastCameraTrack,
     screenTrack,
-    isReplacingCamera,
+    activePreviewStream,
+    stoppingScreenShare,
     stopScreenShare,
     toggleScreenShare,
     teardownScreenShare,
+    applyCamStateForOutbound,
   }
 }
 
-/** Same composable — alias for app-level `useScreenShare()` naming without `Call`. */
 export { useCallScreenShare as useScreenShare }

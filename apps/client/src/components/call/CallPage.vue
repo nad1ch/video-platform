@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import type { CallChatLine } from 'call-core'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
@@ -16,6 +16,10 @@ import {
 } from 'call-core'
 import { useAuth } from '@/composables/useAuth'
 import { createLogger } from '@/utils/logger'
+import {
+  loadCallTileLocalDisplayOverrides,
+  saveCallTileLocalDisplayOverrides,
+} from '@/utils/callTileLocalDisplayNames'
 
 const callPageLog = createLogger('call-page')
 import ParticipantTile from './ParticipantTile.vue'
@@ -41,6 +45,12 @@ watch(
 
 /** Manual video quality: backend `role === 'admin'` (see ADMIN_EMAILS / ADMIN_TWITCH_IDS on server). */
 const allowManualVideoQuality = computed(() => isAdmin.value)
+
+/** Sent with `join-room` and used as local tile `avatarUrl` SSOT (same URL remotes receive via roster). */
+const joinAvatarUrl = computed(() => {
+  const a = user.value?.avatar
+  return typeof a === 'string' && a.trim().length > 0 ? a.trim() : undefined
+})
 
 /** Debug overlay UI: admins always; in dev also local engineers (no secret in URL). */
 const showCallDebugControls = computed(() => isAdmin.value || import.meta.env.DEV)
@@ -77,7 +87,7 @@ const {
   toggleRaiseHand,
   screenSharing,
   toggleScreenShare,
-} = useCallOrchestrator({ allowManualVideoQuality })
+} = useCallOrchestrator({ allowManualVideoQuality, joinAvatarUrl })
 
 const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
 
@@ -94,8 +104,31 @@ const displayNameUiByPeerId = computed(() =>
   }),
 )
 
+/** Local-only tile labels (persists in localStorage). */
+const localTileDisplayOverrides = shallowRef<Record<string, string>>(loadCallTileLocalDisplayOverrides())
+
+function onCommitLocalTileDisplayName(payload: { peerId: string; name: string | null }): void {
+  const id = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
+  if (!id) {
+    return
+  }
+  const next = { ...localTileDisplayOverrides.value }
+  const t = payload.name != null ? normalizeDisplayName(payload.name).slice(0, 64) : ''
+  if (!t) {
+    delete next[id]
+  } else {
+    next[id] = t
+  }
+  localTileDisplayOverrides.value = next
+  saveCallTileLocalDisplayOverrides(next)
+}
+
 /** Single resolver: cache hit for peers in map; fallback for chat lines whose peer left the map. */
 function peerDisplayName(peerId: string): string {
+  const o = localTileDisplayOverrides.value[peerId]
+  if (typeof o === 'string' && normalizeDisplayName(o)) {
+    return normalizeDisplayName(o).slice(0, 64)
+  }
   const participants = participantsByPeerId.value
   const opts = {
     selfPeerId: selfPeerId.value,
@@ -143,6 +176,20 @@ watch(
     }
     for (const id of remoteListenMutedByPeer.keys()) {
       if (!ids.has(id)) remoteListenMutedByPeer.delete(id)
+    }
+    const o = localTileDisplayOverrides.value
+    let next: Record<string, string> | null = null
+    for (const k of Object.keys(o)) {
+      if (!ids.has(k)) {
+        if (!next) {
+          next = { ...o }
+        }
+        delete next[k]
+      }
+    }
+    if (next) {
+      localTileDisplayOverrides.value = next
+      saveCallTileLocalDisplayOverrides(next)
     }
   },
 )
@@ -361,6 +408,156 @@ const orderedTiles = computed(() => {
   return order.map((id) => map.get(id)!).filter(Boolean)
 })
 
+/** Pixels; must match `gap` in `gridStyle`. */
+const GAP = 12
+const MIN_TILE_WIDTH = 180
+
+/**
+ * Matches `.call-page__grid { padding: 6px }` — total inset per axis (left+right / top+bottom)
+ * so tile layout matches the content box inside padded grid (room for drag/hover ring).
+ */
+const GRID_CONTENT_INSET_PX = 12
+
+function getGrid(n: number, width: number, height: number) {
+  if (n === 0) {
+    return { cols: 1, rows: 0, tileWidth: 0, tileHeight: 0 }
+  }
+
+  const layoutW = Math.max(1, width - GRID_CONTENT_INSET_PX)
+  const layoutH = Math.max(1, height - GRID_CONTENT_INSET_PX)
+
+  let best: { cols: number; rows: number; tileWidth: number; tileHeight: number } | null = null
+  let bestScore = Infinity
+
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols)
+
+    const totalGapW = GAP * (cols - 1)
+    const totalGapH = GAP * (rows - 1)
+
+    const innerW = layoutW - totalGapW
+    const innerH = layoutH - totalGapH
+
+    if (innerW <= 0 || innerH <= 0) {
+      continue
+    }
+
+    let tileWidth = innerW / cols
+    let tileHeight = tileWidth * (9 / 16)
+
+    if (tileHeight * rows > innerH) {
+      tileHeight = innerH / rows
+      tileWidth = tileHeight * (16 / 9)
+    }
+
+    const tilesW = tileWidth * cols
+    const totalWidth = tilesW + totalGapW
+
+    if (totalWidth > layoutW && tilesW > 0) {
+      const scale = (layoutW - totalGapW) / tilesW
+      tileWidth *= scale
+      tileHeight *= scale
+    }
+
+    if (tileWidth < MIN_TILE_WIDTH) {
+      continue
+    }
+
+    if (import.meta.env.DEV) {
+      callPageLog.debug('grid candidate', { cols, rows, tileWidth, tileHeight })
+    }
+
+    const usedHeight = tileHeight * rows + totalGapH
+    const usedWidth = tileWidth * cols + totalGapW
+    /** Balance width + height (height-only minimization always favored cols=1 “strip”). */
+    const heightDiff = Math.abs(layoutH - usedHeight)
+    const widthDiff = Math.abs(layoutW - usedWidth)
+    const score = Math.max(heightDiff, widthDiff)
+
+    if (score < bestScore) {
+      bestScore = score
+      best = { cols, rows, tileWidth, tileHeight }
+    }
+  }
+
+  if (!best) {
+    const cols = Math.min(n, 2)
+    const rows = Math.ceil(n / cols)
+
+    const tileWidth = layoutW / cols
+    const tileHeight = tileWidth * (9 / 16)
+
+    return { cols, rows, tileWidth, tileHeight }
+  }
+
+  return best
+}
+
+/** Call stage (not the inner grid) — ResizeObserver + content-box size matches real tile area. */
+const stageRef = ref<HTMLElement | null>(null)
+const stageSize = shallowRef({ width: 0, height: 0 })
+
+watch(
+  stageRef,
+  (el, _prev, onCleanup) => {
+    if (!el) {
+      return
+    }
+    const update = (): void => {
+      const rect = el.getBoundingClientRect()
+      if (typeof getComputedStyle === 'undefined') {
+        stageSize.value = { width: rect.width, height: rect.height }
+        return
+      }
+      const cs = getComputedStyle(el)
+      const pl = parseFloat(cs.paddingLeft) || 0
+      const pr = parseFloat(cs.paddingRight) || 0
+      const pt = parseFloat(cs.paddingTop) || 0
+      const pb = parseFloat(cs.paddingBottom) || 0
+      stageSize.value = {
+        width: Math.max(0, rect.width - pl - pr),
+        height: Math.max(0, rect.height - pt - pb),
+      }
+    }
+    update()
+    if (typeof ResizeObserver === 'undefined') {
+      return
+    }
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    onCleanup(() => {
+      ro.disconnect()
+    })
+  },
+  { immediate: true, flush: 'post' },
+)
+
+if (import.meta.env.DEV) {
+  watch(
+    () => {
+      const n = orderedTiles.value.length
+      if (!n) {
+        return null
+      }
+      const { cols, rows, tileWidth, tileHeight } = getGrid(n, stageSize.value.width, stageSize.value.height)
+      return { n, cols, rows, tileWidth, tileHeight }
+    },
+    (v) => {
+      if (!v) {
+        return
+      }
+      if (v.n > 1 && v.cols === 1) {
+        callPageLog.debug('call grid: unexpected single column layout', {
+          ...v,
+          stageW: stageSize.value.width,
+          stageH: stageSize.value.height,
+        })
+      }
+    },
+    { flush: 'post' },
+  )
+}
+
 /** One name-resolution pass per grid row when order/tiles/participants change (large grids). */
 const orderedGridRows = computed(() => {
   const participants = participantsByPeerId.value
@@ -369,29 +566,37 @@ const orderedGridRows = computed(() => {
     selfDisplayName: selfDisplayName.value,
   }
   const names = displayNameUiByPeerId.value
-  return orderedTiles.value.map((tile) => ({
-    tile,
-    displayName:
-      names.get(tile.peerId) ??
-      resolvePeerDisplayNameForUi(tile.peerId, participants, opts),
-  }))
+  const overrides = localTileDisplayOverrides.value
+  return orderedTiles.value.map((tile) => {
+    const ov = overrides[tile.peerId]
+    if (typeof ov === 'string' && normalizeDisplayName(ov)) {
+      return { tile, displayName: normalizeDisplayName(ov).slice(0, 64) }
+    }
+    return {
+      tile,
+      displayName:
+        names.get(tile.peerId) ??
+        resolvePeerDisplayNameForUi(tile.peerId, participants, opts),
+    }
+  })
 })
 
-const callGridModifier = computed(() => {
+const gridStyle = computed(() => {
   const n = orderedTiles.value.length
-  if (n <= 1) {
-    return 'call-page__grid--1'
+  if (!n) {
+    return {}
   }
-  if (n === 2) {
-    return 'call-page__grid--2'
+
+  const { cols, rows, tileWidth, tileHeight } = getGrid(n, stageSize.value.width, stageSize.value.height)
+
+  return {
+    display: 'grid',
+    gridTemplateColumns: `repeat(${cols}, ${tileWidth}px)`,
+    gridTemplateRows: `repeat(${rows}, ${tileHeight}px)`,
+    gap: `${GAP}px`,
+    justifyContent: 'center',
+    alignContent: 'center',
   }
-  if (n <= 4) {
-    return 'call-page__grid--4'
-  }
-  if (n <= 9) {
-    return 'call-page__grid--9'
-  }
-  return 'call-page__grid--12'
 })
 
 /** Повна ширина вьюпорта для сітки тільки коли хоча б один учасник з увімкненим відео. */
@@ -472,11 +677,20 @@ onMounted(() => {
   } catch {
     /* ignore */
   }
+  if (import.meta.env.DEV) {
+    ;(globalThis as unknown as { __CALL_DEBUG__: { stageSize: typeof stageSize; orderedTiles: typeof orderedTiles } }).__CALL_DEBUG__ = {
+      stageSize,
+      orderedTiles,
+    }
+  }
 })
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
   document.documentElement.classList.remove(CALL_ROUTE_HTML_CLASS)
+  if (import.meta.env.DEV) {
+    delete (globalThis as unknown as { __CALL_DEBUG__?: unknown }).__CALL_DEBUG__
+  }
 })
 
 watch(
@@ -499,7 +713,7 @@ watch(
         'call-page--prejoin': !session.inCall,
         'call-page--stage-full': stageFullBleed,
       }"
-      :flush="stageFullBleed"
+      :flush="session.inCall"
     >
     <div class="call-page__shell">
       <section v-if="!session.inCall" class="call-page__pre">
@@ -565,25 +779,26 @@ watch(
           </TransitionGroup>
         </div>
 
-        <div class="call-page__stage">
-          <div class="call-page__grid" :class="[callGridModifier, { 'call-page__grid--fullbleed': stageFullBleed }]">
+        <div ref="stageRef" class="call-page__stage">
+          <div class="call-page__grid" :style="gridStyle">
             <div
               v-for="row in orderedGridRows"
               :key="row.tile.peerId"
               class="call-page__tile-wrap"
-              :class="{ 'call-page__tile-wrap--over': dragOverPeerId === row.tile.peerId }"
+              draggable="true"
+              :title="t('callPage.dragReorder')"
+              :aria-label="t('callPage.dragReorder')"
+              :class="{
+                'call-page__tile-wrap--over': dragOverPeerId === row.tile.peerId,
+                'call-page__tile-wrap--dragging': dragPeerId === row.tile.peerId,
+              }"
+              @dragstart="onTileDragStart($event, row.tile.peerId)"
               @dragover.prevent="onTileDragOver($event, row.tile.peerId)"
               @dragleave="onTileDragLeave(row.tile.peerId)"
               @drop.prevent="onTileDrop(row.tile.peerId)"
               @dragend="onTileDragEnd"
             >
-              <div
-                class="call-page__drag-handle"
-                draggable="true"
-                :title="t('callPage.dragReorder')"
-                :aria-label="t('callPage.dragReorder')"
-                @dragstart="onTileDragStart($event, row.tile.peerId)"
-              />
+              <!-- Grid uses object-fit: contain (fill-cover false) so wide tiles do not crop webcam/screen. -->
               <ParticipantTile
                 class="call-page__tile-inner"
                 :peer-id="row.tile.peerId"
@@ -592,7 +807,7 @@ watch(
                 :is-local="row.tile.isLocal"
                 :video-enabled="row.tile.videoEnabled"
                 :audio-enabled="row.tile.audioEnabled"
-                :video-fill-cover="row.tile.videoFillCover !== false"
+                :video-fill-cover="false"
                 :play-rev="row.tile.playRev"
                 :size-tier="sizeTier"
                 :active-speaker="activeSpeakerPeerId === row.tile.peerId"
@@ -600,8 +815,10 @@ watch(
                 :remote-listen-muted="row.tile.remoteListenMuted"
                 :raise-hand="Boolean(row.tile.handRaised)"
                 :video-presentation="row.tile.videoPresentation"
+                :avatar-url="row.tile.avatarUrl ?? ''"
                 @update:listen-volume="remoteListenVolumeHandler(row.tile.peerId)"
                 @update:listen-muted="remoteListenMutedHandler(row.tile.peerId)"
+                @commit-local-display-name="onCommitLocalTileDisplayName"
               />
             </div>
           </div>
@@ -775,7 +992,7 @@ watch(
           </div>
           <button
             type="button"
-            class="call-page__dock-btn"
+            class="call-page__dock-btn call-page__dock-btn--compact-narrow-hide"
             :class="{ 'call-page__dock-btn--accent': handRaised }"
             :title="handRaised ? t('callPage.raiseHandOff') : t('callPage.raiseHandOn')"
             :aria-pressed="handRaised"
@@ -785,7 +1002,7 @@ watch(
           </button>
           <button
             type="button"
-            class="call-page__dock-btn"
+            class="call-page__dock-btn call-page__dock-btn--compact-narrow-hide"
             :class="{ 'call-page__dock-btn--accent': screenSharing }"
             :title="screenSharing ? t('callPage.screenShareStop') : t('callPage.screenShareStart')"
             :aria-pressed="screenSharing"
@@ -810,7 +1027,7 @@ watch(
           </button>
           <button
             type="button"
-            class="call-page__dock-btn"
+            class="call-page__dock-btn call-page__dock-btn--compact-narrow-hide"
             :class="{ 'call-page__dock-btn--accent': chatOpen }"
             :title="chatOpen ? t('callPage.chatHide') : t('callPage.chatShow')"
             :aria-pressed="chatOpen"
@@ -962,6 +1179,12 @@ watch(
   background: transparent;
   color: var(--sa-color-text-body);
   padding-block: 0 var(--sa-space-6);
+}
+
+/* Під час дзвінка сітка займає усю ширину в’юпорту (не лише ~72rem / ~850px по центру). */
+.call-page.app-container:not(.call-page--prejoin) {
+  max-width: 100%;
+  width: 100%;
 }
 
 .call-page:not(.call-page--prejoin) {
@@ -1148,70 +1371,45 @@ watch(
   padding: 20px;
 }
 
+/* Flex column + height:100% on a flex child often resolves wrong; flex:1 + min-height:0 matches Discord-style fill. */
 .call-page__grid {
-  display: grid;
-  gap: 0.85rem;
   flex: 1;
   min-height: 0;
-  align-content: center;
-  justify-items: stretch;
   width: 100%;
-  overflow: visible;
-}
-
-.call-page__grid--1 {
-  grid-template-columns: 1fr;
-  grid-template-rows: minmax(0, 1fr);
-  max-width: min(1100px, 100%);
-  margin-inline: auto;
-  align-content: stretch;
-}
-
-.call-page__grid--1 .call-page__tile-wrap {
-  min-height: 0;
-  max-height: 100%;
-}
-
-.call-page__grid--2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  max-width: min(1200px, 100%);
-  margin-inline: auto;
-  align-content: center;
-}
-
-.call-page__grid--4 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  max-width: min(1280px, 100%);
-  margin-inline: auto;
-}
-
-.call-page__grid--9 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  max-width: min(1400px, 100%);
-  margin-inline: auto;
-}
-
-.call-page__grid--12 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  max-width: min(1600px, 100%);
-  margin-inline: auto;
-}
-
-.call-page__grid.call-page__grid--fullbleed {
-  max-width: 100%;
-  margin-inline: 0;
+  display: grid;
+  overflow: hidden;
+  /* Matches GRID_CONTENT_INSET_PX in getGrid (6px each side): space for drag-active ring without clipping. */
+  padding: 6px;
+  box-sizing: border-box;
 }
 
 .call-page__tile-wrap {
+  width: 100%;
+  height: 100%;
   position: relative;
   z-index: 0;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+  isolation: isolate;
+  cursor: grab;
+  /* Match `.tile` in ParticipantTile (14px); stable radius avoids jitter vs --over-only radius + shadow animation. */
+  border-radius: 14px;
+  transition: box-shadow 0.15s ease;
 }
 
-/* Сусідня клітина сітки інакше перекриває outline/тінь попередньої (порядок малювання в DOM). */
+.call-page__tile-wrap--dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+/* Drag source: kill tile hover lift / shadow transition so 14px clip + video mask stay aligned. */
+.call-page__tile-wrap--dragging :deep(.tile) {
+  transform: none !important;
+}
+
+.call-page__tile-inner :deep(button:not(:disabled)) {
+  cursor: pointer;
+}
+
+/* Сусідня клітина сітки інакше перекриває тінь попередньої (порядок малювання в DOM). */
 .call-page__tile-wrap:hover,
 .call-page__tile-wrap:focus-within,
 .call-page__tile-wrap--over {
@@ -1219,45 +1417,28 @@ watch(
 }
 
 .call-page__tile-wrap--over {
-  outline: 2px dashed color-mix(in srgb, var(--sa-color-primary, #a78bfa) 85%, transparent);
-  outline-offset: 5px;
-  border-radius: 18px;
-}
-
-.call-page__drag-handle {
-  position: absolute;
-  left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 8;
-  width: 11px;
-  height: 48px;
-  border-radius: 7px;
-  background: rgb(255 255 255 / 0.1);
-  border: 1px solid rgb(255 255 255 / 0.22);
-  cursor: grab;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
-}
-
-.call-page__drag-handle:active {
-  cursor: grabbing;
+  outline: none;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--sa-color-primary, #a78bfa) 90%, transparent),
+    0 0 0 6px color-mix(in srgb, var(--sa-color-primary, #a78bfa) 22%, transparent);
 }
 
 .call-page__tile-inner {
-  flex: 1;
+  width: 100%;
   min-height: 0;
   min-width: 0;
 }
 
 .call-page__tile-inner :deep(.tile) {
-  height: 100%;
+  width: 100%;
   min-height: 0;
 }
 
 .call-page__dock {
   position: fixed;
   left: 50%;
-  bottom: 1.15rem;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   z-index: 40;
   display: flex;
@@ -1265,8 +1446,11 @@ watch(
   align-items: center;
   justify-content: center;
   gap: 0.55rem 0.75rem;
-  max-width: calc(100vw - 1.5rem);
+  width: max-content;
+  max-width: calc(100vw - 16px);
   padding: 0.62rem 0.9rem;
+  /* overflow visible: device picker popups extend above the bar */
+  box-sizing: border-box;
   border-radius: 999px;
   background: color-mix(in srgb, var(--sa-color-surface-raised) 76%, #000);
   border: 1px solid var(--sa-color-border);
@@ -1461,6 +1645,77 @@ watch(
   line-height: 1;
 }
 
+@media (max-width: 768px) {
+  .call-page__dock-btn {
+    width: 2.6rem;
+    height: 2.6rem;
+  }
+
+  .call-page__dock-btn--split-main {
+    width: 2.3rem;
+    height: 2.6rem;
+    min-height: 2.6rem;
+  }
+
+  .call-page__dock-btn--split-chev {
+    width: 1.5rem;
+    min-width: 1.5rem;
+    height: 2.6rem;
+  }
+
+  .call-page__dock-split--solo .call-page__dock-btn--split-main {
+    width: 2.6rem;
+    height: 2.6rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .call-page__dock {
+    padding: 0.4rem 0.6rem;
+    gap: 0.4rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+
+  .call-page__dock::-webkit-scrollbar {
+    display: none;
+  }
+
+  .call-page__dock-btn {
+    width: 2.2rem;
+    height: 2.2rem;
+    flex-shrink: 0;
+  }
+
+  .call-page__dock-btn--split-main {
+    width: 2rem;
+    height: 2.2rem;
+    min-height: 2.2rem;
+  }
+
+  .call-page__dock-btn--split-chev {
+    width: 1.2rem;
+    min-width: 1.2rem;
+    height: 2.2rem;
+  }
+
+  .call-page__dock-split--solo .call-page__dock-btn--split-main {
+    width: 2.2rem;
+    height: 2.2rem;
+  }
+
+  .call-page__dock-split {
+    flex-shrink: 0;
+  }
+
+  .call-page__dock-btn--compact-narrow-hide {
+    display: none;
+  }
+}
+
 .call-page__chat {
   position: fixed;
   top: 4.5rem;
@@ -1638,22 +1893,6 @@ watch(
 
 .call-page__chat-send {
   flex-shrink: 0;
-}
-
-@media (max-width: 720px) {
-  .call-page__grid--2,
-  .call-page__grid--4,
-  .call-page__grid--9,
-  .call-page__grid--12 {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (min-width: 721px) and (max-width: 1100px) {
-  .call-page__grid--9,
-  .call-page__grid--12 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 .call-page__debug {
