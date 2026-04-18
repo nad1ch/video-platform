@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import '@/eat-first/style.css'
+import '@/eat-first/styles/theme.css'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'

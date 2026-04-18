@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import heroSideAsset from '@/assets/landing-dev/hero-side.svg'
 import callCardOne from '@/assets/landing-dev/call-card-1.svg'
@@ -24,8 +24,11 @@ import whoTakeShitIcon from '@/assets/landing/who-take-shit.png'
 import wordlivIcon from '@/assets/landing/wordliv.png'
 import { persistLocale } from '@/eat-first/i18n/index.js'
 import { STREAM_APP_BRAND_NAME, STREAMER_NICK, STREAMER_TWITCH_URL } from '@/eat-first/constants/brand.js'
+import { getLandingScrollTopForHash } from '@/utils/landingAnchorScroll'
 
 const { locale } = useI18n()
+const route = useRoute()
+const router = useRouter()
 
 const defaultWordleStreamer =
   (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
@@ -63,51 +66,71 @@ type PositionedBolt = {
 type NavItem = {
   label: string
   href: string
-  x: number
 }
 
 type CallBannerCard = {
   asset: string
-  x: number
+  style: Readonly<Record<string, string>>
 }
 
 type GameCard = {
   title: string
   icon: string
   to: { name: string; query?: Record<string, string>; params?: Record<string, string> }
-  x: number
-  y: number
-  width: number
-  height: number
-  labelX: number
-  labelY: number
-  labelWidth: number
-  labelHeight: number
-  iconX: number
-  iconY: number
-  iconWidth: number
-  iconHeight: number
+  cardStyle: Readonly<Record<string, string>>
+  labelStyle: Readonly<Record<string, string>>
+  iconStyle: Readonly<Record<string, string>>
 }
 
-const navItems: NavItem[] = [
-  { label: 'VideoCall', href: '#videocall', x: 496.22 },
-  { label: 'Games', href: '#games', x: 583.97 },
-  { label: 'Economy', href: '#economy', x: 658.22 },
-  { label: 'Safety', href: '#footer', x: 738.47 },
-  { label: 'Support', href: '#footer', x: 804.47 },
-  { label: 'Developers', href: '#footer', x: 887.44 },
-]
+/** Memoized design-token strings (`calc(var(--u) * n)`) — same output, fewer allocations when building frozen data. */
+const pxCache = new Map<number, string>()
+function px(value: number): string {
+  let s = pxCache.get(value)
+  if (s === undefined) {
+    s = `calc(var(--u) * ${value})`
+    pxCache.set(value, s)
+  }
+  return s
+}
 
-const localeButtons = [
-  { code: 'en', label: 'English' },
-  { code: 'de', label: 'Germany' },
-  { code: 'uk', label: 'Ukrainian' },
-  { code: 'pl', label: 'Spanish' },
-] as const
+const authRoute = { path: '/app', query: { needLogin: '1' } } as const
+const callRoute = { name: 'call' } as const
+const homeRoute = { name: 'home' } as const
+
+const navItems = Object.freeze([
+  Object.freeze({ label: 'VideoCall', href: '#videocall', style: Object.freeze({ left: px(496.22) }) }),
+  Object.freeze({ label: 'Games', href: '#games', style: Object.freeze({ left: px(583.97) }) }),
+  Object.freeze({ label: 'Economy', href: '#economy', style: Object.freeze({ left: px(658.22) }) }),
+  Object.freeze({ label: 'Safety', href: '#footer', style: Object.freeze({ left: px(738.47) }) }),
+  Object.freeze({ label: 'Support', href: '#footer', style: Object.freeze({ left: px(804.47) }) }),
+  Object.freeze({ label: 'Developers', href: '#footer', style: Object.freeze({ left: px(887.44) }) }),
+] as readonly (NavItem & { style: Readonly<Record<string, string>> })[])
+
+/** Labels match `eat-first` i18n locale codes (`VALID` in i18n/index.js includes pl, not es). */
+const localeButtons = Object.freeze([
+  Object.freeze({ code: 'en', label: 'English' }),
+  Object.freeze({ code: 'de', label: 'German' }),
+  Object.freeze({ code: 'uk', label: 'Ukrainian' }),
+  Object.freeze({ code: 'pl', label: 'Polish' }),
+] as const)
 
 const heroLeftLineTops = [82.6, 95.98, 109.35, 122.73] as const
+const heroLeftLineStyles = Object.freeze(
+  heroLeftLineTops.map((top) =>
+    Object.freeze({
+      key: top,
+      style: Object.freeze({ top: px(top) }),
+    }),
+  ),
+)
 
-const sparkleDots: PositionedDot[] = [
+const heroLineTop136_1 = Object.freeze({ top: px(136.1) })
+const heroLineTop82_6 = Object.freeze({ top: px(82.6) })
+const heroLineTop95_98 = Object.freeze({ top: px(95.98) })
+const heroLineTop109_35 = Object.freeze({ top: px(109.35) })
+const heroLineTop122_73 = Object.freeze({ top: px(122.73) })
+
+const sparkleDotsRaw: PositionedDot[] = [
   { x: 678, y: 72, size: 3, radius: 1.5 },
   { x: 754.5, y: 159, size: 4.5, radius: 2.25 },
   { x: 892.5, y: 109.5, size: 3.75, radius: 1.875 },
@@ -190,48 +213,98 @@ const sparkleDots: PositionedDot[] = [
   { x: 739.91, y: 1374.42, size: 4.16, radius: 2.08 },
 ]
 
-const glows: PositionedGlow[] = [
-  { x: 734, y: 90, width: 195, height: 195, background: 'rgba(124, 58, 237, 0.18)', blur: 45 },
-  { x: 2083.28, y: 436, width: 195, height: 195, background: 'rgba(124, 58, 237, 0.18)', blur: 45 },
-  { x: 466.28, y: 661.5, width: 195, height: 195, background: 'rgba(124, 58, 237, 0.18)', blur: 45 },
-  { x: 419, y: 1871, width: 195, height: 195, background: 'rgba(124, 58, 237, 0.18)', blur: 45 },
-  { x: 2426, y: 2572.09, width: 195, height: 195, background: 'rgba(124, 58, 237, 0.18)', blur: 45 },
-  { x: 1826.25, y: 984, width: 195, height: 195, background: 'rgba(124, 58, 237, 0.18)', blur: 45 },
-  { x: 628.5, y: 1332.75, width: 195, height: 195, background: 'rgba(124, 58, 237, 0.18)', blur: 45 },
-  { x: 624.75, y: 1743.75, width: 195, height: 195, background: 'rgba(124, 58, 237, 0.18)', blur: 45 },
-  { x: 1683, y: 135, width: 225, height: 225, background: 'rgba(96, 165, 250, 0.16)', blur: 45 },
-  { x: 66.48, y: 1068.84, width: 133.97, height: 133.97, background: 'rgba(96, 165, 250, 0.16)', blur: 26.79, rotate: -23 },
-  { x: 1593, y: 525, width: 195, height: 195, background: 'rgba(139, 92, 246, 0.16)', blur: 45 },
-  { x: -24, y: 572.5, width: 195, height: 195, background: 'rgba(139, 92, 246, 0.16)', blur: 45 },
-  { x: 972.75, y: 1326, width: 195, height: 195, background: 'rgba(139, 92, 246, 0.16)', blur: 45 },
-  { x: 942, y: 1826.25, width: 195, height: 195, background: 'rgba(139, 92, 246, 0.16)', blur: 45 },
-  { x: 989.25, y: 92.25, width: 56.25, height: 55.5, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 2357.03, y: 445.75, width: 56.25, height: 55.5, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 740.03, y: 791.25, width: 56.25, height: 55.5, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 112.25, y: 1557.25, width: 56.25, height: 55.5, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 2152.25, y: 2562.34, width: 56.25, height: 55.5, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 1552.5, y: 854.25, width: 56.25, height: 55.5, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 928.59, y: 1372.34, width: 52.03, height: 51.33, background: 'rgba(196, 181, 253, 0.22)', blur: 8.32 },
-  { x: 1823.25, y: 373.5, width: 82.5, height: 78.75, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 214, y: 220, width: 82.5, height: 78.75, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 681.47, y: 1207.59, width: 74.25, height: 72.75, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 2049.25, y: 1561.09, width: 74.25, height: 72.75, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 420.03, y: 2544.34, width: 74.25, height: 72.75, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 2076, y: 905, width: 74.25, height: 72.75, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 774, y: 1665.75, width: 74.25, height: 72.75, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 1753.5, y: 1534.5, width: 76.5, height: 69.75, background: 'rgba(196, 181, 253, 0.22)', blur: 9 },
-  { x: 1668, y: 95.25, width: 82.5, height: 80.25, background: 'rgba(147, 197, 253, 0.22)', blur: 9 },
-  { x: 873.75, y: 882, width: 82.5, height: 80.25, background: 'rgba(147, 197, 253, 0.22)', blur: 9 },
-  { x: 2377.97, y: 1318.57, width: 197.97, height: 192.57, background: 'rgba(147, 197, 253, 0.22)', blur: 21.6 },
-  { x: 624.53, y: 137.25, width: 82.5, height: 80.25, background: 'rgba(147, 197, 253, 0.22)', blur: 9 },
-  { x: 227.75, y: 2211.25, width: 82.5, height: 80.25, background: 'rgba(147, 197, 253, 0.22)', blur: 9 },
-  { x: 2267.75, y: 1772.59, width: 82.5, height: 80.25, background: 'rgba(147, 197, 253, 0.22)', blur: 9 },
-  { x: 1581, y: 1345.5, width: 82.5, height: 80.25, background: 'rgba(147, 197, 253, 0.22)', blur: 9 },
-  { x: 1577.25, y: 1756.5, width: 82.5, height: 80.25, background: 'rgba(147, 197, 253, 0.22)', blur: 9 },
-  { x: 1511.25, y: 1029, width: 82.5, height: 80.25, background: 'rgba(147, 197, 253, 0.22)', blur: 9 },
+/** Shared glow fills (same rgba strings as in Figma export; single source for glowsRaw). */
+const GLOW_BG_PURPLE_195 = 'rgba(124, 58, 237, 0.18)' as const
+const GLOW_BG_BLUE_225 = 'rgba(96, 165, 250, 0.16)' as const
+const GLOW_BG_VIOLET_195 = 'rgba(139, 92, 246, 0.16)' as const
+const GLOW_BG_LAVENDER_SM = 'rgba(196, 181, 253, 0.22)' as const
+const GLOW_BG_SKY = 'rgba(147, 197, 253, 0.22)' as const
+
+/** Per-dot twinkle: unique duration/delay (deterministic) so stars don’t pulse in sync. */
+const sparkleDots = Object.freeze(
+  sparkleDotsRaw.map((d, index) => {
+    const dur = 2.05 + ((index * 47) % 215) / 100
+    const delay = ((index * 277) % 9800) / 1000
+    return Object.freeze({
+      ...d,
+      phase: index % 7,
+      style: Object.freeze({
+        left: px(d.x),
+        top: px(d.y),
+        width: px(d.size),
+        height: px(d.size),
+        borderRadius: px(d.radius),
+        '--dot-dur': `${dur.toFixed(2)}s`,
+        '--dot-delay': `${delay.toFixed(2)}s`,
+      } as Record<string, string>),
+    })
+  }),
+)
+
+const glowsRaw: PositionedGlow[] = [
+  { x: 734, y: 90, width: 195, height: 195, background: GLOW_BG_PURPLE_195, blur: 45 },
+  { x: 2083.28, y: 436, width: 195, height: 195, background: GLOW_BG_PURPLE_195, blur: 45 },
+  { x: 466.28, y: 661.5, width: 195, height: 195, background: GLOW_BG_PURPLE_195, blur: 45 },
+  { x: 419, y: 1871, width: 195, height: 195, background: GLOW_BG_PURPLE_195, blur: 45 },
+  { x: 2426, y: 2572.09, width: 195, height: 195, background: GLOW_BG_PURPLE_195, blur: 45 },
+  { x: 1826.25, y: 984, width: 195, height: 195, background: GLOW_BG_PURPLE_195, blur: 45 },
+  { x: 628.5, y: 1332.75, width: 195, height: 195, background: GLOW_BG_PURPLE_195, blur: 45 },
+  { x: 624.75, y: 1743.75, width: 195, height: 195, background: GLOW_BG_PURPLE_195, blur: 45 },
+  { x: 1683, y: 135, width: 225, height: 225, background: GLOW_BG_BLUE_225, blur: 45 },
+  { x: 66.48, y: 1068.84, width: 133.97, height: 133.97, background: GLOW_BG_BLUE_225, blur: 26.79, rotate: -23 },
+  { x: 1593, y: 525, width: 195, height: 195, background: GLOW_BG_VIOLET_195, blur: 45 },
+  { x: -24, y: 572.5, width: 195, height: 195, background: GLOW_BG_VIOLET_195, blur: 45 },
+  { x: 972.75, y: 1326, width: 195, height: 195, background: GLOW_BG_VIOLET_195, blur: 45 },
+  { x: 942, y: 1826.25, width: 195, height: 195, background: GLOW_BG_VIOLET_195, blur: 45 },
+  { x: 989.25, y: 92.25, width: 56.25, height: 55.5, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 2357.03, y: 445.75, width: 56.25, height: 55.5, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 740.03, y: 791.25, width: 56.25, height: 55.5, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 112.25, y: 1557.25, width: 56.25, height: 55.5, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 2152.25, y: 2562.34, width: 56.25, height: 55.5, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 1552.5, y: 854.25, width: 56.25, height: 55.5, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 928.59, y: 1372.34, width: 52.03, height: 51.33, background: GLOW_BG_LAVENDER_SM, blur: 8.32 },
+  { x: 1823.25, y: 373.5, width: 82.5, height: 78.75, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 214, y: 220, width: 82.5, height: 78.75, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 681.47, y: 1207.59, width: 74.25, height: 72.75, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 2049.25, y: 1561.09, width: 74.25, height: 72.75, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 420.03, y: 2544.34, width: 74.25, height: 72.75, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 2076, y: 905, width: 74.25, height: 72.75, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 774, y: 1665.75, width: 74.25, height: 72.75, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 1753.5, y: 1534.5, width: 76.5, height: 69.75, background: GLOW_BG_LAVENDER_SM, blur: 9 },
+  { x: 1668, y: 95.25, width: 82.5, height: 80.25, background: GLOW_BG_SKY, blur: 9 },
+  { x: 873.75, y: 882, width: 82.5, height: 80.25, background: GLOW_BG_SKY, blur: 9 },
+  { x: 2377.97, y: 1318.57, width: 197.97, height: 192.57, background: GLOW_BG_SKY, blur: 21.6 },
+  { x: 624.53, y: 137.25, width: 82.5, height: 80.25, background: GLOW_BG_SKY, blur: 9 },
+  { x: 227.75, y: 2211.25, width: 82.5, height: 80.25, background: GLOW_BG_SKY, blur: 9 },
+  { x: 2267.75, y: 1772.59, width: 82.5, height: 80.25, background: GLOW_BG_SKY, blur: 9 },
+  { x: 1581, y: 1345.5, width: 82.5, height: 80.25, background: GLOW_BG_SKY, blur: 9 },
+  { x: 1577.25, y: 1756.5, width: 82.5, height: 80.25, background: GLOW_BG_SKY, blur: 9 },
+  { x: 1511.25, y: 1029, width: 82.5, height: 80.25, background: GLOW_BG_SKY, blur: 9 },
 ]
 
-const bolts: PositionedBolt[] = [
+/** Parallax first, then rotate — screen-space drift while scrolling (vars set on `.landing__canvas`). */
+const glows = Object.freeze(
+  glowsRaw.map((glow) =>
+    Object.freeze({
+      ...glow,
+      style: Object.freeze({
+        left: px(glow.x),
+        top: px(glow.y),
+        width: px(glow.width),
+        height: px(glow.height),
+        opacity: String(glow.opacity ?? 1),
+        background: glow.background,
+        filter: `blur(${px(glow.blur)})`,
+        transform:
+          glow.rotate !== undefined
+            ? `translate3d(var(--landing-parallax-glow-x, 0px), var(--landing-parallax-glow-y, 0px), 0) rotate(${glow.rotate}deg)`
+            : `translate3d(var(--landing-parallax-glow-x, 0px), var(--landing-parallax-glow-y, 0px), 0)`,
+      }),
+    }),
+  ),
+)
+
+const boltsRaw: PositionedBolt[] = [
   { asset: bgBoltSmall, x: 1142.96, y: 130.93, width: 67.25, height: 79.72, rotate: -16, opacity: 0.94, blur: 1.42 },
   { asset: bgBoltSharpRight, x: 2438.47, y: 238.25, width: 108.38, height: 79.33, rotate: 156, opacity: 0.96, blur: 0 },
   { asset: bgBoltSharpLeft, x: 1810.77, y: 2029, width: 108.38, height: 79.33, rotate: 24, opacity: 0.96, blur: 0 },
@@ -247,216 +320,380 @@ const bolts: PositionedBolt[] = [
   { asset: bgBoltGlowSmall, x: 235.38, y: 2464.5, width: 90.21, height: 112.94, rotate: 15, opacity: 0.82, blur: 3.07 },
 ]
 
-const heroCards = [
-  { variant: 'purple', avatar: '#f5a875', body: '#2a2a2d' },
-  { variant: 'gray', avatar: '#f5a875', body: '#2a2a2d' },
-  { variant: 'purple', avatar: '#f0bf67', body: '#2a2a2d' },
-  { variant: 'gray', avatar: '#77b665', body: '#2a2a2d' },
-] as const
+const bolts = Object.freeze(
+  boltsRaw.map((bolt) =>
+    Object.freeze({
+      ...bolt,
+      style: Object.freeze({
+        left: px(bolt.x),
+        top: px(bolt.y),
+        width: px(bolt.width),
+        height: px(bolt.height),
+        opacity: String(bolt.opacity),
+        filter: `blur(${px(bolt.blur)})`,
+        transform: `translate3d(var(--landing-parallax-bolt-x, 0px), var(--landing-parallax-bolt-y, 0px), 0) rotate(${bolt.rotate}deg)`,
+      }),
+    }),
+  ),
+)
 
-const callBannerCards: CallBannerCard[] = [
-  { asset: callCardOne, x: 14.35 },
-  { asset: callCardTwo, x: 156.29 },
-  { asset: callCardThree, x: 298.22 },
-  { asset: callCardOne, x: 440.16 },
-]
+const heroCards = Object.freeze([
+  Object.freeze({
+    variant: 'purple' as const,
+    avatar: '#f5a875',
+    body: '#2a2a2d',
+    avatarStyle: Object.freeze({ background: '#f5a875' }),
+    bodyStyle: Object.freeze({ background: '#2a2a2d' }),
+  }),
+  Object.freeze({
+    variant: 'gray' as const,
+    avatar: '#f5a875',
+    body: '#2a2a2d',
+    avatarStyle: Object.freeze({ background: '#f5a875' }),
+    bodyStyle: Object.freeze({ background: '#2a2a2d' }),
+  }),
+  Object.freeze({
+    variant: 'purple' as const,
+    avatar: '#f0bf67',
+    body: '#2a2a2d',
+    avatarStyle: Object.freeze({ background: '#f0bf67' }),
+    bodyStyle: Object.freeze({ background: '#2a2a2d' }),
+  }),
+  Object.freeze({
+    variant: 'gray' as const,
+    avatar: '#77b665',
+    body: '#2a2a2d',
+    avatarStyle: Object.freeze({ background: '#77b665' }),
+    bodyStyle: Object.freeze({ background: '#2a2a2d' }),
+  }),
+])
 
-const games = computed<GameCard[]>(() => [
-  {
+const callBannerCards = Object.freeze([
+  Object.freeze({ asset: callCardOne, style: Object.freeze({ left: px(14.35) }) }),
+  Object.freeze({ asset: callCardTwo, style: Object.freeze({ left: px(156.29) }) }),
+  Object.freeze({ asset: callCardThree, style: Object.freeze({ left: px(298.22) }) }),
+  Object.freeze({ asset: callCardOne, style: Object.freeze({ left: px(440.16) }) }),
+] as readonly CallBannerCard[])
+
+const games = Object.freeze([
+  Object.freeze({
     title: 'Who we\nshould\neat first',
     icon: eatFirstIcon,
     to: { name: 'eat', query: { view: 'join' } },
-    x: 705,
-    y: 1283.37,
-    width: 352.5,
-    height: 144,
-    labelX: 36.76,
-    labelY: 35.38,
-    labelWidth: 161.63,
-    labelHeight: 107.52,
-    iconX: 203.25,
-    iconY: 25.67,
-    iconWidth: 95.03,
-    iconHeight: 95.03,
-  },
-  {
+    cardStyle: Object.freeze({
+      left: px(705),
+      top: px(1283.37),
+      width: px(352.5),
+      height: px(144),
+    }),
+    labelStyle: Object.freeze({
+      left: px(36.76),
+      top: px(35.38),
+      width: px(161.63),
+      height: px(107.52),
+    }),
+    iconStyle: Object.freeze({
+      left: px(203.25),
+      top: px(25.67),
+      width: px(95.03),
+      height: px(95.03),
+    }),
+  } satisfies GameCard),
+  Object.freeze({
     title: 'Mafia',
     icon: mafiaIcon,
     to: { name: 'home' },
-    x: 1089.75,
-    y: 1282.62,
-    width: 352.5,
-    height: 144,
-    labelX: 41.62,
-    labelY: 60.35,
-    labelWidth: 120.7,
-    labelHeight: 26.36,
-    iconX: 180.36,
-    iconY: 13.87,
-    iconWidth: 119.31,
-    iconHeight: 119.31,
-  },
-  {
+    cardStyle: Object.freeze({
+      left: px(1089.75),
+      top: px(1282.62),
+      width: px(352.5),
+      height: px(144),
+    }),
+    labelStyle: Object.freeze({
+      left: px(41.62),
+      top: px(60.35),
+      width: px(120.7),
+      height: px(26.36),
+    }),
+    iconStyle: Object.freeze({
+      left: px(180.36),
+      top: px(13.87),
+      width: px(119.31),
+      height: px(119.31),
+    }),
+  } satisfies GameCard),
+  Object.freeze({
     title: 'Spy',
     icon: spyIcon,
     to: { name: 'home' },
-    x: 1473.75,
-    y: 1282.62,
-    width: 352.5,
-    height: 144,
-    labelX: 52.72,
-    labelY: 60.35,
-    labelWidth: 120.7,
-    labelHeight: 26.36,
-    iconX: 162.32,
-    iconY: 4.86,
-    iconWidth: 136.65,
-    iconHeight: 136.65,
-  },
-  {
+    cardStyle: Object.freeze({
+      left: px(1473.75),
+      top: px(1282.62),
+      width: px(352.5),
+      height: px(144),
+    }),
+    labelStyle: Object.freeze({
+      left: px(52.72),
+      top: px(60.35),
+      width: px(120.7),
+      height: px(26.36),
+    }),
+    iconStyle: Object.freeze({
+      left: px(162.32),
+      top: px(4.86),
+      width: px(136.65),
+      height: px(136.65),
+    }),
+  } satisfies GameCard),
+  Object.freeze({
     title: 'Wordly',
     icon: wordlivIcon,
     to: { name: 'wordle-streamer', params: { streamer: defaultWordleStreamer } },
-    x: 705,
-    y: 1455.87,
-    width: 352.5,
-    height: 144,
-    labelX: 35.38,
-    labelY: 56.88,
-    labelWidth: 144.98,
-    labelHeight: 31.22,
-    iconX: 199.78,
-    iconY: 17.34,
-    iconWidth: 108.21,
-    iconHeight: 108.21,
-  },
-  {
+    cardStyle: Object.freeze({
+      left: px(705),
+      top: px(1455.87),
+      width: px(352.5),
+      height: px(144),
+    }),
+    labelStyle: Object.freeze({
+      left: px(35.38),
+      top: px(56.88),
+      width: px(144.98),
+      height: px(31.22),
+    }),
+    iconStyle: Object.freeze({
+      left: px(199.78),
+      top: px(17.34),
+      width: px(108.21),
+      height: px(108.21),
+    }),
+  } satisfies GameCard),
+  Object.freeze({
     title: 'Gartic\nphone',
     icon: garticPhoneIcon,
     to: { name: 'home' },
-    x: 1089.75,
-    y: 1455.12,
-    width: 352.5,
-    height: 144,
-    labelX: 35.38,
-    labelY: 45.78,
-    labelWidth: 144.98,
-    labelHeight: 54.11,
-    iconX: 193.54,
-    iconY: 18.73,
-    iconWidth: 108.21,
-    iconHeight: 108.21,
-  },
-  {
+    cardStyle: Object.freeze({
+      left: px(1089.75),
+      top: px(1455.12),
+      width: px(352.5),
+      height: px(144),
+    }),
+    labelStyle: Object.freeze({
+      left: px(35.38),
+      top: px(45.78),
+      width: px(144.98),
+      height: px(54.11),
+    }),
+    iconStyle: Object.freeze({
+      left: px(193.54),
+      top: px(18.73),
+      width: px(108.21),
+      height: px(108.21),
+    }),
+  } satisfies GameCard),
+  Object.freeze({
     title: 'Who\ntake a\nshit',
     icon: whoTakeShitIcon,
     to: { name: 'home' },
-    x: 1473.75,
-    y: 1455.87,
-    width: 352.5,
-    height: 144,
-    labelX: 40.93,
-    labelY: 34.68,
-    labelWidth: 139.43,
-    labelHeight: 70.06,
-    iconX: 189.37,
-    iconY: 23.59,
-    iconWidth: 93.65,
-    iconHeight: 93.65,
-  },
+    cardStyle: Object.freeze({
+      left: px(1473.75),
+      top: px(1455.87),
+      width: px(352.5),
+      height: px(144),
+    }),
+    labelStyle: Object.freeze({
+      left: px(40.93),
+      top: px(34.68),
+      width: px(139.43),
+      height: px(70.06),
+    }),
+    iconStyle: Object.freeze({
+      left: px(189.37),
+      top: px(23.59),
+      width: px(93.65),
+      height: px(93.65),
+    }),
+  } satisfies GameCard),
 ])
 
-const socialLinks = [
-  { alt: 'Instagram', icon: instagramIcon, href: 'https://www.instagram.com/', x: 884.25, y: 2227.5, w: 62.58, h: 62.58, opacity: 0.7 },
-  { alt: 'TikTok', icon: tiktokIcon, href: 'https://www.tiktok.com/', x: 993.94, y: 2230.31, w: 61.17, h: 61.17, opacity: 0.7 },
-  { alt: 'Telegram', icon: telegramIcon, href: 'https://telegram.org/', x: 1100.81, y: 2227.5, w: 70.31, h: 70.31, opacity: 1 },
-  { alt: 'Twitch', icon: twitchIcon, href: STREAMER_TWITCH_URL, x: 1233, y: 2230.31, w: 71.72, h: 71.72, opacity: 1 },
-] as const
+const socialLinks = Object.freeze([
+  Object.freeze({
+    alt: 'Instagram',
+    icon: instagramIcon,
+    href: 'https://www.instagram.com/',
+    style: Object.freeze({
+      left: px(884.25),
+      top: px(2227.5),
+      width: px(62.58),
+      height: px(62.58),
+    }),
+  }),
+  Object.freeze({
+    alt: 'TikTok',
+    icon: tiktokIcon,
+    href: 'https://www.tiktok.com/',
+    style: Object.freeze({
+      left: px(993.94),
+      top: px(2230.31),
+      width: px(61.17),
+      height: px(61.17),
+    }),
+  }),
+  Object.freeze({
+    alt: 'Telegram',
+    icon: telegramIcon,
+    href: 'https://telegram.org/',
+    style: Object.freeze({
+      left: px(1100.81),
+      top: px(2227.5),
+      width: px(70.31),
+      height: px(70.31),
+    }),
+  }),
+  Object.freeze({
+    alt: 'Twitch',
+    icon: twitchIcon,
+    href: STREAMER_TWITCH_URL,
+    style: Object.freeze({
+      left: px(1233),
+      top: px(2230.31),
+      width: px(71.72),
+      height: px(71.72),
+    }),
+  }),
+])
 
-const footerProduct = ['Product', 'Nitro', 'Status', 'Policies', 'Terms', 'Privacy', 'Cookie Settings']
-const footerAbout = ['About', 'Jobs', 'Brand', 'Newsroom', 'Developers']
+const footerProduct = Object.freeze(['Product', 'Nitro', 'Status', 'Policies', 'Terms', 'Privacy', 'Cookie Settings'])
+const footerAbout = Object.freeze(['About', 'Jobs', 'Brand', 'Newsroom', 'Developers'])
 
-const slotLetters = ['T', 'W', 'I', 'T', 'C', 'H'] as const
-
-function px(value: number) {
-  return `calc(var(--u) * ${value})`
-}
+const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
 
 function syncDocumentTitle() {
   document.title = 'StreamAssist - where chat turns into the game'
 }
 
-function selectLocale(code: 'en' | 'de' | 'uk' | 'pl') {
-  persistLocale(code)
+type LandingLocaleCode = (typeof localeButtons)[number]['code']
+
+async function selectLocale(code: LandingLocaleCode) {
+  await persistLocale(code)
 }
+
+function landingPrefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+function scrollLandingToHash(hash: string) {
+  if (typeof window === 'undefined') return
+  const top = getLandingScrollTopForHash(hash)
+  window.scrollTo({ top, behavior: landingPrefersReducedMotion() ? 'auto' : 'smooth' })
+}
+
+function goLandingNav(href: string) {
+  const hash = href.startsWith('#') ? href : `#${href}`
+  void router.push({ path: '/', query: route.query, hash })
+}
+
+watch(
+  () => route.hash,
+  (hash) => {
+    void nextTick(() => {
+      if (!hash) return
+      scrollLandingToHash(hash)
+    })
+  },
+  { immediate: true },
+)
+
+function landingPageScrollY(): number {
+  if (typeof window === 'undefined') return 0
+  return (
+    document.scrollingElement?.scrollTop ?? window.pageYOffset ?? document.documentElement?.scrollTop ?? 0
+  )
+}
+
+/** Layered scroll parallax (px) on decorative layers — stronger motion reads as “space depth”. */
+const landingCanvasEl = ref<HTMLElement | null>(null)
+let parallaxScrollCleanup: (() => void) | undefined
 
 onMounted(() => {
   syncDocumentTitle()
+  if (typeof window === 'undefined') return
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+  let ticking = false
+  const applyParallax = () => {
+    const el = landingCanvasEl.value
+    if (!el) return
+    const y = landingPageScrollY()
+    const off = (m: number) => `${y * m}px`
+    el.style.setProperty('--landing-parallax-bg-x', off(-0.048))
+    el.style.setProperty('--landing-parallax-bg-y', off(0.165))
+    el.style.setProperty('--landing-parallax-mid-x', off(-0.042))
+    el.style.setProperty('--landing-parallax-mid-y', off(0.102))
+    el.style.setProperty('--landing-parallax-fg-x', off(0.063))
+    el.style.setProperty('--landing-parallax-fg-y', off(0.083))
+    el.style.setProperty('--landing-parallax-glow-x', off(0.057))
+    el.style.setProperty('--landing-parallax-glow-y', off(0.108))
+    el.style.setProperty('--landing-parallax-bolt-x', off(-0.072))
+    el.style.setProperty('--landing-parallax-bolt-y', off(0.128))
+  }
+
+  const onScroll = () => {
+    if (ticking) return
+    ticking = true
+    requestAnimationFrame(() => {
+      ticking = false
+      applyParallax()
+    })
+  }
+  applyParallax()
+  window.addEventListener('scroll', onScroll, { passive: true })
+  parallaxScrollCleanup = () => window.removeEventListener('scroll', onScroll)
 })
 
-watch(locale, () => {
-  syncDocumentTitle()
+onBeforeUnmount(() => {
+  parallaxScrollCleanup?.()
 })
 </script>
 
 <template>
   <div class="landing page-stack">
-    <div class="landing__canvas">
-      <div class="landing__background" aria-hidden="true" />
+    <div ref="landingCanvasEl" class="landing__canvas">
+      <div v-once>
+        <div class="landing__background" aria-hidden="true" />
 
-      <p class="landing__wordmark landing__wordmark--1" aria-hidden="true">{{ STREAM_APP_BRAND_NAME }}</p>
-      <p class="landing__wordmark landing__wordmark--2" aria-hidden="true">{{ STREAM_APP_BRAND_NAME }}</p>
-      <p class="landing__wordmark landing__wordmark--3" aria-hidden="true">{{ STREAM_APP_BRAND_NAME }}</p>
-      <p class="landing__wordmark landing__wordmark--4" aria-hidden="true">{{ STREAM_APP_BRAND_NAME }}</p>
+        <p class="landing__wordmark landing__wordmark--1" aria-hidden="true">{{ STREAM_APP_BRAND_NAME }}</p>
+        <p class="landing__wordmark landing__wordmark--2" aria-hidden="true">{{ STREAM_APP_BRAND_NAME }}</p>
+        <p class="landing__wordmark landing__wordmark--3" aria-hidden="true">{{ STREAM_APP_BRAND_NAME }}</p>
+        <p class="landing__wordmark landing__wordmark--4" aria-hidden="true">{{ STREAM_APP_BRAND_NAME }}</p>
 
-      <span
-        v-for="(dot, index) in sparkleDots"
-        :key="`dot-${index}`"
-        class="landing__dot"
-        :style="{
-          left: px(dot.x),
-          top: px(dot.y),
-          width: px(dot.size),
-          height: px(dot.size),
-          borderRadius: px(dot.radius),
-        }"
-        aria-hidden="true"
-      />
+        <span
+          v-for="(dot, index) in sparkleDots"
+          :key="`dot-${index}`"
+          class="landing__dot"
+          :class="`landing__dot--ph${dot.phase}`"
+          :style="dot.style"
+          aria-hidden="true"
+        />
 
-      <span
-        v-for="(glow, index) in glows"
-        :key="`glow-${index}`"
-        class="landing__glow"
-        :style="{
-          left: px(glow.x),
-          top: px(glow.y),
-          width: px(glow.width),
-          height: px(glow.height),
-          opacity: glow.opacity ?? 1,
-          background: glow.background,
-          filter: `blur(${px(glow.blur)})`,
-          transform: glow.rotate ? `rotate(${glow.rotate}deg)` : undefined,
-        }"
-        aria-hidden="true"
-      />
+        <span
+          v-for="(glow, index) in glows"
+          :key="`glow-${index}`"
+          class="landing__glow"
+          :style="glow.style"
+          aria-hidden="true"
+        />
 
-      <img
-        v-for="(bolt, index) in bolts"
-        :key="`bolt-${index}`"
-        class="landing__bolt"
-        :src="bolt.asset"
-        alt=""
-        :style="{
-          left: px(bolt.x),
-          top: px(bolt.y),
-          width: px(bolt.width),
-          height: px(bolt.height),
-          opacity: bolt.opacity,
-          filter: `blur(${px(bolt.blur)})`,
-          transform: `rotate(${bolt.rotate}deg)`,
-        }"
-        aria-hidden="true"
-      />
+        <img
+          v-for="(bolt, index) in bolts"
+          :key="`bolt-${index}`"
+          class="landing__bolt"
+          :src="bolt.asset"
+          alt=""
+          :style="bolt.style"
+          aria-hidden="true"
+        />
+      </div>
 
       <header class="landing-header">
         <div class="landing-header__brand">
@@ -474,18 +711,19 @@ watch(locale, () => {
           :key="item.label"
           class="landing-header__nav-link"
           :href="item.href"
-          :style="{ left: px(item.x) }"
+          :style="item.style"
+          @click.prevent="goLandingNav(item.href)"
         >
           {{ item.label }}
         </a>
       </header>
 
       <div class="landing-auth">
-        <RouterLink class="landing-auth__link" :to="{ path: '/app', query: { needLogin: '1' } }">Log In</RouterLink>
-        <RouterLink class="landing-auth__link" :to="{ path: '/app', query: { needLogin: '1' } }">Sing Up</RouterLink>
+        <RouterLink class="landing-auth__link" :to="authRoute">Log In</RouterLink>
+        <RouterLink class="landing-auth__link" :to="authRoute">Sing Up</RouterLink>
       </div>
 
-      <section class="landing-hero" aria-label="Hero">
+      <section class="landing-hero" aria-label="Hero" v-once>
         <div class="landing-hero__screen" aria-hidden="true">
           <div class="landing-hero__screen-notch" />
           <div class="landing-hero__core">
@@ -493,24 +731,24 @@ watch(locale, () => {
               <span class="landing-hero__live-pill" />
 
               <span
-                v-for="top in heroLeftLineTops"
-                :key="`hero-left-${top}`"
+                v-for="line in heroLeftLineStyles"
+                :key="`hero-left-${line.key}`"
                 class="landing-hero__side-line landing-hero__side-line--left"
-                :style="{ top: px(top) }"
+                :style="line.style"
               />
               <span
                 class="landing-hero__side-line landing-hero__side-line--left landing-hero__side-line--blue"
-                :style="{ top: px(136.1) }"
+                :style="heroLineTop136_1"
               />
 
-              <span class="landing-hero__side-line landing-hero__side-line--right" :style="{ top: px(82.6) }" />
+              <span class="landing-hero__side-line landing-hero__side-line--right" :style="heroLineTop82_6" />
               <span
                 class="landing-hero__side-line landing-hero__side-line--right landing-hero__side-line--yellow"
-                :style="{ top: px(95.98) }"
+                :style="heroLineTop95_98"
               />
-              <span class="landing-hero__side-line landing-hero__side-line--right" :style="{ top: px(109.35) }" />
-              <span class="landing-hero__side-line landing-hero__side-line--right" :style="{ top: px(122.73) }" />
-              <span class="landing-hero__side-line landing-hero__side-line--right" :style="{ top: px(136.1) }" />
+              <span class="landing-hero__side-line landing-hero__side-line--right" :style="heroLineTop109_35" />
+              <span class="landing-hero__side-line landing-hero__side-line--right" :style="heroLineTop122_73" />
+              <span class="landing-hero__side-line landing-hero__side-line--right" :style="heroLineTop136_1" />
             </div>
 
             <img class="landing-hero__side-asset" :src="heroSideAsset" alt="" />
@@ -526,17 +764,17 @@ watch(locale, () => {
                 }"
               >
                 <span class="landing-hero__mini-card-pill" />
-                <span class="landing-hero__mini-card-avatar" :style="{ background: card.avatar }" />
+                <span class="landing-hero__mini-card-avatar" :style="card.avatarStyle" />
                 <span class="landing-hero__mini-card-line landing-hero__mini-card-line--white" />
                 <span class="landing-hero__mini-card-line landing-hero__mini-card-line--violet" />
-                <span class="landing-hero__mini-card-line" :style="{ background: card.body }" />
+                <span class="landing-hero__mini-card-line" :style="card.bodyStyle" />
               </article>
             </div>
           </div>
         </div>
 
         <div class="landing-hero__copy">
-          <h1 class="landing-hero__title">WHERE CHAT TURNS INTO THE GAME</h1>
+          <h1 class="landing-hero__title landing-u-text-outline-heading">WHERE CHAT TURNS INTO THE GAME</h1>
           <p class="landing-hero__lead">
             Your stream isn&rsquo;t just something to watch &mdash; it&rsquo;s something to join.
             <br />
@@ -548,11 +786,11 @@ watch(locale, () => {
       </section>
 
       <section id="videocall" class="landing-section landing-section--videocall">
-        <h2 class="landing-section__title">VIDEOCALL</h2>
+        <h2 class="landing-section__title landing-u-text-outline-heading">VIDEOCALL</h2>
         <p class="landing-section__lead">Create private video rooms for games, challenges, and interactive sessions.</p>
 
-        <RouterLink class="call-banner" :to="{ name: 'call' }">
-          <span class="call-banner__title">RUN THE SHOW</span>
+        <RouterLink class="call-banner" :to="callRoute">
+          <span class="call-banner__title landing-u-text-outline-cta">RUN THE SHOW</span>
 
           <span class="call-banner__cards">
             <img
@@ -561,14 +799,14 @@ watch(locale, () => {
               class="call-banner__card"
               :src="card.asset"
               alt=""
-              :style="{ left: px(card.x) }"
+              :style="card.style"
             />
           </span>
         </RouterLink>
       </section>
 
       <section id="games" class="landing-section landing-section--games">
-        <h2 class="landing-section__title">GAMES</h2>
+        <h2 class="landing-section__title landing-u-text-outline-heading">GAMES</h2>
         <p class="landing-section__lead">Play with friends, challenge others, or bring the action live to your audience.</p>
 
         <div class="games-grid">
@@ -577,44 +815,33 @@ watch(locale, () => {
             :key="game.title"
             :to="game.to"
             class="games-grid__card"
-            :style="{ left: px(game.x), top: px(game.y), width: px(game.width), height: px(game.height) }"
+            :style="game.cardStyle"
           >
-            <span
-              class="games-grid__label"
-              :style="{
-                left: px(game.labelX),
-                top: px(game.labelY),
-                width: px(game.labelWidth),
-                height: px(game.labelHeight),
-              }"
-            >
+            <span class="games-grid__label landing-u-text-outline-game" :style="game.labelStyle">
               {{ game.title }}
             </span>
             <img
               class="games-grid__icon"
               :src="game.icon"
               :alt="game.title"
+              width="128"
+              height="128"
               loading="lazy"
-              :style="{
-                left: px(game.iconX),
-                top: px(game.iconY),
-                width: px(game.iconWidth),
-                height: px(game.iconHeight),
-              }"
+              :style="game.iconStyle"
             />
           </RouterLink>
         </div>
       </section>
 
       <section id="economy" class="landing-section landing-section--economy">
-        <h2 class="landing-section__title">ECONOMY</h2>
+        <h2 class="landing-section__title landing-u-text-outline-heading">ECONOMY</h2>
         <p class="landing-section__lead">
           Create your own in-stream economy with points, bonuses, and interactive mechanics that keep your audience
           coming back.
         </p>
 
         <div class="economy-banner">
-          <span class="economy-banner__title">START EARNING</span>
+          <span class="economy-banner__title landing-u-text-outline-cta">START EARNING</span>
 
           <div class="economy-banner__slot">
             <span class="economy-banner__jackpot">JACKPOT</span>
@@ -645,33 +872,29 @@ watch(locale, () => {
           </button>
         </div>
 
-        <a
-          v-for="item in socialLinks"
-          :key="item.alt"
-          class="landing-footer__social"
-          :href="item.href"
-          target="_blank"
-          rel="noreferrer"
-          :aria-label="item.alt"
-          :style="{
-            left: px(item.x),
-            top: px(item.y),
-            width: px(item.w),
-            height: px(item.h),
-            opacity: item.opacity,
-          }"
-        >
-          <img :src="item.icon" :alt="item.alt" loading="lazy" />
-        </a>
+        <div v-once>
+          <a
+            v-for="item in socialLinks"
+            :key="item.alt"
+            class="landing-footer__social"
+            :href="item.href"
+            target="_blank"
+            rel="noreferrer"
+            :aria-label="item.alt"
+            :style="item.style"
+          >
+            <img :src="item.icon" :alt="item.alt" width="128" height="128" loading="lazy" />
+          </a>
 
-        <RouterLink class="landing-footer__feedback" :to="{ name: 'home' }">Feedback</RouterLink>
+          <RouterLink class="landing-footer__feedback" :to="homeRoute">Feedback</RouterLink>
 
-        <div class="landing-footer__product">
-          <p v-for="item in footerProduct" :key="item">{{ item }}</p>
-        </div>
+          <div class="landing-footer__product">
+            <p v-for="item in footerProduct" :key="item">{{ item }}</p>
+          </div>
 
-        <div class="landing-footer__about">
-          <p v-for="item in footerAbout" :key="item">{{ item }}</p>
+          <div class="landing-footer__about">
+            <p v-for="item in footerAbout" :key="item">{{ item }}</p>
+          </div>
         </div>
       </footer>
     </div>
@@ -681,28 +904,220 @@ watch(locale, () => {
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Arbutus&family=Climate+Crisis&family=Marmelad&display=swap');
 
+/* Optional: add `<link rel="preload" as="style">` for this font URL in `index.html` to shorten critical path (keep @import until then). */
+
+.landing-u-text-outline-heading {
+  line-height: 1.12;
+  letter-spacing: 0.03em;
+  text-rendering: geometricPrecision;
+}
+
+.landing-u-text-outline-cta {
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-rendering: geometricPrecision;
+}
+
+.landing-u-text-outline-game {
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  text-rendering: geometricPrecision;
+}
+
 .landing {
   min-height: 100vh;
-  overflow-x: clip;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
   background: #0b0317;
   color: #fff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .landing__canvas {
-  --u: calc(100cqw / 2560);
+  --u: 1px;
+  --landing-parallax-bg-x: 0px;
+  --landing-parallax-bg-y: 0px;
+  --landing-parallax-mid-x: 0px;
+  --landing-parallax-mid-y: 0px;
+  --landing-parallax-fg-x: 0px;
+  --landing-parallax-fg-y: 0px;
+  --landing-parallax-glow-x: 0px;
+  --landing-parallax-glow-y: 0px;
+  --landing-parallax-bolt-x: 0px;
+  --landing-parallax-bolt-y: 0px;
   position: relative;
-  width: min(100vw, 1024px);
+  left: 50%;
+  flex-shrink: 0;
+  width: 2560px;
+  height: auto;
   aspect-ratio: 2560 / 2655;
   min-height: calc(var(--u) * 2655);
-  margin-inline: auto;
-  container-type: inline-size;
   overflow: hidden;
+  transform: translateX(-50%);
   background: linear-gradient(119.10504159217813deg, #0b0317 0%, rgba(74, 50, 116, 0.69) 73.206%);
+  text-rendering: optimizeLegibility;
 }
 
 .landing__background {
   position: absolute;
   inset: 0;
+  transform: translate3d(var(--landing-parallax-bg-x, 0px), var(--landing-parallax-bg-y, 0px), 0);
+  will-change: transform;
+}
+
+/*
+ * Seven independent twinkle curves (opacity + phase). Floors stay >= ~0.26 so dots never
+ * read as “gone”; extra key stops smooth ease-in-out between endpoints (no harsh pops).
+ */
+@keyframes landingDotPh0 {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+
+  22% {
+    opacity: 0.36;
+  }
+
+  45% {
+    opacity: 0.5;
+  }
+
+  72% {
+    opacity: 0.34;
+  }
+}
+
+@keyframes landingDotPh1 {
+  0%,
+  100% {
+    opacity: 0.38;
+  }
+
+  28% {
+    opacity: 0.5;
+  }
+
+  55% {
+    opacity: 0.72;
+  }
+
+  78% {
+    opacity: 0.46;
+  }
+}
+
+@keyframes landingDotPh2 {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  18% {
+    opacity: 0.38;
+  }
+
+  35% {
+    opacity: 0.56;
+  }
+
+  62% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes landingDotPh3 {
+  0%,
+  100% {
+    opacity: 0.48;
+  }
+
+  25% {
+    opacity: 0.62;
+  }
+
+  50% {
+    opacity: 0.8;
+  }
+
+  75% {
+    opacity: 0.58;
+  }
+}
+
+@keyframes landingDotPh4 {
+  0%,
+  100% {
+    opacity: 0.26;
+  }
+
+  32% {
+    opacity: 0.34;
+  }
+
+  65% {
+    opacity: 0.46;
+  }
+
+  88% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes landingDotPh5 {
+  0%,
+  100% {
+    opacity: 0.34;
+  }
+
+  22% {
+    opacity: 0.44;
+  }
+
+  42% {
+    opacity: 0.6;
+  }
+
+  68% {
+    opacity: 0.42;
+  }
+}
+
+@keyframes landingDotPh6 {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+
+  30% {
+    opacity: 0.52;
+  }
+
+  58% {
+    opacity: 0.66;
+  }
+
+  82% {
+    opacity: 0.48;
+  }
+}
+
+@keyframes landingBannerIdle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(calc(var(--u) * -0.65));
+  }
 }
 
 .landing__wordmark {
@@ -716,6 +1131,8 @@ watch(locale, () => {
   pointer-events: none;
   white-space: nowrap;
   font-variation-settings: 'YEAR' 1979;
+  transform: translate3d(var(--landing-parallax-mid-x, 0px), var(--landing-parallax-mid-y, 0px), 0);
+  will-change: transform;
 }
 
 .landing__wordmark--1 {
@@ -757,7 +1174,51 @@ watch(locale, () => {
 }
 
 .landing__dot {
-  background: rgba(255, 255, 255, 0.4);
+  --dot-dur: 3s;
+  --dot-delay: 0s;
+  animation-timing-function: cubic-bezier(0.45, 0.05, 0.55, 0.95);
+  animation-iteration-count: infinite;
+  animation-duration: var(--dot-dur);
+  animation-delay: var(--dot-delay);
+  /* During delay, use first keyframe opacity — avoids a flash at full opacity before the twinkle starts. */
+  animation-fill-mode: backwards;
+  transform: translate3d(var(--landing-parallax-fg-x, 0px), var(--landing-parallax-fg-y, 0px), 0);
+  will-change: transform;
+}
+
+.landing__dot--ph0 {
+  background: rgba(255, 255, 255, 0.33);
+  animation-name: landingDotPh0;
+}
+
+.landing__dot--ph1 {
+  background: rgba(255, 255, 255, 0.46);
+  animation-name: landingDotPh1;
+}
+
+.landing__dot--ph2 {
+  background: rgba(255, 255, 255, 0.38);
+  animation-name: landingDotPh2;
+}
+
+.landing__dot--ph3 {
+  background: rgba(255, 255, 255, 0.5);
+  animation-name: landingDotPh3;
+}
+
+.landing__dot--ph4 {
+  background: rgba(255, 255, 255, 0.28);
+  animation-name: landingDotPh4;
+}
+
+.landing__dot--ph5 {
+  background: rgba(255, 255, 255, 0.41);
+  animation-name: landingDotPh5;
+}
+
+.landing__dot--ph6 {
+  background: rgba(255, 255, 255, 0.36);
+  animation-name: landingDotPh6;
 }
 
 .landing__glow {
@@ -1131,7 +1592,6 @@ watch(locale, () => {
   top: 0;
   width: calc(var(--u) * 474.75);
   font-size: calc(var(--u) * 45);
-  line-height: calc(var(--u) * 58.5);
 }
 
 .landing-hero__lead,
@@ -1151,8 +1611,9 @@ watch(locale, () => {
   width: calc(var(--u) * 423);
   margin: 0;
   font-size: calc(var(--u) * 18);
-  line-height: calc(var(--u) * 28.5);
+  line-height: 1.62;
   color: #e6e9ff;
+  opacity: 0.92;
 }
 
 .landing-section {
@@ -1163,8 +1624,8 @@ watch(locale, () => {
   position: absolute;
   transform: none;
   font-size: calc(var(--u) * 45);
-  line-height: calc(var(--u) * 58.5);
   text-align: center;
+  margin-bottom: calc(var(--u) * 16);
 }
 
 .landing-section__lead {
@@ -1175,6 +1636,7 @@ watch(locale, () => {
   line-height: calc(var(--u) * 28.5);
   text-align: center;
   color: #e6e9ff;
+  opacity: 0.88;
 }
 
 .landing-section--videocall .landing-section__title {
@@ -1195,6 +1657,8 @@ watch(locale, () => {
   top: calc(var(--u) * 856.31);
   width: calc(var(--u) * 1124.25);
   height: calc(var(--u) * 154.5);
+  display: flex;
+  align-items: center;
   border-radius: calc(var(--u) * 41.25);
   background:
     radial-gradient(circle at calc(var(--u) * 195) calc(var(--u) * 13.5), rgba(139, 92, 246, 0.14) 0, rgba(139, 92, 246, 0.14) calc(var(--u) * 45), transparent calc(var(--u) * 90)),
@@ -1206,14 +1670,25 @@ watch(locale, () => {
   overflow: hidden;
   text-decoration: none;
   color: inherit;
+  cursor: pointer;
+  animation: landingBannerIdle 11s ease-in-out infinite;
+  transition:
+    box-shadow 0.3s ease,
+    filter 0.3s ease;
+}
+
+.call-banner:hover {
+  box-shadow:
+    0 calc(var(--u) * 13.5) calc(var(--u) * 36) rgba(0, 0, 0, 0.26),
+    0 0 calc(var(--u) * 22) rgba(255, 255, 255, 0.14);
 }
 
 .call-banner__title {
-  position: absolute;
-  left: calc(var(--u) * 32.34);
-  top: calc(var(--u) * 35.25);
+  position: relative;
+  flex-shrink: 0;
+  margin: 0;
+  margin-left: calc(var(--u) * 32.34);
   font-size: calc(var(--u) * 40.5);
-  line-height: calc(var(--u) * 58.5);
 }
 
 .call-banner__cards {
@@ -1233,6 +1708,14 @@ watch(locale, () => {
   width: calc(var(--u) * 118.02);
   height: calc(var(--u) * 70.17);
   object-fit: contain;
+  transition:
+    transform 0.2s ease,
+    filter 0.2s ease;
+}
+
+.call-banner__card:hover {
+  transform: translateY(calc(var(--u) * -4));
+  filter: drop-shadow(0 calc(var(--u) * 10) calc(var(--u) * 14) rgba(0, 0, 0, 0.35));
 }
 
 .landing-section--games .landing-section__title {
@@ -1265,6 +1748,16 @@ watch(locale, () => {
   overflow: hidden;
   color: inherit;
   text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    filter 0.25s ease;
+}
+
+.games-grid__card:hover {
+  transform: translateY(calc(var(--u) * -6)) scale(1.02);
+  box-shadow: 0 calc(var(--u) * 16) calc(var(--u) * 30) rgba(0, 0, 0, 0.35);
 }
 
 .games-grid__label {
@@ -1273,7 +1766,6 @@ watch(locale, () => {
   white-space: pre-line;
   font-family: 'Climate Crisis', sans-serif;
   font-size: calc(var(--u) * 22.2);
-  line-height: calc(var(--u) * 23.58);
   text-transform: uppercase;
 }
 
@@ -1281,6 +1773,11 @@ watch(locale, () => {
   position: absolute;
   z-index: 1;
   object-fit: contain;
+  transition: transform 0.25s ease;
+}
+
+.games-grid__card:hover .games-grid__icon {
+  transform: rotate(-5deg) scale(1.1);
 }
 
 .landing-section--economy .landing-section__title {
@@ -1301,20 +1798,31 @@ watch(locale, () => {
   top: calc(var(--u) * 1860.47);
   width: calc(var(--u) * 1129.22);
   height: calc(var(--u) * 154.5);
+  display: flex;
+  align-items: center;
   border-radius: calc(var(--u) * 41.25);
   background: linear-gradient(120deg, rgba(124, 77, 219, 0.48) 0%, rgba(60, 36, 99, 0.47) 100%);
   box-shadow: 0 calc(var(--u) * 13.5) calc(var(--u) * 30) rgba(0, 0, 0, 0.18);
   outline: calc(var(--u) * 7.5) solid #fff;
   outline-offset: calc(var(--u) * -7.5);
   overflow: hidden;
+  animation: landingBannerIdle 12.5s ease-in-out infinite;
+  animation-delay: 1.2s;
+  transition: box-shadow 0.3s ease;
+}
+
+.economy-banner:hover {
+  box-shadow:
+    0 calc(var(--u) * 13.5) calc(var(--u) * 30) rgba(0, 0, 0, 0.18),
+    0 0 calc(var(--u) * 40) rgba(160, 120, 255, 0.28);
 }
 
 .economy-banner__title {
-  position: absolute;
-  left: calc(var(--u) * 49.22);
-  top: calc(var(--u) * 35.06);
+  position: relative;
+  flex-shrink: 0;
+  margin: 0;
+  margin-left: calc(var(--u) * 49.22);
   font-size: calc(var(--u) * 40.5);
-  line-height: calc(var(--u) * 58.5);
 }
 
 .economy-banner__slot {
@@ -1323,12 +1831,14 @@ watch(locale, () => {
   top: calc(var(--u) * 18.28);
   width: calc(var(--u) * 429.19);
   height: calc(var(--u) * 97.03);
+  transform: translateY(calc(var(--u) * 2));
 }
 
 .economy-banner__jackpot {
   position: absolute;
   left: calc(var(--u) * 122.34);
   top: 0;
+  z-index: 1;
   width: calc(var(--u) * 142.031);
   height: calc(var(--u) * 35.156);
   display: flex;
@@ -1337,10 +1847,11 @@ watch(locale, () => {
   border: calc(var(--u) * 3.75) solid #7c4ddb;
   box-sizing: border-box;
   border-radius: calc(var(--u) * 18);
-  background: rgba(255, 59, 48, 0.58);
+  background: rgba(255, 59, 48, 0.52);
   font-family: 'Arbutus', serif;
   font-size: calc(var(--u) * 19.5);
   line-height: 1;
+  letter-spacing: 0.04em;
 }
 
 .economy-banner__cells {
@@ -1348,6 +1859,7 @@ watch(locale, () => {
   left: 0;
   top: calc(var(--u) * 22.87);
   display: grid;
+  z-index: 0;
   grid-template-columns:
     calc(var(--u) * 58.479)
     calc(var(--u) * 61.5)
@@ -1423,14 +1935,27 @@ watch(locale, () => {
   background: #1a1133;
 }
 
+.landing-footer {
+  position: relative;
+  background: linear-gradient(to top, rgba(20, 10, 40, 0.8), transparent);
+  pointer-events: none;
+}
+
+.landing-footer > * {
+  pointer-events: auto;
+}
+
 .landing-footer__languages {
   position: absolute;
   left: calc(var(--u) * 700.03);
   top: calc(var(--u) * 2227.5);
-  width: calc(var(--u) * 116.72);
+  width: calc(var(--u) * 140);
   height: calc(var(--u) * 156.09);
-  border-radius: calc(var(--u) * 19.5);
-  background: rgba(255, 255, 255, 0.45);
+  box-sizing: border-box;
+  border-radius: calc(var(--u) * 20);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .landing-footer__language {
@@ -1438,11 +1963,16 @@ watch(locale, () => {
   border: 0;
   padding: 0;
   background: transparent;
-  color: #111827;
+  color: rgba(255, 255, 255, 0.7);
   font-size: calc(var(--u) * 18);
   text-align: left;
   cursor: pointer;
   z-index: 1;
+  border-radius: calc(var(--u) * 14);
+  transition:
+    background 0.22s ease,
+    color 0.22s ease,
+    box-shadow 0.22s ease;
 }
 
 .landing-footer__language:nth-child(1) {
@@ -1465,43 +1995,79 @@ watch(locale, () => {
   top: calc(var(--u) * 119.44);
 }
 
+.landing-footer__language:hover:not(.landing-footer__language--active) {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
 .landing-footer__language.landing-footer__language--active {
   left: 0;
   top: calc(var(--u) * -2.81);
   width: calc(var(--u) * 117);
   height: calc(var(--u) * 46.5);
   padding-left: calc(var(--u) * 26.44);
-  border-radius: calc(var(--u) * 19.5);
-  background: #fff;
+  border-radius: calc(var(--u) * 14);
+  background: #ffffff;
+  color: #1a1a1a;
+  font-weight: 500;
   display: flex;
   align-items: center;
+  box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 8) rgba(0, 0, 0, 0.12);
+}
+
+.landing-footer__language.landing-footer__language--active:hover {
+  background: #ffffff;
+  color: #1a1a1a;
 }
 
 .landing-footer__social {
   position: absolute;
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .landing-footer__social img {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  opacity: 0.45;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.landing-footer__social:hover img {
+  opacity: 1;
+  transform: translateY(calc(var(--u) * -3)) scale(1.1);
 }
 
 .landing-footer__feedback {
   position: absolute;
   left: calc(var(--u) * 1376.44);
   top: calc(var(--u) * 2230.31);
-  width: calc(var(--u) * 160.59);
+  min-width: calc(var(--u) * 160.59);
   height: calc(var(--u) * 46.5);
+  padding: calc(var(--u) * 10) calc(var(--u) * 22);
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: calc(var(--u) * 19.5);
-  background: #fff;
-  color: #111827;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #1a1a1a;
   font-size: calc(var(--u) * 18);
+  font-weight: 500;
   text-decoration: none;
+  opacity: 1;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.landing-footer__feedback:hover {
+  transform: translateY(calc(var(--u) * -2));
+  box-shadow: 0 calc(var(--u) * 8) calc(var(--u) * 20) rgba(0, 0, 0, 0.25);
 }
 
 .landing-footer__product,
@@ -1509,7 +2075,7 @@ watch(locale, () => {
   position: absolute;
   margin: 0;
   font-size: calc(var(--u) * 18);
-  color: #fff;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .landing-footer__product {
@@ -1531,15 +2097,43 @@ watch(locale, () => {
 .landing-footer__product p,
 .landing-footer__about p {
   margin: 0;
+  transition: color 0.2s ease;
+  cursor: default;
 }
 
-@media (max-width: 640px) {
-  .landing {
-    overflow-x: auto;
+.landing-footer__product p:hover,
+.landing-footer__about p:hover {
+  color: #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing__dot {
+    animation: none;
+    transform: none;
+    will-change: auto;
   }
 
-  .landing__canvas {
-    width: 100vw;
+  .landing__wordmark {
+    transform: none;
+    will-change: auto;
+  }
+
+  .landing__background {
+    transform: none;
+    will-change: auto;
+  }
+
+  .call-banner,
+  .economy-banner {
+    animation: none;
   }
 }
+
+</style>
+
+<style>
+  /* Landing only: viewport “camera” crops the fixed canvas; no horizontal page scroll. */
+  body:has(.landing) {
+    overflow-x: hidden;
+  }
 </style>

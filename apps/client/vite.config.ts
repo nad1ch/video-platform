@@ -63,6 +63,8 @@ export default defineConfig({
       'call-core/signaling': path.resolve(__dirname, '../../packages/call-core/src/signaling/index.ts'),
       'call-core/transport': path.resolve(__dirname, '../../packages/call-core/src/transport/index.ts'),
       'call-core/utils': path.resolve(__dirname, '../../packages/call-core/src/utils/index.ts'),
+      /** Avoid pulling the full `call-core` barrel (mediasoup, transports) for tab audio unlock on boot. */
+      'call-core/audio-unlock': path.resolve(__dirname, '../../packages/call-core/src/audio/audioPlaybackUnlock.ts'),
       'call-core': path.resolve(__dirname, '../../packages/call-core/src/index.ts'),
     },
   },

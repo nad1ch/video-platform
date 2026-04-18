@@ -13,6 +13,7 @@
       "call-core/signaling": ["../../packages/call-core/src/signaling/index.ts"],
       "call-core/transport": ["../../packages/call-core/src/transport/index.ts"],
       "call-core/utils": ["../../packages/call-core/src/utils/index.ts"],
+      "call-core/audio-unlock": ["../../packages/call-core/src/audio/audioPlaybackUnlock.ts"],
       "call-core/*": ["../../packages/call-core/src/*"]
     },
     "erasableSyntaxOnly": true,

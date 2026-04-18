@@ -163,6 +163,8 @@ export const router = createRouter({
   scrollBehavior: ((to, from, savedPosition) => {
     if (!to.path.startsWith('/app/eat')) {
       if (savedPosition) return savedPosition
+      // Landing uses fixed-canvas sections with ~0 in-flow height; LandingPage applies hash scroll.
+      if (to.path === '/' && to.hash) return false
       return { top: 0 }
     }
     if (savedPosition) return savedPosition

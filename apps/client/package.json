@@ -11,13 +11,13 @@
   },
   "dependencies": {
     "call-core": "file:../../packages/call-core",
-    "wordle-core": "file:../../packages/wordle-core",
     "mediasoup-client": "^3.18.7",
     "pinia": "^3.0.4",
     "ui-theme": "file:../../packages/ui-theme",
     "vue": "^3.5.32",
     "vue-i18n": "^9.14.5",
-    "vue-router": "^4.6.4"
+    "vue-router": "^4.6.4",
+    "wordle-core": "file:../../packages/wordle-core"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",
@@ -26,6 +26,7 @@
     "autoprefixer": "^10.5.0",
     "esbuild": "^0.28.0",
     "postcss": "^8.5.10",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.19",
     "typescript": "~6.0.2",
     "vite": "^8.0.4",
