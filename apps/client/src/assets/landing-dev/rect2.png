@@ -1,0 +1,6 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 28.8201 19.5629" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Rectangle">
+<path d="M18.4031 0H10.2067C4.5697 0 0 4.5697 0 10.2067V19.5629H27.5014C28.2672 19.5629 28.8719 18.9127 28.8165 18.149L28.159 9.07448C27.7884 3.96005 23.531 0 18.4031 0Z" fill="var(--fill-0, #8B5CF6)"/>
+<path d="M18.4031 0H10.2067C4.5697 0 0 4.5697 0 10.2067V19.5629H27.5014C28.2672 19.5629 28.8719 18.9127 28.8165 18.149L28.159 9.07448C27.7884 3.96005 23.531 0 18.4031 0Z" fill="var(--fill-1, black)" fill-opacity="0.2"/>
+</g>
+</svg>

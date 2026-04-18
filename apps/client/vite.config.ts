@@ -57,6 +57,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
       // Hoisted to repo root node_modules; Vite dev resolves from apps/client and misses it without an alias.
       'wordle-core': path.resolve(__dirname, '../../packages/wordle-core/index.mjs'),
+      'ui-theme': path.resolve(__dirname, '../../packages/ui-theme/src/index.css'),
       'call-core/audio': path.resolve(__dirname, '../../packages/call-core/src/audio/index.ts'),
       'call-core/media': path.resolve(__dirname, '../../packages/call-core/src/media/index.ts'),
       'call-core/signaling': path.resolve(__dirname, '../../packages/call-core/src/signaling/index.ts'),

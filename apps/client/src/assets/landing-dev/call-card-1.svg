@@ -1,0 +1,19 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 83.9218 49.8994" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Frame">
+<g clip-path="url(#clip0_0_25)">
+<rect width="83.9218" height="49.8994" rx="7.93855" fill="var(--fill-0, #8B5CF6)" fill-opacity="0.51"/>
+<rect id="Rectangle" x="58.9722" y="7.93859" width="15.8771" height="5.67039" rx="2.8352" fill="var(--fill-0, #6E72F8)"/>
+<circle id="Ellipse" cx="41.1105" cy="22.1146" r="8.50559" fill="var(--fill-0, #FFA36C)"/>
+<g id="Rectangle_2">
+<path d="M45.6212 30.6202H37.4247C31.7877 30.6202 27.218 35.1899 27.218 40.8269V50.183H54.7194C55.4852 50.183 56.0899 49.5329 56.0346 48.7691L55.377 39.6947C55.0064 34.5802 50.749 30.6202 45.6212 30.6202Z" fill="var(--fill-0, #FF6030)" fill-opacity="0.71"/>
+<path d="M45.6212 30.6202H37.4247C31.7877 30.6202 27.218 35.1899 27.218 40.8269V50.183H54.7194C55.4852 50.183 56.0899 49.5329 56.0346 48.7691L55.377 39.6947C55.0064 34.5802 50.749 30.6202 45.6212 30.6202Z" fill="var(--fill-1, black)" fill-opacity="0.2"/>
+</g>
+</g>
+<rect x="0.567039" y="0.567039" width="82.7877" height="48.7654" rx="7.37151" stroke="var(--stroke-0, white)" stroke-opacity="0.28" stroke-width="1.13408"/>
+</g>
+<defs>
+<clipPath id="clip0_0_25">
+<rect width="83.9218" height="49.8994" rx="7.93855" fill="white"/>
+</clipPath>
+</defs>
+</svg>
