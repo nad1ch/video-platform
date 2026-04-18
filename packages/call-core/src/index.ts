@@ -13,6 +13,13 @@ export {
 
 export { useCallOrchestrator } from './useCallOrchestrator'
 
+export {
+  SCREEN_SHARE_GET_DISPLAY_MEDIA,
+  useCallScreenShare,
+  useScreenShare,
+  type UseCallScreenShareDeps,
+} from './screenShare/useCallScreenShare'
+
 export { useCallSessionStore, type RoomPeerEntry } from './stores/callSession'
 
 export {
@@ -55,6 +62,7 @@ export { normalizeDisplayName } from './utils/normalizeDisplayName'
 export {
   ACTIVE_CAMERA_SMALL_ROOM_MAX,
   AUTO_LARGE_ROOM_VIDEO_CAPTURE,
+  AUTO_SMALL_ROOM_VIDEO_CAPTURE,
   countActiveCameraPublishersAtWire,
   getCallVideoConstraints,
   getSimulcastEncodingsForPreset,

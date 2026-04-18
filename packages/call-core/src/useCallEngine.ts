@@ -1,6 +1,6 @@
 import { getActivePinia, storeToRefs } from 'pinia'
 import type { ComputedRef, Ref } from 'vue'
-import { computed, nextTick, onScopeDispose, ref, shallowRef, watch } from 'vue'
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { loadRemoteListeningPrefs, saveRemoteListeningPrefs } from './audio/remoteListeningPrefs'
 import type { RemoteListenEntry } from './audio/remoteListeningPrefs'
 import { gridSizeTierFromParticipantCount } from './media/gridTier'
@@ -27,6 +27,7 @@ import { normalizeDisplayName } from './utils/normalizeDisplayName'
 import { resolveParticipantDisplayName } from './utils/participantsMapper'
 import { waitForCondition } from './utils/waitForCondition'
 import { newCallTabPeerId } from './utils/callTabPeerId'
+import { useCallScreenShare } from './screenShare/useCallScreenShare'
 
 /** Pinia session store from this package (or a compatible drop-in). */
 export type CallSessionStore = ReturnType<typeof useCallSessionStore>
@@ -78,6 +79,8 @@ export type CallTile = {
   remoteListenMuted?: boolean
   /** Signaled “raise hand” for this peer. */
   handRaised?: boolean
+  /** Camera vs screen for this tile (outbound `producer-video-source` / inbound mapping). */
+  videoPresentation?: 'camera' | 'screen'
 }
 
 export type CallChatLine = {
@@ -247,10 +250,26 @@ export function useCallEngine(options?: CallEngineOptions) {
   const peerHandRaised = ref<Record<string, boolean>>({})
   /** Local user's raised-hand flag (also echoed from server). */
   const handRaised = ref(false)
-  const screenSharing = ref(false)
-  const screenShareStream = shallowRef<MediaStream | null>(null)
-  let detachScreenShareEndedListener: (() => void) | null = null
-  let stoppingScreenShare = false
+
+  const {
+    screenSharing,
+    stoppingScreenShare,
+    screenShareStream,
+    toggleScreenShare,
+    teardownScreenShare,
+  } = useCallScreenShare({
+    localStream,
+    localPlayRev,
+    replaceOutboundVideoTrack,
+    notifyProducerVideoSource: (producerId, source) => {
+      try {
+        sendJson({ type: 'producer-video-source', payload: { producerId, source } })
+      } catch {
+        /* ws closed */
+      }
+    },
+    canShareScreen: () => readEngineRole(options) === 'participant' && Boolean(inCall.value),
+  })
 
   async function setCallAudioInputDevice(deviceId: string): Promise<void> {
     lastPickedAudioInputId.value = deviceId.trim()
@@ -647,6 +666,7 @@ export function useCallEngine(options?: CallEngineOptions) {
         audioEnabled: a ? a.enabled : true,
         /** Camera: cover in grid. Screen share (`replaceTrack`): contain so the whole desktop is visible. */
         videoFillCover: remoteSource === 'camera',
+        videoPresentation: remoteSource,
         playRev: remotePeerPlayRevs.value.get(peerId) ?? 0,
         remoteListenVolume: remoteListenPrefs.value.get(peerId)?.volume ?? 1,
         remoteListenMuted: remoteListenPrefs.value.get(peerId)?.muted ?? false,
@@ -668,6 +688,7 @@ export function useCallEngine(options?: CallEngineOptions) {
         audioEnabled: micEnabled.value,
         /** Webcam grid: cover. Screen capture: same as remote — contain. */
         videoFillCover: !screenSharing.value && camEnabled.value,
+        videoPresentation: screenSharing.value ? 'screen' : 'camera',
         playRev: localPlayRev.value,
         handRaised: handRaised.value,
       },
@@ -742,116 +763,6 @@ export function useCallEngine(options?: CallEngineOptions) {
     )
   }
 
-  async function stopScreenShare(): Promise<void> {
-    if (stoppingScreenShare) {
-      return
-    }
-    const dm = screenShareStream.value
-    const wasSharing = screenSharing.value
-    if (!dm && !wasSharing) {
-      return
-    }
-    stoppingScreenShare = true
-    detachScreenShareEndedListener?.()
-    detachScreenShareEndedListener = null
-
-    // Swap the outbound producer back to the camera *before* stopping display tracks,
-    // otherwise the producer can briefly reference an `ended` track and remotes/self glitch.
-    try {
-      if (wasSharing) {
-        screenSharing.value = false
-        try {
-          const cam = localStream.value?.getVideoTracks().find((x) => x.readyState === 'live')
-          if (cam) {
-            const producerId = await replaceOutboundVideoTrack(cam)
-            await nextTick()
-            try {
-              sendJson({ type: 'producer-video-source', payload: { producerId, source: 'camera' } })
-            } catch {
-              /* ws closed */
-            }
-          }
-        } catch {
-          /* producer may already be torn down */
-        }
-      }
-
-      if (dm) {
-        for (const t of dm.getTracks()) {
-          t.stop()
-        }
-      }
-      screenShareStream.value = null
-      localPlayRev.value += 1
-    } finally {
-      stoppingScreenShare = false
-    }
-  }
-
-  async function toggleScreenShare(): Promise<void> {
-    if (readEngineRole(options) !== 'participant' || !inCall.value) {
-      return
-    }
-    if (screenSharing.value) {
-      await stopScreenShare()
-      return
-    }
-    try {
-      const dm = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
-      if (import.meta.env.DEV) {
-        console.log('[screen-share] SCREEN STREAM', dm)
-      }
-      const vt = dm.getVideoTracks()[0]
-      if (import.meta.env.DEV) {
-        console.log('[screen-share] SCREEN TRACK', vt)
-      }
-      if (!vt) {
-        for (const x of dm.getTracks()) {
-          x.stop()
-        }
-        return
-      }
-      screenShareStream.value = dm
-      detachScreenShareEndedListener?.()
-      const onEnded = () => {
-        void stopScreenShare()
-      }
-      vt.addEventListener('ended', onEnded, { once: true })
-      detachScreenShareEndedListener = () => {
-        vt.removeEventListener('ended', onEnded)
-      }
-      screenSharing.value = true
-      localPlayRev.value += 1
-      await nextTick()
-      if (import.meta.env.DEV) {
-        console.log('[screen-share] PRODUCING SCREEN (replaceTrack)', vt.id)
-      }
-      const producerId = await replaceOutboundVideoTrack(vt)
-      await nextTick()
-      try {
-        sendJson({ type: 'producer-video-source', payload: { producerId, source: 'screen' } })
-      } catch {
-        /* ws closed */
-      }
-      localPlayRev.value += 1
-    } catch (e) {
-      if (import.meta.env.DEV) {
-        console.warn('[screen-share] start failed', e)
-      }
-      const orphan = screenShareStream.value
-      if (orphan) {
-        for (const t of orphan.getTracks()) {
-          t.stop()
-        }
-      }
-      detachScreenShareEndedListener?.()
-      detachScreenShareEndedListener = null
-      screenShareStream.value = null
-      screenSharing.value = false
-      stoppingScreenShare = false
-    }
-  }
-
   /**
    * Local `track.enabled` alone does not stop RTP — remotes often keep `!muted` and draw black.
    * Mirror Meet-style camera off by pausing the **server** video producer when not screen-sharing.
@@ -860,7 +771,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     () =>
       [inCall.value, readEngineRole(options), camEnabled.value, screenSharing.value] as const,
     async ([inC, role, cam, screen]) => {
-      if (!inC || role !== 'participant' || stoppingScreenShare) {
+      if (!inC || role !== 'participant' || stoppingScreenShare.value) {
         return
       }
       const wantPaused = !screen && !cam
@@ -907,14 +818,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   function teardownMedia(): void {
     lastPickedAudioInputId.value = ''
     lastPickedVideoInputId.value = ''
-    detachScreenShareEndedListener?.()
-    detachScreenShareEndedListener = null
-    for (const t of screenShareStream.value?.getTracks() ?? []) {
-      t.stop()
-    }
-    screenShareStream.value = null
-    screenSharing.value = false
-    stoppingScreenShare = false
+    teardownScreenShare()
     callChatMessages.value = []
     peerHandRaised.value = {}
     handRaised.value = false

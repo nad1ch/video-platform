@@ -14,6 +14,11 @@ const props = withDefaults(
     fillCover?: boolean
     /** When false, skip videoUi events (local preview). */
     reportVideoUi?: boolean
+    /**
+     * Local preview only (`reportVideoUi: false`): screen capture tracks may stay `live` with
+     * `enabled === false` in some browsers — still attach to `<video>` so screen share is visible.
+     */
+    videoPresentation?: 'camera' | 'screen'
   }>(),
   {
     muted: false,
@@ -35,6 +40,7 @@ const el = ref<HTMLVideoElement | null>(null)
  */
 const hasUsableVideoTrack = computed(() => {
   void props.playRev
+  void props.videoPresentation
   const s = props.stream
   if (!s) {
     return false
@@ -44,6 +50,9 @@ const hasUsableVideoTrack = computed(() => {
     return false
   }
   if (!props.reportVideoUi) {
+    if (props.videoPresentation === 'screen') {
+      return true
+    }
     return t.enabled
   }
   if (t.muted) {

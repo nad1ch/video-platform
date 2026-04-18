@@ -34,6 +34,8 @@ const props = defineProps<{
   raiseHand?: boolean
   /** Local webcam in grid: cover; screen share / remotes: contain (default false). */
   videoFillCover?: boolean
+  /** Shown video is camera or screen capture (semantics / tests; no layout change). */
+  videoPresentation?: 'camera' | 'screen'
 }>()
 
 const menuOpen = ref(false)
@@ -168,6 +170,11 @@ const hasLiveLocalVideo = computed(() => {
   }
   // `MediaStreamTrack.enabled` / readyState are not Vue deps — call-core bumps `playRev` on cam toggle.
   void props.playRev
+  // Webcam: require `enabled` so a disabled cam does not render a black frame. Screen capture from
+  // `getDisplayMedia` can be `live` while `enabled` is false in some browsers — still show the tile.
+  if (props.videoPresentation === 'screen') {
+    return props.stream.getVideoTracks().some((t) => t.readyState === 'live')
+  }
   return props.stream
     .getVideoTracks()
     .some((t) => t.readyState === 'live' && t.enabled)
@@ -287,6 +294,7 @@ const streamVideoMemoDeps = computed(() => [
   Boolean(props.videoFillCover),
   props.isLocal,
   reportInboundVideoUi.value,
+  props.videoPresentation,
 ])
 
 function onVolumeSliderInput(ev: Event): void {
@@ -310,6 +318,7 @@ function toggleMenu(): void {
 <template>
   <div
     class="tile"
+    :data-video-presentation="videoPresentation"
     :class="[
       `tile--${sizeTier}`,
       { 'tile--active-speaker': activeSpeaker, 'tile--menu-open': menuOpen },
@@ -334,6 +343,7 @@ function toggleMenu(): void {
             muted
             :play-rev="playRev"
             :report-video-ui="reportInboundVideoUi"
+            :video-presentation="isLocal ? videoPresentation : undefined"
             fill
             :fill-cover="Boolean(videoFillCover)"
             @video-ui="onVideoUi"

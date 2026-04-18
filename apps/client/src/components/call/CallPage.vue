@@ -599,6 +599,7 @@ watch(
                 :remote-listen-volume="row.tile.remoteListenVolume"
                 :remote-listen-muted="row.tile.remoteListenMuted"
                 :raise-hand="Boolean(row.tile.handRaised)"
+                :video-presentation="row.tile.videoPresentation"
                 @update:listen-volume="remoteListenVolumeHandler(row.tile.peerId)"
                 @update:listen-muted="remoteListenMutedHandler(row.tile.peerId)"
               />

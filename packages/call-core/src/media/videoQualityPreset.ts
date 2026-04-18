@@ -30,6 +30,22 @@ export const AUTO_LARGE_ROOM_VIDEO_CAPTURE = {
   FPS_MAX: 30,
 } as const
 
+/** Small-room capture: 720p ideal; fps targets match `AUTO_LARGE_ROOM_VIDEO_CAPTURE` (shared ~25fps auto tier). */
+export const AUTO_SMALL_ROOM_VIDEO_CAPTURE = {
+  WIDTH_IDEAL: 1280,
+  HEIGHT_IDEAL: 720,
+  WIDTH_MAX: 1920,
+  HEIGHT_MAX: 1080,
+} as const
+
+/**
+ * Outbound VP8 max bitrates (bps) — mediasoup `maxBitrate` caps, not guaranteed throughput; CC/congestion
+ * can send less. Tuned for voice-first calls with auto capture roughly ~576p–720p @ ~25fps:
+ * - Single-layer (no simulcast): one encoding worth of headroom for motion/clarity.
+ * - Simulcast `auto_large_room`: R0≈quarter spatial, R1≈half, R2≈full; R2 matches typical good 720p-class VP8
+ *   need under cap; large-room *camera ideal* is ~576p but max allows 720p — caps leave margin.
+ * Revisit after prod metrics if sustained sender quality or congestion needs adjustment.
+ */
 const AUTO_LARGE_SINGLE_LAYER_MAX_BITRATE_BPS = 2_000_000
 
 const AUTO_LARGE_SIMULCAST_MAX_BITRATE_BPS = {
@@ -103,8 +119,8 @@ export function getCallVideoConstraints(tier: VideoPublishTier): MediaTrackConst
       }
     case 'auto_small_room':
       return {
-        width: { ideal: 1280, max: 1920 },
-        height: { ideal: 720, max: 1080 },
+        width: { ideal: AUTO_SMALL_ROOM_VIDEO_CAPTURE.WIDTH_IDEAL, max: AUTO_SMALL_ROOM_VIDEO_CAPTURE.WIDTH_MAX },
+        height: { ideal: AUTO_SMALL_ROOM_VIDEO_CAPTURE.HEIGHT_IDEAL, max: AUTO_SMALL_ROOM_VIDEO_CAPTURE.HEIGHT_MAX },
         frameRate: { ideal: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL, max: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_MAX },
       }
     case 'economy':
@@ -129,7 +145,10 @@ export function getCallVideoConstraints(tier: VideoPublishTier): MediaTrackConst
   }
 }
 
-/** Outbound VP8 single layer (small rooms). */
+/**
+ * Outbound VP8 single encoding (used when this publish does not enable simulcast — see send transport).
+ * Tier still follows the same capture profiles as `getCallVideoConstraints`.
+ */
 export function getSingleLayerEncodingsForPreset(tier: VideoPublishTier): RtpEncodingParameters[] {
   switch (tier) {
     case 'auto_large_room':
