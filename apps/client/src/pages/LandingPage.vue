@@ -72,13 +72,13 @@ const callRoute = { name: 'call' } as const
 const homeRoute = { name: 'home' } as const
 
 const navItems = Object.freeze([
-  Object.freeze({ label: 'VideoCall', href: '#videocall', style: Object.freeze({ left: px(496.22) }) }),
-  Object.freeze({ label: 'Games', href: '#games', style: Object.freeze({ left: px(583.97) }) }),
-  Object.freeze({ label: 'Economy', href: '#economy', style: Object.freeze({ left: px(658.22) }) }),
-  Object.freeze({ label: 'Safety', href: '#footer', style: Object.freeze({ left: px(738.47) }) }),
-  Object.freeze({ label: 'Support', href: '#footer', style: Object.freeze({ left: px(804.47) }) }),
-  Object.freeze({ label: 'Developers', href: '#footer', style: Object.freeze({ left: px(887.44) }) }),
-] as readonly (NavItem & { style: Readonly<Record<string, string>> })[])
+  Object.freeze({ label: 'VideoCall', href: '#videocall' }),
+  Object.freeze({ label: 'Games', href: '#games' }),
+  Object.freeze({ label: 'Economy', href: '#economy' }),
+  Object.freeze({ label: 'Safety', href: '#footer' }),
+  Object.freeze({ label: 'Support', href: '#footer' }),
+  Object.freeze({ label: 'Developers', href: '#footer' }),
+] as readonly NavItem[])
 
 /** Labels match `eat-first` i18n locale codes (`VALID` in i18n/index.js includes pl, not es). */
 const localeButtons = Object.freeze([
@@ -374,13 +374,27 @@ async function selectLocale(code: LandingLocaleCode) {
   await persistLocale(code)
 }
 
+const LANDING_FLOW_LAYOUT_MEDIA = '(max-width: 960px)'
+
 function landingPrefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
+function landingUsesFlowLayout(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia(LANDING_FLOW_LAYOUT_MEDIA).matches
+}
+
+function getLandingFlowScrollTop(hash: string): number | null {
+  if (typeof window === 'undefined' || !landingUsesFlowLayout()) return null
+  const target = document.querySelector<HTMLElement>(hash)
+  if (target == null) return null
+  const top = window.scrollY + target.getBoundingClientRect().top
+  return Number.isFinite(top) ? Math.max(top - 16, 0) : null
+}
+
 function scrollLandingToHash(hash: string) {
   if (typeof window === 'undefined') return
-  const top = getLandingScrollTopForHash(hash)
+  const top = getLandingFlowScrollTop(hash) ?? getLandingScrollTopForHash(hash)
   window.scrollTo({ top, behavior: landingPrefersReducedMotion() ? 'auto' : 'smooth' })
 }
 
@@ -445,33 +459,36 @@ useLandingCosmicParallax(landingCanvasEl)
         />
       </div>
 
-      <header class="landing-header" aria-label="Site header">
-        <div class="landing-header__brand">
-          <span class="landing-header__brand-mark" aria-hidden="true">
-            <span />
-          </span>
-          <p class="landing-header__brand-name">
-            <span>Stream</span>
-            <span>Assist</span>
-          </p>
+      <header class="landing-topbar" aria-label="Site header">
+        <div class="landing-topbar__start">
+          <div class="landing-header__brand">
+            <span class="landing-header__brand-mark" aria-hidden="true">
+              <span />
+            </span>
+            <p class="landing-header__brand-name">
+              <span>Stream</span>
+              <span>Assist</span>
+            </p>
+          </div>
         </div>
 
-        <a
-          v-for="item in navItems"
-          :key="item.label"
-          class="landing-header__nav-link"
-          :href="item.href"
-          :style="item.style"
-          @click.prevent="goLandingNav(item.href)"
-        >
-          {{ item.label }}
-        </a>
-      </header>
+        <nav class="landing-topbar__mid landing-header__nav" aria-label="Primary">
+          <a
+            v-for="item in navItems"
+            :key="item.label"
+            class="landing-header__nav-link"
+            :href="item.href"
+            @click.prevent="goLandingNav(item.href)"
+          >
+            {{ item.label }}
+          </a>
+        </nav>
 
-      <div class="landing-auth" aria-label="Account">
-        <RouterLink class="landing-auth__link" :to="authRoute">Log In</RouterLink>
-        <RouterLink class="landing-auth__link" :to="authRoute">Sing Up</RouterLink>
-      </div>
+        <div class="landing-topbar__end landing-auth" aria-label="Account">
+          <RouterLink class="landing-auth__link" :to="authRoute">Log In</RouterLink>
+          <RouterLink class="landing-auth__link" :to="authRoute">Sing Up</RouterLink>
+        </div>
+      </header>
 
       <section class="landing-hero" aria-label="Hero" v-once>
         <div class="landing-hero__screen" aria-hidden="true">
@@ -524,14 +541,14 @@ useLandingCosmicParallax(landingCanvasEl)
         </div>
 
         <div class="landing-hero__copy">
-          <h1 class="landing-hero__title landing-u-text-outline-heading">StreamAssist</h1>
-          <p class="landing-hero__tagline landing-u-text-outline-heading">WHERE CHAT TURNS INTO THE GAME</p>
+          <div class="landing-hero__headline">
+            <h1 class="landing-hero__title landing-u-text-outline-heading">StreamAssist</h1>
+            <p class="landing-hero__tagline landing-u-text-outline-heading">WHERE CHAT TURNS INTO THE GAME</p>
+          </div>
           <p class="landing-hero__lead">
-            StreamAssist is a platform for streamers: your stream isn&rsquo;t just something to watch &mdash; it&rsquo;s
-            something to join. With StreamAssist you can turn every moment into a shared experience with real-time chat,
-            games, and video calls. People sometimes write it as &ldquo;stream assist&rdquo; when they search; it is the
-            same StreamAssist product, built for creators who want one focused toolkit instead of a dozen tabs.
-            Interact, play, and connect with your audience &mdash; all in one place.
+            Your stream isn&rsquo;t just something to watch &mdash; it&rsquo;s something to join. Turn every moment into
+            a shared experience with real-time chat, games, and video calls. Interact, play, and connect with your
+            audience like never before &mdash; all in one place, effortlessly.
           </p>
         </div>
       </section>
@@ -539,7 +556,7 @@ useLandingCosmicParallax(landingCanvasEl)
       <section id="videocall" class="landing-section landing-section--videocall">
         <h2 class="landing-section__title landing-u-text-outline-heading">VIDEOCALL</h2>
         <p class="landing-section__lead">
-          Open StreamAssist video rooms for co-streams, challenges, and interactive sessions with guests.
+          Create private video rooms for games, challenges, and interactive sessions.
         </p>
 
         <RouterLink class="call-banner" :to="callRoute">
@@ -561,7 +578,7 @@ useLandingCosmicParallax(landingCanvasEl)
       <section id="games" class="landing-section landing-section--games">
         <h2 class="landing-section__title landing-u-text-outline-heading">GAMES</h2>
         <p class="landing-section__lead">
-          StreamAssist games are built for chat energy: play with friends, challenge viewers, or put the moment on screen.
+          Play with friends, challenge others, or bring the action live to your audience.
         </p>
 
         <div class="games-grid">
@@ -591,8 +608,8 @@ useLandingCosmicParallax(landingCanvasEl)
       <section id="economy" class="landing-section landing-section--economy">
         <h2 class="landing-section__title landing-u-text-outline-heading">ECONOMY</h2>
         <p class="landing-section__lead">
-          Inside StreamAssist, create your own in-stream economy with points, bonuses, and interactive mechanics that
-          keep your audience coming back.
+          Create your own in-stream economy with points, bonuses, and interactive mechanics that keep your audience
+          coming back.
         </p>
 
         <div class="economy-banner">
@@ -619,41 +636,47 @@ useLandingCosmicParallax(landingCanvasEl)
           <a class="landing-footer__seo-link" href="/twitch-wordle-game/">Wordle chat game</a>
           <a class="landing-footer__seo-link" href="/stream-overlay-tools/">Stream overlay tools</a>
         </nav>
-        <div class="landing-footer__languages" role="group" aria-label="Interface language">
-          <button
-            v-for="item in localeButtons"
-            :key="item.code"
-            class="landing-footer__language"
-            :class="{ 'landing-footer__language--active': locale === item.code }"
-            type="button"
-            @click="selectLocale(item.code)"
-          >
-            {{ item.label }}
-          </button>
-        </div>
-
-        <div v-once>
-          <a
-            v-for="item in socialLinks"
-            :key="item.alt"
-            class="landing-footer__social"
-            :href="item.href"
-            target="_blank"
-            rel="noreferrer"
-            :aria-label="item.alt"
-            :style="item.style"
-          >
-            <img :src="item.icon" :alt="item.alt" width="128" height="128" loading="lazy" />
-          </a>
-
-          <RouterLink class="landing-footer__feedback" :to="homeRoute">Feedback</RouterLink>
-
-          <div class="landing-footer__product">
-            <p v-for="item in footerProduct" :key="item">{{ item }}</p>
+        <div class="landing-footer__panel">
+          <div class="landing-footer__languages" role="group" aria-label="Interface language">
+            <button
+              v-for="item in localeButtons"
+              :key="item.code"
+              class="landing-footer__language"
+              :class="{ 'landing-footer__language--active': locale === item.code }"
+              type="button"
+              @click="selectLocale(item.code)"
+            >
+              {{ item.label }}
+            </button>
           </div>
 
-          <div class="landing-footer__about">
-            <p v-for="item in footerAbout" :key="item">{{ item }}</p>
+          <div class="landing-footer__static" v-once>
+            <div class="landing-footer__socials">
+              <a
+                v-for="item in socialLinks"
+                :key="item.alt"
+                class="landing-footer__social"
+                :href="item.href"
+                target="_blank"
+                rel="noreferrer"
+                :aria-label="item.alt"
+                :style="item.style"
+              >
+                <img :src="item.icon" :alt="item.alt" width="128" height="128" loading="lazy" />
+              </a>
+            </div>
+
+            <RouterLink class="landing-footer__feedback" :to="homeRoute">Feedback</RouterLink>
+
+            <div class="landing-footer__columns">
+              <div class="landing-footer__product">
+                <p v-for="item in footerProduct" :key="item">{{ item }}</p>
+              </div>
+
+              <div class="landing-footer__about">
+                <p v-for="item in footerAbout" :key="item">{{ item }}</p>
+              </div>
+            </div>
           </div>
         </div>
       </footer>
@@ -688,7 +711,7 @@ useLandingCosmicParallax(landingCanvasEl)
   min-height: 100vh;
   min-width: 0;
   display: flex;
-  justify-content: flex-start;
+  justify-content: center;
   align-items: flex-start;
   width: 100%;
   max-width: 100%;
@@ -701,7 +724,7 @@ useLandingCosmicParallax(landingCanvasEl)
 }
 
 .landing__canvas {
-  --u: 1px;
+  --u: calc(100cqw / 2560);
   --landing-parallax-bg-x: 0px;
   --landing-parallax-bg-y: 0px;
   --landing-parallax-mid-x: 0px;
@@ -713,14 +736,16 @@ useLandingCosmicParallax(landingCanvasEl)
   --landing-parallax-bolt-x: 0px;
   --landing-parallax-bolt-y: 0px;
   position: relative;
-  left: 50%;
   flex-shrink: 0;
-  width: 2560px;
+  width: min(100vw, 2560px);
+  max-width: 2560px;
   height: auto;
   aspect-ratio: 2560 / 2655;
   min-height: calc(var(--u) * 2655);
+  margin-inline: auto;
+  container-type: inline-size;
+  box-sizing: border-box;
   overflow: hidden;
-  transform: translateX(-50%);
   background: linear-gradient(119.10504159217813deg, #0b0317 0%, rgba(74, 50, 116, 0.69) 73.206%);
   text-rendering: optimizeLegibility;
 }
@@ -992,18 +1017,44 @@ useLandingCosmicParallax(landingCanvasEl)
   transform-origin: center;
 }
 
-.landing-header {
+.landing-topbar {
   position: absolute;
   left: calc(var(--u) * 583.5);
+  right: calc(var(--u) * 611.221);
   top: calc(var(--u) * 21);
-  width: calc(var(--u) * 1387.5);
-  height: calc(var(--u) * 61.5);
+  min-height: calc(var(--u) * 61.5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--u) * 12);
+  box-sizing: border-box;
+  z-index: 3;
+}
+
+.landing-topbar__start {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.landing-topbar__mid {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.landing-topbar__end {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
 }
 
 .landing-header__brand {
-  position: absolute;
-  left: 0;
-  top: 0;
+  position: relative;
+  left: auto;
+  top: auto;
   width: calc(var(--u) * 165);
   height: calc(var(--u) * 52.5);
   overflow: visible;
@@ -1055,12 +1106,25 @@ useLandingCosmicParallax(landingCanvasEl)
   display: grid;
   font-family: 'Climate Crisis', sans-serif;
   font-size: calc(var(--u) * 12);
-  line-height: calc(var(--u) * 12.6);
+  line-height: calc(var(--u) * 13.2);
+}
+
+.landing-header__nav {
+  position: relative;
+  inset: auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--u) * 18);
+  min-width: 0;
 }
 
 .landing-header__nav-link {
-  position: absolute;
-  top: calc(var(--u) * 17.16);
+  position: relative;
+  top: auto;
+  left: auto;
+  flex: 0 0 auto;
   color: #fff;
   font-family: 'Marmelad', sans-serif;
   font-size: calc(var(--u) * 12.75);
@@ -1075,15 +1139,16 @@ useLandingCosmicParallax(landingCanvasEl)
 }
 
 .landing-auth {
-  position: absolute;
-  left: calc(var(--u) * 1865.81);
-  top: calc(var(--u) * 30.94);
+  position: relative;
+  left: auto;
+  top: auto;
   width: calc(var(--u) * 82.969);
   height: calc(var(--u) * 67.5);
   border-radius: calc(var(--u) * 19.5);
   background: rgba(255, 255, 255, 0.45);
   overflow: hidden;
   z-index: 2;
+  align-self: center;
 }
 
 .landing-auth::before {
@@ -1336,6 +1401,10 @@ useLandingCosmicParallax(landingCanvasEl)
   height: calc(var(--u) * 402.75);
 }
 
+.landing-hero__headline {
+  position: static;
+}
+
 .landing-hero__title,
 .landing-hero__tagline,
 .landing-section__title,
@@ -1349,19 +1418,24 @@ useLandingCosmicParallax(landingCanvasEl)
 
 .landing-hero__title {
   position: absolute;
-  left: calc(var(--u) * 4.5);
-  top: 0;
-  width: calc(var(--u) * 474.75);
-  font-size: calc(var(--u) * 45);
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .landing-hero__tagline {
   position: absolute;
   left: calc(var(--u) * 4.5);
-  top: calc(var(--u) * 54);
+  top: 0;
   width: calc(var(--u) * 474.75);
-  font-size: calc(var(--u) * 22);
-  line-height: 1.18;
+  font-size: calc(var(--u) * 45);
+  line-height: calc(var(--u) * 58.5);
 }
 
 .landing-hero__lead,
@@ -1377,7 +1451,7 @@ useLandingCosmicParallax(landingCanvasEl)
 .landing-hero__lead {
   position: absolute;
   left: calc(var(--u) * 3.84);
-  top: calc(var(--u) * 128);
+  top: calc(var(--u) * 192.75);
   width: calc(var(--u) * 423);
   margin: 0;
   font-size: calc(var(--u) * 18);
@@ -1535,8 +1609,10 @@ useLandingCosmicParallax(landingCanvasEl)
   z-index: 1;
   white-space: pre-line;
   font-family: 'Climate Crisis', sans-serif;
-  font-size: calc(var(--u) * 22.2);
+  font-size: calc(var(--u) * 18);
   text-transform: uppercase;
+  max-width: calc(100% - calc(var(--u) * 125));
+  box-sizing: border-box;
 }
 
 .games-grid__icon {
@@ -1707,13 +1783,15 @@ useLandingCosmicParallax(landingCanvasEl)
 
 .landing-footer__seo {
   position: absolute;
-  left: calc(var(--u) * 700.03);
-  top: calc(var(--u) * 2158);
-  display: flex;
-  flex-wrap: wrap;
-  gap: calc(var(--u) * 10) calc(var(--u) * 18);
-  max-width: calc(var(--u) * 820);
-  pointer-events: auto;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .landing-footer__seo-link {
@@ -1730,9 +1808,16 @@ useLandingCosmicParallax(landingCanvasEl)
   color: #f5f3ff;
 }
 
+.landing-footer__panel,
+.landing-footer__static,
+.landing-footer__socials,
+.landing-footer__columns {
+  display: contents;
+}
+
 .landing-footer {
   position: relative;
-  background: linear-gradient(to top, rgba(20, 10, 40, 0.8), transparent);
+  background: none;
   pointer-events: none;
 }
 
@@ -1826,7 +1911,7 @@ useLandingCosmicParallax(landingCanvasEl)
   width: 100%;
   height: 100%;
   object-fit: contain;
-  opacity: 0.45;
+  opacity: 1;
   transition:
     opacity 0.2s ease,
     transform 0.2s ease;
@@ -1899,6 +1984,1011 @@ useLandingCosmicParallax(landingCanvasEl)
 .landing-footer__product p:hover,
 .landing-footer__about p:hover {
   color: #ffffff;
+}
+
+@media (max-width: 1599px) {
+  .landing-auth {
+    height: calc(var(--u) * 39.375);
+    border-radius: calc(var(--u) * 19.5);
+    background: transparent;
+    overflow: visible;
+  }
+
+  .landing-auth::before {
+    width: 100%;
+    height: 100%;
+  }
+
+  .landing-auth__link:first-child {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+  }
+
+  .landing-auth__link:last-child {
+    display: none;
+  }
+}
+
+@media (max-width: 960px) {
+  .landing__canvas {
+    --landing-section-gutter: clamp(22px, 4vw, 30px);
+    --landing-panel-width: 681px;
+    width: 100%;
+    aspect-ratio: auto;
+    min-height: 100vh;
+    padding: 21px var(--landing-section-gutter) 152px;
+  }
+
+  .landing__bolt {
+    display: none;
+  }
+
+  .landing__wordmark {
+    left: 50%;
+    width: min(calc(100% - (var(--landing-section-gutter) * 2)), 761px);
+    font-size: clamp(32px, 9.9vw, 76.078px);
+    line-height: 1.153;
+    transform: translateX(-50%);
+    will-change: auto;
+  }
+
+  .landing__wordmark--1 {
+    top: auto;
+    bottom: 202px;
+  }
+
+  .landing__wordmark--2 {
+    top: auto;
+    bottom: 138px;
+  }
+
+  .landing__wordmark--3 {
+    top: auto;
+    bottom: 72px;
+  }
+
+  .landing__wordmark--4 {
+    top: auto;
+    bottom: 6px;
+  }
+
+  .landing-topbar,
+  .landing-auth,
+  .landing-hero,
+  .landing-section,
+  .landing-footer {
+    position: relative;
+    left: auto;
+    top: auto;
+  }
+
+  .landing-topbar {
+    right: auto;
+    width: 100%;
+    min-height: 54px;
+    height: auto;
+    margin-bottom: 40px;
+    padding: 0;
+    gap: clamp(6px, 1.8vw, 14px);
+  }
+
+  .landing-header__brand {
+    --u: 0.72px;
+    width: 119px;
+    height: 40px;
+  }
+
+  .landing-header__brand-mark {
+    transform: translate(calc(var(--u) * -13.5), calc(var(--u) * 2.25)) scale(3.15, 2.9);
+  }
+
+  .landing-header__nav {
+    position: relative;
+    inset: auto;
+    flex: 1 1 auto;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(6px, 1.4vw, 12px);
+    min-width: 0;
+    padding: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .landing-header__nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .landing-header__nav-link {
+    position: relative;
+    top: 0;
+    left: auto !important;
+    font-size: clamp(8px, 1.45vw, 10px);
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .landing-auth {
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
+    width: 83px;
+    height: 39px;
+    border-radius: 19.5px;
+    background: transparent;
+    flex-shrink: 0;
+  }
+
+  .landing-auth::before {
+    width: 100%;
+    height: 100%;
+    border-radius: 19.5px;
+  }
+
+  .landing-auth__link {
+    font-size: 13.5px;
+  }
+
+  .landing-auth__link:first-child {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .landing-hero {
+    display: grid;
+    justify-items: center;
+    gap: 18px;
+    margin-bottom: 72px;
+  }
+
+  .landing-hero__copy {
+    display: contents;
+  }
+
+  .landing-hero__headline {
+    order: 1;
+    position: relative;
+    display: grid;
+    gap: 0;
+    max-width: 530px;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .landing-hero__tagline,
+  .landing-hero__lead {
+    position: static;
+    left: auto;
+    top: auto;
+    width: auto;
+    height: auto;
+    margin: 0;
+    text-align: center;
+  }
+
+  .landing-hero__tagline {
+    font-size: 32px;
+    line-height: 41.133px;
+    max-width: 530px;
+  }
+
+  .landing-hero__lead {
+    order: 3;
+    max-width: 551px;
+    font-size: 12px;
+    line-height: 25.397px;
+  }
+
+  .landing-hero__screen {
+    order: 2;
+    position: relative;
+    left: auto;
+    top: auto;
+    width: min(100%, 594px);
+    height: auto;
+    aspect-ratio: 648.64 / 372.6;
+    margin-inline: auto;
+    overflow: hidden;
+    border-radius: calc(var(--u) * 37.5);
+    container-type: inline-size;
+    --u: calc(100cqw / 648.64);
+  }
+
+  .landing-section {
+    display: grid;
+    justify-items: center;
+    width: min(100%, var(--landing-panel-width));
+    gap: 12px;
+    margin-inline: auto;
+    margin-top: 0;
+  }
+
+  .landing-section__title,
+  .landing-section__lead {
+    position: static;
+    left: auto;
+    top: auto;
+    width: 100%;
+    margin: 0;
+    max-width: 42rem;
+    text-align: center;
+  }
+
+  .landing-section__title {
+    font-size: 32px;
+    line-height: 51.806px;
+  }
+
+  .landing-section__lead {
+    max-width: 663px;
+    font-size: 12px;
+    line-height: 25.35px;
+  }
+
+  .landing-section--videocall .landing-section__title,
+  .landing-section--videocall .landing-section__lead,
+  .landing-section--games .landing-section__title,
+  .landing-section--games .landing-section__lead,
+  .landing-section--economy .landing-section__title,
+  .landing-section--economy .landing-section__lead {
+    left: auto;
+    top: auto;
+    width: 100%;
+  }
+
+  .landing-section--videocall {
+    margin-top: 42px;
+  }
+
+  .landing-section--games {
+    margin-top: 84px;
+  }
+
+  .landing-section--economy {
+    margin-top: 92px;
+  }
+
+  .call-banner {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: min(100%, var(--landing-panel-width));
+    height: auto;
+    margin-top: 0;
+    padding: 12px 16px 16px;
+    display: grid;
+    gap: 12px;
+    justify-items: center;
+    box-sizing: border-box;
+    border-radius: 36px;
+    border: 6.5px solid #fff;
+    background: linear-gradient(120deg, rgba(124, 77, 219, 0.6) 0%, rgba(60, 36, 99, 0.88) 100%);
+  }
+
+  .call-banner__title {
+    position: static;
+    margin: 0;
+    font-size: 31px;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .call-banner__cards {
+    position: static;
+    width: 100%;
+    height: auto;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    padding: 10px 12px;
+    margin-inline: auto;
+    overflow: hidden;
+    box-sizing: border-box;
+    border-radius: 20px;
+    background: #3c2463;
+    order: -1;
+  }
+
+  .call-banner__card {
+    position: relative;
+    top: auto;
+    left: auto !important;
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 118.02 / 70.17;
+  }
+
+  .games-grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 21px 25px;
+    width: min(100%, var(--landing-panel-width));
+    margin-top: 0;
+    justify-content: center;
+  }
+
+  .games-grid__card {
+    position: relative;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 128px;
+    box-sizing: border-box;
+    border-radius: 33.445px;
+    border: 6.689px solid #fff;
+    background: linear-gradient(120deg, rgba(124, 77, 219, 0.52) 0%, rgba(60, 36, 99, 0.9) 100%);
+  }
+
+  .games-grid__label {
+    left: 18px !important;
+    top: 50% !important;
+    width: auto !important;
+    max-width: min(calc(100% - 108px), 9.5rem) !important;
+    height: auto !important;
+    transform: translateY(-50%);
+    font-size: clamp(11px, 2.6vw, 17px);
+    line-height: 1.06;
+  }
+
+  .games-grid__icon {
+    top: 50% !important;
+    right: 14px;
+    left: auto !important;
+    width: min(88px, 24vw) !important;
+    height: auto !important;
+    transform: translateY(-50%);
+  }
+
+  .games-grid__card:hover .games-grid__icon {
+    transform: translateY(-50%) rotate(-5deg) scale(1.1);
+  }
+
+  .games-grid__card:nth-child(1) { order: 1; }
+  .games-grid__card:nth-child(2) { order: 2; }
+  .games-grid__card:nth-child(3) { order: 5; }
+  .games-grid__card:nth-child(4) { order: 3; }
+  .games-grid__card:nth-child(5) { order: 4; }
+  .games-grid__card:nth-child(6) { order: 6; }
+
+  .landing-section--economy .landing-section__lead {
+    max-width: 524px;
+  }
+
+  .economy-banner {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: min(100%, var(--landing-panel-width));
+    height: auto;
+    margin-top: 0;
+    padding: 14px 16px 18px;
+    display: grid;
+    gap: 14px;
+    justify-items: center;
+    box-sizing: border-box;
+    border-radius: 36.53px;
+    border: 6.642px solid #fff;
+    background: linear-gradient(120deg, rgba(124, 77, 219, 0.6) 0%, rgba(60, 36, 99, 0.88) 100%);
+  }
+
+  .economy-banner__title {
+    position: static;
+    margin: 0;
+    font-size: 27px;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .economy-banner__slot {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: min(100%, 347px);
+    height: auto;
+    aspect-ratio: 429.19 / 97.03;
+    transform: none;
+    container-type: inline-size;
+    --u: calc(100cqw / 429.19);
+    order: -1;
+  }
+
+  .landing-footer {
+    margin-top: 88px;
+    padding-bottom: 0;
+  }
+
+  .landing-footer__seo {
+    display: none;
+  }
+
+  .landing-footer__panel {
+    display: grid;
+    width: min(100%, var(--landing-panel-width));
+    margin: 0 auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'languages . feedback columns'
+      'socials socials socials socials';
+    align-items: start;
+    gap: 20px clamp(14px, 3vw, 28px);
+  }
+
+  .landing-footer__static {
+    display: contents;
+  }
+
+  .landing-footer__languages {
+    grid-area: languages;
+    position: relative;
+    left: auto;
+    top: auto;
+    width: 105px;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 0 10px;
+    border-radius: 17px;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .landing-footer__language {
+    position: relative;
+    left: auto !important;
+    top: auto !important;
+    width: auto;
+    height: auto;
+    padding: 8px 14px;
+    font-size: 16px;
+    line-height: 1.15;
+    text-align: left;
+  }
+
+  .landing-footer__language.landing-footer__language--active {
+    left: auto;
+    top: auto;
+    width: auto;
+    height: auto;
+    min-height: 42px;
+    padding: 11px 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  }
+
+  .landing-footer__socials {
+    grid-area: socials;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 28px;
+    width: auto;
+    justify-self: start;
+  }
+
+  .landing-footer__social {
+    position: relative;
+    left: auto !important;
+    top: auto !important;
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  .landing-footer__social img {
+    opacity: 1;
+  }
+
+  .landing-footer__feedback {
+    grid-area: feedback;
+    position: relative;
+    left: auto;
+    top: auto;
+    min-width: 142px;
+    height: 41px;
+    padding: 10px 18px;
+    font-size: 16px;
+    justify-self: start;
+    align-self: start;
+  }
+
+  .landing-footer__columns {
+    grid-area: columns;
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 14px clamp(18px, 4vw, 34px);
+    width: auto;
+    max-width: none;
+    margin: 0;
+    justify-content: start;
+    justify-self: end;
+    align-self: start;
+  }
+
+  .landing-footer__product,
+  .landing-footer__about {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: auto;
+    padding-top: 0;
+    font-size: 10px;
+    line-height: 2;
+  }
+}
+
+@media (max-width: 800px) {
+  .landing__canvas {
+    --landing-section-gutter: clamp(18px, 4.5vw, 26px);
+    --landing-panel-width: 681px;
+    padding-inline: var(--landing-section-gutter);
+    padding-bottom: 136px;
+  }
+
+  .landing-topbar {
+    gap: 10px;
+  }
+
+  .landing-header__nav {
+    gap: clamp(4px, 1.2vw, 10px);
+  }
+
+  .games-grid {
+    gap: 18px;
+  }
+
+  .landing-footer__panel {
+    gap: 18px 18px;
+  }
+
+  .landing-footer__socials {
+    gap: 22px;
+  }
+
+  .landing-footer__social {
+    width: 38px !important;
+    height: 38px !important;
+  }
+
+  .landing__wordmark {
+    width: min(calc(100% - (var(--landing-section-gutter) * 2)), 620px);
+    font-size: clamp(30px, 8.4vw, 60px);
+  }
+}
+
+@media (max-width: 560px) {
+  .landing__canvas {
+    --landing-section-gutter: 12px;
+    --landing-panel-width: 426px;
+    padding: 14px var(--landing-section-gutter) 88px;
+  }
+
+  .landing__wordmark {
+    width: min(calc(100% - (var(--landing-section-gutter) * 2)), 296px);
+    font-size: clamp(27px, 8.8vw, 36px);
+    line-height: 1.153;
+  }
+
+  .landing__wordmark--1 {
+    bottom: 74px;
+  }
+
+  .landing__wordmark--2 {
+    bottom: 54px;
+  }
+
+  .landing__wordmark--3 {
+    bottom: 34px;
+  }
+
+  .landing__wordmark--4 {
+    bottom: 14px;
+  }
+
+  .landing-topbar {
+    min-height: 48px;
+    margin-bottom: 34px;
+    align-items: center;
+  }
+
+  .landing-header__brand {
+    --u: 0.33px;
+    width: 54px;
+    height: 29px;
+  }
+
+  .landing-header__brand-mark {
+    transform: translate(calc(var(--u) * -13), calc(var(--u) * 2.4)) scale(3.12, 2.9);
+  }
+
+  .landing-header__brand-name {
+    line-height: 1.12;
+  }
+
+  .landing-header__nav {
+    justify-content: center;
+    gap: clamp(3px, 1.1vw, 8px);
+  }
+
+  .landing-header__nav-link {
+    font-size: clamp(6px, 1.85vw, 8px);
+  }
+
+  .landing-auth {
+    top: auto;
+    right: auto;
+    width: clamp(39px, 12vw, 62px);
+    height: clamp(18px, 5.6vw, 30px);
+    border-radius: 10px;
+  }
+
+  .landing-auth__link {
+    font-size: clamp(6.274px, 1.95vw, 9px);
+  }
+
+  .landing-hero {
+    gap: 12px;
+    margin-bottom: 58px;
+  }
+
+  .landing-hero__tagline {
+    max-width: min(100%, 360px);
+    font-size: clamp(22px, 6.6vw, 28px);
+    line-height: clamp(29.135px, 8vw, 36px);
+  }
+
+  .landing-hero__screen {
+    width: min(100%, var(--landing-panel-width));
+    max-width: 426px;
+  }
+
+  .landing-hero__lead {
+    max-width: min(100%, 256px);
+    font-size: clamp(8px, 1.95vw, 10px);
+    line-height: clamp(17.58px, 4vw, 20px);
+  }
+
+  .landing-section {
+    gap: 10px;
+  }
+
+  .landing-section--videocall {
+    margin-top: 34px;
+  }
+
+  .landing-section--games {
+    margin-top: 56px;
+  }
+
+  .landing-section--economy {
+    margin-top: 60px;
+  }
+
+  .landing-section__title {
+    font-size: clamp(22px, 6.6vw, 28px);
+    line-height: 1.55;
+  }
+
+  .landing-section__lead {
+    max-width: min(100%, 263px);
+    font-size: clamp(8px, 1.95vw, 10px);
+    line-height: clamp(10px, 3vw, 16px);
+  }
+
+  .call-banner {
+    width: min(100%, var(--landing-panel-width));
+    padding: 10px 12px 14px;
+    border-radius: 28px;
+    border-width: 3.5px;
+    gap: 10px;
+  }
+
+  .call-banner__cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+    padding: 8px;
+    border-radius: 16px;
+  }
+
+  .call-banner__title {
+    font-size: clamp(20px, 6.6vw, 24px);
+  }
+
+  .games-grid {
+    grid-template-columns: 1fr;
+    width: min(100%, var(--landing-panel-width));
+    gap: 14px;
+    margin-top: 0;
+  }
+
+  .games-grid__card {
+    min-height: clamp(66px, 20vw, 96px);
+    border-radius: 24px;
+    border-width: 3.5px;
+  }
+
+  .games-grid__label {
+    left: 16px !important;
+    width: auto !important;
+    max-width: min(calc(100% - 96px), 10rem) !important;
+    font-size: clamp(11px, 3.8vw, 16px);
+    line-height: 1.06;
+  }
+
+  .games-grid__icon {
+    right: 12px;
+    width: min(72px, 22vw) !important;
+  }
+
+  .games-grid__card:nth-child(1) { order: 1; }
+  .games-grid__card:nth-child(2) { order: 4; }
+  .games-grid__card:nth-child(3) { order: 3; }
+  .games-grid__card:nth-child(4) { order: 2; }
+  .games-grid__card:nth-child(5) { order: 5; }
+  .games-grid__card:nth-child(6) { order: 6; }
+
+  .economy-banner {
+    width: min(100%, var(--landing-panel-width));
+    padding: 12px 12px 14px;
+    border-radius: 28px;
+    border-width: 3.5px;
+    gap: 10px;
+  }
+
+  .economy-banner__slot {
+    width: min(100%, 348px);
+  }
+
+  .economy-banner__title {
+    font-size: clamp(20px, 6.6vw, 24px);
+  }
+
+  .landing-footer {
+    margin-top: 64px;
+  }
+
+  .landing-footer__panel {
+    width: min(100%, var(--landing-panel-width));
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'languages . feedback columns'
+      'socials socials socials socials';
+    gap: 16px 10px;
+    align-items: start;
+  }
+
+  .landing-footer__languages {
+    width: 64px;
+    min-height: 85px;
+    padding-bottom: 8px;
+    border-radius: 10.621px;
+  }
+
+  .landing-footer__language {
+    padding: 5px 10px;
+    font-size: 9.804px;
+    border-radius: 10.621px;
+  }
+
+  .landing-footer__language.landing-footer__language--active {
+    min-height: 25px;
+    padding: 6px 10px;
+  }
+
+  .landing-footer__feedback {
+    min-width: 65px;
+    height: 24px;
+    padding: 6px 12px;
+    font-size: 9.412px;
+    align-self: start;
+    justify-self: start;
+  }
+
+  .landing-footer__columns {
+    width: auto;
+    max-width: none;
+    margin: 0;
+    grid-template-columns: repeat(2, auto);
+    gap: 10px 14px;
+    justify-self: end;
+  }
+
+  .landing-footer__product,
+  .landing-footer__about {
+    font-size: 8px;
+    line-height: 1.7;
+  }
+
+  .landing-footer__socials {
+    justify-content: flex-start;
+    gap: 16px;
+  }
+
+  .landing-footer__social {
+    width: 26px !important;
+    height: 26px !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .landing__canvas {
+    --landing-panel-width: 296px;
+    padding-bottom: 84px;
+  }
+
+  .landing__wordmark {
+    width: 296px;
+    font-size: clamp(26px, 8.4vw, 31px);
+  }
+
+  .landing__wordmark--1 {
+    bottom: 58px;
+  }
+
+  .landing__wordmark--2 {
+    bottom: 42px;
+  }
+
+  .landing__wordmark--3 {
+    bottom: 26px;
+  }
+
+  .landing__wordmark--4 {
+    bottom: 10px;
+  }
+
+  .landing-topbar {
+    min-height: 44px;
+    margin-bottom: 32px;
+  }
+
+  .landing-header__nav {
+    gap: 4px;
+  }
+
+  .landing-header__nav-link {
+    font-size: clamp(5.5px, 1.7vw, 6.5px);
+  }
+
+  .landing-auth {
+    width: 36px;
+    height: 17px;
+  }
+
+  .landing-auth__link {
+    font-size: 5.8px;
+  }
+
+  .landing-hero__headline {
+    width: 242px;
+  }
+
+  .landing-hero__tagline {
+    max-width: 242px;
+    font-size: 18px;
+    line-height: 23px;
+  }
+
+  .landing-hero__screen {
+    max-width: 296px;
+  }
+
+  .landing-hero__lead,
+  .landing-section__lead {
+    max-width: 244px;
+    font-size: 8px;
+    line-height: 14px;
+  }
+
+  .landing-section {
+    gap: 8px;
+  }
+
+  .landing-section__title {
+    font-size: 18px;
+    line-height: 28px;
+  }
+
+  .call-banner {
+    padding: 8px 8px 10px;
+    gap: 8px;
+    border-radius: 22px;
+    border-width: 3px;
+  }
+
+  .call-banner__cards {
+    gap: 6px;
+    padding: 6px;
+    border-radius: 12px;
+  }
+
+  .call-banner__title {
+    font-size: 15px;
+  }
+
+  .games-grid {
+    gap: 12px;
+  }
+
+  .games-grid__card {
+    min-height: 74px;
+    border-radius: 20px;
+    border-width: 3px;
+  }
+
+  .games-grid__label {
+    left: 12px !important;
+    width: auto !important;
+    max-width: min(calc(100% - 80px), 7.5rem) !important;
+    font-size: clamp(10px, 3.2vw, 12.5px);
+    line-height: 1.05;
+  }
+
+  .games-grid__icon {
+    right: 10px;
+    width: min(52px, 20vw) !important;
+  }
+
+  .economy-banner {
+    padding: 8px 8px 10px;
+    gap: 8px;
+    border-radius: 22px;
+    border-width: 3px;
+  }
+
+  .economy-banner__slot {
+    width: 100%;
+  }
+
+  .economy-banner__title {
+    font-size: 15px;
+  }
+
+  .landing-footer {
+    margin-top: 58px;
+  }
+
+  .landing-footer__panel {
+    gap: 14px 6px;
+  }
+
+  .landing-footer__socials {
+    gap: 12px;
+  }
+
+  .landing-footer__social {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  .landing-footer__languages {
+    width: 60px;
+  }
+
+  .landing-footer__feedback {
+    min-width: 62px;
+  }
+
+  .landing-footer__columns {
+    gap: 8px 10px;
+  }
+
+  .landing-footer__product,
+  .landing-footer__about {
+    font-size: 7px;
+    line-height: 1.55;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
