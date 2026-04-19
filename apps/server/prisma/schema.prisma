@@ -22,8 +22,30 @@ model Streamer {
   members   User[]   @relation("StreamerMembers")
   gameRounds          GameRound[]
   userStreamerStats   UserStreamerStats[]
+  garticPrompts       GarticPrompt[]
 
   @@index([ownerId])
+}
+
+/// Crowdsourced drawing-game prompts; `!add` creates unapproved rows for the streamer to moderate.
+model GarticPrompt {
+  id          String   @id @default(cuid())
+  streamerId  String
+  streamer    Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+  text        String
+  /// Normalized key for deduplication (lowercase, punctuation stripped, etc.).
+  normalizedText String?
+  /// `chat` = `!add`; `streamer` = host UI; `system` = seeded rows.
+  source      String   @default("chat")
+  /// Twitch user id (IRC) of chatter who submitted via `!add`, when known.
+  createdBy   String?
+  approved    Boolean  @default(false)
+  usageCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([streamerId, approved])
+  @@index([streamerId, normalizedText])
 }
 
 model User {

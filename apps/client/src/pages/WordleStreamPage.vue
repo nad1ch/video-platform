@@ -6,7 +6,7 @@ import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import WordleGlobalLeaderboardTable from '@/components/wordle/WordleGlobalLeaderboardTable.vue'
-import WordleChatPanel from '@/components/wordle/WordleChatPanel.vue'
+import TwitchRelayChatPanel from '@/components/twitch/TwitchRelayChatPanel.vue'
 import WordleLocalBoardGrid from '@/components/wordle/WordleLocalBoardGrid.vue'
 import WordleOnScreenKeyboard from '@/components/wordle/WordleOnScreenKeyboard.vue'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
@@ -82,7 +82,7 @@ const wordleTabPeerId =
     ? crypto.randomUUID()
     : `tab-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
 
-const chatPanelRef = ref<InstanceType<typeof WordleChatPanel> | null>(null)
+const chatPanelRef = ref<InstanceType<typeof TwitchRelayChatPanel> | null>(null)
 
 function scrollChatToBottom(): void {
   chatPanelRef.value?.scrollToBottom()
@@ -485,7 +485,7 @@ onUnmounted(() => {
           :id="WORDLE_STREAM_CHAT_ANCHOR_ID"
           class="wordle-page__stack wordle-page__stack--side wordle-page__stack--chat"
         >
-          <WordleChatPanel
+          <TwitchRelayChatPanel
             ref="chatPanelRef"
             :ws-status="wsStatus"
             :ws-status-label="wsStatusLabel"

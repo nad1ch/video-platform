@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { Game, GameStatePayload, GuessRow, LeaderboardEntry, PlayerState, Store } from './types'
 import type { PersistWordleRoundInput } from './persistRound'
 import { computeFeedback, generateWord, isValidGuessShape, normalizeWord, wordGraphemeCount } from './wordleLogic'
+import { setStreamerActiveGame } from '../streamerActiveGame'
 
 const MAX_ATTEMPTS_PER_ROUND = 6
 
@@ -169,6 +170,7 @@ export function adminStartNewGame(streamerId: string): { gameId: string; wordLen
     players: {},
   }
   stores.set(streamerId, next)
+  setStreamerActiveGame(streamerId, 'wordle')
   const g = next.currentGame
   return {
     gameId: g.id,

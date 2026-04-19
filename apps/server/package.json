@@ -8,6 +8,7 @@
     "postinstall": "node scripts/prisma-generate-retry.cjs",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
+    "db:generate:retry": "node scripts/prisma-generate-retry.cjs",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "npx dotenv-cli -e .env.local -- prisma migrate dev --skip-generate",
     "db:migrate:dev:raw": "prisma migrate dev",

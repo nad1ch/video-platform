@@ -17,6 +17,8 @@ import { startTwitchChatIngest, stopTwitchChatIngest } from './wordle/tmiChat'
 import { attachWordleSocketServer } from './wordle/wordleSocket'
 import { attachEatFirstSocketServer } from './eatFirst/broadcast'
 import { mountEatFirstRoutes } from './eatFirst/router'
+import { attachGarticShowSocketServer } from './gartic-show/garticSocket'
+import { mountGarticShowRoutes } from './gartic-show/garticRouter'
 
 async function bootstrap(): Promise<void> {
   let shuttingDown = false
@@ -64,10 +66,12 @@ async function bootstrap(): Promise<void> {
   const wssSignaling = new WebSocketServer({ noServer: true })
   const wssWordle = new WebSocketServer({ noServer: true })
   const wssEatFirst = new WebSocketServer({ noServer: true })
+  const wssGarticShow = new WebSocketServer({ noServer: true })
 
   attachSocketServer(wssSignaling, roomManager)
   attachWordleSocketServer(wssWordle)
   attachEatFirstSocketServer(wssEatFirst)
+  attachGarticShowSocketServer(wssGarticShow)
 
   server.on('upgrade', (request, socket, head) => {
     const host = request.headers.host ?? 'localhost'
@@ -83,6 +87,13 @@ async function bootstrap(): Promise<void> {
     if (pathname === '/wordle-ws') {
       wssWordle.handleUpgrade(request, socket, head, (ws) => {
         wssWordle.emit('connection', ws, request)
+      })
+      return
+    }
+
+    if (pathname === '/gartic-show-ws') {
+      wssGarticShow.handleUpgrade(request, socket, head, (ws) => {
+        wssGarticShow.emit('connection', ws, request)
       })
       return
     }
@@ -103,6 +114,7 @@ async function bootstrap(): Promise<void> {
   mountLeaderboardRoutes(app)
   mountAdminRoutes(app)
   mountEatFirstRoutes(app)
+  mountGarticShowRoutes(app)
 
   app.get('/health', (_req, res) => {
     res.json({
@@ -142,18 +154,20 @@ async function bootstrap(): Promise<void> {
     }
 
     closeWss(wssEatFirst, 'eat-first', () => {
-      closeWss(wssWordle, 'wordle', () => {
-        closeWss(wssSignaling, 'signaling', () => {
-          server.close((httpErr) => {
-            if (httpErr) {
-              console.error('HTTP server close error', httpErr)
-            }
-            try {
-              worker.close()
-            } catch (err) {
-              console.error('worker.close failed', err)
-            }
-            process.exit(0)
+      closeWss(wssGarticShow, 'gartic-show', () => {
+        closeWss(wssWordle, 'wordle', () => {
+          closeWss(wssSignaling, 'signaling', () => {
+            server.close((httpErr) => {
+              if (httpErr) {
+                console.error('HTTP server close error', httpErr)
+              }
+              try {
+                worker.close()
+              } catch (err) {
+                console.error('worker.close failed', err)
+              }
+              process.exit(0)
+            })
           })
         })
       })

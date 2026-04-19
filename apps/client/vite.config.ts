@@ -6,6 +6,15 @@ import vue from '@vitejs/plugin-vue'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+/**
+ * Dev proxy target for API + WebSocket upgrade. Use `127.0.0.1` (not `localhost`) so Windows does not
+ * resolve `localhost` → `::1` while Node listens on IPv4 only — otherwise Vite returns HTTP 502 for `/api/*`.
+ */
+const devApiProxyTarget = (process.env.VITE_DEV_API_PROXY ?? 'http://127.0.0.1:3000').replace(/\/$/, '')
+const devWsProxyTarget = devApiProxyTarget.startsWith('https://')
+  ? devApiProxyTarget.replace(/^https:\/\//, 'wss://')
+  : devApiProxyTarget.replace(/^http:\/\//, 'ws://')
+
 /** Map `/slug` and `/slug/` → `/slug/index.html` so `public/` marketing pages load instead of SPA `index.html`. */
 function seoPublicMarketingIndexPlugin(): Plugin {
   const slugs = ['video-calls-for-streamers', 'twitch-wordle-game', 'stream-overlay-tools'] as const
@@ -41,31 +50,42 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: devApiProxyTarget,
         changeOrigin: true,
       },
       // SPA under /app (e.g. reverse proxy): browser calls /app/api/* → same backend /api/*
       '/app/api': {
-        target: 'http://localhost:3000',
+        target: devApiProxyTarget,
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/app/, ''),
       },
       '/wordle-ws': {
-        target: 'ws://localhost:3000',
+        target: devWsProxyTarget,
         ws: true,
       },
       '/eat-first-ws': {
-        target: 'ws://localhost:3000',
+        target: devWsProxyTarget,
         ws: true,
       },
+      '/gartic-show-ws': {
+        target: devWsProxyTarget,
+        ws: true,
+        changeOrigin: true,
+      },
       '/app/wordle-ws': {
-        target: 'ws://localhost:3000',
+        target: devWsProxyTarget,
         ws: true,
         rewrite: (p) => p.replace(/^\/app/, ''),
       },
       '/app/eat-first-ws': {
-        target: 'ws://localhost:3000',
+        target: devWsProxyTarget,
         ws: true,
+        rewrite: (p) => p.replace(/^\/app/, ''),
+      },
+      '/app/gartic-show-ws': {
+        target: devWsProxyTarget,
+        ws: true,
+        changeOrigin: true,
         rewrite: (p) => p.replace(/^\/app/, ''),
       },
     },

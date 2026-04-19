@@ -729,7 +729,7 @@
   min-height: min(64vh, 680px);
 }
 
-/* Wordle: вертикальний скрол сторінки, блоки не ділять «штучну» висоту — футер не наїжджає на чат. */
+/* Wordle + Gartic: зона під шапкою без штучної min-height — flex-ланцюг керує висотою. */
 .app-shell-main__viewport--chrome.app-shell-main__viewport--wordle {
   min-height: 0;
 }

@@ -87,6 +87,14 @@ function goEatBack() {
       </RouterLink>
       <RouterLink
         class="stream-nav__link"
+        :to="{ name: 'gartic-show', params: { streamer: defaultWordleStreamer } }"
+        :title="t('routes.garticShow')"
+        :aria-label="t('routes.garticShow')"
+      >
+        {{ t('app.navGarticShow') }}
+      </RouterLink>
+      <RouterLink
+        class="stream-nav__link"
         :to="{ name: 'eat', query: { view: 'join' } }"
         :title="t('game.title')"
         :aria-label="t('game.title')"

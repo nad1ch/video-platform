@@ -90,6 +90,12 @@ export const router = createRouter({
           component: () => import('./pages/WordleStreamPage.vue'),
         },
         {
+          path: 'gartic-show/:streamer',
+          name: 'gartic-show',
+          meta: { appTitleKey: 'routes.garticShow', footerContext: 'home' },
+          component: () => import('./pages/GarticShowPage.vue'),
+        },
+        {
           path: 'eat',
           name: 'eat',
           meta: { footerContext: 'eat' },
@@ -133,7 +139,7 @@ export const router = createRouter({
         },
         /**
          * Short Wordle URL: `/app/:streamer` (legacy). Static segments above take precedence:
-         * `call`, `wordle`, `wordle/:streamer`, `eat`, `admin` are reserved — a streamer slug matching
+         * `call`, `wordle`, `wordle/:streamer`, `gartic-show/:streamer`, `eat`, `admin` are reserved — a streamer slug matching
          * those first segments cannot use this short path (e.g. `/app/call` is the Call page, not Wordle for "call").
          */
         {
@@ -153,6 +159,14 @@ export const router = createRouter({
       path: '/wordle/:streamer',
       redirect: (to) => ({
         path: `/app/wordle/${String(to.params.streamer)}`,
+        query: to.query,
+        hash: to.hash,
+      }),
+    },
+    {
+      path: '/gartic-show/:streamer',
+      redirect: (to) => ({
+        path: `/app/gartic-show/${String(to.params.streamer)}`,
         query: to.query,
         hash: to.hash,
       }),

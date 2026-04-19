@@ -1,35 +1,37 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import type { TwitchRelayChatLine, TwitchRelayChatWsStatus } from './twitchRelayChatTypes'
 
-export type WordleChatPanelWsStatus = 'idle' | 'open' | 'closed' | 'error'
-
-export type WordleChatPanelLine = {
-  _cid: number
-  displayName: string
-  text: string
-  validGuess: boolean
-  rateLimited?: boolean
-  cooldownMs?: number
-  guessFeedback?: ('correct' | 'present' | 'absent')[]
-}
-
-const props = defineProps<{
-  wsStatus: WordleChatPanelWsStatus
-  wsStatusLabel: string
-  chatTitle: string
-  guessLenHint: string
-  channelDisplay: string
-  twitchWatchUrl: string
-  openTwitchLabel: string
-  ircRelayBanner: string
-  relayAriaLabel: string
-  chatEmptyText: string
-  guessBadgeLabel: string
-  lines: WordleChatPanelLine[]
-  defaultCooldownMs: number
-  formatCooldownHint: (ms: number) => string
-  feedbackToEmojis: (fb: ('correct' | 'present' | 'absent')[]) => string
-}>()
+const props = withDefaults(
+  defineProps<{
+    wsStatus: TwitchRelayChatWsStatus
+    wsStatusLabel: string
+    chatTitle: string
+    /** Shown when `showGuessHints` is true (e.g. Wordle word length). */
+    guessLenHint: string
+    channelDisplay: string
+    twitchWatchUrl: string
+    openTwitchLabel: string
+    ircRelayBanner: string
+    relayAriaLabel: string
+    chatEmptyText: string
+    guessBadgeLabel: string
+    lines: TwitchRelayChatLine[]
+    defaultCooldownMs: number
+    formatCooldownHint: (ms: number) => string
+    feedbackToEmojis: (fb: ('correct' | 'present' | 'absent')[]) => string
+    /** Wordle: guess hints + badges. Gartic / plain relay: false. */
+    showGuessHints?: boolean
+    /**
+     * When true, the feed scrolls inside a fixed-height flex parent (sidebar rail).
+     * Prevents chat content from stretching sibling columns (e.g. Gartic canvas).
+     */
+    flexRail?: boolean
+    /** When false, hides the WebSocket status pill (e.g. Gartic uses a global link dot). */
+    showWsPill?: boolean
+  }>(),
+  { showGuessHints: true, flexRail: false, showWsPill: true },
+)
 
 const feedEl = ref<HTMLElement | null>(null)
 
@@ -54,19 +56,24 @@ defineExpose({ scrollToBottom })
 </script>
 
 <template>
-  <div class="wordle-page__chat-shell">
-    <header class="wordle-page__chat-head">
-      <div class="wordle-page__chat-head-row">
-        <h2 class="wordle-page__chat-title">{{ props.chatTitle }}</h2>
-        <span class="wordle-page__chat-ws-pill" :data-state="props.wsStatus">{{ props.wsStatusLabel }}</span>
+  <div class="twitch-relay-chat__shell" :class="{ 'twitch-relay-chat__shell--flex-rail': props.flexRail }">
+    <header class="twitch-relay-chat__head">
+      <div class="twitch-relay-chat__head-row">
+        <h2 class="twitch-relay-chat__title">{{ props.chatTitle }}</h2>
+        <span
+          v-if="props.showWsPill"
+          class="twitch-relay-chat__ws-pill"
+          :data-state="props.wsStatus"
+          >{{ props.wsStatusLabel }}</span
+        >
       </div>
-      <p class="wordle-page__chat-len-hint" role="note">
+      <p v-if="props.showGuessHints && props.guessLenHint" class="twitch-relay-chat__len-hint" role="note">
         {{ props.guessLenHint }}
       </p>
-      <div class="wordle-page__chat-toolbar">
-        <span class="wordle-page__chat-channel-pill">#{{ props.channelDisplay }}</span>
+      <div class="twitch-relay-chat__toolbar">
+        <span class="twitch-relay-chat__channel-pill">#{{ props.channelDisplay }}</span>
         <a
-          class="wordle-page__chat-external"
+          class="twitch-relay-chat__external"
           :href="props.twitchWatchUrl"
           target="_blank"
           rel="noopener noreferrer"
@@ -74,47 +81,53 @@ defineExpose({ scrollToBottom })
           {{ props.openTwitchLabel }}
         </a>
       </div>
-      <p v-if="props.ircRelayBanner" class="wordle-page__chat-irc-banner" role="status">{{ props.ircRelayBanner }}</p>
+      <p v-if="props.ircRelayBanner" class="twitch-relay-chat__irc-banner" role="status">{{ props.ircRelayBanner }}</p>
     </header>
     <div
       ref="feedEl"
-      class="wordle-page__chat-feed"
+      class="twitch-relay-chat__feed"
       role="log"
       aria-relevant="additions"
       :aria-label="props.relayAriaLabel"
     >
-      <p v-if="props.lines.length === 0" class="wordle-page__chat-empty">
+      <p v-if="props.lines.length === 0" class="twitch-relay-chat__empty">
         {{ props.chatEmptyText }}
       </p>
-      <ul v-else class="wordle-page__chat-lines">
+      <ul v-else class="twitch-relay-chat__lines">
         <li
           v-for="c in props.lines"
           :key="c._cid"
-          class="wordle-page__chat-line"
+          class="twitch-relay-chat__line"
           :class="{
-            'wordle-page__chat-line--guess': c.validGuess,
-            'wordle-page__chat-line--slow': c.rateLimited === true,
+            'twitch-relay-chat__line--guess': c.validGuess && !c.system,
+            'twitch-relay-chat__line--slow': c.rateLimited === true,
+            'twitch-relay-chat__line--system': c.system === true,
           }"
         >
-          <span class="wordle-page__chat-avatar" aria-hidden="true">{{ avatarInitial(c.displayName) }}</span>
-          <div class="wordle-page__chat-line-body">
-            <div class="wordle-page__chat-line-meta">
-              <span class="wordle-page__chat-name">{{ c.displayName }}</span>
-              <span v-if="c.validGuess" class="wordle-page__chat-badge">{{ props.guessBadgeLabel }}</span>
+          <template v-if="c.system">
+            <p class="twitch-relay-chat__system-text">{{ c.text }}</p>
+          </template>
+          <template v-else>
+            <span class="twitch-relay-chat__avatar" aria-hidden="true">{{ avatarInitial(c.displayName) }}</span>
+            <div class="twitch-relay-chat__line-body">
+              <div class="twitch-relay-chat__line-meta">
+                <span class="twitch-relay-chat__name">{{ c.displayName }}</span>
+                <span v-if="c.validGuess" class="twitch-relay-chat__badge">{{ props.guessBadgeLabel }}</span>
+              </div>
+              <p class="twitch-relay-chat__text">
+                <span class="twitch-relay-chat__text-inner">{{ c.text }}</span>
+                <span
+                  v-if="c.validGuess && c.guessFeedback?.length"
+                  class="twitch-relay-chat__relay-emojis"
+                  aria-hidden="true"
+                  >{{ props.feedbackToEmojis(c.guessFeedback) }}</span
+                >
+              </p>
+              <p v-if="c.rateLimited" class="twitch-relay-chat__cooldown">
+                {{ props.formatCooldownHint(c.cooldownMs ?? props.defaultCooldownMs) }}
+              </p>
             </div>
-            <p class="wordle-page__chat-text">
-              <span class="wordle-page__chat-text-inner">{{ c.text }}</span>
-              <span
-                v-if="c.validGuess && c.guessFeedback?.length"
-                class="wordle-page__relay-emojis"
-                aria-hidden="true"
-                >{{ props.feedbackToEmojis(c.guessFeedback) }}</span
-              >
-            </p>
-            <p v-if="c.rateLimited" class="wordle-page__chat-cooldown">
-              {{ props.formatCooldownHint(c.cooldownMs ?? props.defaultCooldownMs) }}
-            </p>
-          </div>
+          </template>
         </li>
       </ul>
     </div>
@@ -122,14 +135,14 @@ defineExpose({ scrollToBottom })
 </template>
 
 <style scoped>
-.wordle-page__relay-emojis {
+.twitch-relay-chat__relay-emojis {
   margin-left: var(--sa-space-2);
   letter-spacing: 0.1em;
   font-size: 0.88rem;
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.4));
 }
 
-.wordle-page__chat-shell {
+.twitch-relay-chat__shell {
   display: flex;
   flex-direction: column;
   gap: var(--sa-space-2);
@@ -139,7 +152,23 @@ defineExpose({ scrollToBottom })
   min-height: 0;
 }
 
-.wordle-page__chat-head {
+/** Sidebar / split layout: never grow past parent; scroll messages inside the feed. */
+.twitch-relay-chat__shell--flex-rail {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.twitch-relay-chat__shell--flex-rail .twitch-relay-chat__feed {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  overflow-y: auto;
+}
+
+.twitch-relay-chat__head {
   flex-shrink: 0;
   width: 100%;
   max-width: 100%;
@@ -147,35 +176,35 @@ defineExpose({ scrollToBottom })
   overflow: hidden;
 }
 
-.wordle-page__chat-irc-banner {
+.twitch-relay-chat__irc-banner {
   margin: 0;
   font-size: 0.8rem;
   line-height: 1.35;
   color: color-mix(in srgb, var(--sa-color-text-muted) 55%, #f59e0b 45%);
 }
 
-.wordle-page__chat-head-row {
+.twitch-relay-chat__head-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sa-space-2);
 }
 
-.wordle-page__chat-len-hint {
+.twitch-relay-chat__len-hint {
   margin: 0 0 var(--sa-space-2);
   font-size: 0.78rem;
   line-height: 1.45;
   color: color-mix(in srgb, var(--sa-color-text-body) 88%, var(--sa-color-primary) 12%);
 }
 
-.wordle-page__chat-title {
+.twitch-relay-chat__title {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
   color: var(--sa-color-text-main);
 }
 
-.wordle-page__chat-ws-pill {
+.twitch-relay-chat__ws-pill {
   flex-shrink: 0;
   font-size: 0.62rem;
   font-weight: 700;
@@ -188,18 +217,18 @@ defineExpose({ scrollToBottom })
   color: color-mix(in srgb, var(--sa-color-text-muted) 75%, var(--sa-color-primary) 25%);
 }
 
-.wordle-page__chat-ws-pill[data-state='open'] {
+.twitch-relay-chat__ws-pill[data-state='open'] {
   border-color: color-mix(in srgb, var(--sa-color-primary) 45%, transparent);
   color: var(--sa-color-primary);
   background: color-mix(in srgb, var(--sa-color-primary-soft) 75%, transparent);
 }
 
-.wordle-page__chat-ws-pill[data-state='error'] {
+.twitch-relay-chat__ws-pill[data-state='error'] {
   border-color: color-mix(in srgb, #f87171 45%, transparent);
   color: #fecaca;
 }
 
-.wordle-page__chat-toolbar {
+.twitch-relay-chat__toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -210,7 +239,7 @@ defineExpose({ scrollToBottom })
   min-width: 0;
 }
 
-.wordle-page__chat-channel-pill {
+.twitch-relay-chat__channel-pill {
   font-family: var(--sa-font-mono);
   font-size: 0.68rem;
   padding: 0.12rem 0.48rem;
@@ -220,7 +249,7 @@ defineExpose({ scrollToBottom })
   color: var(--sa-color-text-main);
 }
 
-.wordle-page__chat-external {
+.twitch-relay-chat__external {
   margin-left: auto;
   font-size: 0.72rem;
   font-weight: 600;
@@ -235,23 +264,23 @@ defineExpose({ scrollToBottom })
     border-color 0.15s ease;
 }
 
-.wordle-page__chat-external:hover {
+.twitch-relay-chat__external:hover {
   background: color-mix(in srgb, var(--sa-color-primary-soft) 85%, transparent);
   color: var(--sa-color-text-main);
 }
 
 @media (max-width: 640px) {
-  .wordle-page__chat-toolbar {
+  .twitch-relay-chat__toolbar {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .wordle-page__chat-external {
+  .twitch-relay-chat__external {
     margin-left: 0;
   }
 }
 
-.wordle-page__chat-feed {
+.twitch-relay-chat__feed {
   flex: 0 1 auto;
   width: 100%;
   min-height: 8rem;
@@ -269,7 +298,7 @@ defineExpose({ scrollToBottom })
     0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 8%, transparent);
 }
 
-.wordle-page__chat-empty {
+.twitch-relay-chat__empty {
   margin: 0;
   margin-inline: auto;
   padding: var(--sa-space-5) var(--sa-space-4);
@@ -281,7 +310,7 @@ defineExpose({ scrollToBottom })
   color: color-mix(in srgb, var(--sa-color-text-body) 88%, var(--sa-color-primary) 12%);
 }
 
-.wordle-page__chat-lines {
+.twitch-relay-chat__lines {
   list-style: none;
   margin: 0;
   padding: var(--sa-space-3) var(--sa-space-3) var(--sa-space-4);
@@ -290,7 +319,7 @@ defineExpose({ scrollToBottom })
   gap: 0.5rem;
 }
 
-.wordle-page__chat-line {
+.twitch-relay-chat__line {
   display: flex;
   align-items: flex-start;
   gap: 0.62rem;
@@ -308,11 +337,11 @@ defineExpose({ scrollToBottom })
     background 0.15s ease;
 }
 
-.wordle-page__chat-line:nth-child(even) {
+.twitch-relay-chat__line:nth-child(even) {
   background: color-mix(in srgb, var(--sa-color-surface-raised) 48%, rgb(10 8 18));
 }
 
-.wordle-page__chat-line:hover {
+.twitch-relay-chat__line:hover {
   border-color: color-mix(in srgb, var(--sa-color-primary) 45%, var(--sa-color-border));
   box-shadow:
     0 4px 14px rgb(0 0 0 / 0.32),
@@ -320,7 +349,7 @@ defineExpose({ scrollToBottom })
     inset 0 1px 0 rgb(255 255 255 / 0.08);
 }
 
-.wordle-page__chat-line--guess {
+.twitch-relay-chat__line--guess {
   border-color: color-mix(in srgb, var(--sa-color-primary) 48%, transparent);
   border-left-color: var(--sa-color-primary, #a78bfa);
   background: linear-gradient(
@@ -333,11 +362,26 @@ defineExpose({ scrollToBottom })
     0 3px 14px color-mix(in srgb, var(--sa-color-primary) 18%, rgb(0 0 0 / 0.5));
 }
 
-.wordle-page__chat-line--slow {
+.twitch-relay-chat__line--slow {
   opacity: 0.9;
 }
 
-.wordle-page__chat-avatar {
+.twitch-relay-chat__line--system {
+  border-left-color: color-mix(in srgb, var(--sa-color-primary) 35%, var(--sa-color-border));
+  background: color-mix(in srgb, var(--sa-color-surface-raised) 40%, rgb(8 12 24));
+}
+
+.twitch-relay-chat__system-text {
+  margin: 0;
+  width: 100%;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  font-style: italic;
+  color: color-mix(in srgb, #7dd3fc 75%, var(--sa-color-text-body) 25%);
+  word-break: break-word;
+}
+
+.twitch-relay-chat__avatar {
   flex-shrink: 0;
   width: 2rem;
   height: 2rem;
@@ -359,19 +403,19 @@ defineExpose({ scrollToBottom })
     0 2px 8px color-mix(in srgb, var(--sa-color-primary) 25%, transparent);
 }
 
-.wordle-page__chat-line-body {
+.twitch-relay-chat__line-body {
   min-width: 0;
   flex: 1 1 auto;
 }
 
-.wordle-page__chat-line-meta {
+.twitch-relay-chat__line-meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.35rem;
 }
 
-.wordle-page__chat-name {
+.twitch-relay-chat__name {
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -379,7 +423,7 @@ defineExpose({ scrollToBottom })
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
 }
 
-.wordle-page__chat-badge {
+.twitch-relay-chat__badge {
   font-size: 0.55rem;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -391,7 +435,7 @@ defineExpose({ scrollToBottom })
   background: color-mix(in srgb, var(--sa-color-primary-soft) 55%, transparent);
 }
 
-.wordle-page__chat-text {
+.twitch-relay-chat__text {
   margin: 0.28rem 0 0;
   font-size: 0.8rem;
   line-height: 1.48;
@@ -399,11 +443,11 @@ defineExpose({ scrollToBottom })
   word-break: break-word;
 }
 
-.wordle-page__chat-text-inner {
+.twitch-relay-chat__text-inner {
   white-space: pre-wrap;
 }
 
-.wordle-page__chat-cooldown {
+.twitch-relay-chat__cooldown {
   margin: 0.28rem 0 0;
   font-size: 0.62rem;
   text-transform: uppercase;
@@ -412,7 +456,7 @@ defineExpose({ scrollToBottom })
 }
 
 @media (max-width: 1200px) {
-  .wordle-page__chat-feed {
+  .twitch-relay-chat__feed {
     flex: 0 0 auto;
     min-height: 12rem;
     height: auto;
@@ -420,7 +464,7 @@ defineExpose({ scrollToBottom })
 }
 
 @media (max-width: 520px) {
-  .wordle-page__chat-feed {
+  .twitch-relay-chat__feed {
     min-height: 10rem;
     max-height: none;
     height: auto;
@@ -428,13 +472,13 @@ defineExpose({ scrollToBottom })
 }
 
 @media (min-width: 1201px) {
-  .wordle-page__chat-shell {
+  .twitch-relay-chat__shell {
     flex: 1 1 0;
     min-height: 0;
     height: 100%;
   }
 
-  .wordle-page__chat-feed {
+  .twitch-relay-chat__feed {
     flex: 1 1 0;
     min-height: min(12rem, 42dvh);
     overflow-y: auto;

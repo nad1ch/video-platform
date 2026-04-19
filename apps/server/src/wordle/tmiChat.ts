@@ -15,6 +15,8 @@ import {
 import { DEV_FALLBACK_STREAMER_ID } from './streamerContext'
 import { isValidGuessShape, normalizeWord } from './wordleLogic'
 import { readTwitchChatGuessCooldownMs, tryConsumeTwitchGuessThrottle } from './tmiGuessThrottle'
+import { ingestGarticTwitchLine } from '../gartic-show/garticTwitchIngest'
+import { getStreamerActiveGame } from '../streamerActiveGame'
 
 type IngestRow = { id: string; username: string; twitchId: string }
 
@@ -115,6 +117,10 @@ async function wireClient(h: Holder): Promise<void> {
     }
     const displayName = displayNameFromTags(tags)
     const text = message.trim()
+    if (getStreamerActiveGame(streamerId) === 'gartic-show') {
+      ingestGarticTwitchLine({ streamerId, userId, displayName, text })
+      return
+    }
     const wordLen = getCurrentWordLength(streamerId)
     const normalized = normalizeWord(text)
     const looksLikeGuess = isValidGuessShape(normalized, wordLen)

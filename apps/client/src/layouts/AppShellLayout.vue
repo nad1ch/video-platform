@@ -51,16 +51,21 @@ const { theme, setTheme, toggleTheme } = useTheme()
 
 const isEatRoute = computed(() => route.path.startsWith('/app/eat'))
 
-/** Wordle/stream: контент у довгому вертикальному потоці — без мін-висоти viewport (інакше flex «тискає» блоки). */
+/** Wordle/stream + Gartic: дати viewport `min-height: 0`, щоб сторінка могла займати залишок висоти без нескінченного росту. */
 const isWordleStreamRoute = computed(
-  () => route.name === 'wordle-streamer' || route.name === 'app-streamer',
+  () =>
+    route.name === 'wordle-streamer' ||
+    route.name === 'app-streamer' ||
+    route.name === 'gartic-show',
 )
 
 const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route) : 'join'))
 
 const showChrome = computed(() => !isEatRoute.value || currentEatView.value !== 'overlay')
 
-const showSiteFooter = computed(() => showChrome.value && route.name !== 'call')
+const showSiteFooter = computed(
+  () => showChrome.value && route.name !== 'call' && route.name !== 'gartic-show',
+)
 
 /** Стабільний ключ для Transition: без зайвих анімацій на дрібні зміни query (наприклад ?channel=). */
 const routeTransitionKey = computed(() => {
