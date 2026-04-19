@@ -230,7 +230,7 @@
     "authPageTitle": "Account",
     "authTabLogin": "Log in",
     "authTabSignup": "Sign up",
-    "authLoginSubmit": "Log in",
+    "authLoginSubmit": "Log in / Sign up",
     "authSignupSubmit": "Create account",
     "authSignupEmailTaken": "This email is already registered. Switch to Log in.",
     "authForgotPasswordLink": "Forgot password?",

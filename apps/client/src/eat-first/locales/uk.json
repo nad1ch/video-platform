@@ -230,7 +230,7 @@
     "authPageTitle": "Акаунт",
     "authTabLogin": "Вхід",
     "authTabSignup": "Реєстрація",
-    "authLoginSubmit": "Увійти",
+    "authLoginSubmit": "Увійти / Зареєструватися",
     "authSignupSubmit": "Створити акаунт",
     "authSignupEmailTaken": "Ця пошта вже зареєстрована. Перейди на вкладку «Вхід».",
     "authForgotPasswordLink": "Забув пароль?",

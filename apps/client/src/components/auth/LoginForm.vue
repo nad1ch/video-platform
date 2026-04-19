@@ -14,7 +14,7 @@ const props = defineProps<{
 const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
-const { loginWithEmail, refresh } = useAuth()
+const { loginOrRegisterWithEmail, refresh } = useAuth()
 
 const email = ref('')
 const password = ref('')
@@ -30,14 +30,14 @@ async function onSubmit(e: Event): Promise<void> {
   }
   submitting.value = true
   try {
-    const r = await loginWithEmail(email.value, password.value)
+    const r = await loginOrRegisterWithEmail(email.value, password.value)
     if (r.ok) {
       await refresh({ force: true })
       const target = safeOAuthRedirectPath(props.redirectPath)
       await router.replace(target)
       return
     }
-    if (r.error === 'invalid_credentials') {
+    if (r.error === 'wrong_password') {
       feedback.value = 'err_pw'
       return
     }
