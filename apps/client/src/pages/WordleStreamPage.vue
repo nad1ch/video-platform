@@ -11,7 +11,6 @@ import WordleLocalBoardGrid from '@/components/wordle/WordleLocalBoardGrid.vue'
 import WordleOnScreenKeyboard from '@/components/wordle/WordleOnScreenKeyboard.vue'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import { useWordleGlobalLeaderboard } from '@/composables/useWordleGlobalLeaderboard'
-import { useWordleLeaderboardSelfName } from '@/composables/useWordleLeaderboardSelfName'
 import { useWordleState } from '@/composables/useWordleState'
 import { useWordleStatusBanners } from '@/composables/useWordleStatusBanners'
 import { useWordleStreamerRoom } from '@/composables/useWordleStreamerRoom'
@@ -95,6 +94,7 @@ const {
   globalLbError,
   globalLbTableRows,
   globalLbScoreLabel,
+  globalLbSelfStreakSummary,
   loadGlobalLbActive,
 } = useWordleGlobalLeaderboard({
   streamerProfile,
@@ -106,7 +106,6 @@ const {
   gameState,
   leaderboard,
   chatLines,
-  sessionUser,
   wsStatus,
   ircRelayStatus,
   connectWs,
@@ -126,8 +125,6 @@ const {
   isAuthenticated,
 })
 
-const { leaderboardSelfName } = useWordleLeaderboardSelfName({ sessionUser, user })
-
 const {
   WORDLE_MAX_ATTEMPTS,
   WORD_LENGTH_OPTIONS,
@@ -144,7 +141,6 @@ const {
   secretPeekVisible,
   guessInput,
   localBoardLocked,
-  leaderboardStatusLabel,
   wordleGridRows,
   kbdKeyFeedbackModifier,
   kbdAppendLetter,
@@ -361,22 +357,13 @@ onUnmounted(() => {
       <div class="wordle-page__grid">
         <AppCard class="wordle-page__stack wordle-page__stack--side wordle-page__stack--leader">
           <div class="wordle-page__leader-stack">
-            <ol class="wordle-page__leader">
-              <li class="wordle-page__leader-row wordle-page__leader-row--solo">
-                <span class="wordle-page__who">{{ leaderboardSelfName }}</span>
-                <span class="wordle-page__stat">{{
-                  t('wordleUi.attemptsLine', { cur: localGuesses.length, max: WORDLE_MAX_ATTEMPTS })
-                }}</span>
-                <span class="wordle-page__status-pill">{{ leaderboardStatusLabel }}</span>
-              </li>
-            </ol>
-
             <WordleGlobalLeaderboardTable
               v-model:tab="globalLbTab"
               :loading="globalLbLoading"
               :error="globalLbError"
               :rows="globalLbTableRows"
               :score-column-header="globalLbScoreLabel"
+              :self-streak-summary="globalLbSelfStreakSummary"
               :section-aria-label="t('wordleUi.globalLeaderboard')"
               :title="t('wordleUi.globalLeaderboard')"
               :tabs-aria-label="t('wordleLeaderboard.tabsAria')"
@@ -919,12 +906,6 @@ onUnmounted(() => {
     scroll-margin-top: var(--sa-space-4);
   }
 
-  .wordle-page__leader-stack .wordle-page__leader {
-    flex: 0 0 auto;
-    max-height: none;
-    overflow: visible;
-  }
-
   .wordle-page__leader-stack {
     flex: 0 0 auto;
     min-height: auto;
@@ -935,7 +916,6 @@ onUnmounted(() => {
   .wordle-page__leader-stack :deep(.wordle-page__global-lb) {
     flex: 0 0 auto;
     align-items: stretch;
-    padding-top: 0;
   }
 
   .wordle-page__leader-stack :deep(.wordle-page__glb-scroll) {
@@ -1169,65 +1149,6 @@ onUnmounted(() => {
   word-break: break-word;
 }
 
-.wordle-page__leader {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  flex: 0 0 auto;
-  max-height: none;
-  overflow-y: visible;
-}
-
-.wordle-page__leader-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto auto;
-  gap: var(--sa-space-1) var(--sa-space-2);
-  align-items: center;
-  padding: var(--sa-space-2) 0;
-  border-bottom: 1px solid var(--sa-color-border);
-  font-size: 0.82rem;
-}
-
-.wordle-page__leader-row--solo {
-  grid-template-columns: 1fr auto auto;
-  gap: var(--sa-space-2);
-}
-
-.wordle-page__status-pill {
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--sa-color-border);
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 75%, transparent);
-  color: var(--sa-color-text-body);
-  white-space: nowrap;
-}
-
-.wordle-page__pos {
-  font-weight: 700;
-  color: var(--sa-color-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.wordle-page__who {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--sa-color-text-main);
-}
-
-.wordle-page__stat {
-  font-size: 0.75rem;
-  color: var(--sa-color-text-body);
-  font-variant-numeric: tabular-nums;
-}
-
-.wordle-page__badge {
-  color: var(--sa-color-success);
-  font-weight: 700;
-}
-
 .wordle-page__secret {
   letter-spacing: 0.06em;
   font-weight: 800;
@@ -1452,7 +1373,6 @@ onUnmounted(() => {
     display: flex;
     flex: none;
     align-items: stretch;
-    padding-top: var(--sa-space-3);
     margin-top: 0;
     min-height: auto;
   }

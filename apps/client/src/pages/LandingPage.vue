@@ -23,7 +23,12 @@ import twitchIcon from '@/assets/landing/twitch.png'
 import whoTakeShitIcon from '@/assets/landing/who-take-shit.png'
 import wordlivIcon from '@/assets/landing/wordliv.png'
 import { persistLocale } from '@/eat-first/i18n/index.js'
-import { STREAM_APP_BRAND_NAME, STREAMER_NICK, STREAMER_TWITCH_URL } from '@/eat-first/constants/brand.js'
+import {
+  BRAND_LOGO_LIGHT_SVG,
+  STREAM_APP_BRAND_NAME,
+  STREAMER_NICK,
+  STREAMER_TWITCH_URL,
+} from '@/eat-first/constants/brand.js'
 import { getLandingScrollTopForHash } from '@/utils/landingAnchorScroll'
 import { landingDesignPx as px } from '@/utils/landingDesignPx'
 import { landingCosmicGlows as glows, landingCosmicSparkleDots as sparkleDots } from '@/utils/landingCosmicDecor'
@@ -447,9 +452,15 @@ useLandingCosmicParallax(landingCanvasEl)
 
       <header class="landing-header" aria-label="Site header">
         <div class="landing-header__brand">
-          <span class="landing-header__brand-mark" aria-hidden="true">
-            <span />
-          </span>
+          <img
+            class="landing-header__brand-mark"
+            :src="BRAND_LOGO_LIGHT_SVG"
+            alt=""
+            width="81"
+            height="104"
+            decoding="async"
+            fetchpriority="high"
+          />
           <p class="landing-header__brand-name">
             <span>Stream</span>
             <span>Assist</span>
@@ -1011,40 +1022,15 @@ useLandingCosmicParallax(landingCanvasEl)
 
 .landing-header__brand-mark {
   position: absolute;
-  left: calc(var(--u) * 0);
-  top: calc(var(--u) * 0);
-  width: calc(var(--u) * 24);
-  height: calc(var(--u) * 24);
-  transform: translate(calc(var(--u) * -15), calc(var(--u) * 2.25)) scale(3.375, 3);
-  transform-origin: top left;
-}
-
-.landing-header__brand-mark::before,
-.landing-header__brand-mark::after,
-.landing-header__brand-mark span,
-.landing-header__brand-mark span::before {
-  content: '';
-  position: absolute;
-  border-radius: 999px;
-  background: #fff;
-}
-
-.landing-header__brand-mark::before {
-  inset: calc(var(--u) * 3) calc(var(--u) * 10) calc(var(--u) * 3) 0;
-}
-
-.landing-header__brand-mark::after {
-  inset: calc(var(--u) * 10) 0 calc(var(--u) * 10) calc(var(--u) * 10);
-}
-
-.landing-header__brand-mark span {
-  inset: calc(var(--u) * 2) calc(var(--u) * 10);
-}
-
-.landing-header__brand-mark span::before {
-  width: 100%;
-  height: 100%;
-  transform: rotate(55deg);
+  left: calc(var(--u) * -15);
+  top: calc(var(--u) * 2.25);
+  width: auto;
+  height: calc(var(--u) * 48);
+  max-width: calc(var(--u) * 42);
+  object-fit: contain;
+  object-position: left center;
+  display: block;
+  pointer-events: none;
 }
 
 .landing-header__brand-name {

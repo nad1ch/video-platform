@@ -24,6 +24,8 @@ defineProps<{
   tabWinsLabel: string
   tabStreakLabel: string
   tabRatingLabel: string
+  /** Shown above the table on the streak tab when the server returns the viewer’s best streak. */
+  selfStreakSummary: string | null
   loadingText: string
   emptyText: string
   colRank: string
@@ -68,6 +70,8 @@ defineProps<{
       </button>
     </div>
 
+    <p v-if="selfStreakSummary" class="wordle-page__glb-self-streak" aria-live="polite">{{ selfStreakSummary }}</p>
+
     <p v-if="error" class="wordle-page__glb-banner" role="alert">{{ error }}</p>
     <p v-else-if="loading" class="wordle-page__glb-muted">{{ loadingText }}</p>
     <div v-else-if="rows.length === 0" class="wordle-page__glb-empty">
@@ -83,7 +87,7 @@ defineProps<{
         <thead>
           <tr>
             <th scope="col" class="wordle-page__glb-th wordle-page__glb-th--rank">{{ colRank }}</th>
-            <th scope="col" class="wordle-page__glb-th">{{ colPlayer }}</th>
+            <th scope="col" class="wordle-page__glb-th wordle-page__glb-th--player-col">{{ colPlayer }}</th>
             <th scope="col" class="wordle-page__glb-th wordle-page__glb-th--score">{{ scoreColumnHeader }}</th>
           </tr>
         </thead>
@@ -130,8 +134,6 @@ defineProps<{
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* Розділювач лише знизу рядка «ти» (.wordle-page__leader-row), без другого border-top — інакше дві лінії підряд. */
-  padding-top: var(--sa-space-6);
   overflow-x: clip;
 }
 
@@ -180,6 +182,20 @@ defineProps<{
   background: color-mix(in srgb, var(--sa-color-primary) 22%, var(--sa-color-surface-raised));
   border-color: var(--sa-color-primary-border);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 35%, transparent);
+}
+
+.wordle-page__glb-self-streak {
+  align-self: stretch;
+  margin: 0 0 var(--sa-space-2);
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--sa-radius-sm);
+  border: 1px solid color-mix(in srgb, var(--sa-color-primary) 28%, var(--sa-color-border));
+  background: color-mix(in srgb, var(--sa-color-primary) 12%, var(--sa-color-surface));
+  color: var(--sa-color-text-main);
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.35;
 }
 
 .wordle-page__glb-banner {
@@ -258,15 +274,16 @@ defineProps<{
   align-self: stretch;
   width: 100%;
   min-width: 0;
-  /* Лише вертикальний скрол: таблиця інколи на 1–2px ширша за контейнер і дає зайвий горизонтальний скрол. */
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   margin-top: var(--sa-space-1);
 }
 
 .wordle-page__glb-table {
   width: 100%;
   max-width: 100%;
+  min-width: 13.5rem;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.72rem;
@@ -274,23 +291,36 @@ defineProps<{
 
 .wordle-page__glb-th {
   text-align: left;
-  padding: 0.28rem 0.35rem;
+  padding: 0.32rem 0.3rem;
   border-bottom: 1px solid var(--sa-color-border);
   color: var(--sa-color-text-muted);
   font-weight: 700;
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-wrap: break-word;
+  vertical-align: bottom;
+  box-sizing: border-box;
 }
 
 .wordle-page__glb-th--rank {
-  width: 2rem;
+  width: 24%;
+  min-width: 3rem;
   text-align: center;
 }
 
+.wordle-page__glb-th--player-col {
+  width: 48%;
+  min-width: 0;
+}
+
 .wordle-page__glb-th--score {
+  width: 28%;
+  min-width: 4.75rem;
   text-align: right;
-  width: 3.25rem;
 }
 
 .wordle-page__glb-td {

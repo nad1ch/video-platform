@@ -7,6 +7,8 @@ import { safeOAuthRedirectPath } from '@/utils/safeOAuthRedirectPath'
 /** Global auth user (GET /api/auth/me). */
 export type AppUser = {
   id: string
+  /** Prisma `User.id` when linked; leaderboard `userId` for wins/rating matches this. */
+  dbUserId?: string
   displayName: string
   avatar?: string
   provider: 'twitch' | 'google' | 'apple' | 'email' | null
@@ -25,7 +27,8 @@ const loaded = ref(false)
 let inflight: Promise<void> | null = null
 
 /** Display-only cache (no tokens). Speeds up first paint after reload; always revalidated over the network. */
-const DISPLAY_CACHE_KEY = 'streamassist_auth_display_v1'
+/** Bump when `AppUser` shape changes (e.g. `dbUserId`) so stale sessionStorage entries re-fetch. */
+const DISPLAY_CACHE_KEY = 'streamassist_auth_display_v2'
 const DISPLAY_CACHE_TTL_MS = 5 * 60 * 1000
 /** Dev-only: log Twitch numeric id once per tab session (cleared on logout). */
 const DEV_TWITCH_ID_LOG_KEY = 'streamassist_dev_twitch_id_logged'
@@ -111,8 +114,13 @@ function parseUser(raw: unknown): AppUser | null {
   if (typeof u.wordleStreamerName === 'string' && u.wordleStreamerName.length > 0) {
     wordleStreamerName = u.wordleStreamerName
   }
+  let dbUserId: string | undefined
+  if (typeof u.dbUserId === 'string' && u.dbUserId.length > 0) {
+    dbUserId = u.dbUserId
+  }
   return {
     id,
+    ...(dbUserId ? { dbUserId } : {}),
     displayName,
     ...(avatar ? { avatar } : {}),
     provider,
