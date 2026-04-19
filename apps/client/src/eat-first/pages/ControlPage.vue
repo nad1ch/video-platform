@@ -1,6 +1,6 @@
 <script setup>
 import { useControlOrchestrator } from '../composables/control/useControlOrchestrator.js'
-import AppPageLoader from '../ui/molecules/AppPageLoader.vue'
+import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import ConfirmDialog from '../ui/molecules/ConfirmDialog.vue'
 import ShowDeskHeader from '../components/showdesk/ShowDeskHeader.vue'
 import ShowPlayersRoster from '../components/showdesk/ShowPlayersRoster.vue'
@@ -242,7 +242,7 @@ const {
   </div>
 
   <div v-else class="desk">
-    <AppPageLoader
+    <AppFullPageLoader
       :visible="showControlPageLoader"
       :label="t('loader.control')"
     />

@@ -20,6 +20,11 @@ import {
   resolveOnboardingTourKeyFromRoute,
 } from '@/eat-first/utils/onboardingStorage.js'
 import { useAuth } from '@/composables/useAuth'
+import {
+  CALL_ROOM_DROPDOWN_HOST_ID,
+  CALL_ROOM_POPOVER_PANEL_ID,
+  useCallRoomHeaderJoinStore,
+} from '@/stores/callRoomHeaderJoin'
 import { redirectAdminToControlIfAuthed } from '@/eat-first/router.js'
 import {
   BRAND_LOGO_COMPACT_PNG,
@@ -37,6 +42,7 @@ useSeoApp()
 const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
+const callRoomHeaderJoin = useCallRoomHeaderJoinStore()
 const auth = useAuth()
 const canEatFirstHost = computed(() => {
   const r = auth.user.value?.role
@@ -219,14 +225,32 @@ onMounted(() => {
           <AppShellStreamNav />
         </template>
         <template v-if="!isEatRoute" #center>
-          <RouterLink
-            class="app-shell-stream-centered-title"
-            :to="{ name: 'home' }"
-            :title="headerTitle"
-            :aria-label="`${t('app.navHome')} · ${headerTitle}`"
-          >
-            {{ headerTitle }}
-          </RouterLink>
+          <div class="app-shell-header__stream-center">
+            <RouterLink
+              class="app-shell-stream-centered-title"
+              :to="{ name: 'home' }"
+              :title="headerTitle"
+              :aria-label="`${t('app.navHome')} · ${headerTitle}`"
+            >
+              {{ headerTitle }}
+            </RouterLink>
+            <div
+              v-if="route.name === 'call'"
+              :id="CALL_ROOM_DROPDOWN_HOST_ID"
+              class="app-shell-call-room-anchor"
+            >
+              <button
+                type="button"
+                class="app-shell-call-join-room"
+                :aria-expanded="callRoomHeaderJoin.roomPopoverOpen"
+                aria-haspopup="dialog"
+                :aria-controls="CALL_ROOM_POPOVER_PANEL_ID"
+                @click.stop="callRoomHeaderJoin.toggleRoomPopover()"
+              >
+                {{ t('callPage.headerJoinRoom') }}
+              </button>
+            </div>
+          </div>
         </template>
         <template #end>
           <AppHeaderToolbar
@@ -376,6 +400,50 @@ onMounted(() => {
   font-size: 0.8rem;
   font-weight: 800;
   color: var(--text-heading, var(--sa-color-text-main));
+}
+
+.app-shell-header__stream-center {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.65rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.app-shell-call-room-anchor {
+  position: relative;
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.app-shell-call-join-room {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.32rem 0.72rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--sa-color-primary, #a78bfa) 55%, var(--sa-color-border, #334155));
+  background: color-mix(in srgb, var(--sa-color-primary, #a78bfa) 38%, rgb(15 16 20 / 0.5));
+  color: var(--sa-color-text-on-primary, #f8fafc);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  line-height: 1.2;
+  font-family: inherit;
+}
+
+.app-shell-call-join-room:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.app-shell-call-join-room:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 @media (max-width: 420px) {

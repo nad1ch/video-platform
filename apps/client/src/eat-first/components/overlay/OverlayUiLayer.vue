@@ -2,7 +2,7 @@
 import { computed, ref, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import AppPageLoader from '../../ui/molecules/AppPageLoader.vue'
+import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import OverlayMediaVideoLayer from '../OverlayMediaVideoLayer.vue'
 import ParticipantTile from '../ParticipantTile.vue'
 import OverlayPlayerCard from '../OverlayPlayerCard.vue'
@@ -136,7 +136,7 @@ watch(
 </script>
 
 <template>
-  <AppPageLoader
+  <AppFullPageLoader
     :visible="!overlayPageReady"
     :label="t('overlayPage.sync')"
   />

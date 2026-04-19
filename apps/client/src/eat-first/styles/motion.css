@@ -111,7 +111,7 @@
   opacity: 0;
 }
 
-/* Повноекранний лоадер (ui/molecules/AppPageLoader.vue → Teleport body) */
+/* Повноекранний лоадер (components/ui/AppFullPageLoader.vue → Teleport body) */
 .page-loader-fade-enter-active,
 .page-loader-fade-leave-active {
   transition: opacity 0.32s var(--motion-ease, cubic-bezier(0.22, 1, 0.36, 1));

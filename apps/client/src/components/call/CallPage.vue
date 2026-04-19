@@ -3,7 +3,7 @@ import { storeToRefs } from 'pinia'
 import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import type { CallChatLine } from 'call-core'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   buildCallParticipantMap,
   buildDisplayNameUiMap,
@@ -26,11 +26,19 @@ import ParticipantTile from './ParticipantTile.vue'
 import { computeCallVideoGridLayout } from './callVideoGridLayout'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
+import { generateCallRoomCode } from '@/utils/callRoomUi'
+import {
+  CALL_ROOM_DROPDOWN_HOST_ID,
+  CALL_ROOM_POPOVER_PANEL_ID,
+  useCallRoomHeaderJoinStore,
+} from '@/stores/callRoomHeaderJoin'
 
 type VideoQualityUiChoice = 'auto' | VideoQualityPreset
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 const { user, ensureAuthLoaded, isAdmin } = useAuth()
 
 const CALL_ROUTE_HTML_CLASS = 'sa-call-route'
@@ -254,6 +262,108 @@ const micPickerOpen = ref(false)
 const camPickerOpen = ref(false)
 const micSplitRef = ref<HTMLElement | null>(null)
 const camSplitRef = ref<HTMLElement | null>(null)
+const roomJoinDraft = ref('')
+const roomCopyFlash = ref(false)
+let roomCopyFlashTimer: ReturnType<typeof setTimeout> | null = null
+/** Join only after auth is ready (same ordering as the old pre-join form). */
+const callAuthReady = ref(false)
+
+const callRoomHeaderJoin = useCallRoomHeaderJoinStore()
+const { roomPopoverOpen } = storeToRefs(callRoomHeaderJoin)
+
+async function switchToRoom(nextRaw: string, opts?: { fromRoute?: boolean }): Promise<void> {
+  const id = normalizeDisplayName(nextRaw) || 'demo'
+  if (joining.value) {
+    return
+  }
+  const cur = normalizeDisplayName(session.roomId) || 'demo'
+  if (cur === id && session.inCall) {
+    callRoomHeaderJoin.closeRoomPopover()
+    return
+  }
+  if (session.inCall) {
+    leaveCall()
+  }
+  session.roomId = id
+  if (!opts?.fromRoute && route.name === 'call') {
+    try {
+      await router.replace({ name: 'call', query: { ...route.query, room: id } })
+    } catch {
+      /* ignore */
+    }
+  }
+  callRoomHeaderJoin.closeRoomPopover()
+  await joinCall()
+}
+
+watch(
+  () => [route.name, route.query.room, callAuthReady.value] as const,
+  async () => {
+    if (!callAuthReady.value || route.name !== 'call') {
+      return
+    }
+    const q = typeof route.query.room === 'string' ? normalizeDisplayName(route.query.room) : ''
+    const cur = normalizeDisplayName(session.roomId) || 'demo'
+    if (q && q !== cur) {
+      await switchToRoom(q, { fromRoute: true })
+      return
+    }
+    if (!session.inCall && !joining.value) {
+      void joinCall()
+    }
+  },
+  { immediate: true },
+)
+
+watch(roomPopoverOpen, (open) => {
+  if (open) {
+    roomJoinDraft.value = normalizeDisplayName(session.roomId) || 'demo'
+  }
+})
+
+async function copyRoomToClipboard(): Promise<void> {
+  const text = normalizeDisplayName(session.roomId) || 'demo'
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.left = '-9999px'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    } catch {
+      return
+    }
+  }
+  if (roomCopyFlashTimer !== null) {
+    clearTimeout(roomCopyFlashTimer)
+  }
+  roomCopyFlash.value = true
+  roomCopyFlashTimer = setTimeout(() => {
+    roomCopyFlashTimer = null
+    roomCopyFlash.value = false
+  }, 1600)
+}
+
+async function onGenerateNewRoom(): Promise<void> {
+  await switchToRoom(generateCallRoomCode())
+}
+
+function submitRoomDraft(): void {
+  const id = normalizeDisplayName(roomJoinDraft.value)
+  if (!id) {
+    return
+  }
+  void switchToRoom(id)
+}
+
+function retryJoinCall(): void {
+  void joinCall()
+}
 
 const showMediaDevicePickers = computed(
   () => session.inCall && (audioInputDevices.value.length > 0 || videoInputDevices.value.length > 0),
@@ -265,11 +375,18 @@ function closeMediaDevicePickers(): void {
 }
 
 function onDocumentPointerForDevicePickers(ev: PointerEvent): void {
-  if (!micPickerOpen.value && !camPickerOpen.value) {
-    return
-  }
   const t = ev.target
   if (!(t instanceof Node)) {
+    return
+  }
+  const roomHost = typeof document !== 'undefined' ? document.getElementById(CALL_ROOM_DROPDOWN_HOST_ID) : null
+  if (roomHost?.contains(t)) {
+    return
+  }
+  if (callRoomHeaderJoin.roomPopoverOpen) {
+    callRoomHeaderJoin.closeRoomPopover()
+  }
+  if (!micPickerOpen.value && !camPickerOpen.value) {
     return
   }
   if (micSplitRef.value?.contains(t) || camSplitRef.value?.contains(t)) {
@@ -591,14 +708,12 @@ function onTileDragEnd(): void {
   dragOverPeerId.value = null
 }
 
-function onDisplayNameEnter(): void {
-  if (joining.value || session.inCall) {
-    return
-  }
-  void joinCall()
-}
-
 onBeforeUnmount(() => {
+  if (roomCopyFlashTimer !== null) {
+    clearTimeout(roomCopyFlashTimer)
+    roomCopyFlashTimer = null
+  }
+  callRoomHeaderJoin.reset()
   /* Вихід з маршруту /call (навігація по сайту) має закривати кімнату й зупиняти медіа, інакше Pinia-сесія лишається inCall. */
   leaveCall()
 })
@@ -612,6 +727,7 @@ onMounted(() => {
     if (authName && (!cur || cur === 'You')) {
       session.selfDisplayName = authName
     }
+    callAuthReady.value = true
   })()
   try {
     const q = new URLSearchParams(window.location.search).get('callDebug')
@@ -647,69 +763,158 @@ watch(
     }
   },
 )
+
+watch(joining, (j) => {
+  if (j) {
+    callRoomHeaderJoin.closeRoomPopover()
+  }
+})
 </script>
 
 <template>
   <div class="page-route">
-    <AppContainer
-      class="call-page"
-      :class="{
-        'call-page--prejoin': !session.inCall,
-        'call-page--stage-full': stageFullBleed,
-      }"
-      :flush="session.inCall"
-    >
-    <div class="call-page__shell">
-      <section v-if="!session.inCall" class="call-page__pre">
-        <label class="call-page__field">
-          <span>{{ t('callPage.fieldRoom') }}</span>
-          <input
-            v-model="session.roomId"
-            type="text"
-            autocomplete="off"
-            :placeholder="t('callPage.placeholderRoom')"
-          />
-        </label>
-        <label class="call-page__field">
+    <AppFullPageLoader :visible="joining" :aria-label="t('callPage.joining')" label="" />
+    <Teleport v-if="callRoomHeaderJoin.roomPopoverOpen" :to="`#${CALL_ROOM_DROPDOWN_HOST_ID}`">
+      <div
+        :id="CALL_ROOM_POPOVER_PANEL_ID"
+        class="call-page__room-pop sa-scrollbar"
+        role="dialog"
+        :aria-label="t('callPage.roomPopoverAria')"
+      >
+        <label class="call-page__room-pop-field call-page__room-pop-field--top">
           <span>{{ t('callPage.fieldName') }}</span>
           <input
             v-model="session.selfDisplayName"
             type="text"
+            name="call-display-name"
             autocomplete="name"
             :placeholder="t('callPage.placeholderName')"
-            @keydown.enter.prevent="onDisplayNameEnter"
           />
         </label>
-        <fieldset v-if="allowManualVideoQuality" class="call-page__fieldset">
+        <div class="call-page__room-pop-code">
+          <span class="call-page__room-pop-label">{{ t('callPage.roomCodeLabel') }}</span>
+          <div class="call-page__room-pop-code-row">
+            <code class="call-page__room-pop-value call-page__room-pop-value--row">{{ normalizeDisplayName(session.roomId) || 'demo' }}</code>
+            <div class="call-page__room-pop-code-tools">
+              <div class="call-page__room-pop-copy-wrap">
+                <button
+                  type="button"
+                  class="call-page__room-pop-ico-btn"
+                  :disabled="joining"
+                  :title="roomCopyFlash ? t('callPage.roomCodeCopied') : t('callPage.roomCopy')"
+                  :aria-label="roomCopyFlash ? t('callPage.roomCodeCopied') : t('callPage.roomCopy')"
+                  @click="copyRoomToClipboard"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                  </svg>
+                </button>
+                <span
+                  v-show="roomCopyFlash"
+                  role="status"
+                  aria-live="polite"
+                  class="call-page__room-pop-copy-tooltip"
+                >
+                  {{ t('callPage.roomCodeCopied') }}
+                </span>
+              </div>
+              <button
+                type="button"
+                class="call-page__room-pop-ico-btn"
+                :disabled="joining"
+                :title="t('callPage.roomGenerateNew')"
+                :aria-label="t('callPage.roomRegenerateAria')"
+                @click="onGenerateNewRoom"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect width="16" height="16" x="4" y="4" rx="2.5" ry="2.5" />
+                  <circle cx="9" cy="9" r="1.1" fill="currentColor" stroke="none" />
+                  <circle cx="15" cy="9" r="1.1" fill="currentColor" stroke="none" />
+                  <circle cx="9" cy="15" r="1.1" fill="currentColor" stroke="none" />
+                  <circle cx="15" cy="15" r="1.1" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="call-page__room-pop-join">
+          <label class="call-page__room-pop-field">
+            <span>{{ t('callPage.roomJoinFieldLabel') }}</span>
+            <input
+              v-model="roomJoinDraft"
+              type="text"
+              name="call-room-code"
+              autocomplete="off"
+              :placeholder="t('callPage.roomJoinPlaceholder')"
+              @keydown.enter.prevent="submitRoomDraft"
+            />
+          </label>
+          <AppButton variant="primary" :disabled="joining" @click="submitRoomDraft">
+            {{ t('callPage.roomSwitch') }}
+          </AppButton>
+        </div>
+        <fieldset v-if="allowManualVideoQuality" class="call-page__fieldset call-page__fieldset--in-pop">
           <legend class="call-page__legend">{{ t('callPage.qualityPreset') }}</legend>
           <p class="call-page__hint--small">{{ t('callPage.qualityAdminHint') }}</p>
           <div class="call-page__preset-row">
             <label class="call-page__preset">
-              <input v-model="videoQualityChoice" type="radio" name="video-quality" value="auto" />
+              <input v-model="videoQualityChoice" type="radio" name="video-quality-pop" value="auto" />
               <span>{{ t('callPage.quality.auto') }}</span>
             </label>
-            <label
-              v-for="p in qualityPresets"
-              :key="p"
-              class="call-page__preset"
-            >
-              <input v-model="videoQualityChoice" type="radio" name="video-quality" :value="p" />
+            <label v-for="p in qualityPresets" :key="p" class="call-page__preset">
+              <input v-model="videoQualityChoice" type="radio" name="video-quality-pop" :value="p" />
               <span>{{ t(`callPage.quality.${p}`) }}</span>
             </label>
           </div>
         </fieldset>
-        <label v-if="showCallDebugControls" class="call-page__check">
+        <label v-if="showCallDebugControls" class="call-page__check call-page__check--in-pop">
           <input v-model="callDebugOverlay" type="checkbox" />
           <span>{{ t('callPage.debugOverlay') }}</span>
         </label>
-        <p v-if="joinError" class="call-page__error" role="alert">{{ joinError }}</p>
-        <p v-if="isAdmin" class="call-page__meta">{{ t('callPage.wsStatus', { status: wsStatus }) }}</p>
-        <AppButton variant="primary" :disabled="joining" @click="joinCall">
-          {{ joining ? t('callPage.joining') : t('callPage.join') }}
-        </AppButton>
-      </section>
-
-      <section v-else class="call-page__active">
+        <p v-if="isAdmin" class="call-page__meta call-page__meta--in-pop">
+          {{ t('callPage.wsStatus', { status: wsStatus }) }}
+        </p>
+      </div>
+    </Teleport>
+    <AppContainer class="call-page" :class="{ 'call-page--stage-full': stageFullBleed }" :flush="true">
+    <div class="call-page__shell">
+      <section
+        class="call-page__active"
+        :class="{ 'call-page__active--with-dock': session.inCall || joining }"
+      >
+        <div
+          v-if="joinError && !joining"
+          class="call-page__join-error"
+          role="alert"
+        >
+          <p class="call-page__join-error-text">{{ joinError }}</p>
+          <AppButton variant="primary" @click="retryJoinCall">
+            {{ t('callPage.retryJoin') }}
+          </AppButton>
+        </div>
         <div class="call-page__toasts" role="region" :aria-label="t('callPage.toastStackAria')">
           <TransitionGroup name="call-toast" tag="div" class="call-page__toast-stack">
             <div
@@ -768,7 +973,13 @@ watch(
           </div>
         </div>
 
-        <div class="call-page__dock" role="toolbar" :aria-label="t('callPage.callControls')">
+        <div
+          v-if="session.inCall || joining"
+          class="call-page__dock"
+          :class="{ 'call-page__dock--pending': joining }"
+          role="toolbar"
+          :aria-label="t('callPage.callControls')"
+        >
           <div
             ref="micSplitRef"
             class="call-page__dock-split"
@@ -1010,6 +1221,7 @@ watch(
         </div>
 
         <aside
+          v-if="session.inCall"
           class="call-page__chat"
           :class="{ 'call-page__chat--open': chatOpen }"
           :aria-label="t('callPage.chatTitle')"
@@ -1122,17 +1334,12 @@ watch(
   /* Прозоро: позаду — шар AppShell (блискавки), без окремого «килима» під відео / формою. */
   background: transparent;
   color: var(--sa-color-text-body);
-  padding-block: 0 var(--sa-space-6);
+  padding-block: 0;
 }
 
-/* Під час дзвінка сітка займає усю ширину в’юпорту (не лише ~72rem / ~850px по центру). */
-.call-page.app-container:not(.call-page--prejoin) {
+.call-page.app-container {
   max-width: 100%;
   width: 100%;
-}
-
-.call-page:not(.call-page--prejoin) {
-  padding-block: 0;
 }
 
 .call-page__shell {
@@ -1151,12 +1358,6 @@ watch(
   padding-inline: 0;
 }
 
-.call-page--prejoin .call-page__shell {
-  justify-content: center;
-  align-items: center;
-  padding: 1rem 0 2rem;
-}
-
 .call-page__hint--small {
   margin: 0 0 0.5rem;
   font-size: 0.8rem;
@@ -1164,35 +1365,15 @@ watch(
   color: var(--sa-color-text-muted);
 }
 
-.call-page__pre {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  width: 100%;
-  max-width: 420px;
-}
-
-.call-page__field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.9rem;
-}
-
-.call-page__field input {
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--sa-color-border);
-  border-radius: var(--sa-radius-sm);
-  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
-  color: var(--sa-color-text-main);
-  font: inherit;
-}
-
 .call-page__fieldset {
   margin: 0;
   padding: 0.65rem 0.75rem;
   border: 1px solid var(--sa-color-border);
   border-radius: var(--sa-radius-sm);
+}
+
+.call-page__fieldset--in-pop {
+  margin-top: 0.5rem;
 }
 
 .call-page__legend {
@@ -1222,10 +1403,8 @@ watch(
   cursor: pointer;
 }
 
-.call-page__error {
-  margin: 0;
-  color: #f87171;
-  font-size: 0.9rem;
+.call-page__check--in-pop {
+  margin-top: 0.5rem;
 }
 
 .call-page__meta {
@@ -1233,6 +1412,10 @@ watch(
   font-size: 0.8rem;
   opacity: 0.7;
   font-family: var(--sa-font-mono, monospace);
+}
+
+.call-page__meta--in-pop {
+  margin-top: 0.5rem;
 }
 
 .call-page__btn--muted {
@@ -1247,8 +1430,185 @@ watch(
   min-height: 0;
   width: 100%;
   position: relative;
-  /* Раніше було 6.25rem під dock+футер — футер на /call прибрано; лишаємо помірний зазор під плаваючий dock. */
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+.call-page__active--with-dock {
+  /* Зазор під плаваючий dock. */
   padding-bottom: calc(3.25rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Room popover: Teleport target is `#call-room-dropdown-host` in AppShellLayout (positioned below header button). */
+.call-page__room-pop {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 0.35rem;
+  z-index: 100;
+  width: min(22rem, calc(100vw - 2rem));
+  max-height: min(70vh, 28rem);
+  overflow: auto;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--sa-radius-sm);
+  border: 1px solid var(--sa-color-border);
+  background: color-mix(in srgb, var(--sa-color-surface) 94%, rgb(8 10 14 / 0.92));
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.4);
+}
+
+.call-page__room-pop-field--top {
+  margin: 0 0 0.65rem;
+}
+
+.call-page__room-pop-code {
+  margin: 0 0 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.call-page__room-pop-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+  color: var(--sa-color-text-muted);
+}
+
+.call-page__room-pop-value {
+  font-size: 0.95rem;
+  font-family: var(--sa-font-mono, monospace);
+  word-break: break-all;
+  color: var(--sa-color-text-main);
+}
+
+.call-page__room-pop-code-row {
+  display: flex;
+  align-items: stretch;
+  min-height: 2.25rem;
+  border: 1px solid var(--sa-color-border);
+  border-radius: var(--sa-radius-sm);
+  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  /* Visible so the copy feedback tooltip can sit above the icon without clipping. */
+  overflow: visible;
+}
+
+.call-page__room-pop-value--row {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  display: flex;
+  align-items: center;
+  border-radius: calc(var(--sa-radius-sm) - 1px) 0 0 calc(var(--sa-radius-sm) - 1px);
+}
+
+.call-page__room-pop-code-tools {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  border-inline-start: 1px solid var(--sa-color-border);
+  padding: 0 0.1rem;
+  background: color-mix(in srgb, var(--sa-color-surface) 92%, transparent);
+  border-radius: 0 var(--sa-radius-sm) var(--sa-radius-sm) 0;
+  overflow: visible;
+}
+
+.call-page__room-pop-copy-wrap {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.call-page__room-pop-copy-tooltip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.35rem);
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--sa-radius-sm);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--sa-color-text-main);
+  background: color-mix(in srgb, var(--sa-color-surface) 8%, rgb(18 20 26));
+  border: 1px solid var(--sa-color-border);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.35);
+  z-index: 3;
+  pointer-events: none;
+}
+
+.call-page__room-pop-ico-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: calc(var(--sa-radius-sm) - 1px);
+  background: transparent;
+  color: var(--sa-color-text-muted);
+  cursor: pointer;
+}
+
+.call-page__room-pop-ico-btn:hover:not(:disabled) {
+  color: var(--sa-color-text-main);
+  background: color-mix(in srgb, var(--sa-color-text-main) 10%, transparent);
+}
+
+.call-page__room-pop-ico-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.call-page__room-pop-join {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.call-page__room-pop-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.call-page__room-pop-field input {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--sa-color-border);
+  border-radius: var(--sa-radius-sm);
+  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  color: var(--sa-color-text-main);
+  font: inherit;
+}
+
+.call-page__join-error {
+  position: fixed;
+  bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--sa-radius-sm);
+  border: 1px solid color-mix(in srgb, #f87171 45%, var(--sa-color-border));
+  background: color-mix(in srgb, var(--sa-color-surface) 92%, rgb(20 10 12 / 0.95));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.4);
+  box-sizing: border-box;
+}
+
+.call-page__join-error-text {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  color: #fecaca;
 }
 
 .call-page__toasts {
@@ -1405,6 +1765,12 @@ watch(
     0 0 0 1px rgb(255 255 255 / 0.05);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
+}
+
+/* Під час join overlay: та сама панель і відступ, без кліків (без стрибка сітки). */
+.call-page__dock--pending {
+  pointer-events: none;
+  opacity: 0.62;
 }
 
 .call-page__dock-btn {
