@@ -418,7 +418,7 @@ const aliveSlotsForNom = computed(() => {
   font-size: 0.88rem;
   font-weight: 800;
   color: var(--text-heading);
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   letter-spacing: 0.06em;
 }
 
@@ -917,7 +917,7 @@ const aliveSlotsForNom = computed(() => {
 }
 
 .num {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   font-size: 1.35rem;
   font-weight: 900;
   color: var(--text-title);
@@ -974,7 +974,7 @@ const aliveSlotsForNom = computed(() => {
 
 .act-panel__id {
   margin: 0 0 0.6rem;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   font-size: 1.1rem;
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -1007,7 +1007,7 @@ const aliveSlotsForNom = computed(() => {
   min-width: 2.1rem;
   padding: 0.28rem 0.4rem;
   border-radius: 8px;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   font-size: 0.72rem;
   font-weight: 800;
   cursor: pointer;

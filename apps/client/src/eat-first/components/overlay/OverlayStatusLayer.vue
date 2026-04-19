@@ -47,7 +47,7 @@ const { t } = useI18n()
   z-index: 50;
   margin: 0;
   pointer-events: none;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
   font-weight: 800;
   letter-spacing: 0.14em;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.65);
@@ -109,7 +109,7 @@ const { t } = useI18n()
 
 .round-banner__n {
   margin: 0;
-  font-family: Orbitron, system-ui, sans-serif;
+  font-family: var(--sa-font-display);
   font-size: clamp(1.25rem, 4vw, 1.85rem);
   font-weight: 900;
   letter-spacing: 0.2em;

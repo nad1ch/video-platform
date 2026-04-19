@@ -310,6 +310,72 @@ export function useAuth() {
     return { ok: false, error: 'server' }
   }
 
+  /** POST /api/auth/login only — for dedicated login tab. */
+  async function loginWithEmail(
+    email: string,
+    password: string,
+  ): Promise<
+    | { ok: true; user: AppUser }
+    | { ok: false; error: 'validation' | 'invalid_credentials' | 'server' }
+  > {
+    const loginRes = await apiFetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), password }),
+    })
+    if (loginRes.ok) {
+      const j = (await loginRes.json()) as { user?: unknown }
+      const u = parseUser(j.user)
+      if (!u) {
+        return { ok: false, error: 'server' }
+      }
+      return { ok: true, user: u }
+    }
+    if (loginRes.status === 401) {
+      return { ok: false, error: 'invalid_credentials' }
+    }
+    if (loginRes.status === 400) {
+      return { ok: false, error: 'validation' }
+    }
+    return { ok: false, error: 'server' }
+  }
+
+  /** POST /api/auth/register only — for dedicated signup tab (no auto-login fallback). */
+  async function registerWithEmail(
+    email: string,
+    password: string,
+    displayName?: string,
+  ): Promise<
+    | { ok: true; user: AppUser }
+    | { ok: false; error: 'validation' | 'email_taken' | 'server' }
+  > {
+    const body = {
+      email: email.trim(),
+      password,
+      ...(displayName != null && displayName.trim().length > 0 ? { displayName: displayName.trim() } : {}),
+    }
+    const reg = await apiFetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (reg.ok) {
+      const j = (await reg.json()) as { user?: unknown }
+      const u = parseUser(j.user)
+      if (!u) {
+        return { ok: false, error: 'server' }
+      }
+      return { ok: true, user: u }
+    }
+    if (reg.status === 409) {
+      return { ok: false, error: 'email_taken' }
+    }
+    if (reg.status === 400) {
+      return { ok: false, error: 'validation' }
+    }
+    return { ok: false, error: 'server' }
+  }
+
   return {
     user,
     loaded,
@@ -321,6 +387,8 @@ export function useAuth() {
     loginWithTwitch,
     loginWithGoogle,
     loginOrRegisterWithEmail,
+    loginWithEmail,
+    registerWithEmail,
     logout,
     getCurrentUser,
   }

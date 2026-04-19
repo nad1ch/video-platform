@@ -1260,7 +1260,7 @@ const {
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--text-muted-soft);
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
 }
 
 /* .zone-kicker нижче перебивав margin: 0 у --fold (лішнє місце знизу в смузі згортання) */
@@ -1900,7 +1900,7 @@ html[data-theme='light'] .host-forget-btn:hover {
 .player-title {
   margin: 0;
   font-size: 1.5rem;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   color: var(--text-title);
 }
 
@@ -2060,7 +2060,7 @@ html[data-theme='light'] .host-forget-btn:hover {
   font-weight: 900;
   letter-spacing: 0.16em;
   color: var(--text-cyan-strong);
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
 }
 
 .player-vote-panel__line {
@@ -2177,7 +2177,7 @@ html[data-theme='light'] .host-forget-btn:hover {
   font-size: 1rem;
   font-weight: 700;
   color: var(--text-heading);
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
 }
 
 .gen-bar {
@@ -2196,7 +2196,7 @@ html[data-theme='light'] .host-forget-btn:hover {
   font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   letter-spacing: 0.04em;
   transition:
     transform 0.12s ease,

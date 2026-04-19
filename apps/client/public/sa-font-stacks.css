@@ -1,0 +1,13 @@
+/**
+ * Font stacks shared with `packages/ui-theme/src/tokens.css`
+ * (--sa-font-sans, --sa-font-hud-sans, --sa-font-hud-display, --sa-font-main, --sa-font-display).
+ * Static HTML/CSS (e.g. seo-pages) imports this instead of repeating family names.
+ */
+:root {
+  --sa-font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sa-font-hud-sans: 'Plus Jakarta Sans', var(--sa-font-sans);
+  --sa-font-hud-display: 'Climate Crisis', system-ui, sans-serif;
+  --sa-font-main: var(--sa-font-hud-sans);
+  --sa-font-display: var(--sa-font-hud-display);
+  --font-display: var(--sa-font-hud-display);
+}

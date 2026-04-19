@@ -38,9 +38,12 @@
 
   --sa-font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --sa-font-mono: ui-monospace, Consolas, monospace;
-  /** HUD / eat-first typography (Plus Jakarta + Orbitron). */
+  /**
+   * HUD / eat-first typography (Plus Jakarta + Climate Crisis display).
+   * Static pages: mirror font names in `apps/client/public/sa-font-stacks.css` (same `--sa-font-*`).
+   */
   --sa-font-hud-sans: 'Plus Jakarta Sans', var(--sa-font-sans);
-  --sa-font-hud-display: 'Orbitron', system-ui, sans-serif;
+  --sa-font-hud-display: 'Climate Crisis', system-ui, sans-serif;
 
   --sa-shadow-elevated:
     rgba(0, 0, 0, 0.35) 0 12px 24px -4px, rgba(0, 0, 0, 0.22) 0 6px 12px -3px;

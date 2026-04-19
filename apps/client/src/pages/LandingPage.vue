@@ -72,7 +72,8 @@ type GameCard = {
   iconStyle: Readonly<Record<string, string>>
 }
 
-const authRoute = { path: '/app', query: { needLogin: '1' } } as const
+const authRouteLogin = { path: '/auth', query: { redirect: '/app', mode: 'login' as const } } as const
+const authRouteSignup = { path: '/auth', query: { redirect: '/app', mode: 'signup' as const } } as const
 const callRoute = { name: 'call' } as const
 const homeRoute = { name: 'home' } as const
 
@@ -480,8 +481,8 @@ useLandingCosmicParallax(landingCanvasEl)
       </header>
 
       <div class="landing-auth" aria-label="Account">
-        <RouterLink class="landing-auth__link" :to="authRoute">Log In</RouterLink>
-        <RouterLink class="landing-auth__link" :to="authRoute">Sing Up</RouterLink>
+        <RouterLink class="landing-auth__link" :to="authRouteLogin">Log In</RouterLink>
+        <RouterLink class="landing-auth__link" :to="authRouteSignup">Sing Up</RouterLink>
       </div>
 
       <section class="landing-hero" aria-label="Hero" v-once>
@@ -673,7 +674,8 @@ useLandingCosmicParallax(landingCanvasEl)
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Arbutus&family=Climate+Crisis&family=Marmelad&display=swap');
+/* Display + body sans: `index.html` + ui-theme. Landing-only: Abril/Arbutus/Marmelad. */
+@import url('https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Arbutus&family=Marmelad&display=swap');
 
 /* Optional: add `<link rel="preload" as="style">` for this font URL in `index.html` to shorten critical path (keep @import until then). */
 
@@ -894,7 +896,7 @@ useLandingCosmicParallax(landingCanvasEl)
 .landing__wordmark {
   position: absolute;
   margin: 0;
-  font-family: 'Climate Crisis', sans-serif;
+  font-family: var(--sa-font-display);
   font-size: calc(var(--u) * 143.91);
   line-height: calc(var(--u) * 192.3);
   letter-spacing: calc(var(--u) * 1.4391);
@@ -1039,7 +1041,7 @@ useLandingCosmicParallax(landingCanvasEl)
   top: calc(var(--u) * 10.5);
   margin: 0;
   display: grid;
-  font-family: 'Climate Crisis', sans-serif;
+  font-family: var(--sa-font-display);
   font-size: calc(var(--u) * 12);
   line-height: calc(var(--u) * 12.6);
 }
@@ -1328,7 +1330,7 @@ useLandingCosmicParallax(landingCanvasEl)
 .call-banner__title,
 .economy-banner__title {
   margin: 0;
-  font-family: 'Climate Crisis', sans-serif;
+  font-family: var(--sa-font-display);
   font-weight: 400;
   text-transform: uppercase;
 }
@@ -1520,7 +1522,7 @@ useLandingCosmicParallax(landingCanvasEl)
   position: absolute;
   z-index: 1;
   white-space: pre-line;
-  font-family: 'Climate Crisis', sans-serif;
+  font-family: var(--sa-font-display);
   font-size: calc(var(--u) * 22.2);
   text-transform: uppercase;
 }

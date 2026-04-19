@@ -868,7 +868,7 @@ async function submitVote(choice) {
   font-size: var(--cg-timer-num, 0.72rem);
   font-weight: 800;
   color: #faf5ff;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
@@ -979,7 +979,7 @@ async function submitVote(choice) {
 
 .vote-strip__title {
   margin: 0 0 0.15rem;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
   font-size: clamp(0.624rem, min(1.8vw, 1.98vh), 0.744rem);
   font-weight: 800;
   letter-spacing: 0.22em;
@@ -1016,7 +1016,7 @@ async function submitVote(choice) {
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.65rem 1rem;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
   font-size: clamp(1.02rem, min(2.88vw, 3.12vh), 1.26rem);
   font-weight: 900;
   letter-spacing: 0.06em;
@@ -1059,7 +1059,7 @@ async function submitVote(choice) {
 
 .vote-strip__dramatic {
   margin: 0 0 0.28rem;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
   font-size: clamp(0.696rem, min(1.92vw, 2.1vh), 0.864rem);
   font-weight: 900;
   letter-spacing: 0.28em;
@@ -1085,7 +1085,7 @@ async function submitVote(choice) {
 }
 
 .vote-tally__it {
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
   font-weight: 700;
   white-space: nowrap;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
@@ -1101,7 +1101,7 @@ async function submitVote(choice) {
 
 .nominee-nom-who {
   margin: 0.05rem 0 0.2rem;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
   font-size: clamp(0.55rem, min(1.5vw, 1.6vh), 0.72rem);
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -1310,7 +1310,7 @@ async function submitVote(choice) {
 
 .card-elim-screen__title {
   margin: 0;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
   font-size: clamp(1.65rem, 5.5vw, 2.35rem);
   font-weight: 900;
   letter-spacing: 0.22em;
@@ -1331,7 +1331,7 @@ async function submitVote(choice) {
   margin: 1rem 0 0;
   font-size: clamp(1.85rem, 6vw, 2.65rem);
   font-weight: 900;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
   color: rgba(248, 250, 252, 0.94);
   letter-spacing: 0.08em;
 }
@@ -1341,7 +1341,7 @@ async function submitVote(choice) {
   font-size: var(--cg-id-fs);
   letter-spacing: 0.14em;
   color: rgba(196, 181, 253, 0.55);
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
 }
 
 .card-grid-name {
@@ -1551,7 +1551,7 @@ async function submitVote(choice) {
   margin: 0;
   padding: 0.28rem 0.75rem;
   border-radius: 999px;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   font-size: clamp(0.52rem, min(1.45vw, 1.6vh), 0.66rem);
   font-weight: 800;
   letter-spacing: 0.24em;
@@ -1989,12 +1989,12 @@ async function submitVote(choice) {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: rgba(196, 181, 253, 0.38);
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
 }
 
 .elim-solo-screen__title {
   margin: 0;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   font-size: clamp(2.65rem, 11vw, 4.25rem);
   font-weight: 900;
   letter-spacing: 0.14em;
@@ -2015,7 +2015,7 @@ async function submitVote(choice) {
   margin: 1.35rem 0 0;
   font-size: clamp(1.75rem, 6.5vw, 2.75rem);
   font-weight: 900;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   letter-spacing: 0.1em;
   color: rgba(248, 250, 252, 0.95);
 }
@@ -2177,7 +2177,7 @@ async function submitVote(choice) {
 .hud-slot {
   font-weight: 900;
   color: #faf5ff;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   line-height: 1;
   text-shadow: 0 0 14px rgba(168, 85, 247, 0.22);
 }
@@ -2218,7 +2218,7 @@ async function submitVote(choice) {
   position: relative;
   z-index: 1;
   font-weight: 800;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   color: #fff;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
 }

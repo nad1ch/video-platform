@@ -653,7 +653,7 @@ function handUpJoin(pid) {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-cyan);
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
 }
 
 .obs-hint__list {
@@ -785,7 +785,7 @@ function handUpJoin(pid) {
 .cta-t {
   font-size: 0.95rem;
   font-weight: 700;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
   color: var(--text-title);
 }
 
@@ -807,7 +807,7 @@ function handUpJoin(pid) {
   margin: 0 0 0.65rem;
   font-size: 0.9rem;
   font-weight: 700;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
   color: var(--text-heading);
 }
 
@@ -960,7 +960,7 @@ function handUpJoin(pid) {
 }
 
 .num {
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
   font-size: 0.72rem;
   letter-spacing: 0.1em;
   color: var(--text-muted);
