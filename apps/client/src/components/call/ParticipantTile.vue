@@ -563,16 +563,15 @@ if (import.meta.env.DEV) {
   background: transparent;
   border: 1px solid var(--call-tile-border, #2e303a);
   transition:
-    box-shadow 0.2s ease,
     border-color 0.2s ease,
     transform 0.2s ease;
 }
 
-.tile:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 12px 32px rgb(0 0 0 / 0.45),
-    0 0 0 1px color-mix(in srgb, var(--sa-color-border, #2e303a) 80%, transparent);
+/* Без тіні — лише легкий scale (і рамка), щоб не «випирала» картка над сіткою. */
+.tile:hover,
+.tile:focus-within {
+  transform: scale(1.01);
+  border-color: color-mix(in srgb, var(--sa-color-border, #2e303a) 80%, transparent);
 }
 
 .tile--menu-open {
@@ -582,9 +581,7 @@ if (import.meta.env.DEV) {
 
 .tile--active-speaker {
   border-color: var(--accent, #c084fc);
-  box-shadow:
-    inset 0 0 0 2px rgba(192, 132, 252, 0.45),
-    0 12px 28px rgb(0 0 0 / 0.35);
+  transform: scale(1.01);
 }
 
 .tile-media {

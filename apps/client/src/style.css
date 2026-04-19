@@ -66,12 +66,14 @@ html::-webkit-scrollbar-thumb:hover {
  */
 html.sa-call-route {
   overflow: hidden;
+  overscroll-behavior: none;
   height: 100vh;
   height: 100dvh;
 }
 
 html.sa-call-route body {
   overflow: hidden;
+  overscroll-behavior: none;
   height: 100%;
   margin: 0;
 }

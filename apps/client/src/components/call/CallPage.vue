@@ -23,6 +23,7 @@ import {
 
 const callPageLog = createLogger('call-page')
 import ParticipantTile from './ParticipantTile.vue'
+import { computeCallVideoGridLayout } from './callVideoGridLayout'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 
@@ -419,78 +420,21 @@ const MIN_TILE_WIDTH = 180
 const GRID_CONTENT_INSET_PX = 12
 
 function getGrid(n: number, width: number, height: number) {
-  if (n === 0) {
-    return { cols: 1, rows: 0, tileWidth: 0, tileHeight: 0 }
+  const g = computeCallVideoGridLayout(n, width, height, {
+    gapPx: GAP,
+    minTileWidthPx: MIN_TILE_WIDTH,
+    contentInsetPx: GRID_CONTENT_INSET_PX,
+  })
+  if (import.meta.env.DEV && n > 0) {
+    callPageLog.debug('grid layout', {
+      n,
+      cols: g.cols,
+      rows: g.rows,
+      tileWidth: g.tileWidth,
+      tileHeight: g.tileHeight,
+    })
   }
-
-  const layoutW = Math.max(1, width - GRID_CONTENT_INSET_PX)
-  const layoutH = Math.max(1, height - GRID_CONTENT_INSET_PX)
-
-  let best: { cols: number; rows: number; tileWidth: number; tileHeight: number } | null = null
-  let bestScore = Infinity
-
-  for (let cols = 1; cols <= n; cols++) {
-    const rows = Math.ceil(n / cols)
-
-    const totalGapW = GAP * (cols - 1)
-    const totalGapH = GAP * (rows - 1)
-
-    const innerW = layoutW - totalGapW
-    const innerH = layoutH - totalGapH
-
-    if (innerW <= 0 || innerH <= 0) {
-      continue
-    }
-
-    let tileWidth = innerW / cols
-    let tileHeight = tileWidth * (9 / 16)
-
-    if (tileHeight * rows > innerH) {
-      tileHeight = innerH / rows
-      tileWidth = tileHeight * (16 / 9)
-    }
-
-    const tilesW = tileWidth * cols
-    const totalWidth = tilesW + totalGapW
-
-    if (totalWidth > layoutW && tilesW > 0) {
-      const scale = (layoutW - totalGapW) / tilesW
-      tileWidth *= scale
-      tileHeight *= scale
-    }
-
-    if (tileWidth < MIN_TILE_WIDTH) {
-      continue
-    }
-
-    if (import.meta.env.DEV) {
-      callPageLog.debug('grid candidate', { cols, rows, tileWidth, tileHeight })
-    }
-
-    const usedHeight = tileHeight * rows + totalGapH
-    const usedWidth = tileWidth * cols + totalGapW
-    /** Balance width + height (height-only minimization always favored cols=1 “strip”). */
-    const heightDiff = Math.abs(layoutH - usedHeight)
-    const widthDiff = Math.abs(layoutW - usedWidth)
-    const score = Math.max(heightDiff, widthDiff)
-
-    if (score < bestScore) {
-      bestScore = score
-      best = { cols, rows, tileWidth, tileHeight }
-    }
-  }
-
-  if (!best) {
-    const cols = Math.min(n, 2)
-    const rows = Math.ceil(n / cols)
-
-    const tileWidth = layoutW / cols
-    const tileHeight = tileWidth * (9 / 16)
-
-    return { cols, rows, tileWidth, tileHeight }
-  }
-
-  return best
+  return g
 }
 
 /** Call stage (not the inner grid) — ResizeObserver + content-box size matches real tile area. */
@@ -1198,7 +1142,8 @@ watch(
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  padding: 1rem 0 2rem;
+  /* Active call: no top/bottom shell inset — stage + __active padding reserve dock; avoids double gap + scroll. */
+  padding: 0;
   box-sizing: border-box;
 }
 
@@ -1209,6 +1154,7 @@ watch(
 .call-page--prejoin .call-page__shell {
   justify-content: center;
   align-items: center;
+  padding: 1rem 0 2rem;
 }
 
 .call-page__hint--small {
@@ -1368,7 +1314,7 @@ watch(
   flex-direction: column;
   width: 100%;
   overflow: hidden;
-  padding: 20px;
+  padding: 0 var(--sa-space-5) var(--sa-space-8);
 }
 
 /* Flex column + height:100% on a flex child often resolves wrong; flex:1 + min-height:0 matches Discord-style fill. */

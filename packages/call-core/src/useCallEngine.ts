@@ -228,22 +228,35 @@ export function useCallEngine(options?: CallEngineOptions) {
   const lastPickedAudioInputId = ref('')
   const lastPickedVideoInputId = ref('')
 
+  /**
+   * UI highlight for device menus: prefer the last explicit pick when it still appears in
+   * `enumerateDevices`, because `track.getSettings().deviceId` can lag or diverge (e.g. Windows
+   * multi-endpoint / virtual devices) while capture already switched.
+   */
   const localAudioInputDeviceId = computed(() => {
-    const t = localStream.value?.getAudioTracks()[0]
-    const id = t?.getSettings?.()?.deviceId
-    if (typeof id === 'string' && id.length > 0) {
-      return id
+    const picked = lastPickedAudioInputId.value.trim()
+    const trackId = (localStream.value?.getAudioTracks()[0]?.getSettings?.()?.deviceId ?? '').trim()
+
+    if (picked && audioInputDevices.value.some((d) => d.deviceId === picked)) {
+      return picked
     }
-    return lastPickedAudioInputId.value
+    if (trackId) {
+      return trackId
+    }
+    return picked
   })
 
   const localVideoInputDeviceId = computed(() => {
-    const t = localStream.value?.getVideoTracks()[0]
-    const id = t?.getSettings?.()?.deviceId
-    if (typeof id === 'string' && id.length > 0) {
-      return id
+    const picked = lastPickedVideoInputId.value.trim()
+    const trackId = (localStream.value?.getVideoTracks()[0]?.getSettings?.()?.deviceId ?? '').trim()
+
+    if (picked && videoInputDevices.value.some((d) => d.deviceId === picked)) {
+      return picked
     }
-    return lastPickedVideoInputId.value
+    if (trackId) {
+      return trackId
+    }
+    return picked
   })
 
   const {

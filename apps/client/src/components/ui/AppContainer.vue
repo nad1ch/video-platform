@@ -39,6 +39,8 @@ withDefaults(
 
 .app-container--flush {
   padding-inline: 0;
+  /* Call / full-bleed: no vertical inset — parent handles height; avoids page scroll. */
+  padding-block: 0;
 }
 
 @media (max-width: 600px) {
@@ -48,6 +50,7 @@ withDefaults(
 
   .app-container--flush {
     padding-inline: 0;
+    padding-block: 0;
   }
 }
 </style>
