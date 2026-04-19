@@ -524,20 +524,23 @@ useLandingCosmicParallax(landingCanvasEl)
         </div>
 
         <div class="landing-hero__copy">
-          <h1 class="landing-hero__title landing-u-text-outline-heading">WHERE CHAT TURNS INTO THE GAME</h1>
+          <h1 class="landing-hero__title landing-u-text-outline-heading">StreamAssist</h1>
+          <p class="landing-hero__tagline landing-u-text-outline-heading">WHERE CHAT TURNS INTO THE GAME</p>
           <p class="landing-hero__lead">
-            Your stream isn&rsquo;t just something to watch &mdash; it&rsquo;s something to join.
-            <br />
-            Turn every moment into a shared experience with real-time chat, games, and video calls.
-            <br />
-            Interact, play, and connect with your audience like never before &mdash; all in one place, effortlessly.
+            StreamAssist is a platform for streamers: your stream isn&rsquo;t just something to watch &mdash; it&rsquo;s
+            something to join. With StreamAssist you can turn every moment into a shared experience with real-time chat,
+            games, and video calls. People sometimes write it as &ldquo;stream assist&rdquo; when they search; it is the
+            same StreamAssist product, built for creators who want one focused toolkit instead of a dozen tabs.
+            Interact, play, and connect with your audience &mdash; all in one place.
           </p>
         </div>
       </section>
 
       <section id="videocall" class="landing-section landing-section--videocall">
         <h2 class="landing-section__title landing-u-text-outline-heading">VIDEOCALL</h2>
-        <p class="landing-section__lead">Create private video rooms for games, challenges, and interactive sessions.</p>
+        <p class="landing-section__lead">
+          Open StreamAssist video rooms for co-streams, challenges, and interactive sessions with guests.
+        </p>
 
         <RouterLink class="call-banner" :to="callRoute">
           <span class="call-banner__title landing-u-text-outline-cta">RUN THE SHOW</span>
@@ -557,7 +560,9 @@ useLandingCosmicParallax(landingCanvasEl)
 
       <section id="games" class="landing-section landing-section--games">
         <h2 class="landing-section__title landing-u-text-outline-heading">GAMES</h2>
-        <p class="landing-section__lead">Play with friends, challenge others, or bring the action live to your audience.</p>
+        <p class="landing-section__lead">
+          StreamAssist games are built for chat energy: play with friends, challenge viewers, or put the moment on screen.
+        </p>
 
         <div class="games-grid">
           <RouterLink
@@ -586,8 +591,8 @@ useLandingCosmicParallax(landingCanvasEl)
       <section id="economy" class="landing-section landing-section--economy">
         <h2 class="landing-section__title landing-u-text-outline-heading">ECONOMY</h2>
         <p class="landing-section__lead">
-          Create your own in-stream economy with points, bonuses, and interactive mechanics that keep your audience
-          coming back.
+          Inside StreamAssist, create your own in-stream economy with points, bonuses, and interactive mechanics that
+          keep your audience coming back.
         </p>
 
         <div class="economy-banner">
@@ -609,6 +614,11 @@ useLandingCosmicParallax(landingCanvasEl)
       </section>
 
       <footer id="footer" class="landing-footer" aria-label="Site footer">
+        <nav class="landing-footer__seo" aria-label="Guides">
+          <a class="landing-footer__seo-link" href="/video-calls-for-streamers/">Video calls for streamers</a>
+          <a class="landing-footer__seo-link" href="/twitch-wordle-game/">Wordle chat game</a>
+          <a class="landing-footer__seo-link" href="/stream-overlay-tools/">Stream overlay tools</a>
+        </nav>
         <div class="landing-footer__languages" role="group" aria-label="Interface language">
           <button
             v-for="item in localeButtons"
@@ -1327,6 +1337,7 @@ useLandingCosmicParallax(landingCanvasEl)
 }
 
 .landing-hero__title,
+.landing-hero__tagline,
 .landing-section__title,
 .call-banner__title,
 .economy-banner__title {
@@ -1344,6 +1355,15 @@ useLandingCosmicParallax(landingCanvasEl)
   font-size: calc(var(--u) * 45);
 }
 
+.landing-hero__tagline {
+  position: absolute;
+  left: calc(var(--u) * 4.5);
+  top: calc(var(--u) * 54);
+  width: calc(var(--u) * 474.75);
+  font-size: calc(var(--u) * 22);
+  line-height: 1.18;
+}
+
 .landing-hero__lead,
 .landing-section__lead,
 .landing-footer__language,
@@ -1357,7 +1377,7 @@ useLandingCosmicParallax(landingCanvasEl)
 .landing-hero__lead {
   position: absolute;
   left: calc(var(--u) * 3.84);
-  top: calc(var(--u) * 192.75);
+  top: calc(var(--u) * 128);
   width: calc(var(--u) * 423);
   margin: 0;
   font-size: calc(var(--u) * 18);
@@ -1683,6 +1703,31 @@ useLandingCosmicParallax(landingCanvasEl)
   height: calc(var(--u) * 43.5);
   border-radius: calc(var(--u) * 3);
   background: #1a1133;
+}
+
+.landing-footer__seo {
+  position: absolute;
+  left: calc(var(--u) * 700.03);
+  top: calc(var(--u) * 2158);
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 10) calc(var(--u) * 18);
+  max-width: calc(var(--u) * 820);
+  pointer-events: auto;
+}
+
+.landing-footer__seo-link {
+  font-family: 'Marmelad', sans-serif;
+  font-size: calc(var(--u) * 15.75);
+  line-height: 1.35;
+  color: #c4b5fd;
+  text-decoration: underline;
+  text-underline-offset: calc(var(--u) * 2);
+}
+
+.landing-footer__seo-link:hover,
+.landing-footer__seo-link:focus-visible {
+  color: #f5f3ff;
 }
 
 .landing-footer {

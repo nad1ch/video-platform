@@ -1,0 +1,529 @@
+/* StreamAssist — static marketing pages (LandingPage visual language, minimal). */
+@import url('https://fonts.googleapis.com/css2?family=Climate+Crisis&family=Marmelad&display=swap');
+
+:root {
+  color-scheme: dark;
+  --bg: #0b0317;
+  --gradient-mid: rgba(74, 50, 116, 0.69);
+  --text: #e6e9ff;
+  --muted: rgba(230, 233, 255, 0.78);
+  --faint: rgba(230, 233, 255, 0.5);
+  --violet: #7c4ddb;
+  --violet-glow: rgba(124, 77, 219, 0.45);
+  --card-edge: rgba(255, 255, 255, 0.78);
+  --glass: rgba(14, 14, 16, 0.52);
+  --link: #c4b5fd;
+  --link-hover: #f5f3ff;
+  --radius: 1.125rem;
+  --radius-pill: 999px;
+  --font-display: 'Climate Crisis', system-ui, sans-serif;
+  --font-body: 'Marmelad', Georgia, 'Times New Roman', serif;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* Match `apps/client/src/style.css` — thin violet thumb on dark track (same as SPA). */
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.48) rgba(10, 8, 22, 0.65);
+}
+
+html::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+html::-webkit-scrollbar-track {
+  background: rgba(10, 8, 22, 0.65);
+}
+
+html::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.52);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+html::-webkit-scrollbar-thumb:hover {
+  background: rgba(192, 132, 252, 0.62);
+  background-clip: padding-box;
+}
+
+::selection {
+  background: rgba(124, 77, 219, 0.45);
+  color: var(--text);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+  position: relative;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.sa-bg {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(119.1deg, var(--bg) 0%, var(--gradient-mid) 73%);
+}
+
+.sa-bg::before,
+.sa-bg::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(88px);
+  opacity: 0.42;
+}
+
+.sa-bg::before {
+  width: min(92vw, 480px);
+  height: min(92vw, 480px);
+  top: -14%;
+  right: -20%;
+  background: radial-gradient(circle, var(--violet-glow) 0%, transparent 72%);
+}
+
+.sa-bg::after {
+  width: min(72vw, 400px);
+  height: min(72vw, 400px);
+  bottom: -10%;
+  left: -14%;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.32) 0%, transparent 72%);
+}
+
+.sa-shell {
+  position: relative;
+  z-index: 1;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 4rem;
+}
+
+@media (min-width: 768px) {
+  .sa-shell {
+    padding: 2rem 2rem 4.5rem;
+  }
+}
+
+.sa-skip {
+  position: absolute;
+  left: -9999px;
+  top: 0.75rem;
+  z-index: 100;
+  padding: 0.5rem 1rem;
+  background: #fff;
+  color: #111;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  border-radius: 0.5rem;
+}
+
+.sa-skip:focus {
+  left: 0.75rem;
+  outline: 2px solid var(--violet);
+  outline-offset: 2px;
+}
+
+/* Nav */
+.sa-top {
+  margin-bottom: 2rem;
+}
+
+@media (min-width: 768px) {
+  .sa-top {
+    margin-bottom: 2.75rem;
+  }
+}
+
+.sa-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-pill);
+  background: var(--glass);
+  border: 1px solid rgba(196, 181, 253, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.sa-brand {
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+  font-variation-settings: 'YEAR' 1979;
+}
+
+.sa-brand a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.sa-brand a:hover,
+.sa-brand a:focus-visible {
+  color: var(--link);
+}
+
+.sa-nav__link {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--link);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+.sa-nav__link:hover,
+.sa-nav__link:focus-visible {
+  color: var(--link-hover);
+  border-bottom-color: rgba(196, 181, 253, 0.45);
+}
+
+.sa-nav__link[aria-current='page'] {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: rgba(255, 255, 255, 0.35);
+}
+
+.sa-nav__cta {
+  margin-left: auto;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius-pill);
+  color: #111827;
+  background: #fff;
+  text-decoration: none;
+  border: 2px solid var(--card-edge);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+  transition:
+    transform 0.18s var(--ease),
+    box-shadow 0.18s var(--ease);
+}
+
+.sa-nav__cta:hover,
+.sa-nav__cta:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 26px rgba(124, 77, 219, 0.32);
+}
+
+@media (max-width: 640px) {
+  .sa-nav__cta {
+    margin-left: 0;
+    flex: 1 1 auto;
+    text-align: center;
+  }
+}
+
+/* Hero */
+.sa-hero {
+  text-align: center;
+  padding: 1.5rem 0 3rem;
+  max-width: 36rem;
+  margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+  .sa-hero {
+    padding: 2.25rem 0 3.5rem;
+  }
+}
+
+.sa-hero__title {
+  margin: 0 0 1.125rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.75rem, 5vw, 2.625rem);
+  line-height: 1.08;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  text-shadow: 0 0 48px rgba(139, 92, 246, 0.18);
+  font-variation-settings: 'YEAR' 1979;
+}
+
+.sa-hero__sub {
+  margin: 0 0 2rem;
+  font-size: 1.125rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+@media (min-width: 768px) {
+  .sa-hero__sub {
+    font-size: 1.1875rem;
+  }
+}
+
+/* CTA */
+.sa-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-decoration: none;
+  padding: 1rem 1.85rem;
+  border-radius: var(--radius);
+  border: 3px solid var(--card-edge);
+  color: var(--text);
+  background: linear-gradient(120deg, rgba(124, 77, 219, 0.58) 0%, rgba(40, 21, 56, 0.72) 100%);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(124, 77, 219, 0.15);
+  transition:
+    transform 0.2s var(--ease),
+    box-shadow 0.2s var(--ease),
+    filter 0.2s var(--ease);
+}
+
+.sa-btn:hover,
+.sa-btn:focus-visible {
+  transform: translateY(-3px);
+  box-shadow:
+    0 12px 36px rgba(124, 77, 219, 0.38),
+    0 0 0 1px rgba(255, 255, 255, 0.12);
+  filter: brightness(1.06);
+}
+
+.sa-btn:active {
+  transform: translateY(-1px);
+}
+
+.sa-btn--hero {
+  padding: 1.05rem 2rem;
+  font-size: 1rem;
+}
+
+.sa-btn--final {
+  padding: 1.1rem 2.35rem;
+  font-size: 1.02rem;
+}
+
+/* Sections */
+.sa-section {
+  margin-bottom: 3.25rem;
+}
+
+@media (min-width: 768px) {
+  .sa-section {
+    margin-bottom: 3.75rem;
+  }
+}
+
+.sa-section__title {
+  margin: 0 0 1.5rem;
+  font-family: var(--font-display);
+  font-size: clamp(0.95rem, 2.2vw, 1.125rem);
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--faint);
+  font-variation-settings: 'YEAR' 1979;
+}
+
+.sa-features {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .sa-features {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.125rem;
+  }
+}
+
+.sa-feature {
+  margin: 0;
+  padding: 1.375rem 1.375rem;
+  border-radius: var(--radius);
+  background: linear-gradient(120deg, rgba(124, 77, 219, 0.22) 0%, rgba(60, 36, 99, 0.38) 100%);
+  border: 2px solid var(--card-edge);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+  transition:
+    transform 0.22s var(--ease),
+    box-shadow 0.22s var(--ease),
+    border-color 0.22s var(--ease);
+}
+
+.sa-feature:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.28),
+    0 0 32px rgba(124, 77, 219, 0.12);
+  border-color: rgba(255, 255, 255, 0.92);
+}
+
+.sa-feature h3 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+  font-variation-settings: 'YEAR' 1979;
+}
+
+.sa-feature p {
+  margin: 0;
+  font-size: 0.98rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+/* Steps */
+.sa-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.875rem;
+  counter-reset: sa-step;
+}
+
+@media (min-width: 768px) {
+  .sa-steps {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+}
+
+.sa-steps li {
+  counter-increment: sa-step;
+  position: relative;
+  padding: 1.25rem 1.1rem 1.25rem 3.15rem;
+  border-radius: var(--radius);
+  background: var(--glass);
+  border: 1px solid rgba(196, 181, 253, 0.24);
+  transition:
+    transform 0.2s var(--ease),
+    border-color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+
+.sa-steps li:hover {
+  transform: translateY(-2px);
+  border-color: rgba(196, 181, 253, 0.4);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+}
+
+.sa-steps li::before {
+  content: counter(sa-step);
+  position: absolute;
+  left: 0.95rem;
+  top: 1.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(124, 77, 219, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  color: var(--text);
+  font-variation-settings: 'YEAR' 1979;
+}
+
+.sa-steps strong {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  color: var(--text);
+}
+
+.sa-steps span {
+  font-size: 0.94rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* Use cases */
+.sa-usecases {
+  margin: 0 auto;
+  max-width: 38rem;
+  padding: 1.5rem 1.5rem 1.5rem 1.65rem;
+  border-radius: var(--radius);
+  background: rgba(14, 14, 16, 0.42);
+  border: 1px solid rgba(196, 181, 253, 0.2);
+}
+
+.sa-usecases li {
+  margin-bottom: 0.6rem;
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 0.98rem;
+}
+
+.sa-usecases li:last-child {
+  margin-bottom: 0;
+}
+
+/* Final CTA */
+.sa-final {
+  text-align: center;
+  padding: 2.75rem 1.5rem;
+  margin-top: 0.5rem;
+  border-radius: 1.75rem;
+  background: linear-gradient(120deg, rgba(124, 77, 219, 0.2) 0%, rgba(28, 14, 48, 0.65) 100%);
+  border: 2px solid var(--card-edge);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+}
+
+.sa-final p {
+  margin: 0 0 1.5rem;
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 26rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.sa-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--faint);
+  letter-spacing: 0.02em;
+}
+
+.sa-footer a {
+  color: var(--link);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+.sa-footer a:hover,
+.sa-footer a:focus-visible {
+  color: var(--link-hover);
+  border-bottom-color: rgba(196, 181, 253, 0.4);
+}

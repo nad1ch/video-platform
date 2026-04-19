@@ -57,5 +57,5 @@ export function resolveDefaultOgImageUrl(originTrimmed) {
   if (!originTrimmed) {
     return ''
   }
-  return `${originTrimmed}/og.jpg`
+  return `${originTrimmed}/og.png`
 }

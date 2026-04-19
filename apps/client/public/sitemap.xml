@@ -6,6 +6,21 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://app.streamassist.net/video-calls-for-streamers/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://app.streamassist.net/twitch-wordle-game/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://app.streamassist.net/stream-overlay-tools/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
     <loc>https://app.streamassist.net/app</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>

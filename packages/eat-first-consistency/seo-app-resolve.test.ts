@@ -64,7 +64,7 @@ describe('seoAppResolve', () => {
   })
 
   it('resolveDefaultOgImageUrl', () => {
-    expect(resolveDefaultOgImageUrl('https://example.com')).toBe('https://example.com/og.jpg')
+    expect(resolveDefaultOgImageUrl('https://example.com')).toBe('https://example.com/og.png')
     expect(resolveDefaultOgImageUrl('')).toBe('')
   })
 })

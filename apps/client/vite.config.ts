@@ -1,16 +1,43 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { Plugin } from 'vite'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+/** Map `/slug` and `/slug/` → `/slug/index.html` so `public/` marketing pages load instead of SPA `index.html`. */
+function seoPublicMarketingIndexPlugin(): Plugin {
+  const slugs = ['video-calls-for-streamers', 'twitch-wordle-game', 'stream-overlay-tools'] as const
+  return {
+    name: 'seo-public-marketing-index',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          next()
+          return
+        }
+        const raw = req.url ?? ''
+        const pathname = raw.split('?')[0] ?? '/'
+        for (const slug of slugs) {
+          if (pathname === `/${slug}` || pathname === `/${slug}/`) {
+            const q = raw.includes('?') ? raw.slice(raw.indexOf('?')) : ''
+            req.url = `/${slug}/index.html${q}`
+            break
+          }
+        }
+        next()
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 // App is deployed at the site root (e.g. https://app.streamassist.net/), so assets must be `/assets/*`, not `/app/assets/*`.
 // If you ever host the SPA under a subpath, set `base` to that path and match Pages/nginx routing.
 export default defineConfig({
   base: '/',
-  plugins: [vue()],
+  plugins: [vue(), seoPublicMarketingIndexPlugin()],
   server: {
     proxy: {
       '/api': {

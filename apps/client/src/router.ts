@@ -1,7 +1,9 @@
+import { defineComponent } from 'vue'
 import {
   createRouter,
   createWebHistory,
   type RouteLocationGeneric,
+  type RouteRecordRaw,
   type RouterScrollBehavior,
 } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
@@ -13,6 +15,39 @@ const DEFAULT_WORDLE_STREAMER =
   (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
   STREAMER_NICK
 
+/** Served as real HTML from `public/{slug}/index.html`. If the host returns SPA `index.html` instead, full-reload to that file. */
+const SEO_MARKETING_SLUGS = ['video-calls-for-streamers', 'twitch-wordle-game', 'stream-overlay-tools'] as const
+
+const seoMarketingPlaceholder = defineComponent({
+  name: 'SeoMarketingPlaceholder',
+  setup() {
+    return () => null
+  },
+})
+
+function seoMarketingStaticRoutes(): RouteRecordRaw[] {
+  return SEO_MARKETING_SLUGS.flatMap((slug) => {
+    const target = `/${slug}/index.html`
+    const beforeEnter = (): false => {
+      window.location.replace(target)
+      return false
+    }
+    return [
+      {
+        path: `/${slug}`,
+        name: `seo-marketing-${slug}`,
+        beforeEnter,
+        component: seoMarketingPlaceholder,
+      },
+      {
+        path: `/${slug}/`,
+        beforeEnter,
+        component: seoMarketingPlaceholder,
+      },
+    ]
+  })
+}
+
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -21,6 +56,7 @@ export const router = createRouter({
       name: 'landing',
       component: () => import('./pages/LandingPage.vue'),
     },
+    ...seoMarketingStaticRoutes(),
     {
       path: '/app',
       component: () => import('./layouts/AppShellLayout.vue'),
