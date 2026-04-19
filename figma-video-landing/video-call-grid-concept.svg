@@ -1,0 +1,351 @@
+<svg width="733" height="492" viewBox="0 0 733 492" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="frameBg" x1="43" y1="30" x2="676" y2="454" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C42F4"/>
+      <stop offset="0.47" stop-color="#4D208C"/>
+      <stop offset="1" stop-color="#26172F"/>
+    </linearGradient>
+    <radialGradient id="frameGlowLeft" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(133 107) rotate(20) scale(276 190)">
+      <stop stop-color="#B88CFF" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#B88CFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="frameGlowRight" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(586 355) rotate(-12) scale(240 184)">
+      <stop stop-color="#3CB9FF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#3CB9FF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="tileStroke" x1="0" y1="0" x2="326.257" y2="193.991" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E6C8FF" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.24"/>
+    </linearGradient>
+    <linearGradient id="tileGlass" x1="12" y1="8" x2="285" y2="192" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.09"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.03"/>
+    </linearGradient>
+    <linearGradient id="tile1Bg" x1="23" y1="15" x2="302" y2="185" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5A2348"/>
+      <stop offset="0.44" stop-color="#6A2C56"/>
+      <stop offset="1" stop-color="#2C1533"/>
+    </linearGradient>
+    <linearGradient id="tile2Bg" x1="18" y1="18" x2="303" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2D45E5"/>
+      <stop offset="0.46" stop-color="#4731C9"/>
+      <stop offset="1" stop-color="#34155C"/>
+    </linearGradient>
+    <linearGradient id="tile3Bg" x1="12" y1="14" x2="309" y2="186" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6632E6"/>
+      <stop offset="0.52" stop-color="#7D2BD2"/>
+      <stop offset="1" stop-color="#A6337F"/>
+    </linearGradient>
+    <linearGradient id="tile4Sky" x1="0" y1="14" x2="326" y2="181" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2DB7FF"/>
+      <stop offset="0.42" stop-color="#2A7FFF"/>
+      <stop offset="1" stop-color="#40D0B3"/>
+    </linearGradient>
+    <linearGradient id="statusBlue" x1="0" y1="0" x2="79" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5AAEFF"/>
+      <stop offset="1" stop-color="#4473FF"/>
+    </linearGradient>
+    <linearGradient id="pillRed" x1="0" y1="0" x2="80" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF4E58"/>
+      <stop offset="1" stop-color="#FF2E45"/>
+    </linearGradient>
+    <linearGradient id="pillPurple" x1="0" y1="0" x2="85" y2="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2A2546" stop-opacity="0.88"/>
+      <stop offset="1" stop-color="#3F235D" stop-opacity="0.88"/>
+    </linearGradient>
+    <linearGradient id="donationBar" x1="0" y1="0" x2="158" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4D2E98"/>
+      <stop offset="1" stop-color="#24184E"/>
+    </linearGradient>
+    <linearGradient id="donationFill" x1="0" y1="0" x2="102" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7FEF6D"/>
+      <stop offset="1" stop-color="#FFD34E"/>
+    </linearGradient>
+    <linearGradient id="skin" x1="145" y1="42" x2="179" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD3A6"/>
+      <stop offset="0.58" stop-color="#FFB684"/>
+      <stop offset="1" stop-color="#F39569"/>
+    </linearGradient>
+    <linearGradient id="handSkin" x1="121" y1="110" x2="214" y2="151" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD9B6"/>
+      <stop offset="1" stop-color="#F5AE82"/>
+    </linearGradient>
+    <linearGradient id="hoodieRed" x1="105" y1="118" x2="216" y2="192" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D11F46"/>
+      <stop offset="1" stop-color="#8C1136"/>
+    </linearGradient>
+    <linearGradient id="shirtBlue" x1="110" y1="121" x2="214" y2="192" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3652E1"/>
+      <stop offset="1" stop-color="#1F3099"/>
+    </linearGradient>
+    <linearGradient id="sweaterYellow" x1="100" y1="120" x2="221" y2="191" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE568"/>
+      <stop offset="1" stop-color="#F5A81D"/>
+    </linearGradient>
+    <linearGradient id="hoodiePurple" x1="103" y1="120" x2="216" y2="192" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6C4BFF"/>
+      <stop offset="1" stop-color="#5820B6"/>
+    </linearGradient>
+    <linearGradient id="capBlue" x1="131" y1="36" x2="195" y2="72" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38B2FF"/>
+      <stop offset="1" stop-color="#2A63D0"/>
+    </linearGradient>
+    <linearGradient id="beanie" x1="132" y1="37" x2="196" y2="77" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD84C"/>
+      <stop offset="1" stop-color="#FF8B27"/>
+    </linearGradient>
+    <linearGradient id="coin" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF29A"/>
+      <stop offset="0.55" stop-color="#FFD44F"/>
+      <stop offset="1" stop-color="#F0A812"/>
+    </linearGradient>
+    <linearGradient id="fireYellow" x1="0" y1="0" x2="0" y2="88" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF47D"/>
+      <stop offset="0.5" stop-color="#FFD233"/>
+      <stop offset="1" stop-color="#FF8E1A"/>
+    </linearGradient>
+    <linearGradient id="fireOrange" x1="0" y1="0" x2="0" y2="110" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFB339"/>
+      <stop offset="0.6" stop-color="#FF6B22"/>
+      <stop offset="1" stop-color="#EA2D1E"/>
+    </linearGradient>
+    <linearGradient id="speechLine" x1="0" y1="0" x2="72" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D7ECFF"/>
+      <stop offset="1" stop-color="#8FD0FF"/>
+    </linearGradient>
+    <linearGradient id="mountain" x1="0" y1="0" x2="62" y2="96" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2E60D8"/>
+      <stop offset="1" stop-color="#173E86"/>
+    </linearGradient>
+    <filter id="tileShadow" x="-18" y="-14" width="362.257" height="229.991" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="16" stdDeviation="12" flood-color="#080810" flood-opacity="0.36"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="2.5" flood-color="#F0D8FF" flood-opacity="0.14"/>
+    </filter>
+    <filter id="glow" x="-30" y="-30" width="120" height="120" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <clipPath id="tileClip">
+      <rect width="326.257" height="193.991" rx="24"/>
+    </clipPath>
+  </defs>
+
+  <g id="Frame_Concept">
+    <rect width="733" height="492" rx="18" fill="url(#frameBg)"/>
+    <rect width="733" height="492" rx="18" fill="url(#frameGlowLeft)"/>
+    <rect width="733" height="492" rx="18" fill="url(#frameGlowRight)"/>
+    <rect x="12" y="11" width="86" height="23" rx="11.5" fill="#FF2F45"/>
+
+    <g id="Tile_1" transform="translate(26.06 51)">
+      <g filter="url(#tileShadow)">
+        <rect width="326.257" height="193.991" rx="24" fill="url(#tile1Bg)"/>
+        <rect x="2" y="2" width="322.257" height="189.991" rx="22" stroke="url(#tileStroke)" stroke-width="4"/>
+      </g>
+      <g clip-path="url(#tileClip)">
+        <rect width="326.257" height="193.991" rx="24" fill="url(#tileGlass)"/>
+        <rect width="326.257" height="193.991" rx="24" fill="url(#tile1Bg)"/>
+        <circle cx="161" cy="83" r="88" fill="#FF9A3A" fill-opacity="0.12"/>
+        <g id="Tile_1_Effects">
+          <circle cx="210" cy="26" r="3.6" fill="#FF7A1D"/>
+          <circle cx="235" cy="49" r="2.4" fill="#FF8E23"/>
+          <circle cx="284" cy="31" r="2.1" fill="#FF8E23"/>
+          <circle cx="44" cy="58" r="2.6" fill="#FFB246"/>
+          <rect x="19" y="20" width="82" height="29" rx="12" fill="url(#pillRed)"/>
+          <path d="M29 35L35 23L41 35M35 39V32" stroke="#FFF5F7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="48" y="40" fill="#FFFFFF" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="900">Alert:</text>
+          <circle cx="260" cy="27" r="5.4" fill="#FF4D66"/>
+          <text x="273" y="31" fill="#FF6C8D" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="900">REC</text>
+          <g opacity="0.95">
+            <path d="M0 186V144C11 132 14 118 14 101C28 114 30 132 25 147C33 139 43 133 50 121C56 133 60 149 57 164C67 150 76 134 78 111C93 132 100 154 96 186H0Z" fill="url(#fireOrange)"/>
+            <path d="M41 186V127C55 108 62 91 63 70C75 88 78 107 74 125C86 115 95 100 97 79C112 97 117 117 115 140C126 126 136 109 139 83C153 103 158 131 154 186H41Z" fill="url(#fireYellow)"/>
+            <path d="M102 186V147C114 136 121 122 121 102C132 116 138 133 136 149C147 141 155 125 157 103C170 118 176 138 173 161C184 150 195 133 197 110C210 127 216 148 214 186H102Z" fill="url(#fireOrange)"/>
+            <path d="M157 186V136C170 119 176 103 176 84C190 98 196 119 193 138C206 127 214 111 216 90C231 107 237 128 234 150C247 138 256 120 258 95C273 113 279 136 275 186H157Z" fill="url(#fireYellow)"/>
+            <path d="M218 186V148C228 138 233 125 233 108C243 120 248 134 247 149C257 142 264 130 266 113C278 124 285 143 283 164C294 154 302 140 304 122C314 139 319 157 317 186H218Z" fill="url(#fireOrange)"/>
+          </g>
+        </g>
+        <g id="Tile_1_Character" transform="translate(0 1)">
+          <path d="M111 189V150C111 125 131 111 161 111H165C195 111 215 125 215 150V189H111Z" fill="url(#hoodieRed)"/>
+          <path d="M133 127L151 144H176L194 127C198 132 201 138 203 145L186 154H141L123 145C126 138 129 132 133 127Z" fill="#A4173B"/>
+          <ellipse cx="162" cy="74" rx="34" ry="37" fill="url(#skin)"/>
+          <path d="M129 66C129 48 143 35 162 35C181 35 196 48 196 66V69H129V66Z" fill="url(#capBlue)"/>
+          <path d="M141 45C148 39 155 36 163 36C176 36 188 43 194 52L194 67H141V45Z" fill="#42A0F6"/>
+          <rect x="151" y="50" width="24" height="17" rx="7" fill="#6B2B32"/>
+          <path d="M176 43L206 53C210 54 210 60 206 61L177 66L176 43Z" fill="#2E86E7"/>
+          <path d="M142 60C149 57 155 56 162 56C169 56 176 57 183 60" stroke="#381E39" stroke-width="2.4" stroke-linecap="round"/>
+          <ellipse cx="149.5" cy="76" rx="7.5" ry="9" fill="#FFFFFF"/>
+          <ellipse cx="174.5" cy="76" rx="7.5" ry="9" fill="#FFFFFF"/>
+          <circle cx="149.5" cy="78" r="3" fill="#312040"/>
+          <circle cx="174.5" cy="78" r="3" fill="#312040"/>
+          <path d="M160 92C160 88 164 85 168 85C172 85 176 88 176 92V101H160V92Z" fill="#53283A"/>
+          <path d="M136 124C132 117 129 109 129 102C136 105 141 109 144 115L151 131L142 139L136 124Z" fill="url(#handSkin)"/>
+          <path d="M189 124C193 117 196 109 196 102C189 105 184 109 181 115L174 131L183 139L189 124Z" fill="url(#handSkin)"/>
+          <ellipse cx="132" cy="118" rx="10" ry="16" transform="rotate(-8 132 118)" fill="url(#handSkin)"/>
+          <ellipse cx="193" cy="118" rx="10" ry="16" transform="rotate(8 193 118)" fill="url(#handSkin)"/>
+          <path d="M140 113L127 95" stroke="#F3C39E" stroke-width="7" stroke-linecap="round"/>
+          <path d="M184 113L197 95" stroke="#F3C39E" stroke-width="7" stroke-linecap="round"/>
+        </g>
+      </g>
+    </g>
+
+    <g id="Tile_2" transform="translate(381.742 51)">
+      <g filter="url(#tileShadow)">
+        <rect width="326.257" height="193.991" rx="24" fill="url(#tile2Bg)"/>
+        <rect x="2" y="2" width="322.257" height="189.991" rx="22" stroke="url(#tileStroke)" stroke-width="4"/>
+      </g>
+      <g clip-path="url(#tileClip)">
+        <rect width="326.257" height="193.991" rx="24" fill="url(#tile2Bg)"/>
+        <rect width="326.257" height="193.991" rx="24" fill="url(#tileGlass)"/>
+        <g id="Tile_2_Effects">
+          <path d="M8 35C24 12 49 10 70 27C76 18 87 14 98 17C112 8 129 10 141 24C149 17 163 17 171 26C184 19 198 22 206 34V64H8V35Z" fill="#5E5CF0" fill-opacity="0.34"/>
+          <path d="M0 165C14 142 39 137 58 150C65 135 85 129 102 136C109 126 126 121 141 128C150 116 166 114 177 120C189 111 206 112 217 122C230 113 245 114 258 123C271 117 286 120 297 132C309 129 320 132 326 141V194H0V165Z" fill="#4C28A8" fill-opacity="0.68"/>
+          <path d="M37 54L53 58L43 82H55L27 121L37 88H25L37 54Z" fill="#FFF175"/>
+          <path d="M96 36L114 40L102 77H116L84 131L96 82H82L96 36Z" fill="#FFF175"/>
+          <path d="M241 48L257 52L245 82H258L230 121L240 91H229L241 48Z" fill="#FFF175"/>
+          <path d="M275 90L287 93L278 114H289L268 147L274 123H265L275 90Z" fill="#FFF175"/>
+          <rect x="18" y="18" width="69" height="28" rx="11" fill="url(#statusBlue)"/>
+          <path d="M27 25H36L39 30L36 35H27V25Z" fill="#DFF4FF"/>
+          <path d="M39 25H47C50 25 52 27 52 30C52 33 50 35 47 35H39V25Z" fill="#B9E7FF"/>
+          <text x="57" y="37" fill="#FFFFFF" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="900">Chat</text>
+          <g transform="translate(249 15)">
+            <rect width="66" height="30" rx="10" fill="#5770FF" fill-opacity="0.72"/>
+            <rect x="12" y="9" width="42" height="3.5" rx="1.75" fill="url(#speechLine)"/>
+            <rect x="12" y="16" width="34" height="3.5" rx="1.75" fill="url(#speechLine)"/>
+          </g>
+          <g transform="translate(251 72)">
+            <rect width="62" height="28" rx="9" fill="#5860FF" fill-opacity="0.72"/>
+            <rect x="10" y="9" width="43" height="3.5" rx="1.75" fill="url(#speechLine)"/>
+            <rect x="10" y="16" width="34" height="3.5" rx="1.75" fill="url(#speechLine)"/>
+          </g>
+          <g transform="translate(250 126)">
+            <rect width="64" height="28" rx="9" fill="#5A68FF" fill-opacity="0.72"/>
+            <rect x="10" y="8" width="46" height="3.5" rx="1.75" fill="url(#speechLine)"/>
+            <rect x="10" y="15" width="36" height="3.5" rx="1.75" fill="url(#speechLine)"/>
+          </g>
+        </g>
+        <g id="Tile_2_Character" transform="translate(0 1)">
+          <path d="M109 189V151C109 126 130 111 161 111H165C196 111 217 126 217 151V189H109Z" fill="url(#shirtBlue)"/>
+          <ellipse cx="163" cy="74" rx="34" ry="37" fill="url(#skin)"/>
+          <path d="M128 66C129 45 144 34 163 34C181 34 197 45 198 66H128Z" fill="url(#beanie)"/>
+          <path d="M128 56C132 45 146 36 163 36C180 36 194 45 198 56" stroke="#FFB31D" stroke-width="9" stroke-linecap="round"/>
+          <path d="M142 64C149 60 156 58 163 58C170 58 177 60 184 64" stroke="#4D2144" stroke-width="2.4" stroke-linecap="round"/>
+          <ellipse cx="149" cy="78" rx="6.4" ry="7.8" fill="#FFFFFF"/>
+          <ellipse cx="176" cy="78" rx="6.4" ry="7.8" fill="#FFFFFF"/>
+          <circle cx="149" cy="80" r="2.5" fill="#351E45"/>
+          <circle cx="176" cy="80" r="2.5" fill="#351E45"/>
+          <path d="M154 92C158 97 167 97 171 92" stroke="#7A4151" stroke-width="2.6" stroke-linecap="round"/>
+          <path d="M149 85C148 94 149 101 151 108" stroke="#64CFFF" stroke-width="3.6" stroke-linecap="round"/>
+          <path d="M176 85C175 94 176 102 178 109" stroke="#64CFFF" stroke-width="3.6" stroke-linecap="round"/>
+          <path d="M188 91C197 92 205 98 211 107" stroke="#F4C49C" stroke-width="7" stroke-linecap="round"/>
+          <ellipse cx="210" cy="108" rx="11" ry="9" transform="rotate(12 210 108)" fill="url(#handSkin)"/>
+          <path d="M189 93L200 82" stroke="#F4C49C" stroke-width="7" stroke-linecap="round"/>
+          <path d="M118 190V157C118 145 121 135 127 127L142 142V190H118Z" fill="#2036A4" fill-opacity="0.55"/>
+        </g>
+      </g>
+    </g>
+
+    <g id="Tile_3" transform="translate(26 273.75)">
+      <g filter="url(#tileShadow)">
+        <rect width="326.257" height="193.991" rx="24" fill="url(#tile3Bg)"/>
+        <rect x="2" y="2" width="322.257" height="189.991" rx="22" stroke="url(#tileStroke)" stroke-width="4"/>
+      </g>
+      <g clip-path="url(#tileClip)">
+        <rect width="326.257" height="193.991" rx="24" fill="url(#tile3Bg)"/>
+        <rect width="326.257" height="193.991" rx="24" fill="url(#tileGlass)"/>
+        <g id="Tile_3_Effects">
+          <rect x="18" y="18" width="59" height="26" rx="10" fill="url(#pillRed)"/>
+          <path d="M28 27L39 35L28 43V27Z" fill="#FFFFFF"/>
+          <text x="47" y="36" fill="#FFFFFF" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="900">LIVE</text>
+          <text x="90" y="36" fill="#FFD583" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="900">478</text>
+          <text x="144" y="36" fill="#FF8BCF" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="900">478</text>
+          <path d="M80 27H86L88 31L86 35H80V27Z" fill="#FFC94F"/>
+          <path d="M89 27H95L97 31L95 35H89V27Z" fill="#FF9F3E"/>
+          <path d="M98 27H104L106 31L104 35H98V27Z" fill="#C36AFF"/>
+          <path d="M123 25C126 22 131 22 134 25C137 22 142 22 145 25C149 29 148 35 134 45C120 35 119 29 123 25Z" fill="#FF7BCB"/>
+          <path d="M32 100C32 93 38 89 44 89C49 89 54 92 56 96C59 92 64 89 70 89C77 89 82 95 82 101C82 113 69 120 56 129C44 121 32 113 32 100Z" fill="#FF77C7"/>
+          <path d="M223 104C223 99 227 95 233 95C238 95 242 97 244 101C247 97 252 95 257 95C263 95 268 100 268 106C268 116 257 122 244 130C232 123 223 116 223 104Z" fill="#FF7CCB"/>
+          <circle cx="56" cy="49" r="2.2" fill="#FF9BD9"/>
+          <circle cx="238" cy="54" r="2" fill="#FFD677"/>
+          <circle cx="269" cy="92" r="2.2" fill="#58E1FF"/>
+          <circle cx="202" cy="38" r="2" fill="#FF9BD9"/>
+          <rect x="208" y="19" width="1.2" height="17" rx="0.6" fill="#F8CCFF" fill-opacity="0.5"/>
+        </g>
+        <g id="Tile_3_Character" transform="translate(0 1)">
+          <path d="M106 189V151C106 127 127 111 161 111H166C198 111 219 127 219 151V189H106Z" fill="url(#sweaterYellow)"/>
+          <path d="M136 134C146 142 155 146 163 146C170 146 179 142 190 134L198 144C188 151 176 156 163 156C149 156 138 151 128 144L136 134Z" fill="#F7B73C"/>
+          <ellipse cx="163" cy="76" rx="33" ry="36" fill="url(#skin)"/>
+          <path d="M132 74C132 56 145 44 163 44C181 44 194 56 194 74V83H132V74Z" fill="#5C2C2F"/>
+          <path d="M132 73C136 59 147 50 163 50C179 50 190 59 194 73" stroke="#7B3B3B" stroke-width="3" stroke-linecap="round"/>
+          <path d="M131 50L145 37L156 53" fill="#FF7AC8"/>
+          <path d="M170 53L181 37L195 50" fill="#FF7AC8"/>
+          <path d="M132 55C135 46 142 40 149 40H153L145 55H132Z" fill="#FF8FD8"/>
+          <path d="M176 40H180C187 40 194 46 197 55H184L176 40Z" fill="#FF8FD8"/>
+          <rect x="134" y="69" width="58" height="24" rx="12" fill="none" stroke="#2D3A72" stroke-width="3"/>
+          <circle cx="152" cy="81" r="7" fill="#FFFFFF"/>
+          <circle cx="175" cy="81" r="7" fill="#FFFFFF"/>
+          <circle cx="152" cy="82" r="2.4" fill="#2C2148"/>
+          <circle cx="175" cy="82" r="2.4" fill="#2C2148"/>
+          <path d="M165 80H164" stroke="#2D3A72" stroke-width="3" stroke-linecap="round"/>
+          <path d="M151 94C156 98 170 98 175 94" stroke="#8A495A" stroke-width="2.4" stroke-linecap="round"/>
+          <ellipse cx="136" cy="111" rx="12" ry="11" fill="url(#handSkin)"/>
+          <ellipse cx="190" cy="111" rx="12" ry="11" fill="url(#handSkin)"/>
+          <path d="M129 112L120 101" stroke="#F4C59E" stroke-width="7" stroke-linecap="round"/>
+          <path d="M197 112L206 101" stroke="#F4C59E" stroke-width="7" stroke-linecap="round"/>
+        </g>
+      </g>
+    </g>
+
+    <g id="Tile_4" transform="translate(381.742 273.339)">
+      <g filter="url(#tileShadow)">
+        <rect width="326.257" height="193.991" rx="24" fill="url(#tile4Sky)"/>
+        <rect x="2" y="2" width="322.257" height="189.991" rx="22" stroke="url(#tileStroke)" stroke-width="4"/>
+      </g>
+      <g clip-path="url(#tileClip)">
+        <rect width="326.257" height="193.991" rx="24" fill="url(#tile4Sky)"/>
+        <rect width="326.257" height="193.991" rx="24" fill="url(#tileGlass)"/>
+        <g id="Tile_4_Effects">
+          <path d="M0 158C40 152 59 149 79 140C94 132 113 121 128 115C149 107 169 109 186 115C203 121 221 136 237 144C258 154 283 158 326 160V194H0V158Z" fill="#1E7838"/>
+          <path d="M93 154L122 119L147 154H93Z" fill="url(#mountain)"/>
+          <path d="M123 154L159 109L195 154H123Z" fill="#2E7DD1"/>
+          <path d="M181 154L217 119L245 154H181Z" fill="url(#mountain)"/>
+          <path d="M0 172C26 166 46 164 73 168C98 171 123 178 148 177C171 176 198 167 220 167C248 166 274 176 326 171V194H0V172Z" fill="#286A2E"/>
+          <path d="M16 48C20 37 32 33 42 37C46 27 59 22 72 28C82 18 100 19 109 31C120 28 132 33 136 43H16V48Z" fill="#FFF1D4" fill-opacity="0.8"/>
+          <path d="M247 44C251 34 263 30 272 34C277 24 289 21 300 27C311 18 327 20 335 32V48H247V44Z" fill="#FFF1D4" fill-opacity="0.8"/>
+          <circle cx="65" cy="58" r="18" fill="url(#coin)"/>
+          <circle cx="43" cy="91" r="16" fill="url(#coin)"/>
+          <circle cx="253" cy="92" r="18" fill="url(#coin)"/>
+          <path d="M65 48V68" stroke="#F4B61C" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M43 82V100" stroke="#F4B61C" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M253 82V102" stroke="#F4B61C" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M225 41L237 44L230 62H239L219 88L226 66H217L225 41Z" fill="#A4E8FF"/>
+          <path d="M74 144C74 132 82 122 93 119C88 130 99 138 97 148H74Z" fill="#FF5D1D"/>
+          <path d="M81 148C81 138 88 131 95 128C92 136 99 141 98 148H81Z" fill="#FFE55D"/>
+          <g transform="translate(18 149)">
+            <rect width="166" height="28" rx="10" fill="url(#donationBar)" stroke="#F9C977" stroke-opacity="0.6"/>
+            <circle cx="14" cy="14" r="11" fill="#F28A2A"/>
+            <text x="36" y="13" fill="#FFF7EF" font-family="Inter, Segoe UI, sans-serif" font-size="7" font-weight="800">NEW DONATION !</text>
+            <text x="128" y="18" fill="#FFFFFF" font-family="Inter, Segoe UI, sans-serif" font-size="9" font-weight="900">$8.88</text>
+            <rect x="33" y="18" width="98" height="4.8" rx="2.4" fill="#1C2244"/>
+            <rect x="33" y="18" width="79" height="4.8" rx="2.4" fill="url(#donationFill)"/>
+          </g>
+        </g>
+        <g id="Tile_4_Character" transform="translate(0 2)">
+          <path d="M106 189V149C106 125 128 110 161 110H166C199 110 221 125 221 149V189H106Z" fill="url(#hoodiePurple)"/>
+          <path d="M134 132L149 145H177L193 132C198 138 201 143 203 150L181 158H145L124 150C127 143 130 138 134 132Z" fill="#4D34BE"/>
+          <ellipse cx="163" cy="74" rx="34" ry="37" fill="url(#skin)"/>
+          <path d="M132 61C132 44 145 34 163 34C181 34 195 44 195 61V66H132V61Z" fill="#2F4ED6"/>
+          <path d="M142 61C149 58 156 56 163 56C170 56 177 58 184 61" stroke="#1F2F86" stroke-width="2.4" stroke-linecap="round"/>
+          <ellipse cx="150" cy="77" rx="7" ry="8.5" fill="#FFFFFF"/>
+          <ellipse cx="176" cy="77" rx="7" ry="8.5" fill="#FFFFFF"/>
+          <circle cx="150" cy="79" r="2.6" fill="#2A1A44"/>
+          <circle cx="176" cy="79" r="2.6" fill="#2A1A44"/>
+          <path d="M150 92C156 98 170 98 176 92" stroke="#7C4A52" stroke-width="2.6" stroke-linecap="round"/>
+          <path d="M147 95C151 103 157 108 163 108C169 108 175 103 179 95" stroke="#4A2D2C" stroke-width="6" stroke-linecap="round"/>
+          <path d="M149 104C153 108 157 110 163 110C169 110 173 108 177 104" stroke="#4A2D2C" stroke-width="5" stroke-linecap="round"/>
+          <path d="M187 118L204 128" stroke="#F4C59E" stroke-width="8" stroke-linecap="round"/>
+          <ellipse cx="212" cy="132" rx="12" ry="9" transform="rotate(12 212 132)" fill="url(#handSkin)"/>
+          <path d="M214 123C221 126 225 132 226 139C220 141 214 142 208 138" fill="#FFD0A7"/>
+          <path d="M224 137L232 143" stroke="#FFD0A7" stroke-width="5" stroke-linecap="round"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
