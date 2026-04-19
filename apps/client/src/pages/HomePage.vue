@@ -5,13 +5,11 @@ import AppContainer from '@/components/ui/AppContainer.vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { STREAM_APP_BRAND_NAME, STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import { useAuth } from '@/composables/useAuth'
-import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const { isAuthenticated, refresh } = useAuth()
-const { openStreamAuthModal } = useStreamAuthModal()
 
 const defaultWordleStreamer =
   (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
@@ -31,7 +29,13 @@ watch(
   () => route.query.needLogin,
   (need) => {
     if (need === '1') {
-      openStreamAuthModal(authRedirectTarget.value)
+      void router.replace({
+        name: 'auth',
+        query: {
+          redirect: authRedirectTarget.value,
+          mode: 'login',
+        },
+      })
     }
   },
   { immediate: true },

@@ -7,6 +7,7 @@
 export {
   fetchLeaderboardRating,
   fetchLeaderboardStreak,
+  type FetchLeaderboardStreakResult,
   fetchLeaderboardWins,
   postWordleWin,
   requestWordlePublicConfig,
@@ -44,7 +45,6 @@ export {
 } from './ws'
 
 export { useWordleGlobalLeaderboard } from '@/composables/useWordleGlobalLeaderboard'
-export { useWordleLeaderboardSelfName } from '@/composables/useWordleLeaderboardSelfName'
 export { useWordleState } from '@/composables/useWordleState'
 export { useWordleStatusBanners } from '@/composables/useWordleStatusBanners'
 export { useWordleStreamerRoom, type WordleStreamerCard } from '@/composables/useWordleStreamerRoom'

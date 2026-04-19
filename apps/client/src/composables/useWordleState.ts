@@ -1,5 +1,4 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
-import { useI18n } from 'vue-i18n'
 import type { WordleLocalBoardCell } from '@/components/wordle/WordleLocalBoardGrid.vue'
 import {
   MAX_ATTEMPTS,
@@ -69,7 +68,6 @@ export type UseWordleStateOptions = {
 }
 
 export function useWordleState(options: UseWordleStateOptions) {
-  const { t, locale } = useI18n()
   const { storageScope, lastError } = options
 
   const WORDLE_MAX_ATTEMPTS = MAX_ATTEMPTS
@@ -105,18 +103,6 @@ export function useWordleState(options: UseWordleStateOptions) {
   const localBoardLocked = computed(
     () => gameStatus.value !== 'playing' || localGuesses.value.length >= MAX_ATTEMPTS,
   )
-
-  const leaderboardStatusLabel = computed(() => {
-    void locale.value
-    switch (gameStatus.value) {
-      case 'won':
-        return t('wordleUi.statusWon')
-      case 'lost':
-        return t('wordleUi.statusLost')
-      default:
-        return t('wordleUi.statusPlaying')
-    }
-  })
 
   const wordleGridRows = computed((): WordleLocalBoardCell[][] => {
     const len = wordLength.value
@@ -294,7 +280,6 @@ export function useWordleState(options: UseWordleStateOptions) {
     secretPeekVisible,
     guessInput,
     localBoardLocked,
-    leaderboardStatusLabel,
     wordleGridRows,
     kbdLetterBestFeedback,
     kbdKeyFeedbackModifier,

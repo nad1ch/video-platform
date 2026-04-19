@@ -521,10 +521,10 @@
   width: 2rem;
   height: 2rem;
   object-fit: contain;
-  border-radius: 10px;
-  border: 1px solid var(--logo-pad-border, var(--border-subtle));
-  background: var(--logo-pad-bg);
-  box-shadow: var(--logo-pad-shadow, none);
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
   box-sizing: border-box;
 }
 
@@ -794,14 +794,14 @@
 .app-site-footer__logo-wrap {
   flex-shrink: 0;
   /* Фіксований бокс до завантаження картинки — зменшує CLS (Lighthouse). */
-  width: 52px;
-  height: 52px;
-  padding: 4px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   box-sizing: border-box;
-  border-radius: 12px;
-  background: var(--logo-pad-bg);
-  border: 1px solid var(--logo-pad-border, var(--border-subtle));
-  box-shadow: var(--logo-pad-shadow, none);
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
   line-height: 0;
   display: flex;
   align-items: center;

@@ -100,11 +100,17 @@ export async function fetchLeaderboardWins(querySuffix: string): Promise<WordleG
     .filter((r) => r.userId.length > 0)
 }
 
-export async function fetchLeaderboardStreak(querySuffix: string): Promise<WordleGlobalStreakRow[]> {
+export type FetchLeaderboardStreakResult = {
+  entries: WordleGlobalStreakRow[]
+  /** Present when the request had a valid session (0 = no wins recorded). */
+  viewerMaxStreak?: number
+}
+
+export async function fetchLeaderboardStreak(querySuffix: string): Promise<FetchLeaderboardStreakResult> {
   const res = await apiFetch(`/api/leaderboard/streak${querySuffix}`)
-  const j = (await res.json()) as { entries?: unknown }
+  const j = (await res.json()) as { entries?: unknown; viewerMaxStreak?: unknown }
   const list = Array.isArray(j.entries) ? j.entries : []
-  return list
+  const entries = list
     .map((raw, i) => {
       const o = raw as Record<string, unknown>
       const rank = typeof o.rank === 'number' ? o.rank : i + 1
@@ -115,6 +121,9 @@ export async function fetchLeaderboardStreak(querySuffix: string): Promise<Wordl
       return { rank, userId, displayName, avatarUrl, streak }
     })
     .filter((r) => r.userId.length > 0)
+  const viewerMaxStreak =
+    typeof j.viewerMaxStreak === 'number' && Number.isFinite(j.viewerMaxStreak) ? j.viewerMaxStreak : undefined
+  return { entries, viewerMaxStreak }
 }
 
 export async function fetchLeaderboardRating(querySuffix: string): Promise<WordleGlobalRatingRow[]> {

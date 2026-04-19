@@ -56,6 +56,11 @@ export const router = createRouter({
       name: 'landing',
       component: () => import('./pages/LandingPage.vue'),
     },
+    {
+      path: '/auth',
+      name: 'auth',
+      component: () => import('./pages/AuthPage.vue'),
+    },
     ...seoMarketingStaticRoutes(),
     {
       path: '/app',
@@ -240,10 +245,10 @@ router.beforeEach(async (to) => {
   }
 
   return {
-    path: '/app',
+    path: '/auth',
     query: {
-      needLogin: '1',
-      authRedirect: to.fullPath,
+      redirect: to.fullPath,
+      mode: 'login',
     },
   }
 })

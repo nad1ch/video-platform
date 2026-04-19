@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { createLogger } from '@/utils/logger'
 import {
-  BRAND_LOGO_COMPACT_PNG,
-  BRAND_LOGO_PNG,
-  BRAND_LOGO_SVG_FALLBACK,
-  BRAND_LOGO_WEBP,
+  BRAND_LOGO_DARK_SVG,
+  BRAND_LOGO_LIGHT_SVG,
   STREAMER_NICK,
   STREAMER_TWITCH_URL,
 } from '../../constants/brand.js'
+import { useTheme } from '../../state/useTheme.js'
 
 const brandLinkLog = createLogger('streamer-brand-link')
 
@@ -26,18 +25,23 @@ const logoBoxStyle = () => ({
   maxHeight: `${props.logoSize}px`,
 })
 
-const imgSrc = ref(BRAND_LOGO_PNG)
+const { theme } = useTheme()
+
+const primaryLogo = computed(() => (theme.value === 'dark' ? BRAND_LOGO_LIGHT_SVG : BRAND_LOGO_DARK_SVG))
+const fallbackLogo = computed(() => (theme.value === 'dark' ? BRAND_LOGO_DARK_SVG : BRAND_LOGO_LIGHT_SVG))
+
+const imgSrc = ref(primaryLogo.value)
+
+watch(primaryLogo, (next) => {
+  imgSrc.value = next
+})
 
 function onLogoError(ev: Event) {
   const el = ev.target
   const src = el instanceof HTMLImageElement ? el.currentSrc || el.src : ''
   brandLinkLog.warn('logo image failed to load:', src || '(unknown src)')
-  if (imgSrc.value === BRAND_LOGO_PNG) {
-    imgSrc.value = BRAND_LOGO_COMPACT_PNG
-    return
-  }
-  if (imgSrc.value === BRAND_LOGO_COMPACT_PNG) {
-    imgSrc.value = BRAND_LOGO_SVG_FALLBACK
+  if (imgSrc.value === primaryLogo.value) {
+    imgSrc.value = fallbackLogo.value
     return
   }
   imgSrc.value = ''
@@ -58,8 +62,7 @@ function initialNick() {
     rel="noopener noreferrer"
     :aria-label="ariaLabel"
   >
-    <picture v-if="imgSrc" class="app-shell-mini-brand__picture">
-      <source v-if="BRAND_LOGO_WEBP" :srcset="BRAND_LOGO_WEBP" type="image/webp" />
+    <span v-if="imgSrc" class="app-shell-mini-brand__picture">
       <img
         class="app-shell-mini-brand__logo"
         :src="imgSrc"
@@ -71,7 +74,7 @@ function initialNick() {
         fetchpriority="low"
         @error="onLogoError"
       />
-    </picture>
+    </span>
     <span
       v-else
       class="app-shell-mini-brand__fallback"
@@ -93,9 +96,12 @@ function initialNick() {
   gap: 0;
 }
 
-.app-shell-mini-brand--icon-only .app-shell-mini-brand__logo,
+.app-shell-mini-brand--icon-only .app-shell-mini-brand__logo {
+  border-radius: 0;
+}
+
 .app-shell-mini-brand--icon-only .app-shell-mini-brand__fallback {
-  border-radius: 50%;
+  border-radius: 10px;
 }
 
 .app-shell-mini-brand__fallback {
@@ -106,7 +112,7 @@ function initialNick() {
   height: 2rem;
   border-radius: 10px;
   border: 1px solid var(--border-subtle, var(--sa-color-border));
-  background: var(--logo-pad-bg, color-mix(in srgb, var(--sa-color-primary) 28%, var(--sa-color-bg-deep)));
+  background: transparent;
   font-family: var(--font-display, var(--sa-font-display));
   font-size: 0.95rem;
   font-weight: 800;

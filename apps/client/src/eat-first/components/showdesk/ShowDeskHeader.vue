@@ -117,7 +117,7 @@ const emit = defineEmits(['copy-personal', 'copy-global'])
   font-size: 1.35rem;
   font-weight: 700;
   color: var(--text-title);
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   letter-spacing: 0.02em;
 }
 

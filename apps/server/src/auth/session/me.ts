@@ -28,6 +28,7 @@ export async function handleGetApiAuthMe(req: Request, res: Response): Promise<v
       authenticated: true,
       user: {
         ...base,
+        ...(prismaUserId ? { dbUserId: prismaUserId } : {}),
         ...(wordle
           ? { wordleStreamerId: wordle.wordleStreamerId, wordleStreamerName: wordle.wordleStreamerName }
           : {}),

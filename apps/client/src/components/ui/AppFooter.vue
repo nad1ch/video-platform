@@ -3,12 +3,12 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  BRAND_LOGO_COMPACT_PNG,
-  BRAND_LOGO_PNG,
-  BRAND_LOGO_SVG_FALLBACK,
+  BRAND_LOGO_DARK_SVG,
+  BRAND_LOGO_LIGHT_SVG,
   STREAMER_NICK,
   STREAMER_TWITCH_URL,
 } from '@/eat-first/constants/brand.js'
+import { useTheme } from '@/eat-first/state/useTheme.js'
 
 defineProps<{
   year: number
@@ -56,15 +56,20 @@ onUnmounted(() => {
   if (typeof document !== 'undefined') document.removeEventListener('keydown', onDocKeydown)
 })
 
-const footerLogoSrc = ref(BRAND_LOGO_PNG)
+const { theme } = useTheme()
+
+const footerPrimaryLogo = computed(() => (theme.value === 'dark' ? BRAND_LOGO_LIGHT_SVG : BRAND_LOGO_DARK_SVG))
+const footerFallbackLogo = computed(() => (theme.value === 'dark' ? BRAND_LOGO_DARK_SVG : BRAND_LOGO_LIGHT_SVG))
+
+const footerLogoSrc = ref(footerPrimaryLogo.value)
+
+watch(footerPrimaryLogo, (next) => {
+  footerLogoSrc.value = next
+})
 
 function onFooterLogoError() {
-  if (footerLogoSrc.value === BRAND_LOGO_PNG) {
-    footerLogoSrc.value = BRAND_LOGO_COMPACT_PNG
-    return
-  }
-  if (footerLogoSrc.value === BRAND_LOGO_COMPACT_PNG) {
-    footerLogoSrc.value = BRAND_LOGO_SVG_FALLBACK
+  if (footerLogoSrc.value === footerPrimaryLogo.value) {
+    footerLogoSrc.value = footerFallbackLogo.value
     return
   }
   footerLogoSrc.value = ''
@@ -188,7 +193,7 @@ function footerInitial() {
   height: 44px;
   border-radius: 12px;
   border: 1px solid var(--border-subtle, var(--sa-color-border));
-  background: var(--logo-pad-bg, color-mix(in srgb, var(--sa-color-primary) 28%, var(--sa-color-bg-deep)));
+  background: transparent;
   font-family: var(--font-display, var(--sa-font-display));
   font-size: 1.15rem;
   font-weight: 800;

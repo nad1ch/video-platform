@@ -23,6 +23,8 @@ export function useWordleGlobalLeaderboard(options: {
   const globalLbTab = ref<'wins' | 'streak' | 'rating'>('rating')
   const globalLbWinsRows = ref<WordleGlobalWinsRow[]>([])
   const globalLbStreakRows = ref<WordleGlobalStreakRow[]>([])
+  /** Set only after a successful streak fetch; `undefined` while not loaded on streak tab. */
+  const globalLbViewerMaxStreak = ref<number | undefined>(undefined)
   const globalLbRatingRows = ref<WordleGlobalRatingRow[]>([])
   const globalLbLoading = ref(false)
   const globalLbError = ref<string | null>(null)
@@ -31,6 +33,9 @@ export function useWordleGlobalLeaderboard(options: {
     const u = user.value
     if (!u) {
       return false
+    }
+    if (u.dbUserId && entry.userId === u.dbUserId) {
+      return true
     }
     if (entry.userId === u.id) {
       return true
@@ -77,11 +82,15 @@ export function useWordleGlobalLeaderboard(options: {
   async function loadGlobalLbStreak(): Promise<void> {
     globalLbLoading.value = true
     globalLbError.value = null
+    globalLbViewerMaxStreak.value = undefined
     try {
-      globalLbStreakRows.value = await fetchLeaderboardStreak(globalLeaderboardQuery())
+      const { entries, viewerMaxStreak } = await fetchLeaderboardStreak(globalLeaderboardQuery())
+      globalLbStreakRows.value = entries
+      globalLbViewerMaxStreak.value = viewerMaxStreak
     } catch {
       globalLbError.value = t('wordleLeaderboard.loadError')
       globalLbStreakRows.value = []
+      globalLbViewerMaxStreak.value = undefined
     } finally {
       globalLbLoading.value = false
     }
@@ -167,12 +176,26 @@ export function useWordleGlobalLeaderboard(options: {
     }))
   })
 
+  /** Signed-in viewer’s best streak on this channel (server); shown above the streak table. */
+  const globalLbSelfStreakSummary = computed((): string | null => {
+    void locale.value
+    if (globalLbTab.value !== 'streak' || !user.value) {
+      return null
+    }
+    const v = globalLbViewerMaxStreak.value
+    if (v === undefined) {
+      return null
+    }
+    return t('wordleLeaderboard.selfBestStreak', { n: v })
+  })
+
   return {
     globalLbTab,
     globalLbLoading,
     globalLbError,
     globalLbTableRows,
     globalLbScoreLabel,
+    globalLbSelfStreakSummary,
     loadGlobalLbActive,
   }
 }

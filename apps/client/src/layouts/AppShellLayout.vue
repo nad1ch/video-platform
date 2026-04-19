@@ -27,9 +27,8 @@ import {
 } from '@/stores/callRoomHeaderJoin'
 import { redirectAdminToControlIfAuthed } from '@/eat-first/router.js'
 import {
-  BRAND_LOGO_COMPACT_PNG,
-  BRAND_LOGO_PNG,
-  BRAND_LOGO_SVG_FALLBACK,
+  BRAND_LOGO_DARK_SVG,
+  BRAND_LOGO_LIGHT_SVG,
   STREAM_APP_BRAND_NAME,
 } from '@/eat-first/constants/brand.js'
 import '@/eat-first/styles/host-chrome.css'
@@ -117,15 +116,18 @@ const themeIcon = computed(() => (theme.value === 'dark' ? '☀️' : '🌙'))
 const themeLabel = computed(() => (theme.value === 'dark' ? t('app.themeLight') : t('app.themeDark')))
 const footerYear = new Date().getFullYear()
 
-const streamShellBrandImg = ref(BRAND_LOGO_PNG)
+const streamShellPrimaryLogo = computed(() => (theme.value === 'dark' ? BRAND_LOGO_LIGHT_SVG : BRAND_LOGO_DARK_SVG))
+const streamShellFallbackLogo = computed(() => (theme.value === 'dark' ? BRAND_LOGO_DARK_SVG : BRAND_LOGO_LIGHT_SVG))
+
+const streamShellBrandImg = ref(streamShellPrimaryLogo.value)
+
+watch(streamShellPrimaryLogo, (next) => {
+  streamShellBrandImg.value = next
+})
 
 function onStreamShellBrandImgError() {
-  if (streamShellBrandImg.value === BRAND_LOGO_PNG) {
-    streamShellBrandImg.value = BRAND_LOGO_COMPACT_PNG
-    return
-  }
-  if (streamShellBrandImg.value === BRAND_LOGO_COMPACT_PNG) {
-    streamShellBrandImg.value = BRAND_LOGO_SVG_FALLBACK
+  if (streamShellBrandImg.value === streamShellPrimaryLogo.value) {
+    streamShellBrandImg.value = streamShellFallbackLogo.value
     return
   }
   streamShellBrandImg.value = ''
@@ -371,10 +373,10 @@ onMounted(() => {
   flex-shrink: 0;
   width: 1.75rem;
   height: 1.75rem;
-  padding: 0.12rem;
-  border-radius: 9px;
-  border: 1px solid var(--border-subtle, var(--sa-color-border));
-  background: var(--logo-pad-bg, color-mix(in srgb, var(--sa-color-primary) 28%, var(--sa-color-bg-deep)));
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
   line-height: 0;
   box-sizing: border-box;
 }
@@ -395,7 +397,7 @@ onMounted(() => {
   height: 1.75rem;
   border-radius: 9px;
   border: 1px solid var(--border-subtle, var(--sa-color-border));
-  background: var(--logo-pad-bg, color-mix(in srgb, var(--sa-color-primary) 28%, var(--sa-color-bg-deep)));
+  background: transparent;
   font-family: var(--font-display, var(--sa-font-display));
   font-size: 0.8rem;
   font-weight: 800;

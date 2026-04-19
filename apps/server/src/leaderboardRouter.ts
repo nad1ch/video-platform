@@ -7,6 +7,9 @@ import { readSessionFromCookie } from './auth/session/sessionJwt'
 /** Matches `MAX_ATTEMPTS` in client `wordleLogic` / solo board rows. */
 const SOLO_MAX_ATTEMPTS = 6
 
+/** `GameRound.winnerUserId` when a solo round ends in a loss (player exhausted attempts). Not a real user id. */
+const WORDLE_SOLO_LOSS_PLACEHOLDER_WINNER = '__wordle_solo_loss__'
+
 function isDatabaseConfigured(): boolean {
   const u = process.env.DATABASE_URL
   return typeof u === 'string' && u.trim().length > 0
@@ -64,15 +67,22 @@ async function buildParticipantDisplayMap(
   return map
 }
 
-function consecutiveWinStreakFromNewestFirst(rows: { isWinner: boolean }[]): number {
-  let n = 0
+/**
+ * Longest run of consecutive wins, in chronological round order (one entry per round the user played).
+ * Losses reset the running count but not the recorded maximum.
+ */
+function maxConsecutiveWinStreakChronological(rows: { isWinner: boolean }[]): number {
+  let run = 0
+  let best = 0
   for (const r of rows) {
-    if (!r.isWinner) {
-      break
+    if (r.isWinner) {
+      run += 1
+      best = Math.max(best, run)
+    } else {
+      run = 0
     }
-    n += 1
   }
-  return n
+  return best
 }
 
 async function winsLeaderboardForStreamer(
@@ -132,13 +142,13 @@ async function streakFromRows(
   }
 
   for (const list of byUser.values()) {
-    list.sort((a, b) => b.roundCreatedAt.getTime() - a.roundCreatedAt.getTime())
+    list.sort((a, b) => a.roundCreatedAt.getTime() - b.roundCreatedAt.getTime())
   }
 
   const scored = [...byUser.entries()]
     .map(([userId, list]) => ({
       userId,
-      streak: consecutiveWinStreakFromNewestFirst(list),
+      streak: maxConsecutiveWinStreakChronological(list),
     }))
     .filter((x) => x.streak > 0)
     .sort((a, b) => b.streak - a.streak || a.userId.localeCompare(b.userId))
@@ -156,6 +166,45 @@ async function streakFromRows(
       streak: s.streak,
     }
   })
+}
+
+/** Best consecutive-win streak for this viewer on this streamer (matches `GameResult.userId` to prisma `id` or `twitchId`). */
+async function viewerMaxWinStreakForStreamer(streamerId: string, prismaUserId: string): Promise<number> {
+  const u = await prisma.user.findUnique({
+    where: { id: prismaUserId },
+    select: { id: true, twitchId: true },
+  })
+  if (!u) {
+    return 0
+  }
+  const uniqKeys = [
+    ...new Set(
+      [u.id, u.twitchId].filter((x): x is string => typeof x === 'string' && x.trim().length > 0),
+    ),
+  ]
+  if (uniqKeys.length === 0) {
+    return 0
+  }
+  const flat = await prisma.$queryRaw<Array<{ isWinner: boolean; createdAt: Date; roundId: string }>>(
+    Prisma.sql`
+      SELECT gr."isWinner", g."createdAt" AS "createdAt", g."id" AS "roundId"
+      FROM "GameResult" gr
+      INNER JOIN "GameRound" g ON g.id = gr."roundId"
+      WHERE g."streamerId" = ${streamerId}
+        AND gr."userId" IN (${Prisma.join(uniqKeys)})
+    `,
+  )
+  const sorted = [...flat].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+  const seenRound = new Set<string>()
+  const merged: { isWinner: boolean }[] = []
+  for (const row of sorted) {
+    if (seenRound.has(row.roundId)) {
+      continue
+    }
+    seenRound.add(row.roundId)
+    merged.push({ isWinner: row.isWinner })
+  }
+  return maxConsecutiveWinStreakChronological(merged)
 }
 
 async function ratingLeaderboardForStreamer(streamerId: string): Promise<
@@ -268,38 +317,55 @@ export function mountLeaderboardRoutes(app: Express): void {
         res.status(404).json({ error: 'streamer_not_found' })
         return
       }
-      if (result === 'win') {
-        await prisma.userStreamerStats.upsert({
-          where: {
-            userId_streamerId: { userId, streamerId },
-          },
-          create: {
-            userId,
+      const isWin = result === 'win'
+      await prisma.$transaction(async (tx) => {
+        if (isWin) {
+          await tx.userStreamerStats.upsert({
+            where: {
+              userId_streamerId: { userId, streamerId },
+            },
+            create: {
+              userId,
+              streamerId,
+              gamesPlayed: 1,
+              wins: 1,
+            },
+            update: {
+              gamesPlayed: { increment: 1 },
+              wins: { increment: 1 },
+            },
+          })
+        } else {
+          await tx.userStreamerStats.upsert({
+            where: {
+              userId_streamerId: { userId, streamerId },
+            },
+            create: {
+              userId,
+              streamerId,
+              gamesPlayed: 1,
+              wins: 0,
+            },
+            update: {
+              gamesPlayed: { increment: 1 },
+            },
+          })
+        }
+        const round = await tx.gameRound.create({
+          data: {
             streamerId,
-            gamesPlayed: 1,
-            wins: 1,
-          },
-          update: {
-            gamesPlayed: { increment: 1 },
-            wins: { increment: 1 },
+            winnerUserId: isWin ? userId : WORDLE_SOLO_LOSS_PLACEHOLDER_WINNER,
           },
         })
-      } else {
-        await prisma.userStreamerStats.upsert({
-          where: {
-            userId_streamerId: { userId, streamerId },
-          },
-          create: {
+        await tx.gameResult.create({
+          data: {
+            roundId: round.id,
             userId,
-            streamerId,
-            gamesPlayed: 1,
-            wins: 0,
-          },
-          update: {
-            gamesPlayed: { increment: 1 },
+            attempts,
+            isWinner: isWin,
           },
         })
-      }
+      })
       res.status(204).end()
     } catch (e) {
       console.error('[leaderboard] POST /api/wins', e)
@@ -338,7 +404,11 @@ export function mountLeaderboardRoutes(app: Express): void {
         return
       }
       const entries = await streakLeaderboardForStreamer(scope)
-      res.json({ entries })
+      const session = readSessionFromCookie(req.headers.cookie)
+      const prismaUserId = session ? await resolvePrismaUserIdFromSession(session) : null
+      const viewerMaxStreak =
+        prismaUserId !== null ? await viewerMaxWinStreakForStreamer(scope, prismaUserId) : undefined
+      res.json({ entries, ...(viewerMaxStreak !== undefined ? { viewerMaxStreak } : {}) })
     } catch (e) {
       console.error('[leaderboard] GET /api/leaderboard/streak', e)
       res.status(500).json({ entries: [], error: 'server_error' })

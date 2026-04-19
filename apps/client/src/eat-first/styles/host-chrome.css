@@ -293,7 +293,7 @@
 }
 
 .hcc-round__mid {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   font-size: 0.8rem;
   font-weight: 900;
   letter-spacing: 0.06em;
@@ -310,7 +310,7 @@
 }
 
 .hcc-target-block__id {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   font-size: 1.35rem;
   font-weight: 900;
   letter-spacing: 0.08em;

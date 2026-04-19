@@ -1,4 +1,5 @@
 /* StreamAssist — static marketing pages (LandingPage visual language, minimal). */
+@import url('./sa-font-stacks.css');
 @import url('https://fonts.googleapis.com/css2?family=Climate+Crisis&family=Marmelad&display=swap');
 
 :root {
@@ -16,7 +17,6 @@
   --link-hover: #f5f3ff;
   --radius: 1.125rem;
   --radius-pill: 999px;
-  --font-display: 'Climate Crisis', system-ui, sans-serif;
   --font-body: 'Marmelad', Georgia, 'Times New Roman', serif;
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
 }

@@ -434,7 +434,7 @@ watch(
   max-width: min(92vw, 28rem);
   text-align: center;
   pointer-events: none;
-  font-family: Orbitron, sans-serif;
+  font-family: var(--sa-font-display);
   border-radius: 12px;
   background: rgba(8, 6, 22, 0.88);
   border: 1px solid rgba(56, 189, 248, 0.35);
@@ -597,7 +597,7 @@ watch(
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   color: rgba(196, 181, 253, 0.72);
 }
 
@@ -615,7 +615,7 @@ watch(
   font-weight: 800;
   letter-spacing: 0.02em;
   color: #f5f3ff;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--sa-font-display);
   line-height: 1.15;
   text-shadow: 0 0 28px rgba(168, 85, 247, 0.2);
 }

@@ -17,6 +17,8 @@ export type SessionUser = {
 /** Global app API shape (GET /api/auth/me). */
 export type GlobalAuthUser = {
   id: string
+  /** Prisma `User.id` when the session is linked to a database row (leaderboards use this id). */
+  dbUserId?: string
   displayName: string
   avatar?: string
   provider: 'twitch' | 'google' | 'apple' | 'email' | null

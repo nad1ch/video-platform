@@ -38,6 +38,8 @@ const CANONICAL_NOISE_QUERY_KEYS = new Set([
   '_ga',
   'needLogin',
   'authRedirect',
+  'redirect',
+  'mode',
 ])
 
 /**

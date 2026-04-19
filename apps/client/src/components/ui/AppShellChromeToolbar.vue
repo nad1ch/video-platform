@@ -6,7 +6,6 @@ import StreamerBrandLink from '@/eat-first/ui/atoms/StreamerBrandLink.vue'
 import ThemeToggleButton from '@/eat-first/ui/atoms/ThemeToggleButton.vue'
 import UiMenuSelect from '@/eat-first/ui/molecules/UiMenuSelect.vue'
 import AppButton from '@/components/ui/AppButton.vue'
-import StreamAuthModal from '@/components/ui/StreamAuthModal.vue'
 import { useTheme } from '@/eat-first'
 import { persistLocale, LOCALE_OPTIONS } from '@/eat-first/i18n'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
@@ -107,7 +106,6 @@ function userAvatarInitial(displayName: string): string {
     />
     <ThemeToggleButton :label="themeLabel" :icon="themeIcon" @click="toggleTheme" />
     <StreamerBrandLink :ariaLabel="twitchChannelAria" :show-nick="false" :logo-size="30" />
-    <StreamAuthModal />
   </div>
 </template>
 

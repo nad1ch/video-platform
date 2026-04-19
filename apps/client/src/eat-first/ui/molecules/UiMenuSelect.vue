@@ -144,7 +144,7 @@ onUnmounted(() => {
   padding: 6px 8px;
   font-size: 0.68rem;
   font-weight: 800;
-  font-family: var(--font-display, 'Orbitron', sans-serif);
+  font-family: var(--font-display, var(--sa-font-display));
   letter-spacing: 0.06em;
 }
 
