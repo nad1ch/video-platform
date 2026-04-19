@@ -73,7 +73,6 @@ type GameCard = {
 }
 
 const authRouteLogin = { path: '/auth', query: { redirect: '/app', mode: 'login' as const } } as const
-const authRouteSignup = { path: '/auth', query: { redirect: '/app', mode: 'signup' as const } } as const
 const callRoute = { name: 'call' } as const
 const homeRoute = { name: 'home' } as const
 
@@ -482,7 +481,6 @@ useLandingCosmicParallax(landingCanvasEl)
 
       <div class="landing-auth" aria-label="Account">
         <RouterLink class="landing-auth__link" :to="authRouteLogin">Log In</RouterLink>
-        <RouterLink class="landing-auth__link" :to="authRouteSignup">Sing Up</RouterLink>
       </div>
 
       <section class="landing-hero" aria-label="Hero" v-once>

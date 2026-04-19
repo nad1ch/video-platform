@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -9,7 +9,6 @@ import { parseAuthMode } from '@/utils/parseAuthMode'
 import { replaceAuthQuery } from '@/utils/authRouteQuery'
 import type { AuthMode } from '@/types/authMode'
 import LoginForm from '@/components/auth/LoginForm.vue'
-import SignupForm from '@/components/auth/SignupForm.vue'
 import ForgotForm from '@/components/auth/ForgotForm.vue'
 
 const props = defineProps<{
@@ -29,9 +28,18 @@ const mode = computed<AuthMode>(() => {
 
 const redirectForOAuth = computed(() => safeOAuthRedirectPath(props.redirectPath))
 
-function setMode(next: AuthMode): void {
-  void router.replace({ path: '/auth', query: replaceAuthQuery(route, next) })
-}
+/** Signup tab removed: normalize legacy `?mode=signup` URLs to login. */
+watch(
+  () => route.query.mode,
+  () => {
+    const raw = route.query.mode
+    const s = Array.isArray(raw) ? raw[0] : raw
+    if (s === 'signup') {
+      void router.replace({ path: '/auth', query: replaceAuthQuery(route, 'login') })
+    }
+  },
+  { immediate: true },
+)
 
 function onTwitch(): void {
   loginWithTwitch(redirectForOAuth.value)
@@ -63,63 +71,37 @@ function goLoginFromSuccess(): void {
       </div>
     </template>
 
-    <template v-else-if="mode === 'login' || mode === 'signup'">
-      <div class="auth-form-login-flow">
-        <div class="auth-form-tabs" role="tablist" :aria-label="t('app.authPageTitle')">
-          <button
-            type="button"
-            role="tab"
-            class="auth-form-tab"
-            :class="{ 'auth-form-tab--active': mode === 'login' }"
-            :aria-selected="mode === 'login'"
-            @click="setMode('login')"
-          >
-            {{ t('app.authTabLogin') }}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            class="auth-form-tab"
-            :class="{ 'auth-form-tab--active': mode === 'signup' }"
-            :aria-selected="mode === 'signup'"
-            @click="setMode('signup')"
-          >
-            {{ t('app.authTabSignup') }}
-          </button>
-        </div>
-
-        <div class="auth-form-stack">
-          <div class="auth-form-oauth">
-            <div class="auth-form-twitch-block">
-              <p class="auth-form-twitch-hint">{{ t('app.authTwitchHint') }}</p>
-              <AppButton
-                variant="primary"
-                type="button"
-                class="auth-form-oauth-btn auth-form-oauth-btn--twitch auth-form-oauth-btn--full"
-                @click="onTwitch"
-              >
-                {{ t('app.authLoginTwitch') }}
-              </AppButton>
-            </div>
+    <template v-else>
+      <div class="auth-form-stack">
+        <div class="auth-form-oauth">
+          <div class="auth-form-twitch-block">
+            <p class="auth-form-twitch-hint">{{ t('app.authTwitchHint') }}</p>
             <AppButton
-              variant="secondary"
+              variant="primary"
               type="button"
-              class="auth-form-oauth-btn auth-form-oauth-btn--google auth-form-oauth-btn--full"
-              @click="onGoogle"
+              class="auth-form-oauth-btn auth-form-oauth-btn--twitch auth-form-oauth-btn--full"
+              @click="onTwitch"
             >
-              {{ t('app.authLoginGoogle') }}
+              {{ t('app.authLoginTwitch') }}
             </AppButton>
           </div>
-
-          <div class="auth-form-divider" role="separator">
-            <span class="auth-form-divider__line" aria-hidden="true" />
-            <span class="auth-form-divider__text">{{ t('app.authOr') }}</span>
-            <span class="auth-form-divider__line" aria-hidden="true" />
-          </div>
-
-          <LoginForm v-if="mode === 'login'" :redirect-path="redirectPath" />
-          <SignupForm v-else :redirect-path="redirectPath" />
+          <AppButton
+            variant="secondary"
+            type="button"
+            class="auth-form-oauth-btn auth-form-oauth-btn--google auth-form-oauth-btn--full"
+            @click="onGoogle"
+          >
+            {{ t('app.authLoginGoogle') }}
+          </AppButton>
         </div>
+
+        <div class="auth-form-divider" role="separator">
+          <span class="auth-form-divider__line" aria-hidden="true" />
+          <span class="auth-form-divider__text">{{ t('app.authOr') }}</span>
+          <span class="auth-form-divider__line" aria-hidden="true" />
+        </div>
+
+        <LoginForm :redirect-path="redirectPath" />
       </div>
     </template>
   </div>
@@ -133,12 +115,6 @@ function goLoginFromSuccess(): void {
   --af-space-6: 1.5rem;
 
   width: 100%;
-}
-
-.auth-form-login-flow {
-  display: flex;
-  flex-direction: column;
-  gap: var(--af-space-4);
 }
 
 .auth-form-panel {
@@ -160,41 +136,6 @@ function goLoginFromSuccess(): void {
   font-size: 0.82rem;
   line-height: 1.5;
   color: var(--text-body, var(--sa-color-text-body));
-}
-
-.auth-form-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--af-space-2);
-}
-
-.auth-form-tab {
-  margin: 0;
-  min-height: 2.5rem;
-  padding: 0 var(--af-space-3);
-  border-radius: var(--sa-radius-sm);
-  border: 1px solid var(--border-subtle, var(--sa-color-border));
-  background: color-mix(in srgb, var(--sa-color-surface) 75%, transparent);
-  color: var(--text-muted, var(--sa-color-text-muted));
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-.auth-form-tab:hover {
-  border-color: var(--border-strong, var(--sa-color-primary-border));
-}
-
-.auth-form-tab--active {
-  border-color: var(--border-strong, var(--sa-color-primary-border));
-  background: color-mix(in srgb, var(--sa-color-primary) 16%, var(--sa-color-surface));
-  color: var(--text-heading, var(--sa-color-text-main));
 }
 
 .auth-form-stack {
