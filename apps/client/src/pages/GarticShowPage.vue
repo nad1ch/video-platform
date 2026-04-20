@@ -24,6 +24,7 @@ const route = useRoute()
 const auth = useAuth()
 
 const manualWord = ref('')
+const nextRoundWordEdit = ref('')
 const wordSourceUi = ref<GarticRoundSetupWordSource>('global')
 const roundDurationSec = ref(180)
 const roundsPlanned = ref(10)
@@ -51,20 +52,16 @@ const {
   chatLines,
   lastWsError,
   wsStatus,
-  prompts,
-  promptsLoading,
   nowTick,
   showHostChrome,
   startRound,
-  clearRound,
+  clearCanvasOnly,
+  ackNextRound,
   sendDrawStart,
   sendDrawMove,
   sendDrawEnd,
   onCanvasClear,
   onRemoteDraw,
-  loadPrompts,
-  approvePrompt,
-  deletePrompt,
 } = orch
 
 const boardRef = useTemplateRef<{ clearBoard: () => void; applyRemote: (p: RemoteDrawPayload) => void }>('boardRef')
@@ -80,7 +77,7 @@ onRemoteDraw((p) => {
 
 const roundSecondsLeft = computed(() => {
   const st = garticState.value
-  if (!st || st.phase === 'idle' || st.phase === 'revealed') {
+  if (!st || st.phase === 'idle' || st.phase === 'revealed' || st.phase === 'between_rounds') {
     return null
   }
   const ms = st.endsAt - (nowTick.value ?? Date.now())
@@ -89,16 +86,107 @@ const roundSecondsLeft = computed(() => {
 
 const roundsPlanHud = computed(() => {
   const st = garticState.value
-  if (!st || st.phase === 'idle' || !st.roundsPlanned || st.roundsPlanned < 1) {
+  if (!st || !st.roundsPlanned || st.roundsPlanned < 1) {
     return ''
   }
-  return t('garticShow.roundsPlanHud', { n: st.roundsPlanned })
+  const current = st.roundNumber ?? 1
+  return t('garticShow.roundProgressHud', { current, total: st.roundsPlanned })
+})
+
+/** Full setup (overlay) only when no multi-round session is active. */
+const showRoundSetupOverlay = computed(() => {
+  if (!showHostChrome.value) {
+    return false
+  }
+  const st = garticState.value
+  if (!st || st.phase !== 'idle') {
+    return false
+  }
+  return (st.roundsPlanned ?? 0) === 0
+})
+
+const showWordStripInCamera = computed(() => {
+  if (!showHostChrome.value) {
+    return false
+  }
+  const st = garticState.value
+  if (!st) {
+    return false
+  }
+  const setupManual = showRoundSetupOverlay.value && wordSourceUi.value === 'manual'
+  const betweenNext =
+    st.phase === 'between_rounds' && st.breakSessionFinished !== true
+  return setupManual || betweenNext
+})
+
+const wordStripModel = computed({
+  get(): string {
+    if (garticState.value?.phase === 'between_rounds') {
+      return nextRoundWordEdit.value
+    }
+    return manualWord.value
+  },
+  set(v: string) {
+    if (garticState.value?.phase === 'between_rounds') {
+      nextRoundWordEdit.value = v
+    } else {
+      manualWord.value = v
+    }
+  },
+})
+
+const wordStripLabel = computed(() => {
+  if (garticState.value?.phase === 'between_rounds') {
+    return t('garticShow.nextRoundWordLabel')
+  }
+  return t('garticShow.sectionWord')
+})
+
+const showBetweenRoundOverlay = computed(() => garticState.value?.phase === 'between_rounds')
+
+const breakOverlayHeadline = computed(() => {
+  const st = garticState.value
+  if (!st || st.phase !== 'between_rounds') {
+    return ''
+  }
+  if (st.breakSessionFinished) {
+    return t('garticShow.breakSessionCompleteTitle')
+  }
+  if (st.breakHadWinner && st.breakWinnerDisplayName) {
+    return t('garticShow.breakRoundSummaryWinner', { name: st.breakWinnerDisplayName })
+  }
+  return t('garticShow.breakRoundSummaryNobody')
+})
+
+const breakAckButtonLabel = computed(() => {
+  const st = garticState.value
+  if (!st || st.phase !== 'between_rounds') {
+    return ''
+  }
+  if (st.breakSessionFinished) {
+    return t('garticShow.breakFinishSession')
+  }
+  return t('garticShow.breakContinueNextRound')
+})
+
+const breakAckDisabled = computed(() => {
+  const st = garticState.value
+  if (!st || st.phase !== 'between_rounds' || st.breakSessionFinished) {
+    return false
+  }
+  if (st.sessionWordSource === 'manual') {
+    return nextRoundWordEdit.value.trim().length === 0
+  }
+  return false
 })
 
 const gameFeelLine = computed(() => {
   const st = garticState.value
   if (!st || st.phase === 'idle') {
     return `🟡 ${t('garticShow.gameFeelWaiting')}`
+  }
+  if (st.phase === 'between_rounds') {
+    return `🟠 ${t('garticShow.gameFeelBetween')}`
   }
   if (st.phase === 'revealed') {
     return `🔴 ${t('garticShow.gameFeelEnd')}`
@@ -107,6 +195,10 @@ const gameFeelLine = computed(() => {
 })
 
 const showCanvasIdleOverlay = computed(() => garticState.value?.phase === 'idle')
+
+const viewerIdleVeil = computed(
+  () => showCanvasIdleOverlay.value && !showHostChrome.value,
+)
 
 /** Viewer idle veil; host sees round setup on the same overlay layer. */
 const canvasIdleOverlayLine = computed(() => t('garticShow.canvasEmptyTitleViewer'))
@@ -125,16 +217,41 @@ function backendWordSource(ui: GarticRoundSetupWordSource): 'manual' | 'db' | 'r
   return 'random'
 }
 
-const streamerSecretSubtle = computed(() => {
+const showCanvasStatsHud = computed(() => {
+  const st = garticState.value
+  return Boolean(st && st.phase !== 'idle')
+})
+
+/** Streamer-only: word to draw — shown on the camera strip while drawing. */
+const canvasHostWordToDrawInCamera = computed((): { label: string; word: string } | null => {
   if (!showHostChrome.value) {
-    return ''
+    return null
   }
   const st = garticState.value
-  if (!st || st.phase === 'idle') {
-    return ''
+  if (!st || (st.phase !== 'drawing_locked' && st.phase !== 'drawing_active')) {
+    return null
   }
   const w = st.currentWord?.trim()
-  return w && w.length > 0 ? w : ''
+  if (!w) {
+    return null
+  }
+  return { label: 'garticShow.canvasWordToDraw', word: w }
+})
+
+/** Streamer-only: revealed word at round end — canvas HUD (and break modal when it covers the board). */
+const canvasHostWordWasForHost = computed((): { word: string } | null => {
+  if (!showHostChrome.value) {
+    return null
+  }
+  const st = garticState.value
+  if (!st || (st.phase !== 'revealed' && st.phase !== 'between_rounds')) {
+    return null
+  }
+  const w = st.currentWord?.trim()
+  if (!w) {
+    return null
+  }
+  return { word: w }
 })
 
 const maskedWordDisplay = computed(() => {
@@ -213,7 +330,7 @@ function onStart(): void {
     return
   }
   const rp = Math.min(50, Math.max(1, Math.floor(Number(roundsPlanned.value) || 1)))
-  const rd = Math.min(600, Math.max(60, Math.floor(Number(roundDurationSec.value) || 180)))
+  const rd = Math.min(600, Math.max(10, Math.floor(Number(roundDurationSec.value) || 180)))
   roundsPlanned.value = rp
   roundDurationSec.value = rd
   const src = backendWordSource(wordSourceUi.value)
@@ -225,7 +342,28 @@ function onStart(): void {
 }
 
 function onClearCanvas(): void {
-  clearRound()
+  boardRef.value?.clearBoard()
+  clearCanvasOnly()
+}
+
+function onAckBetweenRound(): void {
+  const st = garticState.value
+  if (!st || st.phase !== 'between_rounds') {
+    return
+  }
+  if (st.breakSessionFinished) {
+    ackNextRound()
+    return
+  }
+  const w = nextRoundWordEdit.value.trim()
+  if (st.sessionWordSource === 'manual') {
+    if (!w) {
+      return
+    }
+    ackNextRound(w)
+    return
+  }
+  ackNextRound(w.length > 0 ? w : undefined)
 }
 
 onMounted(() => {
@@ -240,6 +378,25 @@ onUnmounted(() => {
 watch(effectiveSlug, () => {
   void loadStreamerCard()
 })
+
+watch(
+  () => garticState.value?.phase,
+  (p) => {
+    if (p === 'drawing_locked' || p === 'drawing_active') {
+      manualWord.value = ''
+    }
+  },
+)
+
+watch(
+  () => garticState.value,
+  (st) => {
+    if (st?.phase === 'between_rounds' && typeof st.nextWordDraft === 'string') {
+      nextRoundWordEdit.value = st.nextWordDraft
+    }
+  },
+  { deep: true },
+)
 </script>
 
 <template>
@@ -269,67 +426,48 @@ watch(effectiveSlug, () => {
         <div
           class="flex shrink-0 flex-col overflow-hidden rounded-xl border border-slate-700/80 bg-slate-900/90 shadow-md"
         >
-          <div class="space-y-2 p-3">
-            <div class="flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
-              <p
-                class="min-w-0 flex-1 font-mono text-xl font-bold leading-tight tracking-[0.2em] text-slate-50 md:text-2xl"
-                aria-live="polite"
-              >
-                {{ maskedWordDisplay }}
-              </p>
-              <p
-                v-if="roundSecondsLeft !== null"
-                class="shrink-0 whitespace-nowrap font-mono text-base font-bold tabular-nums text-amber-200 md:text-lg"
-                aria-live="polite"
-              >
-                ⏱&nbsp;{{ roundSecondsLeft }}s
-              </p>
-            </div>
-            <p class="text-center text-sm font-semibold text-slate-300">
-              {{ gameFeelLine }}
-            </p>
-            <p v-if="roundsPlanHud" class="text-center text-[0.65rem] font-medium text-violet-300/90">
-              {{ roundsPlanHud }}
-            </p>
-          </div>
-
-          <div class="aspect-video w-full shrink-0 bg-black">
+          <div class="relative aspect-video w-full shrink-0 overflow-hidden bg-black">
             <div
               class="flex h-full w-full items-center justify-center px-2 text-center text-[0.65rem] leading-snug text-slate-500"
             >
               {{ t('garticShow.cameraPlaceholder') }}
             </div>
+            <div
+              v-if="canvasHostWordToDrawInCamera || showWordStripInCamera"
+              class="pointer-events-none absolute inset-x-0 bottom-0 z-[12] flex max-h-[52%] flex-col justify-end gap-1.5 border-t border-violet-500/20 bg-gradient-to-t from-black via-black/94 to-transparent px-2 pb-1.5 pt-2.5 backdrop-blur-[8px]"
+            >
+              <div
+                v-if="canvasHostWordToDrawInCamera"
+                class="pointer-events-none shrink-0 text-center"
+              >
+                <p class="text-[0.48rem] font-semibold uppercase tracking-wide text-slate-500">
+                  {{ t(canvasHostWordToDrawInCamera.label) }}
+                </p>
+                <p
+                  class="mt-0.5 font-mono text-[0.78rem] font-extrabold leading-tight tracking-wide text-violet-100 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]"
+                  :aria-label="t('garticShow.secretStreamerAria')"
+                >
+                  {{ canvasHostWordToDrawInCamera.word }}
+                </p>
+              </div>
+              <div v-if="showWordStripInCamera" class="pointer-events-auto shrink-0 space-y-1">
+                <label class="sa-panel-eat__label !mb-0 !text-[0.48rem]" for="gartic-word-strip-cam">{{
+                  wordStripLabel
+                }}</label>
+                <input
+                  id="gartic-word-strip-cam"
+                  v-model="wordStripModel"
+                  class="w-full rounded-[var(--ui-radius-lg,10px)] border-2 border-[color:var(--border-input,rgba(255,255,255,0.14))] bg-[color:var(--bg-muted,rgba(15,23,42,0.88))] px-2.5 py-1.5 text-left text-[0.78rem] font-semibold text-[color:var(--text-body,#f8fafc)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] placeholder:text-[color:var(--text-muted,rgba(196,181,253,0.5))] focus:border-[color:var(--border-strong,rgba(167,139,250,0.7))] focus:outline-none focus:ring-2 focus:ring-[color:var(--border-cyan-strong,rgba(56,189,248,0.35))]"
+                  type="text"
+                  maxlength="80"
+                  autocomplete="off"
+                  :placeholder="t('garticShow.manualWordInputPlaceholder')"
+                />
+              </div>
+            </div>
           </div>
-          <div
-            v-if="showHostChrome && showCanvasIdleOverlay && wordSourceUi === 'manual'"
-            class="border-t border-white/10 bg-black/90 px-3 py-2"
-          >
-            <label class="mb-1 block text-left text-[0.65rem] font-medium text-slate-500" for="gartic-manual-word-cam">{{
-              t('garticShow.sectionWord')
-            }}</label>
-            <input
-              id="gartic-manual-word-cam"
-              v-model="manualWord"
-              class="w-full rounded-lg border border-slate-700/80 bg-slate-950/90 px-2.5 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500/40"
-              type="text"
-              maxlength="80"
-              autocomplete="off"
-              :placeholder="t('garticShow.manualWordInputPlaceholder')"
-            />
-          </div>
-          <p
-            v-if="streamerSecretSubtle"
-            class="border-t border-white/5 bg-black px-2 py-1.5 text-center font-mono text-[0.65rem] leading-snug tracking-wide text-slate-500"
-          >
-            {{ streamerSecretSubtle }}
-          </p>
           <GarticHostSettingsPanel
-            v-if="showHostChrome && !showCanvasIdleOverlay"
-            :prompts="prompts"
-            :prompts-loading="promptsLoading"
-            @load-prompts="loadPrompts"
-            @approve-prompt="(id) => approvePrompt(id, true)"
-            @delete-prompt="deletePrompt"
+            v-if="showHostChrome && !showRoundSetupOverlay"
             @clear-canvas="onClearCanvas"
           />
         </div>
@@ -379,12 +517,65 @@ watch(effectiveSlug, () => {
                 @draw-start="(id, nx, ny, m) => sendDrawStart(id, nx, ny, m)"
                 @draw-move="(id, nx, ny, m) => sendDrawMove(id, nx, ny, m)"
                 @draw-end="(id, nx, ny, m) => sendDrawEnd(id, nx, ny, m)"
-              />
+              >
+                <template v-if="showCanvasStatsHud" #hud>
+                  <div
+                    class="w-full max-w-full px-0.5"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <div
+                      class="flex w-full min-w-0 flex-col gap-y-1 rounded-lg border border-white/10 bg-slate-950/75 px-2 py-0.5 text-[0.65rem] shadow-md backdrop-blur-md sm:px-2.5 sm:py-1 sm:text-[0.7rem] md:text-xs"
+                    >
+                      <div
+                        class="flex w-full min-w-0 flex-wrap items-center justify-center gap-x-2 gap-y-0.5 sm:gap-x-2.5"
+                      >
+                        <span
+                          class="min-w-0 max-w-[min(12rem,38vw)] truncate text-center font-mono text-[0.95em] font-extrabold tracking-[0.12em] text-slate-50 sm:max-w-[min(16rem,44vw)] md:tracking-[0.16em]"
+                        >
+                          {{ maskedWordDisplay }}
+                        </span>
+                        <span
+                          v-if="roundSecondsLeft !== null"
+                          class="shrink-0 whitespace-nowrap font-mono font-bold tabular-nums text-amber-200"
+                        >
+                          ⏱&nbsp;{{ roundSecondsLeft }}s
+                        </span>
+                        <span
+                          class="max-w-[min(28rem,92vw)] shrink-0 text-center font-semibold leading-tight text-slate-300"
+                        >
+                          {{ gameFeelLine }}
+                        </span>
+                        <span
+                          v-if="roundsPlanHud"
+                          class="shrink-0 text-[0.9em] font-bold text-violet-300/95"
+                        >
+                          {{ roundsPlanHud }}
+                        </span>
+                      </div>
+                      <div
+                        v-if="canvasHostWordWasForHost"
+                        class="flex w-full min-w-0 flex-wrap items-center justify-center gap-x-2 gap-y-0 border-t border-white/10 pt-1 text-[0.62rem] leading-tight text-slate-400 sm:text-[0.65rem]"
+                      >
+                        <span class="shrink-0 font-semibold uppercase tracking-wide text-slate-500">
+                          {{ t('garticShow.canvasWordWas') }}
+                        </span>
+                        <span
+                          class="min-w-0 truncate font-mono text-[0.85rem] font-bold text-violet-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)] sm:text-[0.9rem]"
+                          :aria-label="t('garticShow.secretStreamerAria')"
+                        >
+                          {{ canvasHostWordWasForHost.word }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </GarticCanvasBoard>
             </div>
           </div>
 
           <div
-            v-if="showCanvasIdleOverlay && showHostChrome"
+            v-if="showRoundSetupOverlay"
             class="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-2xl bg-slate-950/85 px-3 py-4 backdrop-blur-sm"
           >
             <GarticRoundSetupPanel
@@ -393,16 +584,74 @@ watch(effectiveSlug, () => {
               v-model:round-count="roundsPlanned"
               class="pointer-events-auto max-h-[min(92vh,42rem)] w-full max-w-md overflow-y-auto shadow-2xl shadow-black/50"
               :start-disabled="roundSetupStartDisabled"
-              :prompts="prompts"
-              :prompts-loading="promptsLoading"
-              @load-prompts="loadPrompts"
-              @approve-prompt="(id) => approvePrompt(id, true)"
-              @delete-prompt="deletePrompt"
               @start="onStart"
             />
           </div>
           <div
-            v-else-if="showCanvasIdleOverlay"
+            v-else-if="showBetweenRoundOverlay"
+            class="pointer-events-none absolute inset-0 z-[28] flex items-center justify-center rounded-2xl bg-[rgba(2,6,23,0.88)] px-3 py-6 backdrop-blur-[10px]"
+            role="status"
+            aria-live="polite"
+          >
+            <div
+              class="pointer-events-auto relative w-full max-w-md overflow-hidden rounded-2xl border-2 border-violet-500/55 bg-[#0c0a12] px-5 py-6 text-center shadow-[0_0_0_1px_rgba(0,0,0,0.85),0_0_40px_rgba(0,0,0,0.65),0_0_80px_rgba(139,92,246,0.22)] md:px-7 md:py-8"
+            >
+              <div
+                class="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-violet-600/30 blur-2xl"
+                aria-hidden="true"
+              />
+              <div
+                class="pointer-events-none absolute -bottom-12 -left-10 h-32 w-32 rounded-full bg-indigo-900/40 blur-2xl"
+                aria-hidden="true"
+              />
+              <p
+                class="relative text-[0.65rem] font-extrabold uppercase leading-tight tracking-[0.16em] text-violet-300 md:text-[0.72rem]"
+              >
+                {{ t('garticShow.breakOverlayKicker') }}
+              </p>
+              <p
+                class="relative mt-3 text-lg font-extrabold leading-snug text-white [text-shadow:0_1px_0_rgb(0_0_0),0_2px_12px_rgb(0_0_0)] md:text-xl"
+              >
+                {{ breakOverlayHeadline }}
+              </p>
+              <div
+                v-if="showHostChrome && canvasHostWordWasForHost"
+                class="relative mt-3 flex flex-col items-center gap-0.5"
+              >
+                <span
+                  class="text-[0.6rem] font-semibold uppercase tracking-wide text-slate-500 md:text-[0.65rem]"
+                >
+                  {{ t('garticShow.canvasWordWas') }}
+                </span>
+                <span
+                  class="font-mono text-base font-extrabold tracking-wide text-violet-100 [text-shadow:0_1px_3px_rgba(0,0,0,0.9)] md:text-lg"
+                  :aria-label="t('garticShow.secretStreamerAria')"
+                >
+                  {{ canvasHostWordWasForHost.word }}
+                </span>
+              </div>
+              <p
+                v-if="roundsPlanHud"
+                class="relative mt-3 text-sm font-bold tabular-nums text-slate-100 md:text-base"
+              >
+                {{ roundsPlanHud }}
+              </p>
+              <button
+                v-if="showHostChrome"
+                type="button"
+                class="sa-cta-accent relative mt-6 w-full max-w-xs !min-h-11 !text-[0.88rem]"
+                :disabled="breakAckDisabled"
+                @click="onAckBetweenRound"
+              >
+                {{ breakAckButtonLabel }}
+              </button>
+              <p v-else class="relative mt-5 text-sm font-semibold text-slate-200">
+                {{ t('garticShow.breakViewerWait') }}
+              </p>
+            </div>
+          </div>
+          <div
+            v-else-if="viewerIdleVeil"
             class="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-2xl bg-slate-950/88 px-4 backdrop-blur-[2px]"
           >
             <p class="text-center text-base font-semibold text-violet-100/95 md:text-lg">

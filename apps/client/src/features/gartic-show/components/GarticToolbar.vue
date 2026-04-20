@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { GARTIC_BRUSH_SIZES, GARTIC_TOOLBAR_COLORS } from './garticToolbarConstants'
+import { GARTIC_BRUSH_SIZES, GARTIC_TOOLBAR_COLORS, type GarticCanvasTool } from './garticToolbarConstants'
 
 const props = defineProps<{
   visible: boolean
   color: string
   brushSize: number
-  mode: 'draw' | 'erase'
+  tool: GarticCanvasTool
 }>()
 
 const emit = defineEmits<{
   'update:color': [value: string]
   'update:brushSize': [value: number]
-  'update:mode': [value: 'draw' | 'erase']
+  'update:tool': [value: GarticCanvasTool]
 }>()
 
 const { t } = useI18n()
@@ -21,119 +21,274 @@ const { t } = useI18n()
 const colors = GARTIC_TOOLBAR_COLORS
 const sizes = GARTIC_BRUSH_SIZES
 
-const isDraw = computed(() => props.mode === 'draw')
-const isErase = computed(() => props.mode === 'erase')
+const colorInputRef = useTemplateRef<HTMLInputElement>('colorInputRef')
+
+const isDraw = computed(() => props.tool === 'pencil')
+const isErase = computed(() => props.tool === 'erase')
 
 function setColor(c: string): void {
   emit('update:color', c)
-  emit('update:mode', 'draw')
+  if (props.tool === 'erase') {
+    emit('update:tool', 'pencil')
+  }
 }
 
 function setSize(s: number): void {
   emit('update:brushSize', s)
 }
 
-function setDraw(): void {
-  emit('update:mode', 'draw')
+function setTool(tool: GarticCanvasTool): void {
+  emit('update:tool', tool)
 }
 
-function setErase(): void {
-  emit('update:mode', 'erase')
+function onPickerInput(ev: Event): void {
+  const v = (ev.target as HTMLInputElement).value
+  if (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) {
+    emit('update:color', v.toLowerCase())
+    if (props.tool === 'erase') {
+      emit('update:tool', 'pencil')
+    }
+  }
 }
+
+function openPicker(): void {
+  colorInputRef.value?.click()
+}
+
+function normalizeHex6(h: string): string {
+  const raw = h.trim().replace(/^#/, '').toLowerCase()
+  if (raw.length === 3) {
+    return (
+      '#' +
+      raw
+        .split('')
+        .map((ch) => ch + ch)
+        .join('')
+    )
+  }
+  if (raw.length === 6) {
+    return `#${raw}`
+  }
+  return h.trim().toLowerCase()
+}
+
+function colorBtnBorder(c: string): string {
+  const low = c.toLowerCase()
+  if (low === '#ffffff') {
+    return 'border-[color:var(--border-strong,rgba(148,163,184,0.55))]'
+  }
+  return 'border-[color:var(--border-input,rgba(255,255,255,0.12))]'
+}
+
+function colorSelected(c: string): boolean {
+  return normalizeHex6(props.color) === normalizeHex6(c)
+}
+
+const customSelected = computed(() => {
+  const cur = normalizeHex6(props.color)
+  return !colors.some((sw) => normalizeHex6(sw) === cur)
+})
 </script>
 
 <template>
   <div
     v-show="visible"
-    class="pointer-events-auto w-max max-w-[min(100%,calc(100vw-1.25rem))] rounded-xl border border-slate-500/80 bg-slate-900/88 px-2 py-1 shadow-lg shadow-black/40 backdrop-blur-md"
+    class="gartic-toolbar pointer-events-auto w-full rounded-[var(--ui-container-panel-radius,var(--sa-radius-md))] border border-[color:var(--border,color-mix(in_srgb,var(--sa-color-primary)_22%,transparent))] bg-[color:var(--bg-muted,color-mix(in_srgb,var(--sa-color-surface)_78%,#0f172a))] px-2 py-1 shadow-[0_2px_14px_var(--shadow-elevated,rgba(0,0,0,0.45))] backdrop-blur-md sm:px-3 sm:py-1.5"
     role="toolbar"
     :aria-label="t('garticShow.canvasTitle')"
   >
-    <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-      <div class="flex items-center gap-0.5" role="group" :aria-label="t('garticShow.toolbarColorsAria')">
+    <div
+      class="grid w-full min-w-0 gap-x-2 gap-y-1.5 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:gap-x-3"
+    >
+      <!-- Tools: icons only -->
+      <div
+        class="flex flex-wrap items-center gap-1 border-b border-[color:var(--border-subtle,rgba(255,255,255,0.08))] pb-1.5 lg:border-b-0 lg:pb-0"
+        role="group"
+        :aria-label="t('garticShow.toolbarToolsAria')"
+      >
+        <button
+          type="button"
+          class="gartic-toolbar__icon-btn sa-chip-btn"
+          :class="{ 'sa-chip-btn--on': tool === 'pencil' }"
+          :aria-label="t('garticShow.toolPencilAria')"
+          :aria-pressed="tool === 'pencil'"
+          @click="setTool('pencil')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"
+            />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.862 4.487L19.5 7.125" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="gartic-toolbar__icon-btn sa-chip-btn"
+          :class="{ 'sa-chip-btn--on': tool === 'erase' }"
+          :aria-label="t('garticShow.toolEraseAria')"
+          :aria-pressed="tool === 'erase'"
+          @click="setTool('erase')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M8 21h8M5 3l-3 3 12 12 3-3L5 3z"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="gartic-toolbar__icon-btn sa-chip-btn"
+          :class="{ 'sa-chip-btn--on': tool === 'fill' }"
+          :aria-label="t('garticShow.toolFillAria')"
+          :aria-pressed="tool === 'fill'"
+          @click="setTool('fill')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M9 4h6v2.2L19 10H5l4-3.8V4zM6 10h12v8a2 2 0 01-2 2h-8a2 2 0 01-2-2v-8z"
+            />
+            <path stroke-width="2" stroke-linecap="round" d="M9 14h6" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="gartic-toolbar__icon-btn sa-chip-btn"
+          :class="{ 'sa-chip-btn--on': tool === 'rect' }"
+          :aria-label="t('garticShow.toolRectAria')"
+          :aria-pressed="tool === 'rect'"
+          @click="setTool('rect')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <rect x="4.5" y="5.5" width="15" height="13" rx="1.5" stroke-width="2" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="gartic-toolbar__icon-btn sa-chip-btn"
+          :class="{ 'sa-chip-btn--on': tool === 'ellipse' }"
+          :aria-label="t('garticShow.toolEllipseAria')"
+          :aria-pressed="tool === 'ellipse'"
+          @click="setTool('ellipse')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <ellipse cx="12" cy="12" rx="8.5" ry="6" stroke-width="2" />
+          </svg>
+        </button>
+      </div>
+
+      <div
+        class="flex min-w-0 flex-wrap content-center items-center gap-1"
+        role="group"
+        :aria-label="t('garticShow.toolbarColorsAria')"
+      >
         <button
           v-for="c in colors"
           :key="c"
           type="button"
-          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition hover:scale-105 focus-visible:outline focus-visible:ring-2 focus-visible:ring-cyan-400 active:scale-95 sm:h-8 sm:w-8"
-          :class="
-            isDraw && color.toLowerCase() === c.toLowerCase()
-              ? 'border-cyan-300 ring-2 ring-cyan-400/60 ring-offset-1 ring-offset-slate-900/90'
-              : c.toLowerCase() === '#ffffff'
-                ? 'border-neutral-400'
-                : 'border-slate-500'
-          "
+          class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition hover:scale-105 focus-visible:outline focus-visible:ring-2 focus-visible:ring-[color:var(--border-cyan-strong,rgba(56,189,248,0.65))] active:scale-95 sm:h-8 sm:w-8"
+          :class="[
+            colorBtnBorder(c),
+            colorSelected(c)
+              ? 'z-[1] scale-110 border-[color:var(--border-cyan-strong,rgba(34,211,238,0.95))] shadow-[0_0_0_2px_rgba(15,23,42,0.95),0_0_0_4px_rgba(34,211,238,0.9),0_0_14px_rgba(34,211,238,0.45)]'
+              : '',
+          ]"
           :style="{ backgroundColor: c }"
           :title="c"
-          :aria-pressed="Boolean(isDraw && color.toLowerCase() === c.toLowerCase())"
+          :aria-pressed="colorSelected(c)"
           @click="setColor(c)"
         >
           <span class="sr-only">{{ c }}</span>
         </button>
+        <div class="relative flex h-7 w-7 shrink-0 items-center justify-center sm:h-8 sm:w-8">
+          <input
+            ref="colorInputRef"
+            type="color"
+            class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            :aria-label="t('garticShow.toolbarColorPickerAria')"
+            :value="color.length === 7 ? color : '#000000'"
+            @input="onPickerInput"
+          />
+          <button
+            type="button"
+            class="relative flex h-7 w-7 items-center justify-center rounded-full border-2 border-[color:var(--border-strong,rgba(167,139,250,0.5))] bg-[conic-gradient(from_0deg,red,orange,yellow,green,cyan,blue,violet,red)] transition hover:scale-105 focus-visible:outline focus-visible:ring-2 focus-visible:ring-cyan-400 sm:h-8 sm:w-8"
+            :class="
+              customSelected
+                ? 'z-[1] scale-110 border-[color:var(--border-cyan-strong,rgba(34,211,238,0.95))] shadow-[0_0_0_2px_rgba(15,23,42,0.95),0_0_0_4px_rgba(34,211,238,0.9),0_0_14px_rgba(34,211,238,0.45)]'
+                : ''
+            "
+            :title="t('garticShow.toolbarColorPickerAria')"
+            :aria-label="t('garticShow.toolbarColorPickerAria')"
+            @click="openPicker"
+          >
+            <span class="sr-only">{{ t('garticShow.toolbarColorPickerAria') }}</span>
+          </button>
+        </div>
       </div>
 
-      <div class="hidden h-5 w-px shrink-0 bg-slate-600 sm:block" aria-hidden="true" />
-
-      <div class="flex items-center gap-0.5" role="group" :aria-label="t('garticShow.toolbarSizesAria')">
+      <div
+        class="flex min-w-0 items-center gap-0.5 border-t border-[color:var(--border-subtle,rgba(255,255,255,0.08))] pt-1.5 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0"
+        role="group"
+        :aria-label="t('garticShow.toolbarSizesAria')"
+      >
         <button
           v-for="s in sizes"
           :key="s"
           type="button"
-          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border bg-slate-800/95 transition hover:border-cyan-500/50 focus-visible:outline focus-visible:ring-2 focus-visible:ring-cyan-400 active:scale-95 sm:h-8 sm:w-8"
-          :class="
-            brushSize === s
-              ? isErase
-                ? 'border-amber-400 ring-2 ring-amber-400/50 ring-offset-1 ring-offset-slate-900/90'
-                : 'border-cyan-400 ring-2 ring-cyan-400/55 ring-offset-1 ring-offset-slate-900/90'
-              : 'border-slate-600'
-          "
+          class="sa-chip-btn !flex !h-8 !min-h-8 !w-8 !min-w-8 !shrink-0 !items-center !justify-center !rounded-full !p-0"
+          :class="{
+            'sa-chip-btn--on': brushSize === s && isDraw,
+            '!ring-2 !ring-amber-400/65 !ring-offset-1 !ring-offset-[color:var(--bg-muted,#0f172a)]':
+              brushSize === s && isErase,
+          }"
           :aria-pressed="Boolean(brushSize === s)"
           :title="t('garticShow.toolbarSizeTitle', { n: s })"
           @click="setSize(s)"
         >
           <span
-            class="rounded-full bg-slate-200"
-            :style="{ width: `${Math.min(Math.max(s + 2, 5), 18)}px`, height: `${Math.min(Math.max(s + 2, 5), 18)}px` }"
+            class="rounded-full bg-[color:var(--text-heading,#f8fafc)]"
+            :style="{
+              width: `${Math.min(Math.max(Math.round(s * 1.35), 4), 20)}px`,
+              height: `${Math.min(Math.max(Math.round(s * 1.35), 4), 20)}px`,
+            }"
           />
-        </button>
-      </div>
-
-      <div class="hidden h-5 w-px shrink-0 bg-slate-600 sm:block" aria-hidden="true" />
-
-      <div
-        class="flex items-center gap-0.5 rounded-lg border border-slate-600/70 bg-slate-800/85 p-0.5"
-        role="group"
-        :aria-label="t('garticShow.toolbarModeAria')"
-      >
-        <button
-          type="button"
-          class="flex h-7 items-center gap-0.5 rounded-md px-2 py-0.5 text-[0.65rem] font-semibold transition hover:bg-slate-700/90 sm:h-8 sm:text-xs"
-          :class="
-            isDraw
-              ? 'bg-cyan-600 text-white shadow-sm ring-1 ring-cyan-300/40'
-              : 'text-slate-300'
-          "
-          :aria-pressed="isDraw"
-          @click="setDraw"
-        >
-          <span aria-hidden="true">✏️</span>
-          {{ t('garticShow.toolDraw') }}
-        </button>
-        <button
-          type="button"
-          class="flex h-7 items-center gap-0.5 rounded-md px-2 py-0.5 text-[0.65rem] font-semibold transition hover:bg-slate-700/90 sm:h-8 sm:text-xs"
-          :class="
-            isErase
-              ? 'bg-amber-600 text-white shadow-sm ring-1 ring-amber-300/40'
-              : 'text-slate-300'
-          "
-          :aria-pressed="isErase"
-          @click="setErase"
-        >
-          <span aria-hidden="true">🧽</span>
-          {{ t('garticShow.toolErase') }}
         </button>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Square icon buttons: override compact chip padding/min-height so SVGs stay centered. */
+.gartic-toolbar__icon-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  max-width: 2.25rem;
+  max-height: 2.25rem;
+  padding: 0;
+  flex-shrink: 0;
+  line-height: 0;
+  font-size: 0;
+}
+
+.gartic-toolbar__icon-btn svg {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+</style>

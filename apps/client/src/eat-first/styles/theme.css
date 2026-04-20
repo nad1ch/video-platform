@@ -1,6 +1,7 @@
 /**
  * Eat-first layout, components, and density tokens under `.eat-first-root`.
  * Dark/light semantic colors: `packages/ui-theme/src/eat-first-theme-vars.css` (imported via `ui-theme` in main).
+ * App-wide chip / CTA surfaces (reuse outside host chrome): `packages/ui-theme/src/control-surfaces.css` (`.sa-chip-btn`, `.sa-cta-accent`, …).
  */
 
 /**

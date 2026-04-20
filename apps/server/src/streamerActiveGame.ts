@@ -1,5 +1,5 @@
 /**
- * Single active chat game per streamer for Twitch IRC routing (Wordle vs Gartic Show).
+ * Single active chat game per streamer for Twitch IRC routing (Wordle vs Nadraw).
  * - `null` (missing): treat as Wordle for backward compatibility.
  * - `'wordle'`: Wordle handles guess-shaped messages.
  * - `'gartic-show'`: only Gartic ingest runs for that streamer.

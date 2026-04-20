@@ -5,8 +5,10 @@ import { readSessionFromCookie } from '../auth/session/sessionJwt'
 import { canUserControlGarticRoom } from './garticAccess'
 import {
   getGarticStatePayload,
+  hostAckNextRound,
   hostClearGarticRound,
   hostStartGarticRound,
+  setGarticCanvasClearListener,
   setGarticFeedbackListener,
   setGarticStateListener,
 } from './garticGameStore'
@@ -109,6 +111,10 @@ export function broadcastGarticCanvasClear(streamerId: string): void {
   }
 }
 
+setGarticCanvasClearListener((streamerId) => {
+  broadcastGarticCanvasClear(streamerId)
+})
+
 export function broadcastGarticDraw(
   streamerId: string,
   payload: {
@@ -119,6 +125,9 @@ export function broadcastGarticDraw(
     color?: string
     lineWidth?: number
     erase?: boolean
+    op?: 'stroke' | 'fill' | 'rect' | 'ellipse'
+    x2?: number
+    y2?: number
   },
 ): void {
   const set = clientsByStreamer.get(streamerId)
@@ -231,6 +240,11 @@ type HostStartMsg = {
   roundsPlanned?: number
 }
 
+type HostAckNextMsg = {
+  type: typeof GarticWs.hostAckNextRound
+  word?: string
+}
+
 type HostDrawMsg = {
   type: typeof GarticWs.hostDraw
   phase: 'start' | 'move' | 'end'
@@ -240,9 +254,20 @@ type HostDrawMsg = {
   color?: string
   lineWidth?: number
   erase?: boolean
+  op?: 'stroke' | 'fill' | 'rect' | 'ellipse'
+  x2?: number
+  y2?: number
 }
 
-function parseClientMsg(raw: string): HostStartMsg | { type: typeof GarticWs.hostClearRound } | HostDrawMsg | null {
+function parseClientMsg(
+  raw: string,
+):
+  | HostStartMsg
+  | HostAckNextMsg
+  | { type: typeof GarticWs.hostClearRound }
+  | { type: typeof GarticWs.hostClearCanvas }
+  | HostDrawMsg
+  | null {
   let data: unknown
   try {
     data = JSON.parse(raw)
@@ -263,6 +288,16 @@ function parseClientMsg(raw: string): HostStartMsg | { type: typeof GarticWs.hos
   }
   if (o.type === GarticWs.hostClearRound) {
     return { type: GarticWs.hostClearRound }
+  }
+  if (o.type === GarticWs.hostClearCanvas) {
+    return { type: GarticWs.hostClearCanvas }
+  }
+  if (o.type === GarticWs.hostAckNextRound) {
+    const w = (o as { word?: unknown }).word
+    return {
+      type: GarticWs.hostAckNextRound,
+      word: typeof w === 'string' ? w : undefined,
+    }
   }
   if (o.type === GarticWs.hostStartRound) {
     const ws = o.wordSource
@@ -295,6 +330,13 @@ function parseClientMsg(raw: string): HostStartMsg | { type: typeof GarticWs.hos
     const color = (o as { color?: unknown }).color
     const lineWidth = (o as { lineWidth?: unknown }).lineWidth
     const erase = (o as { erase?: unknown }).erase === true
+    const opRaw = (o as { op?: unknown }).op
+    const op =
+      opRaw === 'fill' || opRaw === 'rect' || opRaw === 'ellipse' || opRaw === 'stroke'
+        ? opRaw
+        : undefined
+    const x2n = Number((o as { x2?: unknown }).x2)
+    const y2n = Number((o as { y2?: unknown }).y2)
     return {
       type: GarticWs.hostDraw,
       phase,
@@ -304,6 +346,9 @@ function parseClientMsg(raw: string): HostStartMsg | { type: typeof GarticWs.hos
       color: typeof color === 'string' ? color : undefined,
       lineWidth: typeof lineWidth === 'number' && Number.isFinite(lineWidth) ? lineWidth : undefined,
       erase,
+      op,
+      x2: Number.isFinite(x2n) ? x2n : undefined,
+      y2: Number.isFinite(y2n) ? y2n : undefined,
     }
   }
   return null
@@ -384,12 +429,20 @@ export function attachGarticShowSocketServer(wss: WebSocketServer): void {
                 color: msg.color,
                 lineWidth: msg.lineWidth,
                 erase: msg.erase,
+                op: msg.op,
+                x2: msg.x2,
+                y2: msg.y2,
               })
               return
             }
 
             if (!meta.isStreamer) {
               safeSend(ws, { type: GarticWs.error, payload: { code: 'forbidden', message: 'Host actions only.' } })
+              return
+            }
+
+            if (msg.type === GarticWs.hostClearCanvas) {
+              broadcastGarticCanvasClear(streamerId)
               return
             }
 
@@ -406,6 +459,19 @@ export function attachGarticShowSocketServer(wss: WebSocketServer): void {
                 roundDurationSec: msg.roundDurationSec,
                 roundsPlanned: msg.roundsPlanned,
               })
+              if (!result.ok) {
+                safeSend(ws, {
+                  type: GarticWs.error,
+                  payload: { code: result.code, message: result.message },
+                })
+                return
+              }
+              broadcastGarticCanvasClear(streamerId)
+              return
+            }
+
+            if (msg.type === GarticWs.hostAckNextRound) {
+              const result = await hostAckNextRound(streamerId, { word: msg.word })
               if (!result.ok) {
                 safeSend(ws, {
                   type: GarticWs.error,

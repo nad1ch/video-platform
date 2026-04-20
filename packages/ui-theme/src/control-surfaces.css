@@ -1,0 +1,204 @@
+/**
+ * Shared control surfaces: chip / segmented buttons and accent CTAs.
+ * Under `.eat-first-root` resolves `--accent-fill-soft`, `--border-strong`, etc. (Eat-first HUD).
+ * Outside the shell, falls back to `--sa-*` primitives from tokens.css.
+ */
+
+.sa-chip-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--ui-control-compact-min-h, 1.9rem);
+  padding: var(--ui-control-compact-pad-y, 0.3rem) var(--ui-control-compact-pad-x, 0.55rem);
+  border-radius: var(--ui-control-compact-radius, 8px);
+  font-family: var(--font-body, var(--sa-font-main));
+  font-size: var(--ui-control-compact-font, 0.62rem);
+  font-weight: var(--ui-control-compact-weight, 700);
+  line-height: var(--ui-control-compact-line, 1.2);
+  cursor: pointer;
+  border: 1px solid var(--border-input, var(--sa-color-border));
+  background: var(--bg-muted-strong, color-mix(in srgb, var(--sa-color-surface-raised) 88%, transparent));
+  color: var(--text-body, var(--sa-color-text-main));
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.sa-chip-btn:hover:not(:disabled) {
+  border-color: var(--border-strong, var(--sa-color-primary-border));
+  color: var(--text-heading, var(--sa-color-text-strong));
+}
+
+.sa-chip-btn:focus {
+  outline: none;
+}
+
+.sa-chip-btn:focus-visible {
+  outline: 2px solid var(--border-cyan-strong, var(--sa-color-primary-border));
+  outline-offset: 1px;
+}
+
+.sa-chip-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/** Selected segment (mirrors `.hcc-chip.on` in host-chrome). */
+.sa-chip-btn--on {
+  border-color: var(--border-strong, var(--sa-color-primary-border));
+  background: var(--accent-fill-soft, var(--sa-color-primary-soft));
+  color: var(--text-title, var(--sa-color-text-strong));
+  box-shadow: 0 0 14px var(--accent-glow, rgba(168, 85, 247, 0.14));
+}
+
+.sa-chip-btn--on:hover:not(:disabled) {
+  box-shadow: 0 0 18px var(--accent-glow-strong, rgba(168, 85, 247, 0.22));
+}
+
+/** Slightly smaller chips (duration / round count rows). */
+.sa-chip-btn--dense {
+  min-height: 1.72rem;
+  padding: 0.24rem 0.48rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+/** Outer track for segmented groups (word source). */
+.sa-seg-track {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--ui-radius-lg, 10px);
+  border: 1px solid var(--border-input, var(--sa-color-border));
+  background: var(--bg-muted, color-mix(in srgb, var(--sa-color-surface) 65%, transparent));
+}
+
+.sa-seg-track .sa-chip-btn {
+  border-radius: var(--ui-radius-md, 8px);
+  min-height: 2rem;
+  padding: 0.35rem 0.25rem;
+  font-size: 0.6rem;
+  font-weight: 800;
+  line-height: 1.15;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary, var(--sa-color-text-muted));
+}
+
+.sa-seg-track .sa-chip-btn:hover:not(:disabled) {
+  background: var(--bg-muted-strong, rgba(0, 0, 0, 0.35));
+  color: var(--text-body, var(--sa-color-text-main));
+}
+
+.sa-seg-track .sa-chip-btn--on {
+  border-color: var(--border-strong, var(--sa-color-primary-border));
+  background: var(--accent-fill-soft, var(--sa-color-primary-soft));
+  color: var(--text-title, var(--sa-color-text-strong));
+  box-shadow: inset 0 1px 0 var(--btn-neon-top, rgba(139, 92, 246, 0.35));
+}
+
+/** Full-width primary action (Eat-first accent / host “go” style). */
+.sa-cta-accent {
+  box-sizing: border-box;
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.62rem 1rem;
+  border-radius: var(--ui-radius-lg, 10px);
+  font-family: var(--font-body, var(--sa-font-main));
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  cursor: pointer;
+  border: 2px solid var(--border-strong, var(--sa-color-primary-border));
+  background: var(--accent-fill, color-mix(in srgb, var(--sa-color-primary) 42%, rgba(0, 0, 0, 0.55)));
+  color: var(--text-title, var(--sa-color-text-strong));
+  box-shadow: 0 0 22px var(--accent-glow, rgba(168, 85, 247, 0.18));
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
+}
+
+.sa-cta-accent:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: 0 0 28px var(--accent-glow-strong, rgba(168, 85, 247, 0.3));
+}
+
+.sa-cta-accent:focus {
+  outline: none;
+}
+
+.sa-cta-accent:focus-visible {
+  outline: 2px solid var(--border-cyan-strong, var(--sa-color-primary-border));
+  outline-offset: 2px;
+}
+
+.sa-cta-accent:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
+}
+
+/** Compact utility actions (refresh / approve in lists). */
+.sa-chip-btn--utility {
+  min-height: 1.55rem;
+  padding: 0.18rem 0.42rem;
+  font-size: 0.55rem;
+  font-weight: 600;
+}
+
+.sa-chip-btn--danger {
+  border-color: var(--danger-border, rgba(248, 113, 113, 0.35));
+  background: var(--danger-bg, rgba(40, 10, 14, 0.25));
+  color: var(--error-text, #fecaca);
+}
+
+.sa-chip-btn--danger:hover:not(:disabled) {
+  border-color: var(--error-border, rgba(248, 113, 113, 0.45));
+  color: #fecaca;
+}
+
+/** Panel shell aligned with Eat-first `ui-container-panel` density. */
+.sa-panel-eat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sa-space-3, 0.75rem);
+  padding: var(--ui-container-panel-pad-y, 0.65rem) var(--ui-container-panel-pad-x, 0.75rem)
+    var(--ui-container-panel-pad-bottom, 0.75rem);
+  border-radius: var(--ui-container-panel-radius, var(--sa-radius-md));
+  border: 1px solid var(--border, color-mix(in srgb, var(--sa-color-primary) 20%, transparent));
+  background: var(--bg-muted, color-mix(in srgb, var(--sa-color-surface) 72%, transparent));
+  box-shadow: 0 2px 12px var(--shadow-elevated, rgba(0, 0, 0, 0.35));
+}
+
+.sa-panel-eat__title {
+  margin: 0;
+  font-family: var(--font-display, var(--sa-font-display));
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: left;
+  color: var(--text-heading, var(--sa-color-text-strong));
+}
+
+.sa-panel-eat__label {
+  margin: 0;
+  font-size: var(--ui-type-overline-size, 0.48rem);
+  font-weight: var(--ui-type-overline-weight, 800);
+  letter-spacing: var(--ui-type-overline-track, 0.12em);
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text-muted, var(--sa-color-text-muted));
+}

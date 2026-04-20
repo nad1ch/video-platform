@@ -51,7 +51,7 @@ const { theme, setTheme, toggleTheme } = useTheme()
 
 const isEatRoute = computed(() => route.path.startsWith('/app/eat'))
 
-/** Wordle/stream + Gartic: дати viewport `min-height: 0`, щоб сторінка могла займати залишок висоти без нескінченного росту. */
+/** Wordle/stream + Nadraw: дати viewport `min-height: 0`, щоб сторінка могла займати залишок висоти без нескінченного росту. */
 const isWordleStreamRoute = computed(
   () =>
     route.name === 'wordle-streamer' ||

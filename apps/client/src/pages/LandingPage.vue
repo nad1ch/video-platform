@@ -275,7 +275,7 @@ const games = Object.freeze([
     }),
   } satisfies GameCard),
   Object.freeze({
-    title: 'Gartic\nphone',
+    title: 'Nadraw\nphone',
     icon: garticPhoneIcon,
     to: { name: 'home' },
     cardStyle: Object.freeze({

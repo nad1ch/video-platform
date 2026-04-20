@@ -34,7 +34,9 @@ const WS = {
   canvasClear: 'gartic:canvas-clear',
   error: 'gartic:error',
   hostStartRound: 'gartic:host-start-round',
+  hostAckNextRound: 'gartic:host-ack-next-round',
   hostClearRound: 'gartic:host-clear-round',
+  hostClearCanvas: 'gartic:host-clear-canvas',
   hostDraw: 'gartic:host-draw',
 } as const
 
@@ -48,10 +50,17 @@ export type GarticPromptRow = {
   createdAt: string
 }
 
+export type GarticDrawOp = 'stroke' | 'fill' | 'rect' | 'ellipse'
+
 export type GarticDrawToolMeta = {
   color: string
   lineWidth: number
   erase: boolean
+  /** Defaults to stroke (freehand). */
+  op?: GarticDrawOp
+  /** Second corner normalized 0–1 (shapes, `phase === 'end'`). */
+  x2?: number
+  y2?: number
 }
 
 export type RemoteDrawPayload = {
@@ -63,6 +72,9 @@ export type RemoteDrawPayload = {
   lineWidth?: number
   /** When true, receivers use globalCompositeOperation destination-out. */
   erase?: boolean
+  op?: GarticDrawOp
+  x2?: number
+  y2?: number
 }
 
 function randomPeerId(): string {
@@ -100,6 +112,9 @@ export function useGarticShowOrchestrator(options: {
     roundsPlanned?: number,
   ) => void
   clearRound: () => void
+  /** Broadcast canvas wipe to all viewers; round timer and word stay active. */
+  clearCanvasOnly: () => void
+  ackNextRound: (word?: string) => void
   sendDrawStart: (strokeId: string, x: number, y: number, meta?: GarticDrawToolMeta) => void
   sendDrawMove: (strokeId: string, x: number, y: number, meta?: GarticDrawToolMeta) => void
   sendDrawEnd: (strokeId: string, x: number, y: number, meta?: GarticDrawToolMeta) => void
@@ -431,6 +446,26 @@ export function useGarticShowOrchestrator(options: {
     ws.send(JSON.stringify({ type: WS.hostClearRound }))
   }
 
+  function clearCanvasOnly(): void {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return
+    }
+    ws.send(JSON.stringify({ type: WS.hostClearCanvas }))
+  }
+
+  function ackNextRound(word?: string): void {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return
+    }
+    const payload: Record<string, unknown> = {
+      type: WS.hostAckNextRound,
+    }
+    if (typeof word === 'string' && word.length > 0) {
+      payload.word = word
+    }
+    ws.send(JSON.stringify(payload))
+  }
+
   function drawPayload(
     phase: 'start' | 'move' | 'end',
     strokeId: string,
@@ -450,6 +485,15 @@ export function useGarticShowOrchestrator(options: {
     }
     if (!m.erase && typeof m.color === 'string') {
       base.color = m.color
+    }
+    if (m.op != null && m.op !== 'stroke') {
+      base.op = m.op
+    }
+    if (typeof m.x2 === 'number' && Number.isFinite(m.x2)) {
+      base.x2 = m.x2
+    }
+    if (typeof m.y2 === 'number' && Number.isFinite(m.y2)) {
+      base.y2 = m.y2
     }
     return base
   }
@@ -554,7 +598,7 @@ export function useGarticShowOrchestrator(options: {
         clearInterval(lockTickTimer)
         lockTickTimer = null
       }
-      if (ph && ph !== 'idle') {
+      if (ph === 'drawing_locked' || ph === 'drawing_active') {
         nowTick.value = Date.now()
         lockTickTimer = setInterval(() => {
           nowTick.value = Date.now()
@@ -607,6 +651,8 @@ export function useGarticShowOrchestrator(options: {
     disposeWs,
     startRound,
     clearRound,
+    clearCanvasOnly,
+    ackNextRound,
     sendDrawStart,
     sendDrawMove,
     sendDrawEnd,

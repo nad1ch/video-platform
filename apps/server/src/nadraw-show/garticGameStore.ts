@@ -13,9 +13,8 @@ import { clearGarticGuessThrottleForStreamer, tryConsumeGarticGuessThrottle } fr
 import type { GamePhase, GarticStatePayload } from './wsProtocol'
 import { setStreamerActiveGame } from '../streamerActiveGame'
 
-const LOCK_MS = 5000
 const ROUND_DURATION_DEFAULT_SEC = 180
-const ROUND_DURATION_MIN_SEC = 60
+const ROUND_DURATION_MIN_SEC = 10
 const ROUND_DURATION_MAX_SEC = 600
 const ROUNDS_PLANNED_MIN = 1
 const ROUNDS_PLANNED_MAX = 50
@@ -32,8 +31,17 @@ type Room = {
   startedAt: number
   unlockAt: number
   endsAt: number
-  /** Planned rounds for this session (UI); host sets at start. */
-  roundsPlanned: number
+  /** Multi-round session: total rounds (0 = no active session). */
+  sessionPlannedRounds: number
+  /** Rounds already finished in this session. */
+  sessionCompletedRounds: number
+  sessionWordSource: 'random' | 'db' | 'manual'
+  sessionRoundDurationSec: number
+  /** Snapshot after a round ends (phase `between_rounds`). */
+  breakHadWinner: boolean
+  breakWinnerDisplayName: string
+  breakSessionFinished: boolean
+  nextRoundWordDraft: string
   roundId: string
   unlockTimer: ReturnType<typeof setTimeout> | null
   roundTimer: ReturnType<typeof setTimeout> | null
@@ -56,6 +64,7 @@ type FeedbackListener = (
 
 let stateListener: StateListener | null = null
 let feedbackListener: FeedbackListener | null = null
+let canvasClearListener: ((streamerId: string) => void) | null = null
 
 export function setGarticStateListener(fn: StateListener | null): void {
   stateListener = fn
@@ -63,6 +72,14 @@ export function setGarticStateListener(fn: StateListener | null): void {
 
 export function setGarticFeedbackListener(fn: FeedbackListener | null): void {
   feedbackListener = fn
+}
+
+export function setGarticCanvasClearListener(fn: typeof canvasClearListener): void {
+  canvasClearListener = fn
+}
+
+function requestCanvasClear(streamerId: string): void {
+  canvasClearListener?.(streamerId)
 }
 
 function notifyState(streamerId: string): void {
@@ -140,6 +157,106 @@ function clearAllTimers(room: Room): void {
   stopLetterReveal(room)
 }
 
+function lockMsForRound(durSec: number): number {
+  return Math.min(5000, Math.max(1500, Math.floor(durSec * 1000 * 0.25)))
+}
+
+function fullSessionEnd(streamerId: string, room: Room): void {
+  clearAllTimers(room)
+  room.phase = 'idle'
+  room.currentWord = ''
+  room.revealed = []
+  room.winnerUserId = undefined
+  room.winnerDisplayName = undefined
+  room.startedAt = 0
+  room.unlockAt = 0
+  room.endsAt = 0
+  room.roundId = ''
+  room.sessionPlannedRounds = 0
+  room.sessionCompletedRounds = 0
+  room.sessionWordSource = 'random'
+  room.sessionRoundDurationSec = ROUND_DURATION_DEFAULT_SEC
+  room.breakHadWinner = false
+  room.breakWinnerDisplayName = ''
+  room.breakSessionFinished = false
+  room.nextRoundWordDraft = ''
+  clearGarticGuessThrottleForStreamer(streamerId)
+  setStreamerActiveGame(streamerId, null)
+  requestCanvasClear(streamerId)
+  notifyState(streamerId)
+}
+
+/**
+ * After `revealed`, move to `between_rounds` so the host can confirm before the next round starts.
+ */
+async function enterBetweenRounds(streamerId: string, room: Room): Promise<void> {
+  if (room.phase !== 'revealed') {
+    return
+  }
+  room.breakHadWinner = Boolean(room.winnerUserId)
+  room.breakWinnerDisplayName = room.winnerDisplayName ?? ''
+  room.winnerUserId = undefined
+  room.winnerDisplayName = undefined
+
+  room.sessionCompletedRounds += 1
+  clearRoundTimer(room)
+  stopLetterReveal(room)
+  clearUnlockTimer(room)
+  room.startedAt = 0
+  room.unlockAt = 0
+  room.endsAt = 0
+  room.roundId = ''
+
+  if (room.sessionCompletedRounds >= room.sessionPlannedRounds) {
+    room.breakSessionFinished = true
+    room.nextRoundWordDraft = ''
+    room.phase = 'between_rounds'
+    notifyState(streamerId)
+    return
+  }
+
+  room.breakSessionFinished = false
+  let draft = ''
+  if (room.sessionWordSource !== 'manual') {
+    const picked = await pickWord(streamerId, room.sessionWordSource, undefined)
+    if (!picked.ok) {
+      console.error('[gartic-show] between-rounds pick failed', picked.code)
+      fullSessionEnd(streamerId, room)
+      return
+    }
+    draft = picked.word
+  }
+  room.nextRoundWordDraft = draft
+  room.phase = 'between_rounds'
+  notifyState(streamerId)
+}
+
+function beginRoundWithWord(streamerId: string, room: Room, word: string): void {
+  requestCanvasClear(streamerId)
+  clearGarticGuessThrottleForStreamer(streamerId)
+  clearAllTimers(room)
+  const now = Date.now()
+  const durSec = room.sessionRoundDurationSec
+  const lockMs = lockMsForRound(durSec)
+  room.currentWord = word
+  room.revealed = initialRevealedMask(room.currentWord)
+  room.winnerUserId = undefined
+  room.winnerDisplayName = undefined
+  room.phase = 'drawing_locked'
+  room.startedAt = now
+  room.unlockAt = now + lockMs
+  room.endsAt = now + durSec * 1000
+  room.roundId = randomUUID()
+  room.breakHadWinner = false
+  room.breakWinnerDisplayName = ''
+  room.breakSessionFinished = false
+  room.nextRoundWordDraft = ''
+  armUnlock(streamerId, room)
+  armRoundMax(streamerId, room)
+  setStreamerActiveGame(streamerId, 'gartic-show')
+  notifyState(streamerId)
+}
+
 function getOrCreateRoom(streamerId: string): Room {
   let r = rooms.get(streamerId)
   if (!r) {
@@ -151,7 +268,14 @@ function getOrCreateRoom(streamerId: string): Room {
       startedAt: 0,
       unlockAt: 0,
       endsAt: 0,
-      roundsPlanned: 0,
+      sessionPlannedRounds: 0,
+      sessionCompletedRounds: 0,
+      sessionWordSource: 'random',
+      sessionRoundDurationSec: ROUND_DURATION_DEFAULT_SEC,
+      breakHadWinner: false,
+      breakWinnerDisplayName: '',
+      breakSessionFinished: false,
+      nextRoundWordDraft: '',
       roundId: '',
       unlockTimer: null,
       roundTimer: null,
@@ -243,19 +367,20 @@ function armRoundMax(streamerId: string, room: Room): void {
   const delay = Math.max(0, room.endsAt - Date.now())
   room.roundTimer = setTimeout(() => {
     room.roundTimer = null
-    if (room.phase === 'idle' || room.phase === 'revealed') {
+    if (room.phase === 'idle' || room.phase === 'revealed' || room.phase === 'between_rounds') {
       return
     }
     room.phase = 'revealed'
     stopLetterReveal(room)
     notifyState(streamerId)
+    void enterBetweenRounds(streamerId, room)
   }, delay)
 }
 
 export function getGarticStatePayload(streamerId: string, includeSecret: boolean): GarticStatePayload {
   const room = getOrCreateRoom(streamerId)
   const viewerShowAnswer =
-    room.phase === 'revealed' && room.currentWord.length > 0
+    (room.phase === 'revealed' || room.phase === 'between_rounds') && room.currentWord.length > 0
   const maskedWord = viewerShowAnswer && !includeSecret
     ? buildMaskedDisplay(room.currentWord, wordCodePoints(room.currentWord).map(() => true))
     : buildMaskedDisplay(room.currentWord, room.revealed)
@@ -263,6 +388,12 @@ export function getGarticStatePayload(streamerId: string, includeSecret: boolean
     room.phase === 'idle' || room.startedAt <= 0
       ? 0
       : Math.max(0, Math.round((room.endsAt - room.startedAt) / 1000))
+  const sessionActive = room.sessionPlannedRounds > 0
+  const roundNumber = !sessionActive
+    ? 0
+    : room.phase === 'between_rounds' && room.breakSessionFinished
+      ? room.sessionPlannedRounds
+      : room.sessionCompletedRounds + 1
   return {
     streamerId,
     phase: room.phase,
@@ -274,7 +405,13 @@ export function getGarticStatePayload(streamerId: string, includeSecret: boolean
     unlockAt: room.unlockAt,
     endsAt: room.endsAt,
     roundDurationSec,
-    roundsPlanned: room.phase === 'idle' ? 0 : room.roundsPlanned,
+    roundsPlanned: sessionActive ? room.sessionPlannedRounds : 0,
+    roundNumber,
+    sessionWordSource: sessionActive ? room.sessionWordSource : undefined,
+    breakHadWinner: room.phase === 'between_rounds' ? room.breakHadWinner : undefined,
+    breakWinnerDisplayName: room.phase === 'between_rounds' ? room.breakWinnerDisplayName : undefined,
+    breakSessionFinished: room.phase === 'between_rounds' ? room.breakSessionFinished : undefined,
+    nextWordDraft: room.phase === 'between_rounds' && includeSecret ? room.nextRoundWordDraft : undefined,
     roundId: room.roundId,
   }
 }
@@ -299,32 +436,58 @@ export async function hostStartGarticRound(
   if (room.phase !== 'idle') {
     return { ok: false, code: 'bad_phase', message: 'Finish or clear the current round first.' }
   }
-  const picked = await pickWord(streamerId, opts.wordSource, opts.manualWord)
-  if (!picked.ok) {
-    return picked
-  }
-  clearGarticGuessThrottleForStreamer(streamerId)
-  clearAllTimers(room)
-  const now = Date.now()
-  const durSec = clampInt(
+
+  room.sessionPlannedRounds = clampInt(opts.roundsPlanned ?? 1, ROUNDS_PLANNED_MIN, ROUNDS_PLANNED_MAX)
+  room.sessionCompletedRounds = 0
+  room.sessionWordSource = opts.wordSource
+  room.sessionRoundDurationSec = clampInt(
     opts.roundDurationSec ?? ROUND_DURATION_DEFAULT_SEC,
     ROUND_DURATION_MIN_SEC,
     ROUND_DURATION_MAX_SEC,
   )
-  room.roundsPlanned = clampInt(opts.roundsPlanned ?? 1, ROUNDS_PLANNED_MIN, ROUNDS_PLANNED_MAX)
-  room.currentWord = picked.word
-  room.revealed = initialRevealedMask(room.currentWord)
-  room.winnerUserId = undefined
-  room.winnerDisplayName = undefined
-  room.phase = 'drawing_locked'
-  room.startedAt = now
-  room.unlockAt = now + LOCK_MS
-  room.endsAt = now + durSec * 1000
-  room.roundId = randomUUID()
-  armUnlock(streamerId, room)
-  armRoundMax(streamerId, room)
-  setStreamerActiveGame(streamerId, 'gartic-show')
-  notifyState(streamerId)
+
+  const picked = await pickWord(streamerId, room.sessionWordSource, opts.manualWord)
+  if (!picked.ok) {
+    return picked
+  }
+
+  beginRoundWithWord(streamerId, room, picked.word)
+  return { ok: true }
+}
+
+export async function hostAckNextRound(
+  streamerId: string,
+  opts: { word?: string },
+): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
+  const room = getOrCreateRoom(streamerId)
+  if (room.phase !== 'between_rounds') {
+    return { ok: false, code: 'bad_phase', message: 'Not between rounds.' }
+  }
+  if (room.breakSessionFinished) {
+    fullSessionEnd(streamerId, room)
+    return { ok: true }
+  }
+
+  const override = String(opts.word ?? '').trim()
+  let word = override.length > 0 ? override : room.nextRoundWordDraft.trim()
+
+  if (room.sessionWordSource === 'manual' && word.length < 1) {
+    return { ok: false, code: 'bad_word', message: 'Enter the word for this round.' }
+  }
+
+  if (word.length > 80) {
+    return { ok: false, code: 'bad_word', message: 'Word length must be 1–80.' }
+  }
+
+  if (word.length < 1) {
+    const picked = await pickWord(streamerId, room.sessionWordSource, undefined)
+    if (!picked.ok) {
+      return picked
+    }
+    word = picked.word
+  }
+
+  beginRoundWithWord(streamerId, room, word)
   return { ok: true }
 }
 
@@ -339,7 +502,14 @@ export function hostClearGarticRound(streamerId: string): void {
   room.startedAt = 0
   room.unlockAt = 0
   room.endsAt = 0
-  room.roundsPlanned = 0
+  room.sessionPlannedRounds = 0
+  room.sessionCompletedRounds = 0
+  room.sessionWordSource = 'random'
+  room.sessionRoundDurationSec = ROUND_DURATION_DEFAULT_SEC
+  room.breakHadWinner = false
+  room.breakWinnerDisplayName = ''
+  room.breakSessionFinished = false
+  room.nextRoundWordDraft = ''
   room.roundId = ''
   clearGarticGuessThrottleForStreamer(streamerId)
   setStreamerActiveGame(streamerId, null)
@@ -415,6 +585,7 @@ export function handleGarticChatGuess(streamerId: string, userId: string, displa
         kind: 'win',
       })
       notifyState(streamerId)
+      void enterBetweenRounds(streamerId, room)
       return
     }
     emitFeedback(streamerId, {

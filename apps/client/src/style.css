@@ -215,7 +215,7 @@ html.sa-wordle-route .app-shell-route-stack {
 }
 
 /**
- * Gartic Show: always locked to the viewport (all breakpoints). Chat scrolls inside the panel;
+ * Nadraw: always locked to the viewport (all breakpoints). Chat scrolls inside the panel;
  * no document vertical scroll. Class toggled in GarticShowPage.vue.
  */
 html.sa-gartic-route {
