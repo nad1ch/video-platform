@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
-    "gen:wordle-dict": "node scripts/gen-wordle-uk-dictionary.mjs"
+    "gen:nadle-dict": "node scripts/gen-nadle-uk-dictionary.mjs"
   },
   "dependencies": {
     "call-core": "file:../../packages/call-core",
@@ -17,7 +17,7 @@
     "vue": "^3.5.32",
     "vue-i18n": "^9.14.5",
     "vue-router": "^4.6.4",
-    "wordle-core": "file:../../packages/wordle-core"
+    "nadle-core": "file:../../packages/nadle-core"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

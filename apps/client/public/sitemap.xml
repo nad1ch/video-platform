@@ -11,7 +11,7 @@
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://app.streamassist.net/twitch-wordle-game/</loc>
+    <loc>https://app.streamassist.net/twitch-nadle-game/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
   </url>
@@ -31,7 +31,7 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://app.streamassist.net/app/wordle/nad1ch</loc>
+    <loc>https://app.streamassist.net/app/nadle/nad1ch</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>

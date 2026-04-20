@@ -1,28 +1,28 @@
 /**
- * All Wordle WebSocket frames use these `type` strings so they never collide
+ * All nadle WebSocket frames use these `type` strings so they never collide
  * with other products on shared infrastructure.
  */
-export const WordleWs = {
+export const NadleWs = {
   /** Server → client: full public game snapshot */
-  state: 'wordle:state',
+  state: 'nadle:state',
   /** Server → client: ordered leaderboard */
-  leaderboard: 'wordle:leaderboard',
+  leaderboard: 'nadle:leaderboard',
   /** Server → client: one successful guess (row + meta) */
-  userGuess: 'wordle:user-guess',
+  userGuess: 'nadle:user-guess',
   /** Server → client: new round started */
-  newGame: 'wordle:new-game',
+  newGame: 'nadle:new-game',
   /** Server → client: Twitch chat relay line */
-  twitchChat: 'wordle:twitch-chat',
+  twitchChat: 'nadle:twitch-chat',
   /** Server → client: Twitch IRC ingest link state (relay up/down for UX) */
-  ircStatus: 'wordle:irc-status',
+  ircStatus: 'nadle:irc-status',
   /** Server → client: auth + admin flags */
-  session: 'wordle:session',
+  session: 'nadle:session',
   /** Server → client */
-  error: 'wordle:error',
+  error: 'nadle:error',
   /** Server → client */
-  guessRejected: 'wordle:guess-rejected',
+  guessRejected: 'nadle:guess-rejected',
   /** Client → server */
-  clientGuess: 'wordle:guess',
+  clientGuess: 'nadle:guess',
   /** Client → server */
-  clientNextWord: 'wordle:next-word',
+  clientNextWord: 'nadle:next-word',
 } as const

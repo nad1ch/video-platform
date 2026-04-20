@@ -6,11 +6,11 @@
     "packages/*"
   ],
   "scripts": {
-    "test:wordle": "npm run test -w wordle-consistency",
+    "test:nadle": "npm run test -w nadle-consistency",
     "test:eat-first": "npm run test -w eat-first-consistency",
     "test:client": "npm run test -w client-consistency",
     "test:call": "npm run test -w call-core-consistency",
-    "test:ci": "npm run test:wordle && npm run test:eat-first && npm run test:client && npm run test:call",
+    "test:ci": "npm run test:nadle && npm run test:eat-first && npm run test:client && npm run test:call",
     "test:all": "npm run test:ci",
     "ci": "npm run test:ci && npm run lint && npm run build -w client",
     "lint": "eslint .",

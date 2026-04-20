@@ -11,7 +11,7 @@ const route = useRoute()
 const router = useRouter()
 const { isAuthenticated, refresh } = useAuth()
 
-const defaultWordleStreamer =
+const defaultNadleStreamer =
   (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
   STREAMER_NICK
 
@@ -74,11 +74,11 @@ watch(
         </li>
         <li class="home__nav-pills__item">
           <RouterLink
-            :to="{ name: 'wordle-streamer', params: { streamer: defaultWordleStreamer } }"
+            :to="{ name: 'nadle-streamer', params: { streamer: defaultNadleStreamer } }"
             class="home__pill home__pill--ghost"
           >
-            <span class="home__pill__title">{{ t('home.wordleTitle') }}</span>
-            <span class="home__pill__desc">{{ t('home.wordleDesc') }}</span>
+            <span class="home__pill__title">{{ t('home.nadleTitle') }}</span>
+            <span class="home__pill__desc">{{ t('home.nadleDesc') }}</span>
           </RouterLink>
         </li>
         <li class="home__nav-pills__item">

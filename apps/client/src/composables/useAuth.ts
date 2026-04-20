@@ -15,9 +15,9 @@ export type AppUser = {
   role: 'admin' | 'user' | 'host'
   /** Helix user id when provider is Twitch (same as `id`). */
   twitchId?: string
-  /** Linked Wordle streamer row (owner or same Twitch channel). */
-  wordleStreamerId?: string
-  wordleStreamerName?: string
+  /** Linked Nadle streamer row (owner or same Twitch channel). */
+  nadleStreamerId?: string
+  nadleStreamerName?: string
 }
 
 const authLog = createLogger('auth')
@@ -106,13 +106,13 @@ function parseUser(raw: unknown): AppUser | null {
   } else if (provider === 'twitch' && id.length > 0) {
     twitchId = id
   }
-  let wordleStreamerId: string | undefined
-  if (typeof u.wordleStreamerId === 'string' && u.wordleStreamerId.length > 0) {
-    wordleStreamerId = u.wordleStreamerId
+  let nadleStreamerId: string | undefined
+  if (typeof u.nadleStreamerId === 'string' && u.nadleStreamerId.length > 0) {
+    nadleStreamerId = u.nadleStreamerId
   }
-  let wordleStreamerName: string | undefined
-  if (typeof u.wordleStreamerName === 'string' && u.wordleStreamerName.length > 0) {
-    wordleStreamerName = u.wordleStreamerName
+  let nadleStreamerName: string | undefined
+  if (typeof u.nadleStreamerName === 'string' && u.nadleStreamerName.length > 0) {
+    nadleStreamerName = u.nadleStreamerName
   }
   let dbUserId: string | undefined
   if (typeof u.dbUserId === 'string' && u.dbUserId.length > 0) {
@@ -126,8 +126,8 @@ function parseUser(raw: unknown): AppUser | null {
     provider,
     role,
     ...(twitchId ? { twitchId } : {}),
-    ...(wordleStreamerId ? { wordleStreamerId } : {}),
-    ...(wordleStreamerName ? { wordleStreamerName } : {}),
+    ...(nadleStreamerId ? { nadleStreamerId } : {}),
+    ...(nadleStreamerName ? { nadleStreamerName } : {}),
   }
 }
 

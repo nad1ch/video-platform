@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import { prisma } from '../../prisma'
-import { resolvePrismaUserIdFromSession, resolveWordleStreamerContextForUserId } from '../resolvePrismaUserFromSession'
+import { resolvePrismaUserIdFromSession, resolveNadleStreamerContextForUserId } from '../resolvePrismaUserFromSession'
 import { readSessionFromCookie } from './sessionJwt'
 import { sessionToGlobalAuthUser, sessionToLegacyApiUser } from './globalUser'
 
@@ -22,15 +22,18 @@ export async function handleGetApiAuthMe(req: Request, res: Response): Promise<v
       dbRole = row?.role ?? null
     }
     const base = sessionToGlobalAuthUser(session, dbRole)
-    const wordle =
-      prismaUserId != null ? await resolveWordleStreamerContextForUserId(prismaUserId) : null
+    const nadleStreamer =
+      prismaUserId != null ? await resolveNadleStreamerContextForUserId(prismaUserId) : null
     res.json({
       authenticated: true,
       user: {
         ...base,
         ...(prismaUserId ? { dbUserId: prismaUserId } : {}),
-        ...(wordle
-          ? { wordleStreamerId: wordle.wordleStreamerId, wordleStreamerName: wordle.wordleStreamerName }
+        ...(nadleStreamer
+          ? {
+              nadleStreamerId: nadleStreamer.nadleStreamerId,
+              nadleStreamerName: nadleStreamer.nadleStreamerName,
+            }
           : {}),
       },
     })
@@ -54,9 +57,9 @@ export function handleGetApiMeLegacy(req: Request, res: Response): void {
 }
 
 /**
- * GET /api/wordle/me — historical flat body (no `authenticated` wrapper).
+ * GET /api/nadle/me — historical flat body (no `authenticated` wrapper).
  */
-export function handleGetWordleMe(req: Request, res: Response): void {
+export function handleGetNadleMe(req: Request, res: Response): void {
   const session = readSessionFromCookie(req.headers.cookie)
   if (!session) {
     res.status(401).json({ authenticated: false })

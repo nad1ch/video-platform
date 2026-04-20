@@ -1,7 +1,7 @@
 <script setup lang="ts">
 withDefaults(
   defineProps<{
-    /** Wider main column (e.g. Wordle board). */
+    /** Wider main column (e.g. Nadle board). */
     wide?: boolean
     /** No horizontal padding (full-bleed sections handle their own). */
     flush?: boolean

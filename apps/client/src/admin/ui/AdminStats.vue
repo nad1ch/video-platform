@@ -62,9 +62,9 @@ onMounted(() => {
         </div>
         <div class="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 ring-1 ring-white/[0.03]">
           <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            {{ t('adminPanel.statWordleRounds') }}
+            {{ t('adminPanel.statNadleRounds') }}
           </p>
-          <p class="mt-2 text-2xl font-semibold tabular-nums text-cyan-300">{{ data.wordleRounds ?? 0 }}</p>
+          <p class="mt-2 text-2xl font-semibold tabular-nums text-cyan-300">{{ data.nadleRounds ?? 0 }}</p>
         </div>
         <div class="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 ring-1 ring-white/[0.03]">
           <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500">

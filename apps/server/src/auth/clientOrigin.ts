@@ -1,15 +1,15 @@
 /**
- * Public browser origin for post-OAuth redirects and Wordle links.
- * In production, set `BASE_URL` or `WORDLE_CLIENT_ORIGIN` — no localhost fallback.
+ * Public browser origin for post-OAuth redirects and nadle links.
+ * In production, set `BASE_URL` or `NADLE_CLIENT_ORIGIN` — no localhost fallback.
  */
 export function clientPublicOrigin(): string {
-  const raw = process.env.BASE_URL ?? process.env.WORDLE_CLIENT_ORIGIN
+  const raw = process.env.BASE_URL ?? process.env.NADLE_CLIENT_ORIGIN
   if (typeof raw === 'string' && raw.trim().length > 0) {
     return raw.trim().replace(/\/$/, '')
   }
   if (process.env.NODE_ENV === 'production') {
     throw new Error(
-      'Production requires BASE_URL or WORDLE_CLIENT_ORIGIN (public SPA origin, no trailing slash).',
+      'Production requires BASE_URL or NADLE_CLIENT_ORIGIN (public SPA origin, no trailing slash).',
     )
   }
   return 'http://localhost:5173'
@@ -17,12 +17,12 @@ export function clientPublicOrigin(): string {
 
 /**
  * Origins allowed for credentialed CORS. The server must echo the request's `Origin` when it matches.
- * Always includes local Vite; adds `BASE_URL` / `WORDLE_CLIENT_ORIGIN`; optional `CORS_ORIGINS` (comma-separated).
+ * Always includes local Vite; adds `BASE_URL` / `NADLE_CLIENT_ORIGIN`; optional `CORS_ORIGINS` (comma-separated).
  */
 export function corsAllowedOrigins(): string[] {
   const set = new Set<string>()
   set.add('http://localhost:5173')
-  const raw = process.env.BASE_URL ?? process.env.WORDLE_CLIENT_ORIGIN
+  const raw = process.env.BASE_URL ?? process.env.NADLE_CLIENT_ORIGIN
   if (typeof raw === 'string' && raw.trim().length > 0) {
     set.add(raw.trim().replace(/\/$/, ''))
   }

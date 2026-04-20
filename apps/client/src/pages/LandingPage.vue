@@ -13,7 +13,7 @@ import bgBoltSharpLeft from '@/assets/landing-dev/bg-bolt-sharp-left.svg'
 import bgBoltSharpRight from '@/assets/landing-dev/bg-bolt-sharp-right.svg'
 import bgBoltSmall from '@/assets/landing-dev/bg-bolt-small.svg'
 import eatFirstIcon from '@/assets/landing/eat-first.png'
-import garticPhoneIcon from '@/assets/landing/gartic-phone.png'
+import nadrawPhoneIcon from '@/assets/landing/nadraw-phone.png'
 import instagramIcon from '@/assets/landing/instagram.png'
 import mafiaIcon from '@/assets/landing/mafia.png'
 import spyIcon from '@/assets/landing/spy.png'
@@ -21,7 +21,7 @@ import telegramIcon from '@/assets/landing/telegram.png'
 import tiktokIcon from '@/assets/landing/tiktok.png'
 import twitchIcon from '@/assets/landing/twitch.png'
 import whoTakeShitIcon from '@/assets/landing/who-take-shit.png'
-import wordlivIcon from '@/assets/landing/wordliv.png'
+import nadleGameIcon from '@/assets/landing/nadle.png'
 import { persistLocale } from '@/eat-first/i18n/index.js'
 import {
   BRAND_LOGO_LIGHT_SVG,
@@ -38,7 +38,7 @@ const { locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-const defaultWordleStreamer =
+const defaultNadleStreamer =
   (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
   STREAMER_NICK
 
@@ -252,9 +252,9 @@ const games = Object.freeze([
     }),
   } satisfies GameCard),
   Object.freeze({
-    title: 'Wordly',
-    icon: wordlivIcon,
-    to: { name: 'wordle-streamer', params: { streamer: defaultWordleStreamer } },
+    title: 'Nadle',
+    icon: nadleGameIcon,
+    to: { name: 'nadle-streamer', params: { streamer: defaultNadleStreamer } },
     cardStyle: Object.freeze({
       left: px(705),
       top: px(1455.87),
@@ -275,9 +275,9 @@ const games = Object.freeze([
     }),
   } satisfies GameCard),
   Object.freeze({
-    title: 'Nadraw\nphone',
-    icon: garticPhoneIcon,
-    to: { name: 'home' },
+    title: 'Nadraw',
+    icon: nadrawPhoneIcon,
+    to: { name: 'nadraw-show', params: { streamer: defaultNadleStreamer } },
     cardStyle: Object.freeze({
       left: px(1089.75),
       top: px(1455.12),
@@ -372,7 +372,8 @@ const socialLinks = Object.freeze([
 const footerProduct = Object.freeze(['Product', 'Nitro', 'Status', 'Policies', 'Terms', 'Privacy', 'Cookie Settings'])
 const footerAbout = Object.freeze(['About', 'Jobs', 'Brand', 'Newsroom', 'Developers'])
 
-const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
+/** Economy slot strip: **Nadle** (five cells) + wildcard; keeps the six-column jackpot layout. */
+const slotLetters = Object.freeze(['N', 'A', 'D', 'L', 'E', '?'] as const)
 
 type LandingLocaleCode = (typeof localeButtons)[number]['code']
 
@@ -645,7 +646,7 @@ useLandingCosmicParallax(landingCanvasEl)
       <footer id="footer" class="landing-footer" aria-label="Site footer">
         <nav class="landing-footer__seo" aria-label="Guides">
           <a class="landing-footer__seo-link" href="/video-calls-for-streamers/">Video calls for streamers</a>
-          <a class="landing-footer__seo-link" href="/twitch-wordle-game/">Wordle chat game</a>
+          <a class="landing-footer__seo-link" href="/twitch-nadle-game/">Nadle chat game</a>
           <a class="landing-footer__seo-link" href="/stream-overlay-tools/">Stream overlay tools</a>
         </nav>
         <div class="landing-footer__panel">

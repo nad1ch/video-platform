@@ -4,11 +4,11 @@ import { prisma } from './prisma'
 import { resolvePrismaUserIdFromSession } from './auth/resolvePrismaUserFromSession'
 import { readSessionFromCookie } from './auth/session/sessionJwt'
 
-/** Matches `MAX_ATTEMPTS` in client `wordleLogic` / solo board rows. */
+/** Matches `MAX_ATTEMPTS` in client `nadleLogic` / solo board rows. */
 const SOLO_MAX_ATTEMPTS = 6
 
 /** `GameRound.winnerUserId` when a solo round ends in a loss (player exhausted attempts). Not a real user id. */
-const WORDLE_SOLO_LOSS_PLACEHOLDER_WINNER = '__wordle_solo_loss__'
+const NADLE_SOLO_LOSS_PLACEHOLDER_WINNER = '__nadle_solo_loss__'
 
 function isDatabaseConfigured(): boolean {
   const u = process.env.DATABASE_URL
@@ -257,7 +257,7 @@ async function ratingLeaderboardForStreamer(streamerId: string): Promise<
 
 export function mountLeaderboardRoutes(app: Express): void {
   /**
-   * Records a solo Wordle result for any signed-in user with a linked `User` row.
+   * Records a solo nadle result for any signed-in user with a linked `User` row.
    * Body: { streamerId, result?: 'win' | 'lose', attempts } — rating uses wins − (gamesPlayed − wins).
    */
   app.post('/api/wins', async (req: Request, res: Response) => {
@@ -354,7 +354,7 @@ export function mountLeaderboardRoutes(app: Express): void {
         const round = await tx.gameRound.create({
           data: {
             streamerId,
-            winnerUserId: isWin ? userId : WORDLE_SOLO_LOSS_PLACEHOLDER_WINNER,
+            winnerUserId: isWin ? userId : NADLE_SOLO_LOSS_PLACEHOLDER_WINNER,
           },
         })
         await tx.gameResult.create({

@@ -4,7 +4,7 @@ export function wordGraphemeCount(s) {
 }
 
 /**
- * Wordle scoring (Unicode code points). Canonical implementation — client + server.
+ * Letter-guessing feedback (Unicode code points). Canonical implementation — client + server.
  * @param {string} answer
  * @param {string} guess
  * @returns {('correct'|'present'|'absent')[]}

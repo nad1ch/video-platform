@@ -1,5 +1,5 @@
 /**
- * Session cookie flags for `wordle_session` (app shell + Wordle share the same cookie name).
+ * Session cookie flags for `nadle_session` (app shell + nadle share the same cookie name).
  * Production cross-subdomain / SPA↔API setups need SameSite=None + Secure.
  */
 export function isAuthCookieProduction(): boolean {

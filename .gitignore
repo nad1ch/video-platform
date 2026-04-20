@@ -39,9 +39,9 @@ _external/
 .tmp-dict_uk/
 
 # Hunspell sources (large); generated `words-uk-dictionary.generated.ts` is committed
-apps/client/src/wordle/dictionary/raw/uk_UA.dic
-apps/client/src/wordle/dictionary/raw/uk_UA.aff
-apps/client/src/wordle/dictionary/raw/*.zip
+apps/client/src/nadle/dictionary/raw/uk_UA.dic
+apps/client/src/nadle/dictionary/raw/uk_UA.aff
+apps/client/src/nadle/dictionary/raw/*.zip
 
 # Server local DB (email/password users)
 apps/server/data/

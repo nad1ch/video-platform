@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Game, GameStatePayload, GuessRow, LeaderboardEntry, PlayerState, Store } from './types'
-import type { PersistWordleRoundInput } from './persistRound'
-import { computeFeedback, generateWord, isValidGuessShape, normalizeWord, wordGraphemeCount } from './wordleLogic'
+import type { PersistNadleRoundInput } from './persistRound'
+import { computeFeedback, generateWord, isValidGuessShape, normalizeWord, wordGraphemeCount } from './nadleLogic'
 import { setStreamerActiveGame } from '../streamerActiveGame'
 
 const MAX_ATTEMPTS_PER_ROUND = 6
@@ -170,7 +170,7 @@ export function adminStartNewGame(streamerId: string): { gameId: string; wordLen
     players: {},
   }
   stores.set(streamerId, next)
-  setStreamerActiveGame(streamerId, 'wordle')
+  setStreamerActiveGame(streamerId, 'nadle')
   const g = next.currentGame
   return {
     gameId: g.id,
@@ -180,10 +180,10 @@ export function adminStartNewGame(streamerId: string): { gameId: string; wordLen
 }
 
 /** Snapshot for DB persistence after a winning guess (in-memory store still holds all participants). */
-export function buildWordleRoundPersistencePayload(
+export function buildNadleRoundPersistencePayload(
   streamerId: string,
   winnerUserId: string,
-): PersistWordleRoundInput | null {
+): PersistNadleRoundInput | null {
   const w = String(winnerUserId ?? '').trim()
   if (!w) {
     return null

@@ -1,16 +1,16 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../prisma'
 
-export type WordleRoundPlayer = {
+export type NadleRoundPlayer = {
   userId: string
   attempts: number
   isWinner: boolean
 }
 
-export type PersistWordleRoundInput = {
+export type PersistNadleRoundInput = {
   streamerId: string
   winnerUserId: string
-  players: WordleRoundPlayer[]
+  players: NadleRoundPlayer[]
 }
 
 function isDatabaseConfigured(): boolean {
@@ -20,27 +20,27 @@ function isDatabaseConfigured(): boolean {
 
 async function resolveDbUserId(
   tx: Prisma.TransactionClient,
-  wordleParticipantId: string,
+  nadleParticipantId: string,
 ): Promise<string | null> {
   const byId = await tx.user.findUnique({
-    where: { id: wordleParticipantId },
+    where: { id: nadleParticipantId },
     select: { id: true },
   })
   if (byId) {
     return byId.id
   }
   const byTwitch = await tx.user.findFirst({
-    where: { twitchId: wordleParticipantId },
+    where: { twitchId: nadleParticipantId },
     select: { id: true },
   })
   return byTwitch?.id ?? null
 }
 
 /**
- * Persists a finished Wordle round (winner known), updates {@link UserStreamerStats} for registered users.
+ * Persists a finished nadle round (winner known), updates {@link UserStreamerStats} for registered users.
  * Swallows errors — must never break live game / websocket flow.
  */
-export async function persistWordleRound(input: PersistWordleRoundInput): Promise<void> {
+export async function persistNadleRound(input: PersistNadleRoundInput): Promise<void> {
   if (!isDatabaseConfigured()) {
     return
   }
@@ -55,7 +55,7 @@ export async function persistWordleRound(input: PersistWordleRoundInput): Promis
         select: { id: true },
       })
       if (!streamer) {
-        console.warn('[wordle][persist] skip persist: unknown or inactive streamerId', streamerId)
+        console.warn('[nadle][persist] skip persist: unknown or inactive streamerId', streamerId)
         return
       }
       const round = await tx.gameRound.create({
@@ -99,6 +99,6 @@ export async function persistWordleRound(input: PersistWordleRoundInput): Promis
       }
     })
   } catch (e) {
-    console.error('[wordle][persist] persistWordleRound failed', e)
+    console.error('[nadle][persist] persistNadleRound failed', e)
   }
 }

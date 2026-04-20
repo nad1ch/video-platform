@@ -1,21 +1,21 @@
 import tmi from 'tmi.js'
 import { prisma } from '../prisma'
 import {
-  buildWordleRoundPersistencePayload,
+  buildNadleRoundPersistencePayload,
   getCurrentGameId,
   getCurrentWordLength,
   submitGuess,
 } from './gameStore'
-import { persistWordleRound } from './persistRound'
+import { persistNadleRound } from './persistRound'
 import {
   broadcastTwitchChatLine,
   broadcastUserGuess,
-  broadcastWordleIrcStatus,
-} from './wordleSocket'
+  broadcastNadleIrcStatus,
+} from './nadleSocket'
 import { DEV_FALLBACK_STREAMER_ID } from './streamerContext'
-import { isValidGuessShape, normalizeWord } from './wordleLogic'
+import { isValidGuessShape, normalizeWord } from './nadleLogic'
 import { readTwitchChatGuessCooldownMs, tryConsumeTwitchGuessThrottle } from './tmiGuessThrottle'
-import { ingestGarticTwitchLine } from '../gartic-show/garticTwitchIngest'
+import { ingestNadrawTwitchLine } from '../nadraw-show/nadrawTwitchIngest'
 import { getStreamerActiveGame } from '../streamerActiveGame'
 
 type IngestRow = { id: string; username: string; twitchId: string }
@@ -39,7 +39,7 @@ function isDatabaseConfigured(): boolean {
 export async function listActiveStreamersForIngest(): Promise<IngestRow[]> {
   if (!isDatabaseConfigured()) {
     if (process.env.NODE_ENV === 'production') {
-      console.warn('[wordle] DATABASE_URL missing — no Twitch IRC ingest in production (add Streamer rows + DB).')
+      console.warn('[nadle] DATABASE_URL missing — no Twitch IRC ingest in production (add Streamer rows + DB).')
       return []
     }
     const username = (process.env.DEV_FALLBACK_STREAMER_USERNAME || 'nad1ch').trim().toLowerCase().replace(/^#/, '')
@@ -87,14 +87,14 @@ function armSupplementalReconnect(h: Holder, reason: string): void {
       return
     }
     if (h.client.readyState() === 'CLOSED') {
-      console.warn('[wordle/tmi] socket still CLOSED after delay; forcing connect()', {
+      console.warn('[nadle/tmi] socket still CLOSED after delay; forcing connect()', {
         streamerId: h.streamerId,
         reason,
       })
-      broadcastWordleIrcStatus(h.streamerId, { status: 'reconnecting', reason: 'supplemental-after-idle' })
+      broadcastNadleIrcStatus(h.streamerId, { status: 'reconnecting', reason: 'supplemental-after-idle' })
       void h.client.connect().catch((err) => {
-        console.error('[wordle/tmi] supplemental connect failed', { streamerId: h.streamerId, err })
-        broadcastWordleIrcStatus(h.streamerId, { status: 'error', reason: String(err) })
+        console.error('[nadle/tmi] supplemental connect failed', { streamerId: h.streamerId, err })
+        broadcastNadleIrcStatus(h.streamerId, { status: 'error', reason: String(err) })
         if (!h.shuttingDown && holders.get(h.streamerId) === h) {
           armSupplementalReconnect(h, 'after-supplemental-failure')
         }
@@ -117,8 +117,8 @@ async function wireClient(h: Holder): Promise<void> {
     }
     const displayName = displayNameFromTags(tags)
     const text = message.trim()
-    if (getStreamerActiveGame(streamerId) === 'gartic-show') {
-      ingestGarticTwitchLine({ streamerId, userId, displayName, text })
+    if (getStreamerActiveGame(streamerId) === 'nadraw-show') {
+      ingestNadrawTwitchLine({ streamerId, userId, displayName, text })
       return
     }
     const wordLen = getCurrentWordLength(streamerId)
@@ -179,42 +179,42 @@ async function wireClient(h: Holder): Promise<void> {
     })
 
     if (result.guessed) {
-      const payload = buildWordleRoundPersistencePayload(streamerId, result.userId)
+      const payload = buildNadleRoundPersistencePayload(streamerId, result.userId)
       if (payload) {
-        void persistWordleRound(payload)
+        void persistNadleRound(payload)
       }
     }
   })
 
   c.on('connecting', (addr, port) => {
-    console.info('[wordle/tmi] connecting', { streamerId, addr, port })
-    broadcastWordleIrcStatus(streamerId, { status: 'connecting' })
+    console.info('[nadle/tmi] connecting', { streamerId, addr, port })
+    broadcastNadleIrcStatus(streamerId, { status: 'connecting' })
   })
 
   c.on('connected', (addr, port) => {
     clearSupplemental(h)
-    console.info('[wordle/tmi] connected', { streamerId, addr, port })
-    broadcastWordleIrcStatus(streamerId, { status: 'connected' })
+    console.info('[nadle/tmi] connected', { streamerId, addr, port })
+    broadcastNadleIrcStatus(streamerId, { status: 'connected' })
   })
 
   c.on('disconnected', (reason) => {
     const r = typeof reason === 'string' ? reason : String(reason ?? '')
-    console.warn('[wordle/tmi] disconnected', { streamerId, r })
-    broadcastWordleIrcStatus(streamerId, { status: 'disconnected', reason: r })
+    console.warn('[nadle/tmi] disconnected', { streamerId, r })
+    broadcastNadleIrcStatus(streamerId, { status: 'disconnected', reason: r })
     if (!h.shuttingDown) {
       armSupplementalReconnect(h, r)
     }
   })
 
   c.on('reconnect', () => {
-    console.warn('[wordle/tmi] reconnecting (tmi internal backoff)', { streamerId })
-    broadcastWordleIrcStatus(streamerId, { status: 'reconnecting', reason: 'tmi-internal' })
+    console.warn('[nadle/tmi] reconnecting (tmi internal backoff)', { streamerId })
+    broadcastNadleIrcStatus(streamerId, { status: 'reconnecting', reason: 'tmi-internal' })
   })
 
   // @ts-expect-error TS2769 — event exists on Client at runtime
   c.on('maxreconnect', () => {
-    console.error('[wordle/tmi] max reconnect attempts reached', { streamerId })
-    broadcastWordleIrcStatus(streamerId, { status: 'error', reason: 'maxreconnect' })
+    console.error('[nadle/tmi] max reconnect attempts reached', { streamerId })
+    broadcastNadleIrcStatus(streamerId, { status: 'error', reason: 'maxreconnect' })
   })
 
   c.on('notice', (_channel, _msgid, message) => {
@@ -222,16 +222,16 @@ async function wireClient(h: Holder): Promise<void> {
       typeof message === 'string' &&
       (message.includes('Login unsuccessful') || message.includes('Login authentication failed'))
     ) {
-      console.error('[wordle/tmi] IRC login notice', { streamerId, message })
-      broadcastWordleIrcStatus(streamerId, { status: 'error', reason: message })
+      console.error('[nadle/tmi] IRC login notice', { streamerId, message })
+      broadcastNadleIrcStatus(streamerId, { status: 'error', reason: message })
     }
   })
 
   try {
     await c.connect()
   } catch (err) {
-    console.error('[wordle/tmi] initial connect failed', { streamerId, err })
-    broadcastWordleIrcStatus(streamerId, { status: 'error', reason: String(err) })
+    console.error('[nadle/tmi] initial connect failed', { streamerId, err })
+    broadcastNadleIrcStatus(streamerId, { status: 'error', reason: String(err) })
     if (!h.shuttingDown) {
       armSupplementalReconnect(h, 'initial-connect-failed')
     }
@@ -292,7 +292,7 @@ export async function stopIngestForStreamer(streamerId: string): Promise<void> {
   try {
     await h.client.disconnect()
   } catch (err) {
-    console.warn('[wordle/tmi] disconnect() finished with error (ignored)', { streamerId, err })
+    console.warn('[nadle/tmi] disconnect() finished with error (ignored)', { streamerId, err })
   }
 }
 
@@ -300,19 +300,19 @@ export async function startTwitchChatIngest(): Promise<void> {
   await stopTwitchChatIngest()
   const rows = await listActiveStreamersForIngest()
   if (rows.length === 0) {
-    console.warn('[wordle] No active Streamer rows — Twitch chat ingest disabled')
+    console.warn('[nadle] No active Streamer rows — Twitch chat ingest disabled')
     return
   }
   const oauth = process.env.TWITCH_IRC_OAUTH?.trim()
   const namedUser = process.env.TWITCH_IRC_USERNAME?.trim()
   if (!oauth || !namedUser) {
-    console.info('[wordle] Using read-only IRC (justinfan) for ingest; set TWITCH_IRC_USERNAME + TWITCH_IRC_OAUTH for a named bot')
+    console.info('[nadle] Using read-only IRC (justinfan) for ingest; set TWITCH_IRC_USERNAME + TWITCH_IRC_OAUTH for a named bot')
   }
   for (const row of rows) {
     try {
       await startIngestForStreamer(row)
     } catch (e) {
-      console.error('[wordle/tmi] failed to start ingest for streamer', row.id, e)
+      console.error('[nadle/tmi] failed to start ingest for streamer', row.id, e)
     }
   }
 }

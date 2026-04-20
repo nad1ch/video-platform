@@ -26,7 +26,7 @@ export function mountAdminRoutes(app: Express): void {
       return
     }
     try {
-      const [rows, wordleAgg] = await Promise.all([
+      const [rows, userStatsAgg] = await Promise.all([
         prisma.user.findMany({
           take: 250,
           orderBy: { updatedAt: 'desc' },
@@ -44,14 +44,14 @@ export function mountAdminRoutes(app: Express): void {
           _sum: { wins: true, gamesPlayed: true },
         }),
       ])
-      const wordleByUser = new Map(
-        wordleAgg.map((g) => [
+      const statsByUser = new Map(
+        userStatsAgg.map((g) => [
           g.userId,
           { wins: g._sum.wins ?? 0, gamesPlayed: g._sum.gamesPlayed ?? 0 },
         ]),
       )
       const users = rows.map((u) => {
-        const w = wordleByUser.get(u.id)
+        const w = statsByUser.get(u.id)
         const role =
           u.role === 'admin' ? 'admin' : u.role === 'host' ? 'host' : 'user'
         return {
@@ -113,7 +113,7 @@ export function mountAdminRoutes(app: Express): void {
       res.json({
         databaseConfigured: false,
         userCount: 0,
-        wordleRounds: 0,
+        nadleRounds: 0,
         totalWinsRecorded: 0,
         totalGamesPlayed: 0,
         topWins: [] as { displayName: string; wins: number; userId: string }[],
@@ -122,7 +122,7 @@ export function mountAdminRoutes(app: Express): void {
       return
     }
     try {
-      const [userCount, wordleRounds, agg, topWinnersRaw, statsGrouped] = await Promise.all([
+      const [userCount, nadleRounds, agg, topWinnersRaw, statsGrouped] = await Promise.all([
         prisma.user.count(),
         prisma.gameRound.count(),
         prisma.userStreamerStats.aggregate({ _sum: { wins: true, gamesPlayed: true } }),
@@ -177,7 +177,7 @@ export function mountAdminRoutes(app: Express): void {
       res.json({
         databaseConfigured: true,
         userCount,
-        wordleRounds,
+        nadleRounds,
         totalWinsRecorded: agg._sum.wins ?? 0,
         totalGamesPlayed: agg._sum.gamesPlayed ?? 0,
         topWins,

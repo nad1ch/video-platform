@@ -12,7 +12,7 @@ function t(key: string, values?: Record<string, unknown>): string {
   }
   const map: Record<string, string> = {
     'routes.call': 'Call',
-    'routes.wordle': 'Wordle',
+    'routes.nadle': 'nadle',
     'routes.admin': 'Admin',
   }
   return map[key] ?? key
@@ -41,15 +41,15 @@ describe('seoAppResolve', () => {
     expect(resolveAppSeoTitle(route, t)).toBe('StreamAssist')
   })
 
-  it('resolveAppSeoTitle: wordle includes streamer', () => {
+  it('resolveAppSeoTitle: nadle includes streamer', () => {
     const route = {
-      path: '/app/wordle/foo',
-      name: 'wordle-streamer',
+      path: '/app/nadle/foo',
+      name: 'nadle-streamer',
       query: {},
-      meta: { appTitleKey: 'routes.wordle' },
+      meta: { appTitleKey: 'routes.nadle' },
       params: { streamer: 'foo' },
     } as unknown as RouteLocationNormalizedLoaded
-    expect(resolveAppSeoTitle(route, t)).toBe('Wordle · foo')
+    expect(resolveAppSeoTitle(route, t)).toBe('nadle · foo')
   })
 
   it('resolveAppSeoDescription uses seo.metaDescription', () => {

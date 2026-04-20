@@ -6,7 +6,7 @@ import { eatViewFromRoute } from '@/eat-first'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import { useAuth } from '@/composables/useAuth'
 
-const defaultWordleStreamer =
+const defaultNadleStreamer =
   (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
   STREAMER_NICK
 
@@ -81,17 +81,17 @@ function goEatBack() {
     <div class="stream-nav__links">
       <RouterLink
         class="stream-nav__link"
-        :to="{ name: 'wordle-streamer', params: { streamer: defaultWordleStreamer } }"
+        :to="{ name: 'nadle-streamer', params: { streamer: defaultNadleStreamer } }"
       >
-        {{ t('app.navWordle') }}
+        {{ t('app.navNadle') }}
       </RouterLink>
       <RouterLink
         class="stream-nav__link"
-        :to="{ name: 'gartic-show', params: { streamer: defaultWordleStreamer } }"
-        :title="t('routes.garticShow')"
-        :aria-label="t('routes.garticShow')"
+        :to="{ name: 'nadraw-show', params: { streamer: defaultNadleStreamer } }"
+        :title="t('routes.nadrawShow')"
+        :aria-label="t('routes.nadrawShow')"
       >
-        {{ t('app.navGarticShow') }}
+        {{ t('app.navNadrawShow') }}
       </RouterLink>
       <RouterLink
         class="stream-nav__link"

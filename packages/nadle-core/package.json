@@ -1,8 +1,8 @@
 {
-  "name": "wordle-core",
+  "name": "nadle-core",
   "version": "0.0.1",
   "private": true,
-  "description": "Shared Wordle primitives: wordGraphemeCount, computeFeedback (Unicode code points).",
+  "description": "Shared nadle primitives: wordGraphemeCount, computeFeedback (Unicode code points).",
   "main": "./index.cjs",
   "types": "./index.d.ts",
   "exports": {

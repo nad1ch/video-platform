@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { setGlobalSessionCookie } from '../session/cookies'
-import { signSession, WORDLE_SESSION_MAX_AGE_SEC } from '../session/sessionJwt'
+import { signSession, NADLE_SESSION_MAX_AGE_SEC } from '../session/sessionJwt'
 import type { GlobalAuthUser, SessionUser } from '../session/types'
 import { withSessionRole } from '../session/withSessionRole'
 import { createEmailUser, findUserByEmail, normalizeEmail, verifyPassword } from './emailUserService'
@@ -40,7 +40,7 @@ function toPublicUser(session: SessionUser): GlobalAuthUser {
 }
 
 function sendSession(res: Response, session: SessionUser, created: boolean, status: number): void {
-  const token = signSession(session, WORDLE_SESSION_MAX_AGE_SEC)
+  const token = signSession(session, NADLE_SESSION_MAX_AGE_SEC)
   setGlobalSessionCookie(res, token)
   res.status(status).json({
     ok: true,

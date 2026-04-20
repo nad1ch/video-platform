@@ -7,7 +7,7 @@ declare module 'vue-router' {
     /** @deprecated Prefer `appTitleKey` for localized titles. */
     appTitle?: string
     /** Який текст показувати у футері (`app.footerLine*` у i18n). */
-    footerContext?: 'home' | 'wordle' | 'call' | 'eat'
+    footerContext?: 'home' | 'nadle' | 'call' | 'eat'
     /** Потрібна сесія StreamAssist OAuth (cookie JWT). */
     requiresAuth?: boolean
     /** Лише `user.role === 'admin'` (інше — редірект на `/app`). */

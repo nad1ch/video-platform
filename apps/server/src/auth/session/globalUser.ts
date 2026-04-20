@@ -48,7 +48,7 @@ export function sessionToGlobalAuthUser(session: SessionPayload, dbRole?: string
   }
 }
 
-/** Legacy JSON for GET /api/me and GET /api/wordle/me. */
+/** Legacy JSON for GET /api/me and GET /api/nadle/me. */
 export function sessionToLegacyApiUser(session: SessionPayload): {
   id: string
   display_name: string

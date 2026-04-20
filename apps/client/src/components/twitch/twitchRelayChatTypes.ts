@@ -1,7 +1,7 @@
 /** WebSocket pill state for the Twitch IRC relay UI. */
 export type TwitchRelayChatWsStatus = 'idle' | 'open' | 'closed' | 'error'
 
-/** One line in the relay chat feed (Wordle guesses + generic Twitch chat). */
+/** One line in the relay chat feed (nadle guesses + generic Twitch chat). */
 export type TwitchRelayChatLine = {
   _cid: number
   displayName: string
@@ -15,7 +15,7 @@ export type TwitchRelayChatLine = {
 }
 
 /** @deprecated Use TwitchRelayChatLine */
-export type WordleChatPanelLine = TwitchRelayChatLine
+export type NadleChatPanelLine = TwitchRelayChatLine
 
 /** @deprecated Use TwitchRelayChatWsStatus */
-export type WordleChatPanelWsStatus = TwitchRelayChatWsStatus
+export type NadleChatPanelWsStatus = TwitchRelayChatWsStatus

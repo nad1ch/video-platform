@@ -62,7 +62,7 @@ describe('seoCanonicalUrl', () => {
     expect(canonicalRelativePathForSeo('/app/eat?view=join&utm_source=x&needLogin=1')).toBe(
       '/app/eat?view=join',
     )
-    expect(canonicalRelativePathForSeo('/app/wordle/foo?x=1')).toBe('/app/wordle/foo?x=1')
+    expect(canonicalRelativePathForSeo('/app/nadle/foo?x=1')).toBe('/app/nadle/foo?x=1')
   })
 
   it('canonicalRelativePathForSeo drops empty query values and sorts keys', () => {

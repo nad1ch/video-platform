@@ -23,7 +23,7 @@ export function resolveAppSeoTitle(route, t) {
   if (typeof key === 'string' && key.length > 0) {
     const base = t(key)
     const nm = route.name
-    if (nm === 'wordle-streamer' || nm === 'app-streamer') {
+    if (nm === 'nadle-streamer' || nm === 'app-streamer') {
       const s = route.params?.streamer
       if (typeof s === 'string' && s.length > 0) {
         return `${base} · ${s}`

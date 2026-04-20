@@ -7,7 +7,7 @@ const props = withDefaults(
     wsStatus: TwitchRelayChatWsStatus
     wsStatusLabel: string
     chatTitle: string
-    /** Shown when `showGuessHints` is true (e.g. Wordle word length). */
+    /** Shown when `showGuessHints` is true (e.g. Nadle word length). */
     guessLenHint: string
     channelDisplay: string
     twitchWatchUrl: string
@@ -20,14 +20,14 @@ const props = withDefaults(
     defaultCooldownMs: number
     formatCooldownHint: (ms: number) => string
     feedbackToEmojis: (fb: ('correct' | 'present' | 'absent')[]) => string
-    /** Wordle: guess hints + badges. Gartic / plain relay: false. */
+    /** Nadle: guess hints + badges. Nadraw / plain relay: false. */
     showGuessHints?: boolean
     /**
      * When true, the feed scrolls inside a fixed-height flex parent (sidebar rail).
-     * Prevents chat content from stretching sibling columns (e.g. Gartic canvas).
+     * Prevents chat content from stretching sibling columns (e.g. Nadraw canvas).
      */
     flexRail?: boolean
-    /** When false, hides the WebSocket status pill (e.g. Gartic uses a global link dot). */
+    /** When false, hides the WebSocket status pill (e.g. Nadraw uses a global link dot). */
     showWsPill?: boolean
   }>(),
   { showGuessHints: true, flexRail: false, showWsPill: true },

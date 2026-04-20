@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken'
 import { authJwtSecret } from './jwtSecret'
 import type { SessionUser, UserRole } from './types'
 
-const COOKIE_NAME = 'wordle_session'
+const COOKIE_NAME = 'nadle_session'
 
 export type SessionPayload = SessionUser & { iat?: number; exp?: number }
 
@@ -74,8 +74,8 @@ export function readSessionFromCookie(cookieHeader: string | undefined): Session
 }
 
 /** Cookie name kept for non-breaking browser sessions. */
-export const WORDLE_SESSION_COOKIE = COOKIE_NAME
-export const WORDLE_SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 7
+export const NADLE_SESSION_COOKIE = COOKIE_NAME
+export const NADLE_SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 7
 
 const OAUTH_STATE_TYP = 'oauth_return'
 const OAUTH_STATE_MAX_AGE_SEC = 600

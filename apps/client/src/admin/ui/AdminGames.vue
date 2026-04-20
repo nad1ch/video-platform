@@ -6,7 +6,7 @@ import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 
 const { t } = useI18n()
 
-const defaultWordleStreamer =
+const defaultNadleStreamer =
   (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
   STREAMER_NICK
 const lastAction = ref<string | null>(null)
@@ -25,10 +25,10 @@ function stub(action: string) {
 
     <div class="flex flex-wrap gap-2">
       <RouterLink
-        :to="{ name: 'wordle-streamer', params: { streamer: defaultWordleStreamer } }"
+        :to="{ name: 'nadle-streamer', params: { streamer: defaultNadleStreamer } }"
         class="inline-flex items-center rounded-lg bg-slate-800/90 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-slate-600/60 transition hover:bg-slate-700/90"
       >
-        {{ t('adminPanel.gamesOpenWordle') }}
+        {{ t('adminPanel.gamesOpenNadle') }}
       </RouterLink>
       <RouterLink
         :to="{ name: 'eat' }"

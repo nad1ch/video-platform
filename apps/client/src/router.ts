@@ -10,13 +10,13 @@ import { useAuth } from '@/composables/useAuth'
 import { registerEatFirstRouterGuards } from '@/eat-first/router.js'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 
-/** Twitch login slug for `/wordle` → `/wordle/:streamer` redirect and default home link. */
-const DEFAULT_WORDLE_STREAMER =
+/** Twitch login slug for `/nadle` → `/nadle/:streamer` redirect and default home link. */
+const DEFAULT_NADLE_STREAMER =
   (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
   STREAMER_NICK
 
 /** Served as real HTML from `public/{slug}/index.html`. If the host returns SPA `index.html` instead, full-reload to that file. */
-const SEO_MARKETING_SLUGS = ['video-calls-for-streamers', 'twitch-wordle-game', 'stream-overlay-tools'] as const
+const SEO_MARKETING_SLUGS = ['video-calls-for-streamers', 'twitch-nadle-game', 'stream-overlay-tools'] as const
 
 const seoMarketingPlaceholder = defineComponent({
   name: 'SeoMarketingPlaceholder',
@@ -79,21 +79,21 @@ export const router = createRouter({
           component: () => import('./components/call/CallPage.vue'),
         },
         {
-          path: 'wordle',
-          name: 'wordle',
-          redirect: { name: 'wordle-streamer', params: { streamer: DEFAULT_WORDLE_STREAMER } },
+          path: 'nadle',
+          name: 'nadle',
+          redirect: { name: 'nadle-streamer', params: { streamer: DEFAULT_NADLE_STREAMER } },
         },
         {
-          path: 'wordle/:streamer',
-          name: 'wordle-streamer',
-          meta: { appTitleKey: 'routes.wordle', footerContext: 'wordle' },
-          component: () => import('./pages/WordleStreamPage.vue'),
+          path: 'nadle/:streamer',
+          name: 'nadle-streamer',
+          meta: { appTitleKey: 'routes.nadle', footerContext: 'nadle' },
+          component: () => import('./pages/NadleStreamPage.vue'),
         },
         {
-          path: 'gartic-show/:streamer',
-          name: 'gartic-show',
-          meta: { appTitleKey: 'routes.garticShow', footerContext: 'home' },
-          component: () => import('./pages/GarticShowPage.vue'),
+          path: 'nadraw-show/:streamer',
+          name: 'nadraw-show',
+          meta: { appTitleKey: 'routes.nadrawShow', footerContext: 'home' },
+          component: () => import('./pages/NadrawShowPage.vue'),
         },
         {
           path: 'eat',
@@ -138,35 +138,35 @@ export const router = createRouter({
           ],
         },
         /**
-         * Short Wordle URL: `/app/:streamer` (legacy). Static segments above take precedence:
-         * `call`, `wordle`, `wordle/:streamer`, `gartic-show/:streamer`, `eat`, `admin` are reserved — a streamer slug matching
-         * those first segments cannot use this short path (e.g. `/app/call` is the Call page, not Wordle for "call").
+         * Short URL: `/app/:streamer` (legacy). Static segments above take precedence:
+         * `call`, `nadle`, `nadle/:streamer`, `nadraw-show/:streamer`, `eat`, `admin` are reserved — a streamer slug matching
+         * those first segments cannot use this short path (e.g. `/app/call` is the Call page, not nadle for "call").
          */
         {
           path: ':streamer',
           name: 'app-streamer',
-          meta: { appTitleKey: 'routes.wordle', footerContext: 'wordle' },
-          component: () => import('./pages/WordleStreamPage.vue'),
+          meta: { appTitleKey: 'routes.nadle', footerContext: 'nadle' },
+          component: () => import('./pages/NadleStreamPage.vue'),
         },
       ],
     },
     { path: '/call', redirect: '/app/call' },
     {
-      path: '/wordle',
-      redirect: () => ({ name: 'wordle-streamer', params: { streamer: DEFAULT_WORDLE_STREAMER } }),
+      path: '/nadle',
+      redirect: () => ({ name: 'nadle-streamer', params: { streamer: DEFAULT_NADLE_STREAMER } }),
     },
     {
-      path: '/wordle/:streamer',
+      path: '/nadle/:streamer',
       redirect: (to) => ({
-        path: `/app/wordle/${String(to.params.streamer)}`,
+        path: `/app/nadle/${String(to.params.streamer)}`,
         query: to.query,
         hash: to.hash,
       }),
     },
     {
-      path: '/gartic-show/:streamer',
+      path: '/nadraw-show/:streamer',
       redirect: (to) => ({
-        path: `/app/gartic-show/${String(to.params.streamer)}`,
+        path: `/app/nadraw-show/${String(to.params.streamer)}`,
         query: to.query,
         hash: to.hash,
       }),

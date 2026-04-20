@@ -1,0 +1,15 @@
+---
+description: Boundaries for Stream Nadle / Twitch work — avoid damaging the monorepo
+globs:
+  - apps/server/src/nadle/**
+  - apps/client/src/pages/Nadle*.vue
+---
+
+# CRITICAL (Stream Nadle / Twitch)
+
+- **DO NOT** modify, delete, or “clean” `node_modules` or lockfiles. Restore deps only with `npm install` at the repo root.
+- **DO NOT** remove or bulk-edit unrelated dependencies; never treat `node_modules` as project source.
+- **DO NOT** refactor mediasoup signaling, `packages/call-core`, or `apps/server/src/signaling/**` unless the task explicitly requires it.
+- **ONLY** change Nadle/Twitch code under `apps/server/src/nadle/**` and `apps/client/src/pages/Nadle*.vue` (plus minimal wiring if the user explicitly allows `index.ts` / `router` / `vite.config` for the same feature).
+
+When adding WebSocket frames for Nadle, use the `nadle:*` namespace (see `apps/server/src/nadle/wsProtocol.ts`).

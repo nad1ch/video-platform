@@ -51,12 +51,12 @@ const { theme, setTheme, toggleTheme } = useTheme()
 
 const isEatRoute = computed(() => route.path.startsWith('/app/eat'))
 
-/** Wordle/stream + Nadraw: дати viewport `min-height: 0`, щоб сторінка могла займати залишок висоти без нескінченного росту. */
-const isWordleStreamRoute = computed(
+/** Nadle stream + Nadraw: дати viewport `min-height: 0`, щоб сторінка могла займати залишок висоти без нескінченного росту. */
+const isNadleStreamRoute = computed(
   () =>
-    route.name === 'wordle-streamer' ||
+    route.name === 'nadle-streamer' ||
     route.name === 'app-streamer' ||
-    route.name === 'gartic-show',
+    route.name === 'nadraw-show',
 )
 
 const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route) : 'join'))
@@ -64,7 +64,7 @@ const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route
 const showChrome = computed(() => !isEatRoute.value || currentEatView.value !== 'overlay')
 
 const showSiteFooter = computed(
-  () => showChrome.value && route.name !== 'call' && route.name !== 'gartic-show',
+  () => showChrome.value && route.name !== 'call' && route.name !== 'nadraw-show',
 )
 
 /** Стабільний ключ для Transition: без зайвих анімацій на дрібні зміни query (наприклад ?channel=). */
@@ -293,7 +293,7 @@ onMounted(() => {
           class="app-shell-main__viewport"
           :class="{
             'app-shell-main__viewport--chrome': showChrome,
-            'app-shell-main__viewport--wordle': isWordleStreamRoute,
+            'app-shell-main__viewport--nadle': isNadleStreamRoute,
           }"
         >
           <div class="app-shell-route-stack">

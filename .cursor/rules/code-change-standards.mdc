@@ -36,8 +36,8 @@ During coding:
 
 Validation rules:
 - After every meaningful change, run the narrowest relevant checks first.
-- If touching Wordle:
-  - run `npm run test:wordle`
+- If touching nadle (word-guessing game):
+  - run `npm run test:nadle`
 - If touching eat-first pure logic / tests:
   - run `npm run test:eat-first`
 - If touching shared client pure logic / admin pure logic:

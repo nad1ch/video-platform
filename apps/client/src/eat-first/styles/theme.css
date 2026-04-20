@@ -195,7 +195,7 @@
 
 
 /**
- * Theme transitions + scrollbar: scoped to the /eat page root so Wordle/Call are unaffected.
+ * Theme transitions + scrollbar: scoped to the /eat page root so nadle/Call are unaffected.
  * Semantic colors live in packages/ui-theme (eat-first-theme-vars.css), loaded via `ui-theme` in main.
  */
 .eat-page.eat-first-root,
@@ -327,7 +327,7 @@
   min-width: 0;
 }
 
-/* Stream shell (Wordle / Call / home): навігація зліва, заголовок по центру, дії справа — без логотипа біля назви */
+/* Stream shell (nadle / Call / home): навігація зліва, заголовок по центру, дії справа — без логотипа біля назви */
 .app-shell-header__top--has-center {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -730,8 +730,8 @@
   min-height: min(64vh, 680px);
 }
 
-/* Wordle + Gartic: зона під шапкою без штучної min-height — flex-ланцюг керує висотою. */
-.app-shell-main__viewport--chrome.app-shell-main__viewport--wordle {
+/* Nadle + Nadraw: зона під шапкою без штучної min-height — flex-ланцюг керує висотою. */
+.app-shell-main__viewport--chrome.app-shell-main__viewport--nadle {
   min-height: 0;
 }
 

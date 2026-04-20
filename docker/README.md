@@ -53,7 +53,7 @@ That pattern is usually **ICE / announced address**, not UI or mediasoup app log
 
   ```env
   MEDIASOUP_ANNOUNCED_ADDRESS=192.168.x.x
-  WORDLE_CLIENT_ORIGIN=http://192.168.x.x:5173
+  NADLE_CLIENT_ORIGIN=http://192.168.x.x:5173
   ```
 
   Open the app at **`http://192.168.x.x:5173`**, not `localhost`, so the browser, signaling, and ICE line up. Optional: **`VITE_SIGNALING_URL=ws://192.168.x.x:3000`** in `apps/client/.env.local` for the same host.

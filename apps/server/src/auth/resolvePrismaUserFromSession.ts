@@ -51,10 +51,10 @@ export async function resolvePrismaUserIdFromSession(session: SessionPayload): P
   return null
 }
 
-/** Wordle room + IRC context: streamer row owned by this user or tied to the same Twitch channel. */
-export async function resolveWordleStreamerContextForUserId(
+/** Nadle room + IRC context: streamer row owned by this user or tied to the same Twitch channel. */
+export async function resolveNadleStreamerContextForUserId(
   userId: string,
-): Promise<{ wordleStreamerId: string; wordleStreamerName: string } | null> {
+): Promise<{ nadleStreamerId: string; nadleStreamerName: string } | null> {
   if (!isDatabaseConfigured()) {
     return null
   }
@@ -80,5 +80,5 @@ export async function resolveWordleStreamerContextForUserId(
   if (!row) {
     return null
   }
-  return { wordleStreamerId: row.id, wordleStreamerName: row.name }
+  return { nadleStreamerId: row.id, nadleStreamerName: row.name }
 }

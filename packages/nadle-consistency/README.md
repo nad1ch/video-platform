@@ -1,16 +1,16 @@
-# Wordle consistency tests
+# nadle consistency tests
 
 Runs the same fixtures against:
 
-- `apps/client/src/wordle/wordleLogic.ts` — `normalizeWord`, `computeFeedback`
-- `apps/server/src/wordle/wordleLogic.ts` — `normalizeWord`, `computeFeedback`
+- `apps/client/src/nadle/nadleLogic.ts` — `normalizeWord`, `computeFeedback`
+- `apps/server/src/nadle/nadleLogic.ts` — `normalizeWord`, `computeFeedback`
 
 ## Run
 
 From repo root:
 
 ```bash
-npm run test:wordle
+npm run test:nadle
 ```
 
 ## Ground truth
@@ -20,4 +20,4 @@ npm run test:wordle
 - **computeFeedback:** Equal code-point length for `secret` / `guess` → identical feedback on both sides; includes one surrogate-pair row.
 - **Documented difference:** Server `computeFeedback` throws on length mismatch; client returns an array sized to the guess (avoid mismatched lengths in product code).
 
-Add new edge cases to `wordle-logic.test.ts` whenever Wordle rules change.
+Add new edge cases to `nadle-logic.test.ts` whenever nadle rules change.

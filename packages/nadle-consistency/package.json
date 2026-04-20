@@ -1,12 +1,12 @@
 {
-  "name": "wordle-consistency",
+  "name": "nadle-consistency",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "vitest run"
   },
   "devDependencies": {
-    "wordle-core": "file:../wordle-core",
+    "nadle-core": "file:../nadle-core",
     "typescript": "~6.0.2",
     "vitest": "^3.2.4"
   }

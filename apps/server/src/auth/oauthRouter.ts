@@ -4,7 +4,7 @@ import {
   signOAuthReturnPath,
   signSession,
   verifyOAuthReturnPath,
-  WORDLE_SESSION_MAX_AGE_SEC,
+  NADLE_SESSION_MAX_AGE_SEC,
 } from './session/sessionJwt'
 import { clearGlobalSessionCookie, setGlobalSessionCookie } from './session/cookies'
 import { handleGetApiAuthMe, handleGetApiMeLegacy } from './session/me'
@@ -131,7 +131,7 @@ oauthRouter.get('/twitch/callback', async (req: Request, res: Response) => {
     await persistTwitchOAuthUser(profile)
     /** `role` + `twitch_id` from {@link withSessionRole} → `resolveUserRole` (Helix `id` vs ADMIN_TWITCH_IDS). */
     const finalUser = withSessionRole(profile)
-    const token = signSession(finalUser, WORDLE_SESSION_MAX_AGE_SEC)
+    const token = signSession(finalUser, NADLE_SESSION_MAX_AGE_SEC)
     setGlobalSessionCookie(res, token)
     const path = verifyOAuthReturnPath(state)
     res.redirect(302, buildPostLoginRedirectUrl(path))
@@ -176,7 +176,7 @@ oauthRouter.get('/google/callback', async (req: Request, res: Response) => {
     const profile = await getUserProfile(accessToken)
     await persistGoogleOAuthUser(profile)
     const finalUser = withSessionRole(profile)
-    const token = signSession(finalUser, WORDLE_SESSION_MAX_AGE_SEC)
+    const token = signSession(finalUser, NADLE_SESSION_MAX_AGE_SEC)
     setGlobalSessionCookie(res, token)
     const path = verifyOAuthReturnPath(state)
     res.redirect(302, buildPostLoginRedirectUrl(path))

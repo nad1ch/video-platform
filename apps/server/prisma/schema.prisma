@@ -11,7 +11,7 @@ datasource db {
 
 model Streamer {
   id        String   @id @default(cuid())
-  /// Public slug for `/wordle/:name` (Twitch-style login, lowercase).
+  /// Public slug for `/nadle/:name` (Twitch-style login, lowercase).
   name      String   @unique
   twitchId  String   @unique
   username  String   @unique
@@ -22,13 +22,13 @@ model Streamer {
   members   User[]   @relation("StreamerMembers")
   gameRounds          GameRound[]
   userStreamerStats   UserStreamerStats[]
-  garticPrompts       GarticPrompt[]
+  nadrawPrompts       NadrawPrompt[]
 
   @@index([ownerId])
 }
 
 /// Crowdsourced drawing-game prompts; `!add` creates unapproved rows for the streamer to moderate.
-model GarticPrompt {
+model NadrawPrompt {
   id          String   @id @default(cuid())
   streamerId  String
   streamer    Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
@@ -46,6 +46,7 @@ model GarticPrompt {
 
   @@index([streamerId, approved])
   @@index([streamerId, normalizedText])
+  @@map("NadrawPrompt")
 }
 
 model User {
@@ -69,7 +70,7 @@ model User {
   @@index([streamerId])
 }
 
-// Wordle stats per registered user per streamer room.
+// Nadle stats per registered user per streamer room.
 model UserStreamerStats {
   id          String   @id @default(cuid())
   userId      String
@@ -97,7 +98,7 @@ model UserStats {
   updatedAt   DateTime @updatedAt
 }
 
-// Wordle stream round snapshot; participant userId strings match gameStore (session id or Twitch IRC id).
+// Nadle stream round snapshot; participant userId strings match gameStore (session id or Twitch IRC id).
 model GameRound {
   id           String        @id @default(cuid())
   streamerId String?

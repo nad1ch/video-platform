@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const clientRoot = path.resolve(__dirname, '..')
-const rawDir = path.join(clientRoot, 'src/wordle/dictionary/raw')
+const rawDir = path.join(clientRoot, 'src/nadle/dictionary/raw')
 const dicPath = path.join(rawDir, 'uk_UA.dic')
 const freqPath = path.join(rawDir, 'uk_opensubtitles_50k.txt')
 

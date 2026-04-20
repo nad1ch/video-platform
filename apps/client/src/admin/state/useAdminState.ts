@@ -79,7 +79,7 @@ export function useAdminUsersState(): {
 export type AdminStatsPayload = {
   databaseConfigured?: boolean
   userCount?: number
-  wordleRounds?: number
+  nadleRounds?: number
   totalWinsRecorded?: number
   totalGamesPlayed?: number
   topWins?: { userId: string; displayName: string; wins: number }[]

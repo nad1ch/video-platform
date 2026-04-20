@@ -58,10 +58,10 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgresql://streamassist:streamassist@db:5432/streamassist
       ADMIN_EMAILS: admin@local.streamassist
-      WORDLE_JWT_SECRET: local-docker-dev-secret-min-16-chars
+      NADLE_JWT_SECRET: local-docker-dev-secret-min-16-chars
       AUTH_JWT_SECRET: local-docker-dev-secret-min-16-chars
       # Override in docker/.env when you open the SPA at http://<LAN-IP>:5173 (CORS / redirects).
-      WORDLE_CLIENT_ORIGIN: ${WORDLE_CLIENT_ORIGIN:-http://localhost:5173}
+      NADLE_CLIENT_ORIGIN: ${NADLE_CLIENT_ORIGIN:-http://localhost:5173}
       TWITCH_AUTH_REDIRECT_URI: http://localhost:3000/api/auth/twitch/callback
       GOOGLE_OAUTH_REDIRECT_URI: http://localhost:3000/api/auth/google/callback
       # Docker: set to host LAN IP if remote video is black while signaling works (see docker/README.md).

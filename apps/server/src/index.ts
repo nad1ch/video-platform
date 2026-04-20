@@ -11,14 +11,14 @@ import { corsAllowedOrigins } from './auth/clientOrigin'
 import { mountGlobalAuth } from './auth/oauthRouter'
 import { mountAdminRoutes } from './adminRouter'
 import { mountLeaderboardRoutes } from './leaderboardRouter'
-import { mountStreamerApiRoutes } from './wordle/streamerApiRouter'
-import { mountTwitchWordleAuth } from './wordle/twitchAuthRouter'
-import { startTwitchChatIngest, stopTwitchChatIngest } from './wordle/tmiChat'
-import { attachWordleSocketServer } from './wordle/wordleSocket'
+import { mountStreamerApiRoutes } from './nadle/streamerApiRouter'
+import { mountTwitchNadleAuth } from './nadle/twitchAuthRouter'
+import { startTwitchChatIngest, stopTwitchChatIngest } from './nadle/tmiChat'
+import { attachNadleSocketServer } from './nadle/nadleSocket'
 import { attachEatFirstSocketServer } from './eatFirst/broadcast'
 import { mountEatFirstRoutes } from './eatFirst/router'
-import { attachGarticShowSocketServer } from './gartic-show/garticSocket'
-import { mountGarticShowRoutes } from './gartic-show/garticRouter'
+import { attachNadrawShowSocketServer } from './nadraw-show/nadrawSocket'
+import { mountNadrawShowRoutes } from './nadraw-show/nadrawRouter'
 
 async function bootstrap(): Promise<void> {
   let shuttingDown = false
@@ -64,14 +64,14 @@ async function bootstrap(): Promise<void> {
   const server = http.createServer(app)
 
   const wssSignaling = new WebSocketServer({ noServer: true })
-  const wssWordle = new WebSocketServer({ noServer: true })
+  const wssNadle = new WebSocketServer({ noServer: true })
   const wssEatFirst = new WebSocketServer({ noServer: true })
-  const wssGarticShow = new WebSocketServer({ noServer: true })
+  const wssNadrawShow = new WebSocketServer({ noServer: true })
 
   attachSocketServer(wssSignaling, roomManager)
-  attachWordleSocketServer(wssWordle)
+  attachNadleSocketServer(wssNadle)
   attachEatFirstSocketServer(wssEatFirst)
-  attachGarticShowSocketServer(wssGarticShow)
+  attachNadrawShowSocketServer(wssNadrawShow)
 
   server.on('upgrade', (request, socket, head) => {
     const host = request.headers.host ?? 'localhost'
@@ -84,16 +84,16 @@ async function bootstrap(): Promise<void> {
       return
     }
 
-    if (pathname === '/wordle-ws') {
-      wssWordle.handleUpgrade(request, socket, head, (ws) => {
-        wssWordle.emit('connection', ws, request)
+    if (pathname === '/nadle-ws') {
+      wssNadle.handleUpgrade(request, socket, head, (ws) => {
+        wssNadle.emit('connection', ws, request)
       })
       return
     }
 
-    if (pathname === '/gartic-show-ws') {
-      wssGarticShow.handleUpgrade(request, socket, head, (ws) => {
-        wssGarticShow.emit('connection', ws, request)
+    if (pathname === '/nadraw-show-ws') {
+      wssNadrawShow.handleUpgrade(request, socket, head, (ws) => {
+        wssNadrawShow.emit('connection', ws, request)
       })
       return
     }
@@ -110,11 +110,11 @@ async function bootstrap(): Promise<void> {
 
   mountGlobalAuth(app)
   mountStreamerApiRoutes(app)
-  mountTwitchWordleAuth(app)
+  mountTwitchNadleAuth(app)
   mountLeaderboardRoutes(app)
   mountAdminRoutes(app)
   mountEatFirstRoutes(app)
-  mountGarticShowRoutes(app)
+  mountNadrawShowRoutes(app)
 
   app.get('/health', (_req, res) => {
     res.json({
@@ -124,7 +124,7 @@ async function bootstrap(): Promise<void> {
   })
 
   void startTwitchChatIngest().catch((err) => {
-    console.error('[wordle] startTwitchChatIngest failed', err)
+    console.error('[nadle] startTwitchChatIngest failed', err)
   })
 
   const shutdown = (): void => {
@@ -135,7 +135,7 @@ async function bootstrap(): Promise<void> {
     console.info('Server shutting down…')
 
     void stopTwitchChatIngest().catch((err) => {
-      console.error('[wordle] stopTwitchChatIngest failed', err)
+      console.error('[nadle] stopTwitchChatIngest failed', err)
     })
 
     try {
@@ -154,8 +154,8 @@ async function bootstrap(): Promise<void> {
     }
 
     closeWss(wssEatFirst, 'eat-first', () => {
-      closeWss(wssGarticShow, 'gartic-show', () => {
-        closeWss(wssWordle, 'wordle', () => {
+      closeWss(wssNadrawShow, 'nadraw-show', () => {
+        closeWss(wssNadle, 'nadle', () => {
           closeWss(wssSignaling, 'signaling', () => {
             server.close((httpErr) => {
               if (httpErr) {

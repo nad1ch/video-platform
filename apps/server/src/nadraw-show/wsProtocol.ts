@@ -1,27 +1,27 @@
 /**
- * WebSocket message types for Nadraw (namespaced `gartic:*`).
+ * WebSocket message types for Nadraw (namespaced `nadraw:*`).
  */
-export const GarticWs = {
-  state: 'gartic:state',
-  session: 'gartic:session',
-  twitchChat: 'gartic:twitch-chat',
-  guessFeedback: 'gartic:guess-feedback',
-  draw: 'gartic:draw',
-  canvasClear: 'gartic:canvas-clear',
-  error: 'gartic:error',
+export const NadrawWs = {
+  state: 'nadraw:state',
+  session: 'nadraw:session',
+  twitchChat: 'nadraw:twitch-chat',
+  guessFeedback: 'nadraw:guess-feedback',
+  draw: 'nadraw:draw',
+  canvasClear: 'nadraw:canvas-clear',
+  error: 'nadraw:error',
   ping: 'ping',
   /** Client → server */
-  hostStartRound: 'gartic:host-start-round',
-  hostAckNextRound: 'gartic:host-ack-next-round',
-  hostClearRound: 'gartic:host-clear-round',
+  hostStartRound: 'nadraw:host-start-round',
+  hostAckNextRound: 'nadraw:host-ack-next-round',
+  hostClearRound: 'nadraw:host-clear-round',
   /** Host: wipe drawing only; does not end the round or session. */
-  hostClearCanvas: 'gartic:host-clear-canvas',
-  hostDraw: 'gartic:host-draw',
+  hostClearCanvas: 'nadraw:host-clear-canvas',
+  hostDraw: 'nadraw:host-draw',
 } as const
 
 export type GamePhase = 'idle' | 'drawing_locked' | 'drawing_active' | 'revealed' | 'between_rounds'
 
-export type GarticStatePayload = {
+export type NadrawStatePayload = {
   streamerId: string
   phase: GamePhase
   /** Full secret word — only streamer control connections receive this while the round is active. */

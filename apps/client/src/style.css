@@ -114,162 +114,162 @@ html.sa-call-route .app-shell-route-stack {
 }
 
 /**
- * Wordle stream: на desktop сторінка живе у viewport-height shell, а на <=1200px
+ * Nadle stream: на desktop сторінка живе у viewport-height shell, а на <=1200px
  * повертається в звичайний document flow, щоб контент міг штовхати футер вниз.
- * Клас додає WordleStreamPage.vue.
+ * Клас додає NadleStreamPage.vue.
  */
-html.sa-wordle-route {
+html.sa-nadle-route {
   height: 100%;
 }
 
-html.sa-wordle-route body {
+html.sa-nadle-route body {
   height: 100%;
   margin: 0;
 }
 
-html.sa-wordle-route #app,
-html.sa-wordle-route .app-root {
+html.sa-nadle-route #app,
+html.sa-nadle-route .app-root {
   height: 100%;
   min-height: 0;
 }
 
-html.sa-wordle-route .page-stack {
+html.sa-nadle-route .page-stack {
   min-height: 0;
   height: 100%;
 }
 
-html.sa-wordle-route .app-layout {
+html.sa-nadle-route .app-layout {
   min-height: 0;
   height: 100%;
 }
 
-html.sa-wordle-route .app-shell-main {
+html.sa-nadle-route .app-shell-main {
   min-height: 0 !important;
 }
 
-html.sa-wordle-route .app-shell-main__viewport {
+html.sa-nadle-route .app-shell-main__viewport {
   min-height: 0 !important;
   flex: 1 1 auto;
 }
 
-html.sa-wordle-route .app-shell-route-stack {
+html.sa-nadle-route .app-shell-route-stack {
   min-height: 0;
   height: 100%;
 }
 
 @media (max-width: 1200px) {
-  html.sa-wordle-route,
-  html.sa-wordle-route body {
+  html.sa-nadle-route,
+  html.sa-nadle-route body {
     height: auto;
     min-height: 100%;
     overflow: visible;
   }
 
-  html.sa-wordle-route #app,
-  html.sa-wordle-route .app-root,
-  html.sa-wordle-route .page-stack,
-  html.sa-wordle-route .app-layout,
-  html.sa-wordle-route .app-shell-main,
-  html.sa-wordle-route .app-shell-main__viewport,
-  html.sa-wordle-route .app-shell-route-stack {
+  html.sa-nadle-route #app,
+  html.sa-nadle-route .app-root,
+  html.sa-nadle-route .page-stack,
+  html.sa-nadle-route .app-layout,
+  html.sa-nadle-route .app-shell-main,
+  html.sa-nadle-route .app-shell-main__viewport,
+  html.sa-nadle-route .app-shell-route-stack {
     height: auto;
     max-height: none;
     overflow: visible;
   }
 
-  html.sa-wordle-route .page-stack {
+  html.sa-nadle-route .page-stack {
     min-height: 100vh;
   }
 
-  html.sa-wordle-route .app-shell-main,
-  html.sa-wordle-route .app-shell-main__viewport,
-  html.sa-wordle-route .app-shell-route-stack,
-  html.sa-wordle-route .app-shell-main__viewport > * {
+  html.sa-nadle-route .app-shell-main,
+  html.sa-nadle-route .app-shell-main__viewport,
+  html.sa-nadle-route .app-shell-route-stack,
+  html.sa-nadle-route .app-shell-main__viewport > * {
     flex: 0 0 auto;
     min-height: 0;
   }
 }
 
 @media (min-width: 1201px) {
-  html.sa-wordle-route {
+  html.sa-nadle-route {
     overflow: hidden;
   }
 
-  html.sa-wordle-route body {
+  html.sa-nadle-route body {
     overflow: hidden;
   }
 
-  html.sa-wordle-route #app,
-  html.sa-wordle-route .app-root {
+  html.sa-nadle-route #app,
+  html.sa-nadle-route .app-root {
     overflow: hidden;
     max-height: 100%;
   }
 
-  html.sa-wordle-route .app-shell-main__viewport {
+  html.sa-nadle-route .app-shell-main__viewport {
     overflow: hidden;
   }
 
-  html.sa-wordle-route .app-shell-route-stack {
+  html.sa-nadle-route .app-shell-route-stack {
     overflow: hidden;
   }
 }
 
 /**
  * Nadraw: always locked to the viewport (all breakpoints). Chat scrolls inside the panel;
- * no document vertical scroll. Class toggled in GarticShowPage.vue.
+ * no document vertical scroll. Class toggled in NadrawShowPage.vue.
  */
-html.sa-gartic-route {
+html.sa-nadraw-route {
   height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
 }
 
-html.sa-gartic-route body {
+html.sa-nadraw-route body {
   height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
   margin: 0;
 }
 
-html.sa-gartic-route #app,
-html.sa-gartic-route .app-root {
+html.sa-nadraw-route #app,
+html.sa-nadraw-route .app-root {
   height: 100%;
   max-height: 100%;
   min-height: 0;
   overflow: hidden;
 }
 
-html.sa-gartic-route .page-stack {
+html.sa-nadraw-route .page-stack {
   min-height: 0;
   height: 100%;
   max-height: 100%;
 }
 
-html.sa-gartic-route .app-layout {
+html.sa-nadraw-route .app-layout {
   min-height: 0;
   height: 100%;
   max-height: 100%;
 }
 
-html.sa-gartic-route .app-shell-main {
+html.sa-nadraw-route .app-shell-main {
   min-height: 0 !important;
   flex: 1 1 auto;
 }
 
-html.sa-gartic-route .app-shell-main__viewport {
+html.sa-nadraw-route .app-shell-main__viewport {
   min-height: 0 !important;
   flex: 1 1 auto;
   overflow: hidden;
 }
 
-html.sa-gartic-route .app-shell-route-stack {
+html.sa-nadraw-route .app-shell-route-stack {
   min-height: 0;
   height: 100%;
   max-height: 100%;
   overflow: hidden;
 }
 
-html.sa-gartic-route .app-shell-route-stack > * {
+html.sa-nadraw-route .app-shell-route-stack > * {
   min-height: 0;
   flex: 1 1 0;
   max-height: 100%;

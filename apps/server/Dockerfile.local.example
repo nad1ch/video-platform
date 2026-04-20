@@ -4,8 +4,8 @@
 #   cp apps/server/Dockerfile.local.example apps/server/Dockerfile.local
 #
 # Build context MUST be the repo root (see docker/docker-compose.local.yml).
-# Server depends on workspace package `wordle-core` at ../../packages/wordle-core;
-# from WORKDIR /app that resolves to /packages/wordle-core (POSIX /app/../../packages).
+# Server depends on workspace package `nadle-core` at ../../packages/nadle-core;
+# from WORKDIR /app that resolves to /packages/nadle-core (POSIX /app/../../packages).
 # =============================================================================
 
 FROM node:20-bullseye
@@ -20,8 +20,8 @@ RUN apt-get update && apt-get install -y \
   ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-# Linked from apps/server via file:../../packages/wordle-core
-COPY packages/wordle-core /packages/wordle-core
+# Linked from apps/server via file:../../packages/nadle-core
+COPY packages/nadle-core /packages/nadle-core
 
 WORKDIR /app
 

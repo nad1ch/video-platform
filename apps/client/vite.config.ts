@@ -17,7 +17,7 @@ const devWsProxyTarget = devApiProxyTarget.startsWith('https://')
 
 /** Map `/slug` and `/slug/` → `/slug/index.html` so `public/` marketing pages load instead of SPA `index.html`. */
 function seoPublicMarketingIndexPlugin(): Plugin {
-  const slugs = ['video-calls-for-streamers', 'twitch-wordle-game', 'stream-overlay-tools'] as const
+  const slugs = ['video-calls-for-streamers', 'twitch-nadle-game', 'stream-overlay-tools'] as const
   return {
     name: 'seo-public-marketing-index',
     configureServer(server) {
@@ -59,7 +59,7 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/app/, ''),
       },
-      '/wordle-ws': {
+      '/nadle-ws': {
         target: devWsProxyTarget,
         ws: true,
       },
@@ -67,12 +67,12 @@ export default defineConfig({
         target: devWsProxyTarget,
         ws: true,
       },
-      '/gartic-show-ws': {
+      '/nadraw-show-ws': {
         target: devWsProxyTarget,
         ws: true,
         changeOrigin: true,
       },
-      '/app/wordle-ws': {
+      '/app/nadle-ws': {
         target: devWsProxyTarget,
         ws: true,
         rewrite: (p) => p.replace(/^\/app/, ''),
@@ -82,7 +82,7 @@ export default defineConfig({
         ws: true,
         rewrite: (p) => p.replace(/^\/app/, ''),
       },
-      '/app/gartic-show-ws': {
+      '/app/nadraw-show-ws': {
         target: devWsProxyTarget,
         ws: true,
         changeOrigin: true,
@@ -103,7 +103,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'src'),
       // Hoisted to repo root node_modules; Vite dev resolves from apps/client and misses it without an alias.
-      'wordle-core': path.resolve(__dirname, '../../packages/wordle-core/index.mjs'),
+      'nadle-core': path.resolve(__dirname, '../../packages/nadle-core/index.mjs'),
       'ui-theme': path.resolve(__dirname, '../../packages/ui-theme/src/index.css'),
       'call-core/audio': path.resolve(__dirname, '../../packages/call-core/src/audio/index.ts'),
       'call-core/media': path.resolve(__dirname, '../../packages/call-core/src/media/index.ts'),

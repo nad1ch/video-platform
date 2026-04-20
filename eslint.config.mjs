@@ -60,7 +60,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['packages/wordle-core/**/*.cjs'],
+    files: ['packages/nadle-core/**/*.cjs'],
     languageOptions: {
       globals: globals.node,
     },
