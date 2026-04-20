@@ -28,14 +28,14 @@
     "tagline": "Interaktywne narzędzia do streamów",
     "callTitle": "Połączenie wideo",
     "callDesc": "Dołącz do pokoju (demo)",
-    "nadleTitle": "nadle",
+    "nadleTitle": "Nadle",
     "nadleDesc": "Graj z czatem Twitch",
     "eatTitle": "Eat First",
     "eatDesc": "Gra głosowa na stream (nakładka)"
   },
   "routes": {
     "call": "Połączenie wideo",
-    "nadle": "nadle",
+    "nadle": "Nadle",
     "admin": "Admin",
     "nadrawShow": "Nadraw"
   },
@@ -128,6 +128,7 @@
     "canvasEmptySubtitleStreamer": "Streamer rozpoczyna rundę",
     "canvasEmptyTitleViewer": "Czekamy na streamera…",
     "canvasEmptySubtitleViewer": "Runda pojawi się tutaj.",
+    "canvasIdleOverlayKicker": "Nadraw",
     "gameStatusIdle": "⏸ Czekamy na start",
     "gameStatusLocked": "🔒 Zgadywanie wkrótce",
     "gameStatusActive": "🟢 Czat zgaduje",
@@ -241,7 +242,7 @@
     "debugRefreshing": "…"
   },
   "nadleUi": {
-    "eyebrow": "nadle",
+    "eyebrow": "Nadle",
     "roundPill": "Runda #{n} · {len} liter",
     "attemptsPill": "{cur} z {max} prób",
     "logout": "Wyloguj",
@@ -308,7 +309,7 @@
     "navCallSoonAria": "Call — jeszcze niedostępne",
     "navCallTitle": "Połączenie wideo",
     "navCall": "Call",
-    "navNadle": "nadle",
+    "navNadle": "Nadle",
     "navNadrawShow": "Nadraw",
     "navEat": "Eat",
     "navEatDisabledTitle": "Eat First — tymczasowo wyłączone w nawigacji",

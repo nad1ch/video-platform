@@ -194,13 +194,15 @@ const gameFeelLine = computed(() => {
   return `🟢 ${t('nadrawShow.gameFeelRound')}`
 })
 
-const showCanvasIdleOverlay = computed(() => nadrawState.value?.phase === 'idle')
+/** Viewers: lobby veil until server state arrives or round is idle (host sees setup panel instead). */
+const viewerIdleVeil = computed(() => {
+  if (showHostChrome.value) {
+    return false
+  }
+  const st = nadrawState.value
+  return st === null || st.phase === 'idle'
+})
 
-const viewerIdleVeil = computed(
-  () => showCanvasIdleOverlay.value && !showHostChrome.value,
-)
-
-/** Viewer idle veil; host sees round setup on the same overlay layer. */
 const canvasIdleOverlayLine = computed(() => t('nadrawShow.canvasEmptyTitleViewer'))
 
 const roundSetupStartDisabled = computed(
@@ -652,14 +654,99 @@ watch(
           </div>
           <div
             v-else-if="viewerIdleVeil"
-            class="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-2xl bg-slate-950/88 px-4 backdrop-blur-[2px]"
+            class="nadraw-idle-veil pointer-events-none absolute inset-0 z-30 flex items-center justify-center overflow-hidden rounded-2xl px-4"
+            role="status"
+            aria-live="polite"
           >
-            <p class="text-center text-base font-semibold text-violet-100/95 md:text-lg">
-              {{ canvasIdleOverlayLine }}
-            </p>
+            <div
+              class="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-950/92 via-slate-950/88 to-indigo-950/92"
+              aria-hidden="true"
+            />
+            <div
+              class="pointer-events-none absolute inset-0 opacity-[0.14] [background-image:radial-gradient(circle_at_center,rgba(255,255,255,0.9)_1px,transparent_1.5px)] [background-size:14px_14px]"
+              aria-hidden="true"
+            />
+            <div
+              class="nadraw-idle-veil__blob nadraw-idle-veil__blob--a pointer-events-none absolute -left-[12%] top-[18%] h-[min(42vw,14rem)] w-[min(42vw,14rem)] rounded-full bg-violet-500/35 blur-3xl"
+              aria-hidden="true"
+            />
+            <div
+              class="nadraw-idle-veil__blob nadraw-idle-veil__blob--b pointer-events-none absolute -right-[8%] bottom-[12%] h-[min(48vw,16rem)] w-[min(48vw,16rem)] rounded-full bg-indigo-500/30 blur-3xl"
+              aria-hidden="true"
+            />
+            <div
+              class="nadraw-idle-veil__blob nadraw-idle-veil__blob--c pointer-events-none absolute left-[22%] bottom-[28%] h-[min(28vw,9rem)] w-[min(28vw,9rem)] rounded-full bg-fuchsia-500/20 blur-3xl"
+              aria-hidden="true"
+            />
+            <div
+              class="relative z-10 w-full max-w-md rounded-2xl border border-violet-400/25 bg-slate-950/55 px-6 py-8 shadow-[0_0_0_1px_rgba(139,92,246,0.12),0_24px_48px_rgba(0,0,0,0.45)] backdrop-blur-md md:px-8 md:py-9"
+            >
+              <p
+                class="text-center text-[0.65rem] font-extrabold uppercase tracking-[0.2em] text-violet-300/95 md:text-[0.7rem]"
+              >
+                {{ t('nadrawShow.canvasIdleOverlayKicker') }}
+              </p>
+              <p class="mt-5 text-center text-4xl drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]" aria-hidden="true">
+                🎨
+              </p>
+              <p
+                class="mt-4 text-center text-base font-bold leading-snug text-white [text-shadow:0_1px_0_rgb(0_0_0),0_2px_14px_rgb(0_0_0)] md:text-lg"
+              >
+                {{ canvasIdleOverlayLine }}
+              </p>
+              <p class="mt-2 text-center text-sm font-medium leading-relaxed text-violet-100/85 md:text-[0.95rem]">
+                {{ t('nadrawShow.canvasEmptySubtitleViewer') }}
+              </p>
+            </div>
           </div>
         </div>
       </main>
     </div>
   </div>
 </template>
+
+<style scoped>
+@keyframes nadraw-idle-float-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(4%, -3%, 0) scale(1.06);
+  }
+}
+
+@keyframes nadraw-idle-float-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-5%, 4%, 0) scale(1.05);
+  }
+}
+
+@keyframes nadraw-idle-float-c {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translate3d(3%, 5%, 0) scale(1.08);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .nadraw-idle-veil__blob--a {
+    animation: nadraw-idle-float-a 14s ease-in-out infinite;
+  }
+  .nadraw-idle-veil__blob--b {
+    animation: nadraw-idle-float-b 18s ease-in-out infinite;
+  }
+  .nadraw-idle-veil__blob--c {
+    animation: nadraw-idle-float-c 12s ease-in-out infinite;
+  }
+}
+</style>

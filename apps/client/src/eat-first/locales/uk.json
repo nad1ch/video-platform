@@ -28,14 +28,14 @@
     "tagline": "Інтерактивні інструменти для стрімів",
     "callTitle": "Відеодзвінок",
     "callDesc": "Приєднатись до кімнати (демо)",
-    "nadleTitle": "Надлі",
+    "nadleTitle": "Nadle",
     "nadleDesc": "Гра з чатом Twitch",
     "eatTitle": "Eat First",
     "eatDesc": "Голосувальна гра для стріму (оверлей)"
   },
   "routes": {
     "call": "Відеодзвінок",
-    "nadle": "Надлі",
+    "nadle": "Nadle",
     "admin": "Адмін",
     "nadrawShow": "Nadraw"
   },
@@ -128,6 +128,7 @@
     "canvasEmptySubtitleStreamer": "Стрімер має почати раунд",
     "canvasEmptyTitleViewer": "Чекаємо стрімера…",
     "canvasEmptySubtitleViewer": "Раунд з’явиться тут.",
+    "canvasIdleOverlayKicker": "Nadraw",
     "gameStatusIdle": "⏸ Очікуємо старт",
     "gameStatusLocked": "🔒 Відгадування скоро відкриється",
     "gameStatusActive": "🟢 Чат відгадує",
@@ -241,7 +242,7 @@
     "debugRefreshing": "…"
   },
   "nadleUi": {
-    "eyebrow": "Надлі",
+    "eyebrow": "Nadle",
     "roundPill": "Раунд {n} · {len} літер",
     "attemptsPill": "{cur} з {max} спроб",
     "logout": "Вийти",
@@ -308,7 +309,7 @@
     "navCallSoonAria": "Call — поки недоступно",
     "navCallTitle": "Відеодзвінок",
     "navCall": "Дзвінок",
-    "navNadle": "Надлі",
+    "navNadle": "Nadle",
     "navNadrawShow": "Nadraw",
     "navEat": "Eat",
     "navEatDisabledTitle": "Eat First — поки вимкнено в навігації",
@@ -356,7 +357,7 @@
     "authBackHome": "На головну",
     "authNeedLogin": "Увійдіть, щоб відкрити цю сторінку.",
     "authNeedLoginHeaderHint": "Натисни «Увійти» зверху справа.",
-    "authHomeHint": "Twitch або Google — та сама сесія (cookie), що й для Надлі через Twitch."
+    "authHomeHint": "Twitch або Google — та сама сесія (cookie), що й для Nadle через Twitch."
   },
   "onboarding": {
     "openGuide": "Як користуватись",

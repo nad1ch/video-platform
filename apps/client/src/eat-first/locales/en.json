@@ -28,14 +28,14 @@
     "tagline": "Interactive tools for streams",
     "callTitle": "Video call",
     "callDesc": "Join a room (demo)",
-    "nadleTitle": "nadle",
+    "nadleTitle": "Nadle",
     "nadleDesc": "Play with Twitch chat",
     "eatTitle": "Eat First",
     "eatDesc": "Stream voting game (overlay)"
   },
   "routes": {
     "call": "Video call",
-    "nadle": "nadle",
+    "nadle": "Nadle",
     "admin": "Admin",
     "nadrawShow": "Nadraw"
   },
@@ -128,6 +128,7 @@
     "canvasEmptySubtitleStreamer": "The streamer starts the round",
     "canvasEmptyTitleViewer": "Waiting for the streamer…",
     "canvasEmptySubtitleViewer": "The round will appear here.",
+    "canvasIdleOverlayKicker": "Nadraw",
     "gameStatusIdle": "⏸ Waiting for start",
     "gameStatusLocked": "🔒 Guessing opens soon",
     "gameStatusActive": "🟢 Chat is guessing",
@@ -241,7 +242,7 @@
     "debugRefreshing": "…"
   },
   "nadleUi": {
-    "eyebrow": "nadle",
+    "eyebrow": "Nadle",
     "roundPill": "Round #{n} · {len} letters",
     "attemptsPill": "{cur} / {max} tries",
     "logout": "Log out",
@@ -308,7 +309,7 @@
     "navCallSoonAria": "Call — not available yet",
     "navCallTitle": "Video call",
     "navCall": "Call",
-    "navNadle": "nadle",
+    "navNadle": "Nadle",
     "navNadrawShow": "Nadraw",
     "navEat": "Eat",
     "navEatDisabledTitle": "Eat First — disabled in navigation for now",
