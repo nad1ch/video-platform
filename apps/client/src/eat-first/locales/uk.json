@@ -100,7 +100,7 @@
     "gameFeelRound": "Раунд",
     "gameFeelEnd": "Кінець",
     "gameFeelBetween": "Перерва",
-    "breakRoundSummaryNobody": "Ніхто не відгадав слово.",
+    "breakRoundSummaryNobody": "Ніхто не відгадав слово",
     "breakRoundSummaryWinner": "Відгадав(ла): {name}.",
     "breakSessionCompleteTitle": "Сесію завершено.",
     "breakContinueNextRound": "Далі",
@@ -357,7 +357,8 @@
     "authBackHome": "На головну",
     "authNeedLogin": "Увійдіть, щоб відкрити цю сторінку.",
     "authNeedLoginHeaderHint": "Натисни «Увійти» зверху справа.",
-    "authHomeHint": "Twitch або Google — та сама сесія (cookie), що й для Nadle через Twitch."
+    "authHomeHint": "Twitch або Google — та сама сесія (cookie), що й для Nadle через Twitch.",
+    "routeLoadingAria": "Завантаження сторінки"
   },
   "onboarding": {
     "openGuide": "Як користуватись",

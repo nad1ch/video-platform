@@ -100,7 +100,7 @@
     "gameFeelRound": "Runda",
     "gameFeelEnd": "Koniec",
     "gameFeelBetween": "Przerwa",
-    "breakRoundSummaryNobody": "Nikt nie odgadł hasła.",
+    "breakRoundSummaryNobody": "Nikt nie odgadł hasła",
     "breakRoundSummaryWinner": "Odgadł(a): {name}.",
     "breakSessionCompleteTitle": "Sesja zakończona.",
     "breakContinueNextRound": "Dalej",
@@ -357,7 +357,8 @@
     "authBackHome": "Strona główna",
     "authNeedLogin": "Zaloguj się, aby otworzyć tę stronę.",
     "authNeedLoginHeaderHint": "Użyj przycisku logowania w prawym górnym rogu.",
-    "authHomeHint": "Twitch lub Google — ta sama sesja (cookie) co dla nadle (Twitch)."
+    "authHomeHint": "Twitch lub Google — ta sama sesja (cookie) co dla nadle (Twitch).",
+    "routeLoadingAria": "Ładowanie strony"
   },
   "onboarding": {
     "openGuide": "Jak korzystać",

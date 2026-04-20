@@ -8,6 +8,7 @@ import {
 } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { registerEatFirstRouterGuards } from '@/eat-first/router.js'
+import { installRouteNavLoadingGuards, releaseRouteNavLoading } from '@/routeNavLoading'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 
 /** Twitch login slug for `/nadle` → `/nadle/:streamer` redirect and default home link. */
@@ -29,6 +30,7 @@ function seoMarketingStaticRoutes(): RouteRecordRaw[] {
   return SEO_MARKETING_SLUGS.flatMap((slug) => {
     const target = `/${slug}/index.html`
     const beforeEnter = (): false => {
+      releaseRouteNavLoading()
       window.location.replace(target)
       return false
     }
@@ -229,6 +231,7 @@ export const router = createRouter({
   }) satisfies RouterScrollBehavior,
 })
 
+installRouteNavLoadingGuards(router)
 registerEatFirstRouterGuards(router)
 
 function eatViewNeedsStreamAuth(query: Record<string, unknown>): boolean {

@@ -100,7 +100,7 @@
     "gameFeelRound": "Round",
     "gameFeelEnd": "End",
     "gameFeelBetween": "Break",
-    "breakRoundSummaryNobody": "Nobody guessed the word.",
+    "breakRoundSummaryNobody": "Nobody guessed the word",
     "breakRoundSummaryWinner": "Guessed by {name}.",
     "breakSessionCompleteTitle": "Session complete.",
     "breakContinueNextRound": "Continue",
@@ -357,7 +357,8 @@
     "authBackHome": "Home",
     "authNeedLogin": "Sign in to open that page.",
     "authNeedLoginHeaderHint": "Use Sign up in the top-right.",
-    "authHomeHint": "Use Twitch or Google — same session as nadle (Twitch) when you log in there."
+    "authHomeHint": "Use Twitch or Google — same session as nadle (Twitch) when you log in there.",
+    "routeLoadingAria": "Loading page"
   },
   "onboarding": {
     "openGuide": "How to use",

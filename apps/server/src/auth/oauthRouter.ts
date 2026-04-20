@@ -102,7 +102,15 @@ oauthRouter.get('/twitch', (req: Request, res: Response) => {
   const returnPath = sanitizePostLoginPath(
     typeof req.query.redirect === 'string' ? req.query.redirect : undefined,
   )
-  const state = signOAuthReturnPath(returnPath)
+  let state: string
+  try {
+    state = signOAuthReturnPath(returnPath)
+  } catch (e) {
+    console.error('[auth][twitch] authorize: cannot sign OAuth state (JWT secret?)', e)
+    const msg = e instanceof Error ? e.message : 'Failed to sign OAuth state'
+    res.status(503).type('text/plain').send(msg)
+    return
+  }
   if (isDev) {
     console.log('[auth][twitch] authorize', { redirectUri, returnPath })
   }
@@ -157,7 +165,15 @@ oauthRouter.get('/google', (req: Request, res: Response) => {
   const returnPath = sanitizePostLoginPath(
     typeof req.query.redirect === 'string' ? req.query.redirect : undefined,
   )
-  const state = signOAuthReturnPath(returnPath)
+  let state: string
+  try {
+    state = signOAuthReturnPath(returnPath)
+  } catch (e) {
+    console.error('[auth][google] authorize: cannot sign OAuth state (JWT secret?)', e)
+    const msg = e instanceof Error ? e.message : 'Failed to sign OAuth state'
+    res.status(503).type('text/plain').send(msg)
+    return
+  }
   if (isDev) {
     console.log('[auth][google] authorize', { redirectUri, returnPath })
   }
