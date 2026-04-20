@@ -123,7 +123,7 @@ async function bootstrap(): Promise<void> {
     })
   })
 
-  void startTwitchChatIngest().catch((err) => {
+  void startTwitchChatIngest().catch((err: unknown) => {
     console.error('[nadle] startTwitchChatIngest failed', err)
   })
 
@@ -134,13 +134,13 @@ async function bootstrap(): Promise<void> {
     shuttingDown = true
     console.info('Server shutting down…')
 
-    void stopTwitchChatIngest().catch((err) => {
+    void stopTwitchChatIngest().catch((err: unknown) => {
       console.error('[nadle] stopTwitchChatIngest failed', err)
     })
 
     try {
       roomManager.disposeAllRooms()
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('disposeAllRooms failed', err)
     }
 
@@ -163,7 +163,7 @@ async function bootstrap(): Promise<void> {
               }
               try {
                 worker.close()
-              } catch (err) {
+              } catch (err: unknown) {
                 console.error('worker.close failed', err)
               }
               process.exit(0)
@@ -185,7 +185,7 @@ async function bootstrap(): Promise<void> {
   })
 }
 
-bootstrap().catch((err) => {
+bootstrap().catch((err: unknown) => {
   console.error(err)
   process.exit(1)
 })
