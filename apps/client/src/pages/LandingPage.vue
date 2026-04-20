@@ -1076,11 +1076,11 @@ useLandingCosmicParallax(landingCanvasEl)
 
 .landing-header__brand-mark {
   position: absolute;
-  left: calc(var(--u) * -15);
+  left: calc(var(--u) * -12);
   top: calc(var(--u) * 2.25);
   width: auto;
   height: calc(var(--u) * 48);
-  max-width: calc(var(--u) * 42);
+  max-width: calc(var(--u) * 40);
   object-fit: contain;
   object-position: left center;
   display: block;
@@ -1089,7 +1089,7 @@ useLandingCosmicParallax(landingCanvasEl)
 
 .landing-header__brand-name {
   position: absolute;
-  left: calc(var(--u) * 42);
+  left: calc(var(--u) * 33);
   top: calc(var(--u) * 10.5);
   margin: 0;
   display: grid;
@@ -2000,6 +2000,26 @@ useLandingCosmicParallax(landingCanvasEl)
   }
 }
 
+/*
+ * Desktop artboard (>= 960px): canvas wider than the viewport so side “empty” bands of the 2560 layout are cropped.
+ * Tuned to Figma at ~1024px (aggressive side crop); `1024 * 1.48 / vw` → approaches 1 as the screen widens.
+ * Placed before the `max-width: 960` block so at exactly 960px the stacked layout still wins.
+ */
+@media (min-width: 960px) {
+  .landing__canvas {
+    width: min(2560px, calc(100vw * clamp(1, calc(1024px * 1.48 / 100vw), 1.63)));
+    max-width: none;
+  }
+}
+
+/* Narrow desktop / large tablet landscape: header mark reads oversized vs nav; scale whole lockup. */
+@media (min-width: 961px) and (max-width: 1280px) {
+  .landing-header__brand {
+    transform: scale(0.86);
+    transform-origin: left center;
+  }
+}
+
 @media (max-width: 960px) {
   .landing__canvas {
     --landing-section-gutter: clamp(22px, 4vw, 30px);
@@ -2065,12 +2085,21 @@ useLandingCosmicParallax(landingCanvasEl)
 
   .landing-header__brand {
     --u: 0.72px;
-    width: 119px;
-    height: 40px;
+    width: 100px;
+    height: 34px;
   }
 
   .landing-header__brand-mark {
-    transform: translate(calc(var(--u) * -13.5), calc(var(--u) * 2.25)) scale(3.15, 2.9);
+    height: calc(var(--u) * 40);
+    max-width: calc(var(--u) * 34);
+    transform: translate(calc(var(--u) * -8.5), calc(var(--u) * 1.75));
+  }
+
+  .landing-header__brand-name {
+    left: calc(var(--u) * 28);
+    top: calc(var(--u) * 7.5);
+    font-size: clamp(9px, 2.35vw, 10.5px);
+    line-height: 1.12;
   }
 
   .landing-header__nav {
@@ -2590,18 +2619,51 @@ useLandingCosmicParallax(landingCanvasEl)
     align-items: center;
   }
 
+  /*
+   * <=560px: absolute + negative mark offset clipped off-screen; switch to flex + no horizontal nudge.
+   */
+  .landing-topbar__start {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: min(50vw, 136px);
+  }
+
   .landing-header__brand {
-    --u: 0.33px;
-    width: 54px;
-    height: 29px;
+    --u: 0.72px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: clamp(1px, 0.45vw, 3px);
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    height: auto;
+    min-height: 26px;
+    overflow: visible;
   }
 
   .landing-header__brand-mark {
-    transform: translate(calc(var(--u) * -13), calc(var(--u) * 2.4)) scale(3.12, 2.9);
+    position: relative;
+    left: auto;
+    top: auto;
+    flex: 0 0 auto;
+    width: auto;
+    height: clamp(17px, 5vw, 23px);
+    max-width: clamp(17px, 5vw, 23px);
+    object-fit: contain;
+    object-position: left center;
+    transform: none;
   }
 
   .landing-header__brand-name {
-    line-height: 1.12;
+    position: relative;
+    left: auto;
+    top: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    font-size: clamp(6.5px, 2.65vw, 9px);
+    line-height: 1.08;
   }
 
   .landing-header__nav {
