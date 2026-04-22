@@ -73,6 +73,12 @@ watch(
           </RouterLink>
         </li>
         <li class="home__nav-pills__item">
+          <RouterLink :to="{ name: 'mafia' }" class="home__pill home__pill--ghost">
+            <span class="home__pill__title">{{ t('home.mafiaTitle') }}</span>
+            <span class="home__pill__desc">{{ t('home.mafiaDesc') }}</span>
+          </RouterLink>
+        </li>
+        <li class="home__nav-pills__item">
           <RouterLink
             :to="{ name: 'nadle-streamer', params: { streamer: defaultNadleStreamer } }"
             class="home__pill home__pill--ghost"

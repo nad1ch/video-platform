@@ -21,6 +21,8 @@ import { Peer } from '../peers/Peer'
 import type { Room } from '../rooms/Room'
 import type { RoomManager } from '../rooms/RoomManager'
 
+const mafiaRoleSchema = z.enum(['mafia', 'don', 'sheriff', 'doctor', 'civilian'])
+
 const directionSchema = z.enum(['send', 'recv'])
 
 const dtlsParametersSchema = z
@@ -138,6 +140,66 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       })
       .optional(),
   }),
+  z.object({
+    type: z.literal('mafia:claim-host'),
+    payload: z.object({}).optional(),
+  }),
+  z.object({
+    type: z.literal('mafia:queue-update'),
+    payload: z.object({
+      /** 1-based seat indices; order preserved; max length bounded server-side. */
+      speakingQueue: z.array(z.number().int().min(1).max(12)).max(16),
+    }),
+  }),
+  z.object({
+    type: z.literal('mafia:reshuffle'),
+    payload: z.object({
+      players: z
+        .array(
+          z.object({
+            peerId: z.string().min(1),
+            seat: z.number().int().min(1).max(12),
+            role: mafiaRoleSchema,
+          }),
+        )
+        .min(1)
+        .max(12),
+    }),
+  }),
+  z.object({
+    type: z.literal('mafia:players-update'),
+    payload: z.object({
+      order: z.array(z.string().min(1)).min(1).max(12),
+      nightActions: z
+        .object({
+          mafia: z.number().int().min(1).max(12).optional(),
+          doctor: z.number().int().min(1).max(12).optional(),
+          sheriff: z.number().int().min(1).max(12).optional(),
+          don: z.number().int().min(1).max(12).optional(),
+        })
+        .strict()
+        .optional(),
+      speakingQueue: z.array(z.number().int().min(1).max(12)).max(16),
+    }),
+  }),
+  z.object({
+    type: z.literal('mafia:timer-start'),
+    payload: z.object({
+      startedAt: z.number().int(),
+      duration: z.number().int().min(30_000).max(7_200_000),
+      isRunning: z.boolean().optional(),
+    }),
+  }),
+  z.object({
+    type: z.literal('mafia:timer-stop'),
+    payload: z.object({}).strict(),
+  }),
+  z.object({
+    type: z.literal('mafia:player-kick'),
+    payload: z.object({
+      peerId: z.string().min(1),
+    }),
+  }),
 ])
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>
@@ -223,6 +285,34 @@ export type ServerMessage =
   | { type: 'consume-failed'; payload: { producerId: string; reason: string } }
   | { type: 'active-speaker'; payload: { peerId: string | null } }
   | { type: 'server-pong'; payload: Record<string, never> }
+  | { type: 'mafia:host-updated'; payload: { hostPeerId: string | null } }
+  | { type: 'mafia:queue-update'; payload: { speakingQueue: number[] } }
+  | {
+      type: 'mafia:reshuffle'
+      payload: {
+        players: Array<{
+          peerId: string
+          seat: number
+          role: 'mafia' | 'don' | 'sheriff' | 'doctor' | 'civilian'
+        }>
+      }
+    }
+  | {
+      type: 'mafia:players-update'
+      payload: {
+        order: string[]
+        nightActions?: Partial<{
+          mafia: number
+          doctor: number
+          sheriff: number
+          don: number
+        }>
+        speakingQueue: number[]
+      }
+    }
+  | { type: 'mafia:timer-start'; payload: { startedAt: number; duration: number; isRunning: boolean } }
+  | { type: 'mafia:timer-stop'; payload: Record<string, never> }
+  | { type: 'mafia:player-kick'; payload: { peerId: string } }
 
 export type SignalingDeps = {
   roomManager: RoomManager
@@ -335,6 +425,63 @@ function broadcastPeerLeftToRoom(room: Room, leftPeerId: string): void {
   }
 }
 
+function broadcastMafiaHostUpdated(room: Room): void {
+  const hostPeerId = room.getMafiaHostPeerId()
+  const msg: ServerMessage = { type: 'mafia:host-updated', payload: { hostPeerId } }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
+const MAFIA_MAX_SEAT = 12
+
+function sanitizeMafiaSpeakingQueueList(raw: unknown, maxSeat: number): number[] {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  const out: number[] = []
+  const seen = new Set<number>()
+  const cap = Math.max(1, Math.min(MAFIA_MAX_SEAT, maxSeat))
+  for (const x of raw) {
+    if (typeof x !== 'number' || !Number.isInteger(x)) {
+      continue
+    }
+    if (x < 1 || x > cap) {
+      continue
+    }
+    if (seen.has(x)) {
+      continue
+    }
+    seen.add(x)
+    out.push(x)
+  }
+  return out
+}
+
+function broadcastMafiaQueueUpdate(room: Room): void {
+  const speakingQueue = room.getMafiaSpeakingQueue()
+  const msg: ServerMessage = { type: 'mafia:queue-update', payload: { speakingQueue } }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
+function broadcastMafiaReshuffle(
+  room: Room,
+  payload: {
+    players: Array<{
+      peerId: string
+      seat: number
+      role: 'mafia' | 'don' | 'sheriff' | 'doctor' | 'civilian'
+    }>
+  },
+): void {
+  const msg: ServerMessage = { type: 'mafia:reshuffle', payload }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
 function finalizeRoomIfEmpty(room: Room, roomManager: RoomManager): void {
   if (room.getPeers().length > 0) {
     return
@@ -348,6 +495,7 @@ function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
   if (room) {
     detachPeerAudioProducersFromLevelObserver(peer, room)
   }
+  const hostIdBeforeRemove = room?.getMafiaHostPeerId() ?? null
   peer.closeAllMedia()
   deps.socketPeer.delete(peer.socket)
   if (!room) {
@@ -358,6 +506,12 @@ function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
     return
   }
   broadcastPeerLeftToRoom(room, peer.id)
+  if (hostIdBeforeRemove === peer.id) {
+    const nextPeers = room.getPeers()
+    const nextId = nextPeers.length > 0 ? nextPeers[0]!.id : null
+    room.setMafiaHostPeerId(nextId)
+    broadcastMafiaHostUpdated(room)
+  }
   finalizeRoomIfEmpty(room, deps.roomManager)
 }
 
@@ -383,8 +537,15 @@ function replaceDuplicatePeerId(room: Room, incomingSocket: WsSocket, peerId: st
   detachPeerAudioProducersFromLevelObserver(existing, room)
   existing.closeAllMedia()
   deps.socketPeer.delete(existing.socket)
+  const wasHost = room.getMafiaHostPeerId() === peerId
   room.removePeer(peerId)
   broadcastPeerLeftToRoom(room, peerId)
+  if (wasHost) {
+    const nextPeers = room.getPeers()
+    const nextId = nextPeers.length > 0 ? nextPeers[0]!.id : null
+    room.setMafiaHostPeerId(nextId)
+    broadcastMafiaHostUpdated(room)
+  }
 
   try {
     existing.socket.close(4000, 'Replaced by new connection')
@@ -497,6 +658,26 @@ export async function handleJoinRoom(
     }
     p.sendJson(joinedMsg)
   }
+
+  sendServerMessage(socket, {
+    type: 'mafia:host-updated',
+    payload: { hostPeerId: room.getMafiaHostPeerId() },
+  })
+  sendServerMessage(socket, {
+    type: 'mafia:queue-update',
+    payload: { speakingQueue: room.getMafiaSpeakingQueue() },
+  })
+  {
+    const mt = room.getMafiaTimer()
+    if (mt != null) {
+      const rem = mt.duration - (Date.now() - mt.startedAt)
+      if (rem > 0) {
+        sendServerMessage(socket, { type: 'mafia:timer-start', payload: { ...mt, isRunning: true } })
+      } else {
+        room.setMafiaTimer(null)
+      }
+    }
+  }
 }
 
 export function handleCallChat(socket: WsSocket, text: string, deps: SignalingDeps): void {
@@ -539,6 +720,299 @@ export function handleRaiseHand(socket: WsSocket, raised: boolean, deps: Signali
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
+}
+
+/**
+ * First peer to claim with no current host becomes Mafia host; idempotent for the same socket.
+ * Does not reassign a host that already exists (another peerId).
+ */
+export function handleMafiaClaimHost(socket: WsSocket, deps: SignalingDeps): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  const current = room.getMafiaHostPeerId()
+  if (current === peer.id) {
+    return
+  }
+  if (current != null) {
+    return
+  }
+  room.setMafiaHostPeerId(peer.id)
+  broadcastMafiaHostUpdated(room)
+}
+
+/**
+ * Only the current Mafia host may update the shared speaking queue; server republishes to the room.
+ */
+export function handleMafiaQueueUpdate(
+  socket: WsSocket,
+  payload: { speakingQueue: unknown } | null | undefined,
+  deps: SignalingDeps,
+): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  if (room.getMafiaHostPeerId() !== peer.id) {
+    return
+  }
+  const list = (payload as { speakingQueue?: unknown } | null | undefined)?.speakingQueue
+  const maxSeat = room.getPeers().length > 0 ? room.getPeers().length : MAFIA_MAX_SEAT
+  const sanitized = sanitizeMafiaSpeakingQueueList(list, maxSeat)
+  room.setMafiaSpeakingQueue(sanitized)
+  broadcastMafiaQueueUpdate(room)
+}
+
+/**
+ * Only the Mafia host may broadcast a post-reshuffle snapshot; server republishes to the room.
+ */
+export function handleMafiaReshuffle(
+  socket: WsSocket,
+  payload: {
+    players: Array<{
+      peerId: string
+      seat: number
+      role: 'mafia' | 'don' | 'sheriff' | 'doctor' | 'civilian'
+    }>
+  },
+  deps: SignalingDeps,
+): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  if (room.getMafiaHostPeerId() !== peer.id) {
+    return
+  }
+  const peers = room.getPeers()
+  if (peers.length < 1) {
+    return
+  }
+  const roomIds = new Set(peers.map((p) => p.id))
+  const { players: list } = payload
+  if (list.length !== peers.length || list.length !== roomIds.size) {
+    return
+  }
+  const used = new Set<string>()
+  for (let i = 0; i < list.length; i += 1) {
+    const pl = list[i]!
+    if (pl.seat !== i + 1) {
+      return
+    }
+    if (!roomIds.has(pl.peerId) || used.has(pl.peerId)) {
+      return
+    }
+    used.add(pl.peerId)
+  }
+  if (used.size !== roomIds.size) {
+    return
+  }
+  broadcastMafiaReshuffle(room, payload)
+}
+
+function broadcastMafiaPlayerKick(room: Room, payload: { peerId: string }): void {
+  const msg: ServerMessage = { type: 'mafia:player-kick', payload }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
+/**
+ * Only the Mafia host may mark a player eliminated; server republishes to the room.
+ */
+export function handleMafiaPlayerKick(
+  socket: WsSocket,
+  payload: { peerId: string },
+  deps: SignalingDeps,
+): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  if (room.getMafiaHostPeerId() !== peer.id) {
+    return
+  }
+  const targetId = payload.peerId
+  if (typeof targetId !== 'string' || targetId.length < 1) {
+    return
+  }
+  if (targetId === peer.id) {
+    return
+  }
+  const peers = room.getPeers()
+  const roomIds = new Set(peers.map((p) => p.id))
+  if (!roomIds.has(targetId)) {
+    return
+  }
+  broadcastMafiaPlayerKick(room, { peerId: targetId })
+}
+
+function broadcastMafiaPlayersUpdate(
+  room: Room,
+  payload: {
+    order: string[]
+    nightActions?: {
+      mafia?: number
+      doctor?: number
+      sheriff?: number
+      don?: number
+    }
+    speakingQueue: number[]
+  },
+): void {
+  const msg: ServerMessage = { type: 'mafia:players-update', payload }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
+/**
+ * Only the Mafia host may push numbering / night + speaking state; server republishes to the room.
+ */
+export function handleMafiaPlayersUpdate(
+  socket: WsSocket,
+  payload: {
+    order: string[]
+    nightActions?: {
+      mafia?: number
+      doctor?: number
+      sheriff?: number
+      don?: number
+    }
+    speakingQueue: number[]
+  },
+  deps: SignalingDeps,
+): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  if (room.getMafiaHostPeerId() !== peer.id) {
+    return
+  }
+  const peers = room.getPeers()
+  if (peers.length < 1) {
+    return
+  }
+  const roomIds = new Set(peers.map((p) => p.id))
+  const { order: list, speakingQueue: q } = payload
+  if (list.length !== peers.length || list.length !== roomIds.size) {
+    return
+  }
+  const used = new Set<string>()
+  for (const id of list) {
+    if (!roomIds.has(id) || used.has(id)) {
+      return
+    }
+    used.add(id)
+  }
+  if (used.size !== roomIds.size) {
+    return
+  }
+  const n = list.length
+  for (const x of q) {
+    if (typeof x !== 'number' || !Number.isInteger(x) || x < 1 || x > n) {
+      return
+    }
+  }
+  const na = payload.nightActions
+  if (na) {
+    for (const v of Object.values(na)) {
+      if (v != null && (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > n)) {
+        return
+      }
+    }
+  }
+  broadcastMafiaPlayersUpdate(room, payload)
+}
+
+function broadcastMafiaTimerStart(
+  room: Room,
+  payload: { startedAt: number; duration: number; isRunning: true },
+): void {
+  const msg: ServerMessage = { type: 'mafia:timer-start', payload }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
+function broadcastMafiaTimerStop(room: Room): void {
+  const msg: ServerMessage = { type: 'mafia:timer-stop', payload: {} }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
+/**
+ * Only the Mafia host may start the shared room timer; server stores it for late joiners and republishes.
+ */
+export function handleMafiaTimerStart(
+  socket: WsSocket,
+  payload: { startedAt: number; duration: number; isRunning?: boolean },
+  deps: SignalingDeps,
+): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  if (room.getMafiaHostPeerId() !== peer.id) {
+    return
+  }
+  if (payload.isRunning === false) {
+    return
+  }
+  const { startedAt, duration } = payload
+  const serverNow = Date.now()
+  if (startedAt > serverNow + 60_000) {
+    return
+  }
+  if (startedAt < serverNow - 120_000) {
+    return
+  }
+  room.setMafiaTimer({ startedAt, duration })
+  broadcastMafiaTimerStart(room, { startedAt, duration, isRunning: true })
+}
+
+/** Only the Mafia host may clear the shared room timer. */
+export function handleMafiaTimerStop(socket: WsSocket, deps: SignalingDeps): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  if (room.getMafiaHostPeerId() !== peer.id) {
+    return
+  }
+  room.setMafiaTimer(null)
+  broadcastMafiaTimerStop(room)
 }
 
 export function handleUpdateDisplayName(

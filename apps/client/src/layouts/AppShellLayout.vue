@@ -20,6 +20,7 @@ import {
   resolveOnboardingTourKeyFromRoute,
 } from '@/eat-first/utils/onboardingStorage.js'
 import { useAuth } from '@/composables/useAuth'
+import { MAFIA_OBS_URL_TOAST_EVENT, mafiaViewQueryIsView } from '@/composables/mafiaStreamViewRoute'
 import {
   CALL_ROOM_DROPDOWN_HOST_ID,
   CALL_ROOM_POPOVER_PANEL_ID,
@@ -61,10 +62,12 @@ const isNadleStreamRoute = computed(
 
 const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route) : 'join'))
 
-const showChrome = computed(() => !isEatRoute.value || currentEatView.value !== 'overlay')
+const showChrome = computed(
+  () => !isEatRoute.value || currentEatView.value !== 'overlay',
+)
 
 const showSiteFooter = computed(
-  () => showChrome.value && route.name !== 'call' && route.name !== 'nadraw-show',
+  () => showChrome.value && route.name !== 'call' && route.name !== 'mafia' && route.name !== 'nadraw-show',
 )
 
 /** Стабільний ключ для Transition: без зайвих анімацій на дрібні зміни query (наприклад ?channel=). */
@@ -191,6 +194,60 @@ watch(() => route.fullPath, tryAutoOnboarding, { immediate: true })
 onMounted(() => {
   setTheme(theme.value)
 })
+
+const isMafiaRoute = computed(() => route.name === 'mafia')
+
+/** URL source of truth for OBS / stream layout (`?mode=view`). */
+const isMafiaViewMode = computed(() => mafiaViewQueryIsView(route.query.mode))
+
+function mafiaQueryAsStringRecord(
+  q: (typeof route)['query'],
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [key, v] of Object.entries(q)) {
+    if (v == null) continue
+    const s = Array.isArray(v) ? v[0] : v
+    if (typeof s !== 'string' || s.trim() === '') continue
+    out[key] = s
+  }
+  return out
+}
+
+const mafiaHeaderHasRoom = computed(() => {
+  if (route.name !== 'mafia') {
+    return false
+  }
+  return Boolean(mafiaQueryAsStringRecord(route.query).room)
+})
+
+const mafiaHeaderModeToggleLabel = computed(() =>
+  isMafiaViewMode.value ? t('mafiaPage.headerCenterHostButton') : t('mafiaPage.headerCenterObsButton'),
+)
+
+async function toggleMafiaViewMode(): Promise<void> {
+  if (route.name !== 'mafia') {
+    return
+  }
+  const room = mafiaQueryAsStringRecord(route.query).room
+  if (typeof room !== 'string' || room.length < 1) {
+    return
+  }
+  if (!isMafiaViewMode.value) {
+    const next = { ...mafiaQueryAsStringRecord(route.query), mode: 'view' as const }
+    const viewUrl = `${window.location.origin}/app/mafia?${new URLSearchParams(next).toString()}`
+    try {
+      await navigator.clipboard.writeText(viewUrl)
+    } catch {
+      /* clipboard may be denied */
+    }
+    window.dispatchEvent(new CustomEvent(MAFIA_OBS_URL_TOAST_EVENT))
+    await router.replace({ name: 'mafia', query: next })
+    return
+  }
+  const rest = { ...mafiaQueryAsStringRecord(route.query) }
+  delete rest.mode
+  await router.replace({ name: 'mafia', query: rest })
+}
 </script>
 
 <template>
@@ -242,7 +299,7 @@ onMounted(() => {
               {{ headerTitle }}
             </RouterLink>
             <div
-              v-if="route.name === 'call'"
+              v-if="route.name === 'call' || route.name === 'mafia'"
               :id="CALL_ROOM_DROPDOWN_HOST_ID"
               class="app-shell-call-room-anchor"
             >
@@ -257,6 +314,17 @@ onMounted(() => {
                 {{ t('callPage.headerJoinRoom') }}
               </button>
             </div>
+            <button
+              v-if="isMafiaRoute && mafiaHeaderHasRoom"
+              type="button"
+              class="stream-nav__link stream-nav__link--btn"
+              :class="{ 'stream-nav__link--active': isMafiaViewMode }"
+              :title="mafiaHeaderModeToggleLabel"
+              :aria-label="mafiaHeaderModeToggleLabel"
+              @click="toggleMafiaViewMode"
+            >
+              {{ mafiaHeaderModeToggleLabel }}
+            </button>
           </div>
         </template>
         <template #end>
@@ -451,6 +519,40 @@ onMounted(() => {
 .app-shell-call-join-room:disabled {
   opacity: 0.42;
   cursor: not-allowed;
+}
+
+/* Same look as `AppShellStreamNav` .stream-nav__link (separate scoped component). */
+.app-shell-header__stream-center .stream-nav__link {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, var(--sa-color-border));
+  background: var(--bg-card-soft, color-mix(in srgb, var(--sa-color-surface) 80%, transparent));
+  color: var(--text-secondary, var(--sa-color-text-muted));
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.app-shell-header__stream-center .stream-nav__link:hover,
+.app-shell-header__stream-center .stream-nav__link.stream-nav__link--active {
+  border-color: var(--border-strong, var(--sa-color-primary-border));
+  color: var(--text-title, var(--sa-color-primary));
+}
+
+.app-shell-header__stream-center .stream-nav__link:focus-visible {
+  outline: 2px solid var(--border-cyan-strong, var(--sa-color-primary));
+  outline-offset: 2px;
+}
+
+.app-shell-header__stream-center .stream-nav__link--btn {
+  cursor: pointer;
+  font: inherit;
 }
 
 @media (max-width: 420px) {

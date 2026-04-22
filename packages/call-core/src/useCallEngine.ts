@@ -17,6 +17,7 @@ import {
   type VideoPublishTier,
 } from './media/videoQualityPreset'
 import { shouldUseVideoSimulcastForRoom } from './media/videoSimulcast'
+import { useActiveSpeaker, type ActiveSpeakerTile } from './audio/useActiveSpeaker'
 import { useSendTransport } from './transport/useSendTransport'
 import { buildRequestProducerSyncPayload } from './media/recoveryCoordinator'
 import {
@@ -264,7 +265,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     remotePeerPlayRevs,
     remoteVideoSourceByPeerId,
     remoteOutboundVideoPausedByPeerId,
-    activeSpeakerPeerId,
+    activeSpeakerPeerId: serverActiveSpeakerPeerId,
     networkQuality,
     setupReceivePath,
     stopRemoteMedia,
@@ -539,16 +540,6 @@ export function useCallEngine(options?: CallEngineOptions) {
   const lastWirePeerCount = ref(0)
   const lastWireVideoSimulcast = ref(false)
 
-  const callDebugSnapshot = computed(() => ({
-    videoQualityPreset: videoQualityPreset.value,
-    videoQualityExplicit: videoQualityExplicit.value,
-    videoPublishTier: wirePublishTier.value,
-    activeCameraPublishersAtWire: lastWireActiveCameraPublishers.value,
-    peerCountAtWire: lastWirePeerCount.value,
-    publishSimulcast: lastWireVideoSimulcast.value,
-    activeSpeakerPeerId: activeSpeakerPeerId.value,
-  }))
-
   function clearReconnectTimer(): void {
     if (reconnectTimer !== null) {
       clearTimeout(reconnectTimer)
@@ -724,6 +715,19 @@ export function useCallEngine(options?: CallEngineOptions) {
       : activePreviewStream.value,
   )
 
+  /**
+   * VAD source for the local-tile speaking highlight.
+   *
+   * Must **not** follow {@link localSelfPreviewStream} (which is video-preview-oriented and goes
+   * `null` when outbound is `'none'`): that hid the local glow whenever the camera was off, even
+   * with the mic on. The raw getUserMedia stream keeps the audio track alive across camera
+   * toggles / device swaps, so we expose it explicitly under a name that documents the intent.
+   *
+   * Stable identity: `localStream` ref only re-assigns on start / stop / device change,
+   * so `useLocalTileSpeakingVisual` reconnects its `AnalyserNode` only when the track id changes.
+   */
+  const localAudioSourceStream = computed<MediaStream | null>(() => localStream.value)
+
   function isRemoteVideoActive(
     track: MediaStreamTrack | undefined,
     source: 'camera' | 'screen',
@@ -802,6 +806,32 @@ export function useCallEngine(options?: CallEngineOptions) {
     list.push(...remoteTiles)
     return list
   })
+
+  /**
+   * UI highlight: derived from local Web Audio analysis of inbound/outbound media streams
+   * (dominant talker with hysteresis). `active-speaker` from the SFU still updates
+   * {@link serverActiveSpeakerPeerId} for simulcast layer policy only.
+   */
+  const activeSpeakerTileInputs = computed<ActiveSpeakerTile[]>(() =>
+    tiles.value.map((t) => ({
+      peerId: t.peerId,
+      stream: t.stream,
+      audioEnabled: t.audioEnabled,
+      excludeFromLevelAnalysis: t.isLocal,
+    })),
+  )
+  const { activeSpeakerPeerId } = useActiveSpeaker(activeSpeakerTileInputs, inCall)
+
+  const callDebugSnapshot = computed(() => ({
+    videoQualityPreset: videoQualityPreset.value,
+    videoQualityExplicit: videoQualityExplicit.value,
+    videoPublishTier: wirePublishTier.value,
+    activeCameraPublishersAtWire: lastWireActiveCameraPublishers.value,
+    peerCountAtWire: lastWirePeerCount.value,
+    publishSimulcast: lastWireVideoSimulcast.value,
+    activeSpeakerPeerId: activeSpeakerPeerId.value,
+    serverActiveSpeakerPeerId: serverActiveSpeakerPeerId.value,
+  }))
 
   const sizeTier = computed<'sm' | 'md' | 'lg'>(() =>
     gridSizeTierFromParticipantCount(tiles.value.length),
@@ -1143,6 +1173,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     sizeTier,
     gridModifier,
     activeSpeakerPeerId,
+    localAudioSourceStream,
     networkQuality,
     setNetworkQualityOverride,
     micEnabled,
@@ -1171,5 +1202,8 @@ export function useCallEngine(options?: CallEngineOptions) {
     isCameraActive,
     isScreenActive,
     toggleScreenShare,
+    /** Same WebSocket as the call; for app-level room messages (e.g. Mafia host). */
+    sendSignalingMessage: sendJson,
+    subscribeSignalingMessage: addMessageListener,
   }
 }

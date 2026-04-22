@@ -81,6 +81,12 @@ export const router = createRouter({
           component: () => import('./components/call/CallPage.vue'),
         },
         {
+          path: 'mafia',
+          name: 'mafia',
+          meta: { appTitleKey: 'routes.mafia', footerContext: 'call', requiresAuth: true },
+          component: () => import('./pages/MafiaPage.vue'),
+        },
+        {
           path: 'nadle',
           name: 'nadle',
           redirect: { name: 'nadle-streamer', params: { streamer: DEFAULT_NADLE_STREAMER } },
@@ -141,7 +147,7 @@ export const router = createRouter({
         },
         /**
          * Short URL: `/app/:streamer` (legacy). Static segments above take precedence:
-         * `call`, `nadle`, `nadle/:streamer`, `nadraw-show/:streamer`, `eat`, `admin` are reserved — a streamer slug matching
+         * `call`, `mafia`, `nadle`, `nadle/:streamer`, `nadraw-show/:streamer`, `eat`, `admin` are reserved — a streamer slug matching
          * those first segments cannot use this short path (e.g. `/app/call` is the Call page, not nadle for "call").
          */
         {
@@ -240,11 +246,18 @@ function eatViewNeedsStreamAuth(query: Record<string, unknown>): boolean {
   return s === 'admin' || s === 'control'
 }
 
+/**
+ * When a guard returns a new location, vue-router may not run `afterEach` for the
+ * superseded navigation — but `installRouteNavLoadingGuards` always bumped on
+ * `beforeEach`. Without an explicit `release`, `App.vue`’s full-screen route loader
+ * stays on (e.g. after redirect to `/auth`). Same for admin → `/app` redirect.
+ */
 router.beforeEach(async (to) => {
   if (to.meta.requiresAdmin) {
     const { ensureAuthLoaded, user } = useAuth()
     await ensureAuthLoaded()
     if (user.value?.role !== 'admin') {
+      releaseRouteNavLoading()
       return { path: '/app' }
     }
   }
@@ -261,6 +274,7 @@ router.beforeEach(async (to) => {
     return true
   }
 
+  releaseRouteNavLoading()
   return {
     path: '/auth',
     query: {

@@ -12,6 +12,13 @@ import {
   handleCallChat,
   handleDisconnect,
   handleJoinRoom,
+  handleMafiaClaimHost,
+  handleMafiaQueueUpdate,
+  handleMafiaReshuffle,
+  handleMafiaPlayersUpdate,
+  handleMafiaTimerStart,
+  handleMafiaTimerStop,
+  handleMafiaPlayerKick,
   handleProduce,
   handleProducerVideoSource,
   handleSetOutboundVideoPaused,
@@ -172,6 +179,34 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             case 'raise-hand': {
               const { raised } = parsed.data.payload
               handleRaiseHand(socket, raised, deps)
+              break
+            }
+            case 'mafia:claim-host': {
+              handleMafiaClaimHost(socket, deps)
+              break
+            }
+            case 'mafia:queue-update': {
+              handleMafiaQueueUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:reshuffle': {
+              handleMafiaReshuffle(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:players-update': {
+              handleMafiaPlayersUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:timer-start': {
+              handleMafiaTimerStart(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:timer-stop': {
+              handleMafiaTimerStop(socket, deps)
+              break
+            }
+            case 'mafia:player-kick': {
+              handleMafiaPlayerKick(socket, parsed.data.payload, deps)
               break
             }
             case 'request-producer-sync': {

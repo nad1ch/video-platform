@@ -24,6 +24,12 @@ export class Room {
   /** Last `peerId` sent in `active-speaker` (null = last send was clear). `undefined` = nothing sent yet. */
   private lastBroadcastSpeakerPeerId: string | null | undefined = undefined
   private silenceClearTimer: ReturnType<typeof setTimeout> | null = null
+  /** Mafia “ведучий” — at most one per room; reassigned when they leave. */
+  private mafiaHostPeerId: string | null = null
+  /** Shared Mafia speaking queue (1-based seat indices); host authorizes updates via signaling. */
+  private mafiaSpeakingQueue: number[] = []
+  /** Shared Mafia round timer; host `mafia:timer-start`, clients derive remaining from wall clock. */
+  private mafiaTimer: { startedAt: number; duration: number } | null = null
 
   private constructor(id: string, router: Router) {
     this.id = id
@@ -173,5 +179,32 @@ export class Room {
 
   getPeers(): Peer[] {
     return [...this.peers.values()]
+  }
+
+  getMafiaHostPeerId(): string | null {
+    return this.mafiaHostPeerId
+  }
+
+  setMafiaHostPeerId(id: string | null): void {
+    this.mafiaHostPeerId = id
+  }
+
+  getMafiaSpeakingQueue(): number[] {
+    return [...this.mafiaSpeakingQueue]
+  }
+
+  setMafiaSpeakingQueue(seats: number[]): void {
+    this.mafiaSpeakingQueue = seats
+  }
+
+  getMafiaTimer(): { startedAt: number; duration: number; isRunning: true } | null {
+    if (this.mafiaTimer == null) {
+      return null
+    }
+    return { ...this.mafiaTimer, isRunning: true as const }
+  }
+
+  setMafiaTimer(t: { startedAt: number; duration: number } | null): void {
+    this.mafiaTimer = t
   }
 }

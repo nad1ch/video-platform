@@ -1,10 +1,22 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  onUnmounted,
+  ref,
+  shallowRef,
+  watch,
+} from 'vue'
 import { useI18n } from 'vue-i18n'
 import { normalizeDisplayName } from 'call-core'
 import { createLogger } from '@/utils/logger'
+import type { MafiaRole } from '@/utils/mafiaGameTypes'
+import MafiaEliminationMark from '../mafia/MafiaEliminationMark.vue'
 import StreamAudio from '../StreamAudio.vue'
 import StreamVideo from '../StreamVideo.vue'
+import type { MafiaEliminationAvatarKind } from '@/utils/mafiaEliminationAvatarKind'
 
 const tileLog = createLogger('participant-tile')
 
@@ -15,35 +27,56 @@ const emit = defineEmits<{
   'update:listenMuted': [value: boolean]
   /** Local-only label override (`name` null or empty clears). */
   'commit-local-display-name': [payload: { peerId: string; name: string | null }]
+  /** Mafia host: toggle eliminated / alive for this remote tile. */
+  'mafia-toggle-life': [peerId: string]
 }>()
 
-const props = defineProps<{
-  /** Room participant id (for optional volume_* localStorage mirror). */
-  peerId?: string
-  displayName: string
-  stream: MediaStream | null
-  isLocal: boolean
-  videoEnabled: boolean
-  audioEnabled: boolean
-  /** Bumps play() when stream ref or tracks change (local / remote). */
-  playRev?: number
-  /** CSS size tier from parent grid: sm | md | lg */
-  sizeTier: 'sm' | 'md' | 'lg'
-  /** Remote/local tile with strongest mic level (Web Audio analyser). */
-  activeSpeaker?: boolean
-  /** Local-only remote listening gain 0..2 (0–200%). */
-  remoteListenVolume?: number
-  /** Local-only remote listen mute */
-  remoteListenMuted?: boolean
-  /** “Raise hand” from signaling (call room). */
-  raiseHand?: boolean
-  /** Passed to StreamVideo `fill-cover`; CallPage sets false so grid video uses contain (no crop). */
-  videoFillCover?: boolean
-  /** Outbound/inbound presentation; local may be `none` when outbound video is paused / no track. */
-  videoPresentation?: 'camera' | 'screen' | 'none'
-  /** Profile image when video is off (HTTPS URL from parent; never fetch here). */
-  avatarUrl?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    /** Room participant id (for optional volume_* localStorage mirror). */
+    peerId?: string
+    displayName: string
+    stream: MediaStream | null
+    isLocal: boolean
+    videoEnabled: boolean
+    audioEnabled: boolean
+    /** Bumps play() when stream ref or tracks change (local / remote). */
+    playRev?: number
+    /** CSS size tier from parent grid: sm | md | lg */
+    sizeTier: 'sm' | 'md' | 'lg'
+    /**
+     * CallPage drives speaking UI: wrap glow + this tile’s `is-speaking` / video nudge
+     * (from `activeSpeakerPeerId` + local RMS; see `isTileRowSpeaking` in `CallPage`).
+     */
+    rowSpeaking: boolean
+    /** Local-only remote listening gain 0..2 (0–200%). */
+    remoteListenVolume?: number
+    /** Local-only remote listen mute */
+    remoteListenMuted?: boolean
+    /** “Raise hand” from signaling (call room). */
+    raiseHand?: boolean
+    /** Passed to StreamVideo `fill-cover`; CallPage sets false so grid video uses contain (no crop). */
+    videoFillCover?: boolean
+    /** Outbound/inbound presentation; local may be `none` when outbound video is paused / no track. */
+    videoPresentation?: 'camera' | 'screen' | 'none'
+    /** Profile image when video is off (HTTPS URL from parent; never fetch here). */
+    avatarUrl?: string
+    /** Mafia: 1-based seat index; shown in a small circle before the role chip (optional UI only). */
+    mafiaSeatIndex?: number
+    /**
+     * Mafia: when set, show a role label (CallPage sets only for host or that tile’s local player; off for stream capture).
+     */
+    mafiaVisibleRole?: MafiaRole
+    /** Mafia stream capture: hide per-tile menu and name editing. */
+    streamViewMode?: boolean
+    /** Mafia: host marked this peer dead — hide WebRTC video and show elimination art. */
+    mafiaEliminated?: boolean
+    mafiaEliminationKind?: MafiaEliminationAvatarKind
+    /** Mafia: host, round started — show persistent 💀/❤️ life toggle (top-right). */
+    mafiaHostShowLifeToggle?: boolean
+  }>(),
+  { streamViewMode: false, mafiaEliminated: false, mafiaEliminationKind: 'skull', mafiaHostShowLifeToggle: false, rowSpeaking: false },
+)
 
 const menuOpen = ref(false)
 const menuRoot = ref<HTMLElement | null>(null)
@@ -57,6 +90,9 @@ function peerIdForNameEdit(): string {
 }
 
 function startNameEdit(): void {
+  if (props.streamViewMode) {
+    return
+  }
   const id = peerIdForNameEdit()
   if (!id) {
     return
@@ -220,6 +256,28 @@ onUnmounted(() => {
   clearSplitHolder(audioSplitStream)
 })
 
+const showMafiaSeat = computed(
+  () => typeof props.mafiaSeatIndex === 'number' && props.mafiaSeatIndex > 0,
+)
+
+/** Mafia call tiles: name only; seat is a separate circle before the role chip. */
+const mafiaCallPrimaryLine = computed(() => {
+  if (!showMafiaSeat.value || typeof props.mafiaSeatIndex !== 'number') {
+    return props.displayName
+  }
+  return normalizeDisplayName(props.displayName)
+})
+
+const showMafiaRole = computed(() => !props.streamViewMode && props.mafiaVisibleRole != null)
+
+const mafiaRoleLabel = computed(() => {
+  const r = props.mafiaVisibleRole
+  if (r == null) {
+    return ''
+  }
+  return t(`mafiaPage.nightRole.${r}`)
+})
+
 const hasLiveLocalVideo = computed(() => {
   if (!props.stream || !props.isLocal) {
     return false
@@ -250,14 +308,24 @@ const showVideo = computed(() => {
   return props.videoEnabled && hasLiveVideoTrack.value
 })
 
+/** Mafia: dim + grayscale the frame while still rendering the stream. */
+const mafiaDeadShade = computed(
+  () => !props.isLocal && !props.streamViewMode && Boolean(props.mafiaEliminated),
+)
+
 const resolvedAvatarUrl = computed(() => {
   const u = props.avatarUrl
   return typeof u === 'string' && u.trim().length > 0 ? u.trim() : ''
 })
 
-/** Video-off filler: OAuth avatar when provided, else initials (below). */
-const showAvatar = computed(() => !showVideo.value && resolvedAvatarUrl.value !== '')
-const showInitialsFallback = computed(() => !showVideo.value && resolvedAvatarUrl.value === '')
+/** Video-off filler: OAuth avatar when provided, else initials (below). Elimination art takes priority. */
+const showMafiaElimination = computed(() => Boolean(props.mafiaEliminated) && !showVideo.value)
+const showAvatar = computed(
+  () => !showMafiaElimination.value && !showVideo.value && resolvedAvatarUrl.value !== '',
+)
+const showInitialsFallback = computed(
+  () => !showMafiaElimination.value && !showVideo.value && resolvedAvatarUrl.value === '',
+)
 
 const volumePercentUi = computed(() =>
   Math.min(200, Math.max(0, Math.round((props.remoteListenVolume ?? 1) * 100))),
@@ -271,7 +339,9 @@ const streamVideoStableKey = computed(() =>
   props.isLocal ? 'local' : typeof props.peerId === 'string' && props.peerId.length > 0 ? props.peerId : 'peer',
 )
 
-/** Memo deps for the video subtree — label/mic/activeSpeaker can change without patching WebRTC. */
+const isSpeaking = computed(() => props.rowSpeaking)
+
+/** Memo deps for the video subtree — label/mic/row speaking can change without patching WebRTC. */
 const streamVideoMemoDeps = computed(() => [
   props.stream,
   props.playRev ?? 0,
@@ -280,6 +350,7 @@ const streamVideoMemoDeps = computed(() => [
   Boolean(props.videoFillCover),
   props.isLocal,
   props.videoPresentation,
+  props.mafiaEliminated,
 ])
 
 function onVolumeSliderInput(ev: Event): void {
@@ -298,6 +369,59 @@ function onMuteCheckboxChange(ev: Event): void {
 function toggleMenu(): void {
   menuOpen.value = !menuOpen.value
 }
+
+const mafiaKillAnim = ref(false)
+const mafiaReviveAnim = ref(false)
+let mafiaKillAnimTimer: ReturnType<typeof setTimeout> | undefined
+let mafiaReviveAnimTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(
+  () => props.mafiaEliminated,
+  (next, prev) => {
+    if (props.isLocal || props.streamViewMode) {
+      return
+    }
+    if (prev === undefined) {
+      return
+    }
+    if (prev === true && next === false) {
+      mafiaReviveAnim.value = true
+      if (mafiaReviveAnimTimer != null) {
+        clearTimeout(mafiaReviveAnimTimer)
+      }
+      mafiaReviveAnimTimer = setTimeout(() => {
+        mafiaReviveAnim.value = false
+        mafiaReviveAnimTimer = undefined
+      }, 700)
+    } else if (prev === false && next === true) {
+      mafiaKillAnim.value = true
+      if (mafiaKillAnimTimer != null) {
+        clearTimeout(mafiaKillAnimTimer)
+      }
+      mafiaKillAnimTimer = setTimeout(() => {
+        mafiaKillAnim.value = false
+        mafiaKillAnimTimer = undefined
+      }, 420)
+    }
+  },
+)
+
+function onMafiaHostLifeClick(): void {
+  const id = typeof props.peerId === 'string' ? props.peerId.trim() : ''
+  if (id.length < 1) {
+    return
+  }
+  emit('mafia-toggle-life', id)
+}
+
+onBeforeUnmount(() => {
+  if (mafiaKillAnimTimer != null) {
+    clearTimeout(mafiaKillAnimTimer)
+  }
+  if (mafiaReviveAnimTimer != null) {
+    clearTimeout(mafiaReviveAnimTimer)
+  }
+})
 
 if (import.meta.env.DEV) {
   watch(
@@ -345,11 +469,17 @@ if (import.meta.env.DEV) {
     :data-video-presentation="videoPresentation"
     :class="[
       `tile--${sizeTier}`,
-      { 'tile--active-speaker': activeSpeaker, 'tile--menu-open': menuOpen },
+      {
+        'is-speaking': isSpeaking,
+        'tile--speaking': isSpeaking,
+        'tile--menu-open': menuOpen,
+        'tile--mafia-kill-anim': mafiaKillAnim,
+        'tile--mafia-revive-glow': mafiaReviveAnim,
+      },
     ]"
   >
     <div class="tile-media">
-      <!-- v-memo: label/activeSpeaker/etc. must not re-patch WebRTC elements when only metadata changes. -->
+      <!-- v-memo: label/speaking zoom/etc. must not re-patch WebRTC elements when only metadata changes. -->
       <StreamAudio
         v-if="!isLocal && audioSplitStream"
         class="tile-audio"
@@ -359,7 +489,11 @@ if (import.meta.env.DEV) {
         :listen-volume="remoteListenVolume ?? 1"
         :listen-muted="remoteListenMuted ?? false"
       />
-      <div v-if="showVideo" class="tile-video-wrap">
+      <div
+        v-if="showVideo"
+        class="tile-video-wrap"
+        :class="{ 'tile-video-wrap--mafia-dead': mafiaDeadShade }"
+      >
         <div class="tile-video-clip" v-memo="streamVideoMemoDeps">
           <StreamVideo
             :key="streamVideoStableKey"
@@ -374,27 +508,55 @@ if (import.meta.env.DEV) {
             :fill-cover="Boolean(videoFillCover)"
           />
         </div>
+        <div v-if="mafiaDeadShade" class="tile-dead-veneer" aria-hidden="true" />
         <div class="tile-overlay" aria-hidden="false">
-          <span
+          <div
             v-if="!editingName"
-            class="tile-overlay__name tile-overlay__name--editable"
-            title="Double-click to rename (local only)"
+            class="tile-overlay__label-group"
+            :class="{ 'tile-overlay__label-group--editable': !streamViewMode }"
+            :title="streamViewMode ? undefined : 'Double-click to rename (local only)'"
             @dblclick.stop="startNameEdit"
-            >{{ displayName }}</span
           >
-          <input
-            v-else
-            ref="nameInputRef"
-            v-model="nameDraft"
-            class="tile-overlay__name tile-overlay__name-input"
-            type="text"
-            maxlength="64"
-            aria-label="Edit display name"
-            @blur="finishNameEdit"
-            @keydown.enter.prevent="onNameInputEnter"
-            @keydown.escape.prevent="cancelNameEdit"
-          />
-          <span class="tile-overlay__icons" aria-hidden="true">
+            <span
+              v-if="showMafiaSeat"
+              class="tile-overlay__seat-badge"
+              aria-hidden="true"
+              >{{ mafiaSeatIndex }}</span
+            >
+            <span
+              v-if="showMafiaRole"
+              class="tile-overlay__role-badge"
+              :title="mafiaRoleLabel"
+              aria-hidden="true"
+              >{{ mafiaRoleLabel }}</span
+            >
+            <span
+              class="tile-overlay__display-name"
+              :class="{ 'tile-overlay__display-name--editable': !streamViewMode }"
+            >{{ mafiaCallPrimaryLine }}</span>
+          </div>
+          <div v-else class="tile-overlay__name-edit">
+            <span v-if="showMafiaSeat" class="tile-overlay__seat-badge" aria-hidden="true">{{ mafiaSeatIndex }}</span>
+            <span
+              v-if="showMafiaRole"
+              class="tile-overlay__role-badge"
+              :title="mafiaRoleLabel"
+              aria-hidden="true"
+              >{{ mafiaRoleLabel }}</span
+            >
+            <input
+              ref="nameInputRef"
+              v-model="nameDraft"
+              class="tile-overlay__name-input"
+              type="text"
+              maxlength="64"
+              :aria-label="t('callPage.editNameAria')"
+              @blur="finishNameEdit"
+              @keydown.enter.prevent="onNameInputEnter"
+              @keydown.escape.prevent="cancelNameEdit"
+            />
+          </div>
+          <span v-if="!streamViewMode" class="tile-overlay__icons" aria-hidden="true">
             <span v-if="raiseHand" class="tile-overlay__hand" :title="t('callPage.raiseHandBadge')" aria-hidden="true"
               >✋</span
             >
@@ -439,8 +601,13 @@ if (import.meta.env.DEV) {
       </div>
       <div v-if="!showVideo" class="tile-placeholder">
         <div class="tile-placeholder__main">
+          <MafiaEliminationMark
+            v-if="showMafiaElimination"
+            class="tile-placeholder-elimination"
+            :kind="mafiaEliminationKind"
+          />
           <img
-            v-if="showAvatar"
+            v-else-if="showAvatar"
             class="tile-placeholder-avatar tile-placeholder-avatar--img"
             :src="resolvedAvatarUrl"
             alt=""
@@ -450,26 +617,53 @@ if (import.meta.env.DEV) {
           <span v-else-if="showInitialsFallback" class="tile-placeholder-avatar">{{ initials(displayName) }}</span>
         </div>
         <div class="tile-overlay tile-overlay--on-placeholder" aria-hidden="false">
-          <span
+          <div
             v-if="!editingName"
-            class="tile-overlay__name tile-overlay__name--editable"
-            title="Double-click to rename (local only)"
+            class="tile-overlay__label-group"
+            :class="{ 'tile-overlay__label-group--editable': !streamViewMode }"
+            :title="streamViewMode ? undefined : 'Double-click to rename (local only)'"
             @dblclick.stop="startNameEdit"
-            >{{ displayName }}</span
           >
-          <input
-            v-else
-            ref="nameInputRef"
-            v-model="nameDraft"
-            class="tile-overlay__name tile-overlay__name-input"
-            type="text"
-            maxlength="64"
-            aria-label="Edit display name"
-            @blur="finishNameEdit"
-            @keydown.enter.prevent="onNameInputEnter"
-            @keydown.escape.prevent="cancelNameEdit"
-          />
-          <span class="tile-overlay__icons" aria-hidden="true">
+            <span
+              v-if="showMafiaSeat"
+              class="tile-overlay__seat-badge"
+              aria-hidden="true"
+              >{{ mafiaSeatIndex }}</span
+            >
+            <span
+              v-if="showMafiaRole"
+              class="tile-overlay__role-badge"
+              :title="mafiaRoleLabel"
+              aria-hidden="true"
+              >{{ mafiaRoleLabel }}</span
+            >
+            <span
+              class="tile-overlay__display-name"
+              :class="{ 'tile-overlay__display-name--editable': !streamViewMode }"
+            >{{ mafiaCallPrimaryLine }}</span>
+          </div>
+          <div v-else class="tile-overlay__name-edit">
+            <span v-if="showMafiaSeat" class="tile-overlay__seat-badge" aria-hidden="true">{{ mafiaSeatIndex }}</span>
+            <span
+              v-if="showMafiaRole"
+              class="tile-overlay__role-badge"
+              :title="mafiaRoleLabel"
+              aria-hidden="true"
+              >{{ mafiaRoleLabel }}</span
+            >
+            <input
+              ref="nameInputRef"
+              v-model="nameDraft"
+              class="tile-overlay__name-input"
+              type="text"
+              maxlength="64"
+              :aria-label="t('callPage.editNameAria')"
+              @blur="finishNameEdit"
+              @keydown.enter.prevent="onNameInputEnter"
+              @keydown.escape.prevent="cancelNameEdit"
+            />
+          </div>
+          <span v-if="!streamViewMode" class="tile-overlay__icons" aria-hidden="true">
             <span v-if="raiseHand" class="tile-overlay__hand" :title="t('callPage.raiseHandBadge')" aria-hidden="true"
               >✋</span
             >
@@ -512,38 +706,63 @@ if (import.meta.env.DEV) {
           </span>
         </div>
       </div>
-      <div v-if="!isLocal" ref="menuRoot" class="tile-menu tile-menu--remote">
+      <div v-if="!isLocal && !streamViewMode" class="tile-menu-cluster">
         <button
+          v-if="mafiaHostShowLifeToggle"
           type="button"
-          class="tile-menu__trigger"
-          draggable="false"
-          :aria-expanded="menuOpen"
-          :aria-label="t('callPage.participantMenu')"
-          @click.stop="toggleMenu"
+          class="tile-menu__life"
+          data-no-mafia-tile-host
+          :title="
+            mafiaEliminated
+              ? t('mafiaPage.hostTileReviveTitle')
+              : t('mafiaPage.hostTileEliminateTitle')
+          "
+          :aria-label="
+            mafiaEliminated
+              ? t('mafiaPage.hostTileReviveTitle')
+              : t('mafiaPage.hostTileEliminateTitle')
+          "
+          @click.stop="onMafiaHostLifeClick"
         >
-          ⋯
+          <span class="tile-menu__life-ico" aria-hidden="true">{{
+            mafiaEliminated ? '❤️' : '💀'
+          }}</span>
         </button>
-        <div v-if="menuOpen" class="tile-menu__dropdown">
-          <label class="tile-menu__row">
-            <span class="tile-menu__label">{{ t('callPage.listenVolume') }}</span>
-            <span class="tile-menu__pct">{{ volumePercentUi }}%</span>
-          </label>
-          <input
-            class="tile-menu__range"
-            type="range"
-            min="0"
-            max="200"
-            :value="volumePercentUi"
-            @input="onVolumeSliderInput"
-          />
-          <label class="tile-menu__row tile-menu__row--check">
-            <input
-              type="checkbox"
-              :checked="remoteListenMuted ?? false"
-              @change="onMuteCheckboxChange"
-            />
-            <span>{{ t('callPage.listenMuteLocal') }}</span>
-          </label>
+        <div ref="menuRoot" class="tile-menu-hoverable tile-menu-hoverable--remote">
+          <div class="tile-menu tile-menu--remote">
+            <button
+              type="button"
+              class="tile-menu__trigger"
+              draggable="false"
+              :aria-expanded="menuOpen"
+              :aria-label="t('callPage.participantMenu')"
+              @click.stop="toggleMenu"
+            >
+              ⋯
+            </button>
+            <div v-if="menuOpen" class="tile-menu__dropdown">
+              <label class="tile-menu__row">
+                <span class="tile-menu__label">{{ t('callPage.listenVolume') }}</span>
+                <span class="tile-menu__pct">{{ volumePercentUi }}%</span>
+              </label>
+              <input
+                class="tile-menu__range"
+                type="range"
+                min="0"
+                max="200"
+                :value="volumePercentUi"
+                @input="onVolumeSliderInput"
+              />
+              <label class="tile-menu__row tile-menu__row--check">
+                <input
+                  type="checkbox"
+                  :checked="remoteListenMuted ?? false"
+                  @change="onMuteCheckboxChange"
+                />
+                <span>{{ t('callPage.listenMuteLocal') }}</span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -564,12 +783,28 @@ if (import.meta.env.DEV) {
   border: 1px solid var(--call-tile-border, #2e303a);
   transition:
     border-color 0.2s ease,
+    box-shadow 0.2s ease,
     transform 0.2s ease;
 }
 
+/**
+ * Active talker: Web Audio RMS in call-core (remotes) or `useLocalTileSpeakingVisual` (local).
+ * Outer glow + tile scale live on `CallPage` `.call-page__tile-wrap` (grid `overflow` clips inner shadow).
+ * Here: border + inner video nudge only.
+ */
+.tile.is-speaking {
+  overflow: visible;
+  z-index: 1;
+  border-color: color-mix(in srgb, #a855f7 40%, var(--call-tile-border, #2e303a));
+}
+
+.tile.is-speaking .tile-video-wrap {
+  transform: none;
+}
+
 /* Без тіні — лише легкий scale (і рамка), щоб не «випирала» картка над сіткою. */
-.tile:hover,
-.tile:focus-within {
+.tile:hover:not(.is-speaking),
+.tile:focus-within:not(.is-speaking) {
   transform: scale(1.01);
   border-color: color-mix(in srgb, var(--sa-color-border, #2e303a) 80%, transparent);
 }
@@ -579,9 +814,52 @@ if (import.meta.env.DEV) {
   z-index: 4;
 }
 
-.tile--active-speaker {
-  border-color: var(--accent, #c084fc);
-  transform: scale(1.01);
+.tile--mafia-kill-anim {
+  animation: mafia-tile-kill 0.42s ease;
+}
+
+.tile--mafia-revive-glow {
+  animation: mafia-tile-revive 0.7s ease;
+}
+
+@keyframes mafia-tile-kill {
+  0% {
+    filter: none;
+  }
+  100% {
+    filter: brightness(0.7);
+  }
+}
+
+@keyframes mafia-tile-revive {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, #22c55e 0%, transparent);
+  }
+  40% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, #4ade80 50%, transparent),
+      0 0 20px color-mix(in srgb, #22c55e 45%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile--mafia-kill-anim,
+  .tile--mafia-revive-glow {
+    animation: none;
+  }
+
+  .tile--speaking .tile-video-wrap {
+    transform: none;
+  }
+
+  .tile.is-speaking {
+    box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.45);
+    transform: none;
+  }
+
+  .tile-video-wrap {
+    transition: none;
+  }
 }
 
 .tile-media {
@@ -603,6 +881,7 @@ if (import.meta.env.DEV) {
   z-index: 0;
 }
 
+/* Speaking highlight: `rowSpeaking` from CallPage; scales whole `.tile-video-wrap` (webcam + overlay). */
 .tile-video-wrap {
   position: absolute;
   inset: 0;
@@ -611,6 +890,27 @@ if (import.meta.env.DEV) {
   border-radius: 14px;
   /* Clips video/overlay; participant menu is a sibling under `.tile-media` so it is not clipped here. */
   overflow: hidden;
+  transform-origin: center center;
+  transition: transform 0.2s ease;
+}
+
+.tile--speaking .tile-video-wrap {
+  transform: scale(1.02);
+}
+
+.tile-video-wrap--mafia-dead .tile-video-clip {
+  filter: grayscale(0.9) brightness(0.5);
+  transition: filter 0.32s ease;
+}
+
+.tile-dead-veneer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 14px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.35) 0%, rgb(0 0 0 / 0.6) 100%);
+  transition: opacity 0.32s ease;
 }
 
 .tile-video-clip {
@@ -656,7 +956,64 @@ if (import.meta.env.DEV) {
   border-bottom-right-radius: 14px;
 }
 
-.tile-overlay__name {
+/* Bottom bar: name + Mafia seat — layout matches call HUD density (`--sa-space-*`). */
+.tile-overlay__label-group {
+  display: flex;
+  align-items: center;
+  gap: var(--sa-space-2, 0.5rem);
+  flex: 1;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.tile-overlay__label-group--editable {
+  pointer-events: auto;
+}
+
+/** Mafia seat: small dark circle, white digit — left of the role chip (name is separate). */
+.tile-overlay__seat-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 0.2rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: #fff;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: color-mix(in srgb, #2a2a2e 88%, #000);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+}
+
+.tile-overlay__role-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  max-width: 5.2rem;
+  padding: 0.1rem 0.32rem;
+  border-radius: 6px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #f5f3ff;
+  border: 1px solid color-mix(in srgb, #a78bfa 50%, transparent);
+  background: color-mix(in srgb, #4c1d95 35%, #000 65%);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-overlay__display-name {
   font-size: 0.8rem;
   font-weight: 600;
   color: #f9fafb;
@@ -667,24 +1024,40 @@ if (import.meta.env.DEV) {
   min-width: 0;
 }
 
-.tile-overlay__name--editable {
+.tile-overlay__display-name--editable {
   pointer-events: auto;
   cursor: text;
 }
 
-.tile-overlay__name-input {
+.tile-overlay__name-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--sa-space-2, 0.5rem);
+  flex: 1;
+  min-width: 0;
   pointer-events: auto;
+}
+
+/** Inline rename: matches `CallPage` `.call-page__room-pop-field input` (call shell / `sa` tokens). */
+.tile-overlay__name-input {
   flex: 1;
   min-width: 0;
   max-width: 100%;
   font: inherit;
+  font-size: 0.8rem;
   font-weight: 600;
-  color: #f9fafb;
-  background: rgb(0 0 0 / 0.5);
-  border: 1px solid rgb(255 255 255 / 0.22);
-  border-radius: 6px;
-  padding: 0.15rem 0.35rem;
+  line-height: 1.35;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--sa-color-border);
+  border-radius: var(--sa-radius-sm);
+  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  color: var(--sa-color-text-main);
   outline: none;
+}
+
+.tile-overlay__name-input:focus-visible {
+  outline: 2px solid var(--sa-color-primary, #a78bfa);
+  outline-offset: 1px;
 }
 
 .tile-overlay__icons {
@@ -713,33 +1086,93 @@ if (import.meta.env.DEV) {
   opacity: 0.95;
 }
 
-.tile-menu {
+/**
+ * Mafia + remote controls: top-right, row-reverse so 💀/❤️ sits at the true top-right, ⋯ to its left.
+ * Life control stays visible; ⋯ is hidden on desktop until tile hover.
+ */
+.tile-menu-cluster {
   position: absolute;
   top: 0.4rem;
   right: 0.4rem;
+  z-index: 40;
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.3rem;
+  max-width: calc(100% - 0.5rem);
+  pointer-events: auto;
+  opacity: 1;
+}
+
+.tile-menu {
+  position: relative;
   transition: opacity 0.15s ease;
 }
 
 /** Remote menu above overlays; visibility: hover on desktop, always on touch / narrow viewports. */
 .tile-menu--remote {
-  z-index: 40;
+  z-index: 1;
+}
+
+.tile-menu__life {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+  font-size: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #f87171 50%, var(--sa-color-border, #2e303a));
+  background: rgb(0 0 0 / 0.58);
+  color: #fecaca;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #f87171 20%, transparent);
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.16s ease;
+  z-index: 2;
+}
+
+.tile-menu__life:hover {
+  background: color-mix(in srgb, #f87171 18%, #000 82%);
+  box-shadow: 0 0 12px color-mix(in srgb, #f87171 38%, transparent);
+  transform: scale(1.05);
+}
+
+.tile-menu__life-ico {
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+/** Wraps the ⋯ menu only; fade on desktop until tile hover. */
+.tile-menu-hoverable--remote {
+  position: relative;
+  transition: opacity 0.15s ease;
 }
 
 @media (max-width: 768px), (hover: none) {
-  .tile-menu--remote {
+  .tile-menu-hoverable--remote {
     opacity: 1;
     pointer-events: auto;
   }
 }
 
 @media (min-width: 769px) and (hover: hover) {
-  .tile-menu--remote {
+  .tile-menu-hoverable--remote {
     opacity: 0;
     pointer-events: none;
   }
 
-  .tile:hover .tile-menu--remote,
-  .tile--menu-open .tile-menu--remote {
+  .tile:hover .tile-menu-hoverable--remote,
+  .tile--menu-open .tile-menu-hoverable--remote {
     opacity: 1;
     pointer-events: auto;
   }

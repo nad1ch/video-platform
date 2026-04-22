@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  onUnmounted,
+  ref,
+  shallowRef,
+  watch,
+} from 'vue'
 import type { CallChatLine } from 'call-core'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
   buildCallParticipantMap,
   buildDisplayNameUiMap,
+  getAudioAnalysisAudioContext,
   normalizeDisplayName,
   resolvePeerDisplayNameForUi,
   useCallOrchestrator,
@@ -14,6 +24,7 @@ import {
   type InboundVideoDebugRow,
   type VideoQualityPreset,
 } from 'call-core'
+import { useLocalTileSpeakingVisual } from '@/composables/useLocalTileSpeakingVisual'
 import { useAuth } from '@/composables/useAuth'
 import { createLogger } from '@/utils/logger'
 import {
@@ -33,6 +44,17 @@ import {
   CALL_ROOM_POPOVER_PANEL_ID,
   useCallRoomHeaderJoinStore,
 } from '@/stores/callRoomHeaderJoin'
+import { useMafiaHostSignaling } from '@/composables/useMafiaHostSignaling'
+import {
+  mafiaBaseRoomIdFromSignaling,
+  mafiaSignalingRoomId,
+  MAFIA_SIGNALING_ROOM_PREFIX,
+} from '@/composables/useMafiaMediaRoom'
+import MafiaSpeakingQueueBar from '@/components/mafia/MafiaSpeakingQueueBar.vue'
+import { useMafiaGameStore } from '@/stores/mafiaGame'
+import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
+import { mafiaEliminationAvatarKindForPeerId } from '@/utils/mafiaEliminationAvatarKind'
+import { MAFIA_OBS_URL_TOAST_EVENT } from '@/composables/mafiaStreamViewRoute'
 
 type VideoQualityUiChoice = 'auto' | VideoQualityPreset
 
@@ -43,11 +65,28 @@ const { user, ensureAuthLoaded, isAdmin } = useAuth()
 
 const CALL_ROUTE_HTML_CLASS = 'sa-call-route'
 
+/**
+ * `/app/call` and `/app/mafia` share one `CallPage` (video + orchestrator).
+ * Isolation: see `useMafiaMediaRoom.ts` (signaling id) + `refreshMafiaPlayersState` (clears mafia when `route.name !== 'mafia'`).
+ */
+const isCallAppRoute = computed(() => route.name === 'call' || route.name === 'mafia')
+const isMafiaRoute = computed(() => route.name === 'mafia')
+
+const props = withDefaults(
+  defineProps<{
+    /** Mafia `?mode=view` from parent: minimal UI for stream capture. */
+    mafiaStreamView?: boolean
+  }>(),
+  { mafiaStreamView: false },
+)
+/** Mafia stream layout: no dock, no host tile actions, no per-tile menus / rename. */
+const mafiaViewUi = computed(() => isMafiaRoute.value && props.mafiaStreamView)
+
 watch(
-  () => route.name === 'call',
-  (onCall) => {
+  () => isCallAppRoute.value,
+  (onCallShell) => {
     if (typeof document === 'undefined') return
-    document.documentElement.classList.toggle(CALL_ROUTE_HTML_CLASS, onCall)
+    document.documentElement.classList.toggle(CALL_ROUTE_HTML_CLASS, onCallShell)
   },
   { immediate: true },
 )
@@ -73,6 +112,7 @@ const {
   tiles,
   sizeTier,
   activeSpeakerPeerId,
+  localAudioSourceStream,
   micEnabled,
   camEnabled,
   toggleMic,
@@ -96,7 +136,11 @@ const {
   toggleRaiseHand,
   screenSharing,
   toggleScreenShare,
+  sendSignalingMessage,
+  subscribeSignalingMessage,
 } = useCallOrchestrator({ allowManualVideoQuality, joinAvatarUrl })
+
+useMafiaHostSignaling(sendSignalingMessage, subscribeSignalingMessage, wsStatus)
 
 const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
 
@@ -254,6 +298,24 @@ watch(
   },
 )
 
+function onMafiaToggleLifeFromTile(peerId: string): void {
+  if (typeof peerId !== 'string' || peerId.length < 1) {
+    return
+  }
+  mafiaGameStore.hostToggleMafiaPlayerLife(peerId)
+}
+
+function onMafiaObsUrlCopiedToast(): void {
+  const id = `mafia-obs-${Date.now()}`
+  callToasts.value = [
+    ...callToasts.value,
+    { id, text: t('mafiaPage.obsViewUrlCopiedToast'), kind: 'join' },
+  ]
+  window.setTimeout(() => {
+    callToasts.value = callToasts.value.filter((x) => x.id !== id)
+  }, 4200)
+}
+
 const chatOpen = ref(false)
 const chatDraft = ref('')
 const chatScrollRef = ref<HTMLElement | null>(null)
@@ -270,24 +332,58 @@ const callAuthReady = ref(false)
 
 const callRoomHeaderJoin = useCallRoomHeaderJoinStore()
 const { roomPopoverOpen } = storeToRefs(callRoomHeaderJoin)
+const mafiaPlayersStore = useMafiaPlayersStore()
+const mafiaGameStore = useMafiaGameStore()
+
+/** Shown in UI, copied, and in `?room=` — without `mafia:` (Mafia still joins `mafia:` + this in the session). */
+function displayCallOrMafiaRoomCode(): string {
+  const raw = normalizeDisplayName(session.roomId) || 'demo'
+  if (isMafiaRoute.value) {
+    return mafiaBaseRoomIdFromSignaling(raw)
+  }
+  return raw
+}
+
+/**
+ * Keep `session.roomId` consistent with the route: Mafia → `mafia:<base>`, Call → never `mafia:`.
+ * Switching between `/app/call` and `/app/mafia` then uses separate mediasoup rooms for the same base code.
+ */
+function normalizeSessionRoomIdForStreamRoute(): void {
+  if (!isCallAppRoute.value) {
+    return
+  }
+  const s = normalizeDisplayName(session.roomId) || 'demo'
+  if (isMafiaRoute.value) {
+    const desired = mafiaSignalingRoomId(mafiaBaseRoomIdFromSignaling(s))
+    if (s !== desired) {
+      session.roomId = desired
+    }
+    return
+  }
+  if (s.startsWith(MAFIA_SIGNALING_ROOM_PREFIX)) {
+    session.roomId = mafiaBaseRoomIdFromSignaling(s)
+  }
+}
 
 async function switchToRoom(nextRaw: string, opts?: { fromRoute?: boolean }): Promise<void> {
-  const id = normalizeDisplayName(nextRaw) || 'demo'
+  const base = normalizeDisplayName(nextRaw) || 'demo'
+  const signalingId = isMafiaRoute.value ? mafiaSignalingRoomId(base) : base
   if (joining.value) {
     return
   }
   const cur = normalizeDisplayName(session.roomId) || 'demo'
-  if (cur === id && session.inCall) {
+  if (cur === signalingId && session.inCall) {
     callRoomHeaderJoin.closeRoomPopover()
     return
   }
   if (session.inCall) {
     leaveCall()
   }
-  session.roomId = id
-  if (!opts?.fromRoute && route.name === 'call') {
+  session.roomId = signalingId
+  if (!opts?.fromRoute && isCallAppRoute.value) {
     try {
-      await router.replace({ name: 'call', query: { ...route.query, room: id } })
+      const name = route.name === 'mafia' ? 'mafia' : 'call'
+      await router.replace({ name, query: { ...route.query, room: base } })
     } catch {
       /* ignore */
     }
@@ -299,12 +395,27 @@ async function switchToRoom(nextRaw: string, opts?: { fromRoute?: boolean }): Pr
 watch(
   () => [route.name, route.query.room, callAuthReady.value] as const,
   async () => {
-    if (!callAuthReady.value || route.name !== 'call') {
+    if (!callAuthReady.value || !isCallAppRoute.value) {
       return
     }
+    normalizeSessionRoomIdForStreamRoute()
     const q = typeof route.query.room === 'string' ? normalizeDisplayName(route.query.room) : ''
-    const cur = normalizeDisplayName(session.roomId) || 'demo'
-    if (q && q !== cur) {
+    if (!q) {
+      if (!session.inCall && !joining.value) {
+        try {
+          await router.replace({
+            name: route.name as 'call' | 'mafia',
+            query: { ...route.query, room: generateCallRoomCode() },
+          })
+        } catch {
+          /* ignore */
+        }
+      }
+      return
+    }
+    const currentSignaling = normalizeDisplayName(session.roomId) || 'demo'
+    const qSignaling = isMafiaRoute.value ? mafiaSignalingRoomId(q) : q
+    if (qSignaling !== currentSignaling) {
       await switchToRoom(q, { fromRoute: true })
       return
     }
@@ -317,12 +428,12 @@ watch(
 
 watch(roomPopoverOpen, (open) => {
   if (open) {
-    roomJoinDraft.value = normalizeDisplayName(session.roomId) || 'demo'
+    roomJoinDraft.value = displayCallOrMafiaRoomCode()
   }
 })
 
 async function copyRoomToClipboard(): Promise<void> {
-  const text = normalizeDisplayName(session.roomId) || 'demo'
+  const text = displayCallOrMafiaRoomCode()
   try {
     await navigator.clipboard.writeText(text)
   } catch {
@@ -515,8 +626,39 @@ watch(
   { immediate: true, flush: 'post' },
 )
 
+/** 1-based seat for each `peerId` (numbering from game store, or join order before reshuffle). */
+const mafiaNumberByPeer = computed(() => {
+  if (!isMafiaRoute.value) {
+    return new Map<string, number>()
+  }
+  const m = new Map<string, number>()
+  const order = mafiaGameStore.getDisplayNumberingOrder(mafiaPlayersStore.joinOrder)
+  order.forEach((id, i) => {
+    m.set(id, i + 1)
+  })
+  return m
+})
+
 const orderedTiles = computed(() => {
   const map = new Map(tiles.value.map((t) => [t.peerId, t]))
+  const list = tiles.value
+  if (isMafiaRoute.value && list.length > 0) {
+    const seats = mafiaNumberByPeer.value
+    return [...list].sort((a, b) => {
+      const sa = seats.get(a.peerId)
+      const sb = seats.get(b.peerId)
+      if (sa != null && sb != null && sa !== sb) {
+        return sa - sb
+      }
+      if (sa != null && sb == null) {
+        return -1
+      }
+      if (sa == null && sb != null) {
+        return 1
+      }
+      return 0
+    })
+  }
   const order = tileOrder.value.filter((id) => map.has(id))
   for (const t of tiles.value) {
     if (!order.includes(t.peerId)) {
@@ -642,6 +784,182 @@ const orderedGridRows = computed(() => {
   })
 })
 
+/**
+ * Speaking highlight — single source of truth (no child emit, no per-peer reactive map; those caused update churn).
+ * - Remote tiles: `activeSpeakerPeerId` from call-core VAD.
+ * - Local tile: `useLocalTileSpeakingVisual` fed from `localAudioSourceStream` (raw getUserMedia),
+ *   not `tile.stream` (which is a video-preview stream that goes `null` when camera is off,
+ *   which previously hid the local glow whenever the cam was off even with mic on).
+ */
+const localTileSpeakingForWrap = useLocalTileSpeakingVisual(
+  () => localAudioSourceStream.value,
+  () => true,
+  () => micEnabled.value,
+)
+
+function isTileRowSpeaking(row: (typeof orderedGridRows.value)[number]): boolean {
+  if (row.tile.isLocal) {
+    return localTileSpeakingForWrap.value
+  }
+  return row.tile.peerId === activeSpeakerPeerId.value
+}
+
+/** User gesture: keep shared analysis AudioContext un-suspended so VAD + local RMS work after join. */
+function resumeCallAudioAnalysisFromGesture(): void {
+  void getAudioAnalysisAudioContext().resume().catch(() => {})
+}
+
+/** Explicit deps so host tile highlight updates immediately when `nightActions` / queue refs change. */
+const mafiaHostNightActionSeatSet = computed(() => {
+  const a = mafiaGameStore.nightActions
+  const s = new Set<number>()
+  for (const x of [a.mafia, a.doctor, a.sheriff, a.don] as const) {
+    if (typeof x === 'number' && Number.isInteger(x) && x >= 1) {
+      s.add(x)
+    }
+  }
+  return s
+})
+
+const mafiaHostSpeakingQueueSeatSet = computed(
+  () => new Set(mafiaGameStore.speakingQueue),
+)
+
+function isMafiaHostNightActionSeat(seat: number | undefined): boolean {
+  if (seat == null) {
+    return false
+  }
+  return mafiaHostNightActionSeatSet.value.has(seat)
+}
+
+function isMafiaHostSpeakingQueuedSeat(seat: number | undefined): boolean {
+  if (seat == null) {
+    return false
+  }
+  return mafiaHostSpeakingQueueSeatSet.value.has(seat)
+}
+
+function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value)[number]): void {
+  if (mafiaViewUi.value) {
+    return
+  }
+  if (!isMafiaRoute.value || !mafiaGameStore.isMafiaHost) {
+    return
+  }
+  const t = ev.target
+  if (t instanceof Element) {
+    if (t.closest('button, input, textarea, a, [data-no-mafia-tile-host]')) {
+      return
+    }
+    if (t.closest('.tile-overlay__label-group, .tile-overlay__name-input, .tile-overlay__name-edit')) {
+      return
+    }
+  }
+  if (mafiaGameStore.hostInteractionMode === 'swap') {
+    const pid = row.tile.peerId
+    const sel = mafiaGameStore.hostSeatSwapSelectionPeerId
+    if (sel == null) {
+      mafiaGameStore.setSeatSwapSelectionPeerId(pid)
+    } else if (sel === pid) {
+      mafiaGameStore.setSeatSwapSelectionPeerId(null)
+    } else {
+      mafiaGameStore.swapSeatsByPeerId(sel, pid)
+    }
+    ev.stopPropagation()
+    return
+  }
+  const seat = mafiaNumberByPeer.value.get(row.tile.peerId)
+  if (seat == null) {
+    return
+  }
+  if (mafiaGameStore.hostInteractionMode === 'speaking') {
+    if (mafiaHostSpeakingQueueSeatSet.value.has(seat)) {
+      mafiaGameStore.removeSpeakingSeat(seat)
+    } else {
+      mafiaGameStore.addSpeakingSeatIfNew(seat)
+    }
+  } else {
+    mafiaGameStore.assignOrClearNightActionForActiveRole(seat)
+  }
+  ev.stopPropagation()
+}
+
+const mafiaSpeakingOrderHintVisible = ref(false)
+let mafiaSpeakingOrderHintTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(
+  () => mafiaGameStore.hostInteractionMode,
+  (mode, prev) => {
+    if (!isMafiaRoute.value || mafiaViewUi.value || !mafiaGameStore.isMafiaHost) {
+      return
+    }
+    if (mode !== 'speaking' || prev == null || prev === 'speaking') {
+      return
+    }
+    mafiaSpeakingOrderHintVisible.value = true
+    if (mafiaSpeakingOrderHintTimer != null) {
+      clearTimeout(mafiaSpeakingOrderHintTimer)
+    }
+    mafiaSpeakingOrderHintTimer = setTimeout(() => {
+      mafiaSpeakingOrderHintVisible.value = false
+      mafiaSpeakingOrderHintTimer = undefined
+    }, 4500)
+  },
+)
+
+function refreshMafiaPlayersState(): void {
+  if (!isMafiaRoute.value) {
+    mafiaPlayersStore.clearPlayerRowsForUi()
+    mafiaGameStore.clearWhenLeavingMafiaRoute()
+    return
+  }
+  if (mafiaGameStore.isApplyingMafiaReshuffle) {
+    const engine = mafiaPlayersStore.joinOrder
+    const order = mafiaGameStore.getDisplayNumberingOrder(engine)
+    mafiaPlayersStore.setPlayerRowsDisplay(
+      order.map((peerId, i) => ({
+        peerId,
+        number: i + 1,
+        displayName: peerDisplayName(peerId),
+      })),
+    )
+    return
+  }
+  mafiaPlayersStore.syncWithPeers(session.roomId, tiles.value.map((t) => t.peerId))
+  const engine = mafiaPlayersStore.joinOrder
+  mafiaGameStore.reconcileNumberingWithEngine(engine)
+  mafiaGameStore.pruneGameStateToPeers(engine)
+  const order = mafiaGameStore.getDisplayNumberingOrder(engine)
+  mafiaGameStore.pruneNightActionsToMaxSeat(order.length)
+  if (mafiaGameStore.isMafiaHost) {
+    mafiaGameStore.pruneSpeakingQueueToMaxSeat(order.length)
+  }
+  mafiaPlayersStore.setPlayerRowsDisplay(
+    order.map((peerId, i) => ({
+      peerId,
+      number: i + 1,
+      displayName: peerDisplayName(peerId),
+    })),
+  )
+}
+
+watch(
+  () =>
+    [
+      isMafiaRoute.value,
+      session.roomId,
+      tiles.value,
+      orderedGridRows.value,
+      mafiaGameStore.numberingKey,
+      mafiaGameStore.nightActions,
+      mafiaGameStore.speakingQueue,
+    ] as const,
+  () => {
+    void refreshMafiaPlayersState()
+  },
+  { deep: true, immediate: true },
+)
+
 const gridStyle = computed(() => {
   const n = orderedTiles.value.length
   if (!n) {
@@ -713,7 +1031,13 @@ onBeforeUnmount(() => {
     clearTimeout(roomCopyFlashTimer)
     roomCopyFlashTimer = null
   }
+  if (mafiaSpeakingOrderHintTimer != null) {
+    clearTimeout(mafiaSpeakingOrderHintTimer)
+    mafiaSpeakingOrderHintTimer = undefined
+  }
   callRoomHeaderJoin.reset()
+  mafiaPlayersStore.reset()
+  mafiaGameStore.fullReset()
   /* Вихід з маршруту /call (навігація по сайту) має закривати кімнату й зупиняти медіа, інакше Pinia-сесія лишається inCall. */
   leaveCall()
 })
@@ -743,10 +1067,12 @@ onMounted(() => {
       orderedTiles,
     }
   }
+  window.addEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
 })
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
+  window.removeEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
   document.documentElement.classList.remove(CALL_ROUTE_HTML_CLASS)
   if (import.meta.env.DEV) {
     delete (globalThis as unknown as { __CALL_DEBUG__?: unknown }).__CALL_DEBUG__
@@ -794,7 +1120,7 @@ watch(joining, (j) => {
         <div class="call-page__room-pop-code">
           <span class="call-page__room-pop-label">{{ t('callPage.roomCodeLabel') }}</span>
           <div class="call-page__room-pop-code-row">
-            <code class="call-page__room-pop-value call-page__room-pop-value--row">{{ normalizeDisplayName(session.roomId) || 'demo' }}</code>
+            <code class="call-page__room-pop-value call-page__room-pop-value--row">{{ displayCallOrMafiaRoomCode() }}</code>
             <div class="call-page__room-pop-code-tools">
               <div class="call-page__room-pop-copy-wrap">
                 <button
@@ -903,7 +1229,10 @@ watch(joining, (j) => {
     <div class="call-page__shell">
       <section
         class="call-page__active"
-        :class="{ 'call-page__active--with-dock': session.inCall || joining }"
+        :class="{
+          'call-page__active--with-dock': (session.inCall || joining) && !mafiaViewUi,
+          'call-page__active--with-mafia-bottom': isMafiaRoute && (session.inCall || joining) && !mafiaViewUi,
+        }"
       >
         <div
           v-if="joinError && !joining"
@@ -927,20 +1256,64 @@ watch(joining, (j) => {
             </div>
           </TransitionGroup>
         </div>
+        <Transition name="call-toast" appear>
+          <div
+            v-if="mafiaSpeakingOrderHintVisible"
+            class="call-page__toast call-page__toast--join call-page__mafia-speak-hint"
+            role="status"
+          >
+            {{ t('mafiaPage.speakingOrderFloatHint') }}
+          </div>
+        </Transition>
 
-        <div ref="stageRef" class="call-page__stage">
+        <div
+          ref="stageRef"
+          class="call-page__stage"
+          @pointerdown.capture="resumeCallAudioAnalysisFromGesture"
+        >
           <div class="call-page__grid" :style="gridStyle">
             <div
               v-for="row in orderedGridRows"
               :key="row.tile.peerId"
               class="call-page__tile-wrap"
-              draggable="true"
+              :draggable="!mafiaViewUi && !isMafiaRoute"
               :title="t('callPage.dragReorder')"
               :aria-label="t('callPage.dragReorder')"
               :class="{
                 'call-page__tile-wrap--over': dragOverPeerId === row.tile.peerId,
                 'call-page__tile-wrap--dragging': dragPeerId === row.tile.peerId,
+                'call-page__tile-wrap--mafia-host-target':
+                  isMafiaRoute &&
+                  !mafiaViewUi &&
+                  mafiaGameStore.isMafiaHost &&
+                  mafiaGameStore.hostInteractionMode === 'night' &&
+                  isMafiaHostNightActionSeat(mafiaNumberByPeer.get(row.tile.peerId)),
+                'call-page__tile-wrap--mafia-host-speaking-queued':
+                  isMafiaRoute &&
+                  !mafiaViewUi &&
+                  isMafiaHostSpeakingQueuedSeat(mafiaNumberByPeer.get(row.tile.peerId)),
+                'call-page__tile-wrap--mafia-host-mode': isMafiaRoute && !mafiaViewUi && mafiaGameStore.isMafiaHost,
+                'call-page__tile-wrap--mafia-host-mode-speaking':
+                  isMafiaRoute &&
+                  !mafiaViewUi &&
+                  mafiaGameStore.isMafiaHost &&
+                  mafiaGameStore.hostInteractionMode === 'speaking',
+                'call-page__tile-wrap--mafia-host-mode-swap':
+                  isMafiaRoute &&
+                  !mafiaViewUi &&
+                  mafiaGameStore.isMafiaHost &&
+                  mafiaGameStore.hostInteractionMode === 'swap',
+                'call-page__tile-wrap--mafia-swap-selected':
+                  isMafiaRoute &&
+                  !mafiaViewUi &&
+                  mafiaGameStore.isMafiaHost &&
+                  mafiaGameStore.hostInteractionMode === 'swap' &&
+                  mafiaGameStore.hostSeatSwapSelectionPeerId === row.tile.peerId,
+                'call-page__tile-wrap--mafia-cursor-default':
+                  isMafiaRoute && (mafiaViewUi || !mafiaGameStore.isMafiaHost),
+                'call-page__tile-wrap--speaking': isTileRowSpeaking(row),
               }"
+              @click="onMafiaHostTileClick($event, row)"
               @dragstart="onTileDragStart($event, row.tile.peerId)"
               @dragover.prevent="onTileDragOver($event, row.tile.peerId)"
               @dragleave="onTileDragLeave(row.tile.peerId)"
@@ -952,6 +1325,11 @@ watch(joining, (j) => {
                 class="call-page__tile-inner"
                 :peer-id="row.tile.peerId"
                 :display-name="row.displayName"
+                :mafia-seat-index="isMafiaRoute ? mafiaNumberByPeer.get(row.tile.peerId) : undefined"
+                :mafia-visible-role="
+                  isMafiaRoute && !mafiaViewUi ? mafiaGameStore.getMafiaRoleVisibleForTile(row.tile.peerId) : undefined
+                "
+                :stream-view-mode="mafiaViewUi"
                 :stream="row.tile.stream"
                 :is-local="row.tile.isLocal"
                 :video-enabled="row.tile.videoEnabled"
@@ -959,28 +1337,47 @@ watch(joining, (j) => {
                 :video-fill-cover="false"
                 :play-rev="row.tile.playRev"
                 :size-tier="sizeTier"
-                :active-speaker="activeSpeakerPeerId === row.tile.peerId"
+                :row-speaking="isTileRowSpeaking(row)"
                 :remote-listen-volume="row.tile.remoteListenVolume"
                 :remote-listen-muted="row.tile.remoteListenMuted"
                 :raise-hand="Boolean(row.tile.handRaised)"
                 :video-presentation="row.tile.videoPresentation"
                 :avatar-url="row.tile.avatarUrl ?? ''"
+                :mafia-eliminated="isMafiaRoute && mafiaGameStore.isMafiaPeerEliminated(row.tile.peerId)"
+                :mafia-elimination-kind="mafiaEliminationAvatarKindForPeerId(row.tile.peerId)"
+                :mafia-host-show-life-toggle="
+                  isMafiaRoute &&
+                  !mafiaViewUi &&
+                  mafiaGameStore.isMafiaHost &&
+                  mafiaGameStore.phase != null
+                "
                 @update:listen-volume="remoteListenVolumeHandler(row.tile.peerId)"
                 @update:listen-muted="remoteListenMutedHandler(row.tile.peerId)"
                 @commit-local-display-name="onCommitLocalTileDisplayName"
+                @mafia-toggle-life="onMafiaToggleLifeFromTile(row.tile.peerId)"
               />
             </div>
           </div>
         </div>
 
         <div
-          v-if="session.inCall || joining"
-          class="call-page__dock"
-          :class="{ 'call-page__dock--pending': joining }"
-          role="toolbar"
-          :aria-label="t('callPage.callControls')"
+          v-if="(session.inCall || joining) && !mafiaViewUi"
+          class="call-page__bottom-cluster"
         >
           <div
+            class="call-page__bottom-cluster__left call-page__bottom-cluster__left--empty"
+            aria-hidden="true"
+          />
+          <div
+            class="call-page__bottom-cluster__center call-page__bottom-cluster__center--speak-dock"
+          >
+            <div
+              class="call-page__dock"
+              :class="{ 'call-page__dock--pending': joining }"
+              role="toolbar"
+              :aria-label="t('callPage.callControls')"
+            >
+            <div
             ref="micSplitRef"
             class="call-page__dock-split"
             :class="{
@@ -1219,9 +1616,12 @@ watch(joining, (j) => {
             </span>
           </button>
         </div>
+            <MafiaSpeakingQueueBar v-if="isMafiaRoute" />
+          </div>
+        </div>
 
         <aside
-          v-if="session.inCall"
+          v-if="session.inCall && !mafiaViewUi"
           class="call-page__chat"
           :class="{ 'call-page__chat--open': chatOpen }"
           :aria-label="t('callPage.chatTitle')"
@@ -1272,7 +1672,7 @@ watch(joining, (j) => {
         </aside>
 
         <aside
-          v-if="session.callDebugOverlay && showCallDebugControls"
+          v-if="session.callDebugOverlay && showCallDebugControls && !mafiaViewUi"
           class="call-page__debug"
           aria-label="Call debug"
         >
@@ -1436,6 +1836,13 @@ watch(joining, (j) => {
 .call-page__active--with-dock {
   /* Зазор під плаваючий dock. */
   padding-bottom: calc(3.25rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Mafia: speaking queue + dock stack on narrow viewports — reserve more stage space. */
+@media (max-width: 40rem) {
+  .call-page__active--with-dock.call-page__active--with-mafia-bottom {
+    padding-bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* Room popover: Teleport target is `#call-room-dropdown-host` in AppShellLayout (positioned below header button). */
@@ -1650,6 +2057,18 @@ watch(joining, (j) => {
   background: color-mix(in srgb, #64748b 35%, rgb(15 16 20 / 0.92));
 }
 
+/* Above `theme.css` `.app-shell-header` (z-index: 100); same vertical band as `.call-page__toasts` */
+.call-page__mafia-speak-hint {
+  position: fixed;
+  top: 4.75rem;
+  right: 1rem;
+  left: auto;
+  transform: none;
+  z-index: 110;
+  pointer-events: none;
+  width: min(20rem, calc(100vw - 1.5rem));
+}
+
 .call-toast-enter-active,
 .call-toast-leave-active {
   transition:
@@ -1683,7 +2102,7 @@ watch(joining, (j) => {
   min-height: 0;
   width: 100%;
   display: grid;
-  overflow: hidden;
+  /* overflow: hidden; */
   /* Matches GRID_CONTENT_INSET_PX in getGrid (6px each side): space for drag-active ring without clipping. */
   padding: 6px;
   box-sizing: border-box;
@@ -1698,12 +2117,23 @@ watch(joining, (j) => {
   cursor: grab;
   /* Match `.tile` in ParticipantTile (14px); stable radius avoids jitter vs --over-only radius + shadow animation. */
   border-radius: 14px;
-  transition: box-shadow 0.15s ease;
+  /**
+   * Asymmetric fade: base = LEAVE (slower, softer exit), `--speaking` rule overrides to a
+   * quicker ENTER. When `--speaking` is removed the style falls back here → leave animation.
+   */
+  transition:
+    box-shadow 0.32s ease-out,
+    transform 0.32s ease-out;
 }
 
 .call-page__tile-wrap--dragging {
   cursor: grabbing;
   transition: none;
+}
+
+/* Mafia: no tile reorder; players / OBS view use a normal pointer — not “grab” (host keeps mode cursors below). */
+.call-page__tile-wrap--mafia-cursor-default {
+  cursor: default;
 }
 
 /* Drag source: kill tile hover lift / shadow transition so 14px clip + video mask stay aligned. */
@@ -1718,8 +2148,30 @@ watch(joining, (j) => {
 /* Сусідня клітина сітки інакше перекриває тінь попередньої (порядок малювання в DOM). */
 .call-page__tile-wrap:hover,
 .call-page__tile-wrap:focus-within,
-.call-page__tile-wrap--over {
+.call-page__tile-wrap--over,
+.call-page__tile-wrap--speaking {
   z-index: 2;
+}
+
+/**
+ * Active speaker ring on the wrap (not the inner `.tile`) so `overflow: hidden` on `.call-page__grid`
+ * does not clip the glow. `call-page__tile-wrap--speaking` from `isTileRowSpeaking(row)` (no `:has()`).
+ */
+.call-page__tile-wrap--speaking:not(.call-page__tile-wrap--dragging) {
+  box-shadow: 0 0 24px rgba(140, 90, 255, 0.6);
+  transform: scale(1.01);
+  transform-origin: center center;
+  /* ENTER is snappier than LEAVE; see base rule for the LEAVE duration. */
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-page__tile-wrap--speaking:not(.call-page__tile-wrap--dragging) {
+    transform: none;
+    box-shadow: 0 0 0 1px rgba(140, 90, 255, 0.5);
+  }
 }
 
 .call-page__tile-wrap--over {
@@ -1728,6 +2180,41 @@ watch(joining, (j) => {
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--sa-color-primary, #a78bfa) 90%, transparent),
     0 0 0 6px color-mix(in srgb, var(--sa-color-primary, #a78bfa) 22%, transparent);
+}
+
+.call-page__tile-wrap--mafia-host-mode {
+  cursor: crosshair;
+  /* Keep the same asymmetric LEAVE speed as the base rule; outline-color is host-mode UI only. */
+  transition:
+    box-shadow 0.32s ease-out,
+    outline-color 0.2s ease,
+    transform 0.32s ease-out;
+}
+
+.call-page__tile-wrap--mafia-host-mode-speaking {
+  cursor: copy;
+}
+
+.call-page__tile-wrap--mafia-host-mode-swap {
+  cursor: cell;
+}
+
+.call-page__tile-wrap--mafia-swap-selected {
+  z-index: 2;
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #a855f7 80%, var(--sa-color-surface) 20%);
+}
+
+.call-page__tile-wrap--mafia-host-speaking-queued {
+  z-index: 2;
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #22d3ee 80%, var(--sa-color-primary, #a78bfa) 10%);
+}
+
+.call-page__tile-wrap--mafia-host-target {
+  z-index: 2;
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #fde047 75%, var(--sa-color-primary, #a78bfa) 15%);
 }
 
 .call-page__tile-inner {
@@ -1741,19 +2228,133 @@ watch(joining, (j) => {
   min-height: 0;
 }
 
-.call-page__dock {
+/**
+ * Mafia (and call): 3 columns `1fr | auto (dock) | 1fr` so the queue never shifts the pill dock off center.
+ */
+.call-page__bottom-cluster {
   position: fixed;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-  transform: translateX(-50%);
+  transform: none;
   z-index: 40;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.4rem;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.call-page__bottom-cluster__left {
+  min-width: 0;
+  max-width: 100%;
+  justify-self: end;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  overflow: hidden;
+  padding-right: 0.1rem;
+  pointer-events: auto;
+}
+
+.call-page__bottom-cluster__left--empty {
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.call-page__bottom-cluster__center {
+  justify-self: center;
+  min-width: 0;
+  pointer-events: auto;
+}
+
+/* Mafia speaking queue to the right of `.call-page__dock`, same row; long queues wrap to a second line inside the pill. */
+.call-page__bottom-cluster__center--speak-dock {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sa-space-2) var(--sa-space-3);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.call-page__bottom-cluster__center--speak-dock .call-page__dock {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.call-page__bottom-cluster__right {
+  justify-self: start;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.3rem 0.35rem;
+  min-width: 0;
+  padding-left: 0.1rem;
+  pointer-events: auto;
+}
+
+@media (max-width: 40rem) {
+  .call-page__bottom-cluster {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    row-gap: 0.4rem;
+    left: 0.25rem;
+    right: 0.25rem;
+  }
+
+  .call-page__bottom-cluster__left {
+    justify-self: center;
+    width: 100%;
+    max-width: 100%;
+    justify-content: center;
+  }
+
+  .call-page__bottom-cluster__center {
+    grid-row: 2;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  .call-page__bottom-cluster__center--speak-dock {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: min(100%, 100vw - 0.5rem);
+  }
+
+  .call-page__bottom-cluster__center--speak-dock :deep(.mafia-host-hud) {
+    align-self: center;
+    max-width: min(100%, 100vw - 0.5rem);
+    width: min(100%, 42rem);
+  }
+
+  .call-page__bottom-cluster__right {
+    grid-row: 3;
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+/* Pill surface only; position comes from `.call-page__bottom-cluster`. */
+.call-page__dock {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 0.55rem 0.75rem;
   width: max-content;
-  max-width: calc(100vw - 16px);
+  max-width: min(calc(100vw - 16px), 100%);
   padding: 0.62rem 0.9rem;
   /* overflow visible: device picker popups extend above the bar */
   box-sizing: border-box;

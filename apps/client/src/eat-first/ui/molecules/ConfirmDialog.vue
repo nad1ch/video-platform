@@ -7,6 +7,8 @@ const props = defineProps({
   message: { type: String, default: '' },
   confirmLabel: { type: String, default: '' },
   cancelLabel: { type: String, default: '' },
+  /** When true, primary action is disabled (e.g. require extra slot input first). */
+  confirmDisabled: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:open', 'confirm', 'close'])
@@ -72,7 +74,12 @@ watch(
           <button type="button" class="confirm-dialog__btn confirm-dialog__btn--ghost" @click="close">
             {{ cancelLabel }}
           </button>
-          <button type="button" class="confirm-dialog__btn confirm-dialog__btn--primary" @click="onConfirm">
+          <button
+            type="button"
+            class="confirm-dialog__btn confirm-dialog__btn--primary"
+            :disabled="confirmDisabled"
+            @click="onConfirm"
+          >
             {{ confirmLabel }}
           </button>
         </div>
@@ -174,8 +181,14 @@ watch(
   color: var(--text-title, #e8e4f0);
 }
 
-.confirm-dialog__btn--primary:hover {
+.confirm-dialog__btn--primary:hover:not(:disabled) {
   filter: brightness(1.08);
+}
+
+.confirm-dialog__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  filter: none;
 }
 
 .confirm-dialog__btn:focus-visible {

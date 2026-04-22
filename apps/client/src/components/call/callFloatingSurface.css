@@ -1,0 +1,15 @@
+/**
+ * Floating “pill” surface — token stack matches `CallPage` `.call-page__dock`.
+ * Reuse for mafia timer / speaking queue / any call-adjacent HUD that should feel like the dock.
+ */
+.call-floating-surface {
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sa-color-surface-raised) 76%, #000);
+  border: 1px solid var(--sa-color-border);
+  box-shadow:
+    0 10px 36px rgb(0 0 0 / 0.48),
+    0 0 0 1px rgb(255 255 255 / 0.05);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}

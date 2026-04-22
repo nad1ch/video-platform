@@ -1,4 +1,4 @@
-import { type ComputedRef, onMounted, onUnmounted, shallowRef, watch } from 'vue'
+import { type ComputedRef, type Ref, onMounted, onUnmounted, shallowRef, watch } from 'vue'
 import { getAudioAnalysisAudioContext } from './audioAnalysisContext'
 import {
   isAudioPlaybackUnlocked,
@@ -45,7 +45,8 @@ function rmsTimeDomain(analyser: AnalyserNode): number {
 
 export function useActiveSpeaker(
   tiles: ComputedRef<ActiveSpeakerTile[]>,
-  inCall: ComputedRef<boolean>,
+  /** Call session / room flag; `Ref` or `ComputedRef` (both have `.value`). */
+  inCall: Ref<boolean>,
 ) {
   const activeSpeakerPeerId = shallowRef<string | null>(null)
   const ctx = getAudioAnalysisAudioContext()

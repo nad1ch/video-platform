@@ -110,6 +110,14 @@ function goEatBack() {
         {{ t('app.navCall') }}
       </RouterLink>
       <RouterLink
+        class="stream-nav__link"
+        :to="{ name: 'mafia' }"
+        :title="t('routes.mafia')"
+        :aria-label="t('routes.mafia')"
+      >
+        {{ t('app.navMafia') }}
+      </RouterLink>
+      <RouterLink
         v-if="isAdmin"
         class="stream-nav__link"
         :class="{ 'router-link-active stream-nav__link--active': route.path.startsWith('/app/admin') }"
@@ -228,6 +236,11 @@ function goEatBack() {
 .stream-nav__link:focus-visible {
   outline: 2px solid var(--border-cyan-strong, var(--sa-color-primary));
   outline-offset: 2px;
+}
+
+.stream-nav__link--btn {
+  cursor: pointer;
+  font: inherit;
 }
 
 /* Телефон / вузький планшет: як у другому рядку шапки — ліворуч іконка, по центру посилання, справа баланс */
