@@ -64,10 +64,6 @@ const price = computed(() => {
   return t('coinHub.premiumPricePro')
 })
 
-const proTagline = computed(() =>
-  props.plan === 'pro' ? t('coinHub.premiumProTagline') : '',
-)
-
 /** Card-level chat mock (per spec: nad1ch / 🟣 / 👑). */
 const chatLine = computed(() => {
   if (props.plan === 'basic') return t('coinHub.premiumCardChatLineBasic')
@@ -177,12 +173,6 @@ function onCta() {
           <p class="ppc__price">
             {{ price }}
           </p>
-          <!-- <p
-            v-if="proTagline"
-            class="ppc__emotional"
-          >
-            {{ proTagline }}
-          </p> -->
 
           <div
             class="ppc__chat"
