@@ -14,6 +14,7 @@ import {
 } from './nadleSocket'
 import { DEV_FALLBACK_STREAMER_ID } from './streamerContext'
 import { isValidGuessShape, normalizeWord } from './nadleLogic'
+import { isAdminTwitchUserId } from './adminConfig'
 import { readTwitchChatGuessCooldownMs, tryConsumeTwitchGuessThrottle } from './tmiGuessThrottle'
 import { ingestNadrawTwitchLine } from '../nadraw-show/nadrawTwitchIngest'
 import { getStreamerActiveGame } from '../streamerActiveGame'
@@ -135,7 +136,8 @@ async function wireClient(h: Holder): Promise<void> {
       return
     }
 
-    if (!tryConsumeTwitchGuessThrottle(streamerId, userId)) {
+    const bypassGuessCooldown = isAdminTwitchUserId(userId)
+    if (!bypassGuessCooldown && !tryConsumeTwitchGuessThrottle(streamerId, userId)) {
       broadcastTwitchChatLine(streamerId, {
         userId,
         displayName,

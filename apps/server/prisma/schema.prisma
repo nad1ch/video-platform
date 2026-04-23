@@ -65,9 +65,53 @@ model User {
   updatedAt          DateTime            @updatedAt
   stats              UserStats?
   userStreamerStats  UserStreamerStats[]
+  coinHubBalance     CoinBalance?
+  coinHubPending     Pending?
+  coinHubSpin        Spin?
+  coinHubCases       CoinCase[]
 
   @@unique([provider, providerUserId])
   @@index([streamerId])
+}
+
+/// Smallest whole-coin unit; `amount` is non-negative.
+model CoinBalance {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+/// Unclaimed accrual (claim moves into `CoinBalance`).
+model Pending {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+/// One row per user: next daily spin window + last outcome.
+model Spin {
+  userId          String    @id
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Spin allowed when null or `<= now` (reconciled in service).
+  nextAvailableAt DateTime?
+  lastReward      Json?
+  updatedAt       DateTime  @updatedAt
+}
+
+/// One row per user per hub case (ids: `luck-0`…`luck-3`, `free`, `subscriber`). Named `CoinCase` so Prisma client is valid (`Case` would emit `prisma.case`).
+model CoinCase {
+  userId          String
+  caseId          String
+  state           String
+  cooldownUntil   DateTime?
+  lastReward      Json?
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt       DateTime  @updatedAt
+
+  @@id([userId, caseId])
+  @@index([userId])
 }
 
 // Nadle stats per registered user per streamer room.

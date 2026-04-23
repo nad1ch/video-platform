@@ -9,22 +9,31 @@ withDefaults(
     label?: string
     /** Screen-reader label when `label` is empty. */
     ariaLabel?: string
+    /** When `false`, render inside the parent (e.g. route) so the page is already in the same subtree under the fixed overlay. */
+    teleport?: boolean
   }>(),
   {
     visible: true,
     label: '',
     ariaLabel: '',
+    teleport: true,
   },
 )
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport
+    to="body"
+    :disabled="!teleport"
+  >
     <Transition name="page-loader-fade">
       <div
         v-if="visible"
         class="app-full-page-loader"
-        :class="{ 'app-full-page-loader--no-label': !label }"
+        :class="{
+          'app-full-page-loader--no-label': !label,
+          'app-full-page-loader--docked': !teleport,
+        }"
         role="status"
         :aria-label="label || ariaLabel || 'Loading'"
       >
@@ -49,10 +58,15 @@ withDefaults(
   gap: 1.35rem;
   padding: 2rem;
   box-sizing: border-box;
-  /* Semi-transparent scrim so the page stays visible underneath */
-  background: color-mix(in srgb, var(--sa-color-bg-hud-deep) 42%, transparent);
+  /* Let the route paint underneath; scrim is light enough to read layout through the blur. */
+  background: color-mix(in srgb, var(--sa-color-bg-hud-deep) 32%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+}
+
+.app-full-page-loader--docked {
+  pointer-events: auto;
+  /* Same viewport-fixed overlay; docked in route tree for clearer paint / stacking with page content. */
 }
 
 .app-full-page-loader--no-label {

@@ -19,6 +19,7 @@ import { attachEatFirstSocketServer } from './eatFirst/broadcast'
 import { mountEatFirstRoutes } from './eatFirst/router'
 import { attachNadrawShowSocketServer } from './nadraw-show/nadrawSocket'
 import { mountNadrawShowRoutes } from './nadraw-show/nadrawRouter'
+import { mountCoinHubRoutes } from './coinHub/coinHubRouter'
 
 async function bootstrap(): Promise<void> {
   let shuttingDown = false
@@ -115,6 +116,7 @@ async function bootstrap(): Promise<void> {
   mountAdminRoutes(app)
   mountEatFirstRoutes(app)
   mountNadrawShowRoutes(app)
+  mountCoinHubRoutes(app)
 
   app.get('/health', (_req, res) => {
     res.json({

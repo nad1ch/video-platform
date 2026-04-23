@@ -16,6 +16,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "db:migrate:dev": "npm run db:migrate:dev -w server",
+    "db:migrate:prod": "npm run db:migrate:prod -w server",
     "db:migrate:dev:raw": "npm run db:migrate:dev:raw -w server",
     "db:seed": "npm run db:seed -w server",
     "db:generate:server": "node apps/server/scripts/prisma-generate-retry.cjs",

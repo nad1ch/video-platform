@@ -118,6 +118,14 @@ function goEatBack() {
         {{ t('app.navMafia') }}
       </RouterLink>
       <RouterLink
+        class="stream-nav__link"
+        :to="{ name: 'coin-hub' }"
+        :title="t('routes.coinHub')"
+        :aria-label="t('app.navCoinHub')"
+      >
+        {{ t('app.navCoinHub') }}
+      </RouterLink>
+      <RouterLink
         v-if="isAdmin"
         class="stream-nav__link"
         :class="{ 'router-link-active stream-nav__link--active': route.path.startsWith('/app/admin') }"

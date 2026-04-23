@@ -110,6 +110,12 @@ export const router = createRouter({
           component: () => import('./pages/EatFirstPage.vue'),
         },
         {
+          path: 'coin-hub',
+          name: 'coin-hub',
+          meta: { appTitleKey: 'routes.coinHub', footerContext: 'home' },
+          component: () => import('./pages/CoinHubPage.vue'),
+        },
+        {
           path: 'admin',
           meta: {
             requiresAdmin: true,
@@ -147,7 +153,7 @@ export const router = createRouter({
         },
         /**
          * Short URL: `/app/:streamer` (legacy). Static segments above take precedence:
-         * `call`, `mafia`, `nadle`, `nadle/:streamer`, `nadraw-show/:streamer`, `eat`, `admin` are reserved — a streamer slug matching
+         * `call`, `mafia`, `nadle`, `nadle/:streamer`, `nadraw-show/:streamer`, `eat`, `coin-hub`, `admin` are reserved — a streamer slug matching
          * those first segments cannot use this short path (e.g. `/app/call` is the Call page, not nadle for "call").
          */
         {

@@ -1,0 +1,696 @@
+/**
+ * Coin Hub — visual design system (tokens + reusable surfaces).
+ * Scope: add `ch-ds-root` on the page root; use utility classes on existing nodes.
+ */
+
+.ch-ds-root {
+  --ch-bg: #0b0e17;
+  --ch-bg-2: #0f1222;
+  --ch-card-1: rgba(20, 24, 45, 0.68);
+  --ch-card-2: rgba(18, 21, 40, 0.86);
+  --ch-border: rgba(255, 255, 255, 0.1);
+  --ch-border-inner: rgba(255, 255, 255, 0.08);
+  --ch-glow-inset: rgba(124, 58, 237, 0.24);
+  --ch-glow-outer: rgba(124, 58, 237, 0.32);
+  --ch-purple: #7c3aed;
+  --ch-purple-hover: #a855f7;
+  --ch-gold-from: #facc15;
+  --ch-gold-to: #f59e0b;
+  --ch-text: #ffffff;
+  --ch-text-sec: #9ca3af;
+  --ch-text-muted: #6b7280;
+  /* Motion — premium easing */
+  --ch-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ch-t-hover: 0.28s;
+
+  /* Page fill comes from the app shell / `html` (same as other `page-route` pages). */
+}
+
+/* Layer 1 — ambient: base gradient + blurred glow blobs + noise (non-interactive) */
+.ch-ds-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 95% 55% at 50% 108%, rgba(59, 130, 246, 0.14) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 45% at 12% 25%, rgba(124, 58, 237, 0.2) 0%, transparent 52%),
+    radial-gradient(ellipse 55% 40% at 88% 15%, rgba(168, 85, 247, 0.1) 0%, transparent 50%),
+    linear-gradient(180deg, #0c1020 0%, var(--ch-bg) 38%, #080a12 100%);
+}
+
+.ch-ds-ambient::before,
+.ch-ds-ambient::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+/* Purple blob */
+.ch-ds-ambient::before {
+  width: min(64vw, 780px);
+  height: min(64vw, 780px);
+  left: -8%;
+  top: 6%;
+  opacity: 0.78;
+  background: radial-gradient(
+    circle,
+    rgba(124, 58, 237, 0.38) 0%,
+    rgba(124, 58, 237, 0.12) 45%,
+    rgba(124, 58, 237, 0) 72%
+  );
+  animation: ch-ds-ambient-breathe 14s ease-in-out infinite;
+}
+
+/* Blue blob */
+.ch-ds-ambient::after {
+  width: min(54vw, 640px);
+  height: min(54vw, 640px);
+  right: -6%;
+  bottom: 8%;
+  opacity: 0.7;
+  background: radial-gradient(
+    circle,
+    rgba(59, 130, 246, 0.26) 0%,
+    rgba(59, 130, 246, 0.1) 48%,
+    rgba(59, 130, 246, 0) 72%
+  );
+  animation: ch-ds-ambient-breathe 18s ease-in-out infinite;
+  animation-delay: -5s;
+}
+
+@keyframes ch-ds-ambient-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+.ch-ds-ambient__noise {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.09;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+/* Faint line grid (readable but still subtle) */
+.ch-ds-ambient__grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.055;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, #000 20%, transparent 75%);
+}
+
+/* Layer 2 — glass cards */
+.ch-ds-card {
+  position: relative;
+  border-radius: 20px;
+  border: 1px solid var(--ch-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.015) 45%, rgba(255, 255, 255, 0.02) 100%),
+    radial-gradient(120% 80% at 50% -20%, rgba(168, 85, 247, 0.09) 0%, transparent 55%),
+    var(--ch-card-1);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow:
+    inset 0 1px 0 var(--ch-border-inner),
+    inset 0 0 52px var(--ch-glow-inset),
+    inset 0 -12px 36px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 16px 48px rgba(0, 0, 0, 0.72),
+    0 0 56px -16px var(--ch-glow-outer);
+  isolation: isolate;
+}
+
+.ch-ds-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.03) 28%,
+    transparent 48%
+  );
+  opacity: 0.58;
+  mix-blend-mode: screen;
+}
+
+.ch-ds-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ch-ds-card--alt {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.012) 50%, rgba(255, 255, 255, 0.02) 100%),
+    radial-gradient(100% 70% at 80% 0%, rgba(59, 130, 246, 0.06) 0%, transparent 50%),
+    var(--ch-card-2);
+}
+
+.ch-ds-card--interactive {
+  transition:
+    transform var(--ch-t-hover) var(--ch-ease-out),
+    filter var(--ch-t-hover) var(--ch-ease-out),
+    box-shadow var(--ch-t-hover) var(--ch-ease-out),
+    border-color var(--ch-t-hover) var(--ch-ease-out);
+}
+
+.ch-ds-card--interactive:hover {
+  filter: brightness(1.07) saturate(1.04);
+  transform: scale(1.012);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 56px rgba(124, 58, 237, 0.32),
+    inset 0 -10px 32px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(168, 85, 247, 0.22),
+    0 20px 52px rgba(0, 0, 0, 0.78),
+    0 0 64px -10px rgba(168, 85, 247, 0.45),
+    0 0 100px -24px rgba(124, 58, 237, 0.28);
+}
+
+/* Typography */
+.ch-ds-text-label {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ch-text-sec);
+}
+
+.ch-ds-text-section {
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--ch-text);
+  letter-spacing: -0.02em;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.35),
+    0 0 28px rgba(124, 58, 237, 0.25);
+}
+
+.ch-ds-text-muted {
+  font-size: 14px;
+  color: var(--ch-text-muted);
+}
+
+.ch-ds-balance-num {
+  font-size: 72px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -1px;
+  color: var(--ch-text);
+  text-shadow:
+    0 2px 1px rgba(0, 0, 0, 0.45),
+    0 0 48px rgba(255, 255, 255, 0.12),
+    0 0 72px rgba(250, 204, 21, 0.15);
+}
+
+@media (max-width: 1023px) {
+  .ch-ds-balance-num {
+    font-size: clamp(2.5rem, 10vw, 4.5rem);
+    letter-spacing: -0.06em;
+  }
+}
+
+/* Buttons — layer 3 */
+.ch-ds-btn-purple {
+  background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 38%, #5b21b6 100%);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -2px 8px rgba(34, 6, 80, 0.45),
+    0 0 28px rgba(124, 58, 237, 0.75),
+    0 4px 18px rgba(0, 0, 0, 0.45),
+    0 0 1px rgba(168, 85, 247, 0.6);
+  transition:
+    filter var(--ch-t-hover) var(--ch-ease-out),
+    transform var(--ch-t-hover) var(--ch-ease-out),
+    box-shadow var(--ch-t-hover) var(--ch-ease-out),
+    border-color var(--ch-t-hover) var(--ch-ease-out);
+}
+
+.ch-ds-btn-purple:hover:enabled {
+  filter: brightness(1.12) saturate(1.05);
+  transform: scale(1.02);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -2px 10px rgba(34, 6, 80, 0.4),
+    0 0 40px rgba(168, 85, 247, 0.95),
+    0 0 64px rgba(124, 58, 237, 0.55),
+    0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.ch-ds-btn-purple:active:enabled {
+  transform: scale(0.98);
+  filter: brightness(0.96);
+}
+
+.ch-ds-btn-gold {
+  background: linear-gradient(180deg, #fde047 0%, #facc15 35%, #f59e0b 100%);
+  color: #0b0e17;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow:
+    inset 0 2px 8px rgba(255, 255, 255, 0.45),
+    inset 0 -3px 10px rgba(180, 100, 8, 0.25),
+    0 0 32px rgba(250, 204, 21, 0.55),
+    0 12px 36px rgba(250, 180, 40, 0.4),
+    0 4px 14px rgba(0, 0, 0, 0.35);
+  transition:
+    filter var(--ch-t-hover) var(--ch-ease-out),
+    transform var(--ch-t-hover) var(--ch-ease-out),
+    box-shadow var(--ch-t-hover) var(--ch-ease-out);
+}
+
+.ch-ds-btn-gold:hover:enabled {
+  filter: brightness(1.1) saturate(1.08);
+  transform: scale(1.02);
+  box-shadow:
+    inset 0 2px 10px rgba(255, 255, 255, 0.5),
+    inset 0 -3px 12px rgba(180, 100, 8, 0.2),
+    0 0 48px rgba(250, 220, 80, 0.65),
+    0 14px 44px rgba(250, 190, 40, 0.45),
+    0 6px 18px rgba(0, 0, 0, 0.32);
+}
+
+.ch-ds-btn-gold:active:enabled {
+  transform: scale(0.99);
+}
+
+/**
+ * Shared premium gold CTA (Upgrade card, Premium plans modal).
+ * Single source of truth for gradient, glow, and hover — avoid duplicating in scoped CSS.
+ */
+@keyframes ch-coinhub-gold-shimmer {
+  0% {
+    background-position: -100% 0, 0 0;
+  }
+  100% {
+    background-position: 200% 0, 0 0;
+  }
+}
+
+.ch-coinhub-gold-cta {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  padding: 16px 24px;
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #1a1204;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  overflow: hidden;
+  border: 1px solid rgba(255, 240, 180, 0.45);
+  background-image: linear-gradient(
+      120deg,
+      rgba(255, 255, 255, 0) 38%,
+      rgba(255, 255, 255, 0.55) 50%,
+      rgba(255, 255, 255, 0) 62%
+    ),
+    linear-gradient(135deg, #ffd86b, #ffb300);
+  background-size: 200% 100%, 100% 100%;
+  background-position: 0 0, 0 0;
+  animation: ch-coinhub-gold-shimmer 2.4s var(--ch-ease-out, ease-in-out) infinite;
+  box-shadow:
+    0 0 0 1px rgba(255, 200, 100, 0.35),
+    0 0 30px rgba(255, 200, 80, 0.4),
+    0 8px 28px rgba(255, 160, 30, 0.35),
+    0 10px 40px rgba(255, 200, 80, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transition: transform 0.26s var(--ch-ease-out, ease), box-shadow 0.26s var(--ch-ease-out, ease);
+}
+
+.ch-coinhub-gold-cta::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 230, 150, 0.85), rgba(255, 160, 50, 0.45));
+  filter: blur(16px);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+/* Optional: light label on gold (stack with `.ch-coinhub-gold-cta`). */
+.ch-coinhub-gold-cta--label-light {
+  color: #fff;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+/* Premium modal — tiered glow (stack with `.ch-coinhub-gold-cta` + `--label-light`). */
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-basic {
+  box-shadow:
+    0 0 0 1px rgba(255, 200, 100, 0.28),
+    0 0 16px rgba(255, 200, 80, 0.22),
+    0 6px 20px rgba(255, 160, 40, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-basic::before {
+  opacity: 0.5;
+  filter: blur(12px);
+}
+
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-plus {
+  box-shadow:
+    0 0 0 1px rgba(255, 200, 100, 0.38),
+    0 0 26px rgba(255, 200, 80, 0.38),
+    0 8px 28px rgba(255, 160, 30, 0.32),
+    0 10px 40px rgba(255, 200, 80, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-pro {
+  box-shadow:
+    0 0 0 1px rgba(255, 230, 160, 0.55),
+    0 0 44px rgba(255, 200, 80, 0.58),
+    0 0 72px rgba(255, 180, 50, 0.38),
+    0 12px 40px rgba(255, 160, 30, 0.45),
+    0 0 40px rgba(255, 210, 120, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-pro::before {
+  opacity: 0.9;
+}
+
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-basic:hover:enabled,
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-plus:hover:enabled,
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-pro:hover:enabled {
+  transform: scale(1.02);
+}
+
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-basic:hover:enabled {
+  box-shadow:
+    0 0 0 1px rgba(255, 220, 160, 0.38),
+    0 0 24px rgba(255, 200, 80, 0.32),
+    0 10px 30px rgba(255, 170, 50, 0.28),
+    0 0 28px rgba(255, 200, 100, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-plus:hover:enabled {
+  box-shadow:
+    0 0 0 1px rgba(255, 240, 160, 0.5),
+    0 0 40px rgba(255, 210, 100, 0.48),
+    0 12px 40px rgba(255, 180, 50, 0.38),
+    0 0 36px rgba(255, 200, 100, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-pro:hover:enabled {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 220, 0.6),
+    0 0 64px rgba(255, 230, 120, 0.65),
+    0 0 90px rgba(255, 190, 60, 0.4),
+    0 16px 52px rgba(255, 180, 50, 0.5),
+    0 0 56px rgba(255, 220, 140, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-pro:hover:enabled::before {
+  opacity: 0.95;
+  filter: blur(18px);
+}
+
+/* Pro plan CTA: strongest focus — faster shimmer, hover scale 1.03. */
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-pro.ch-coinhub-gold-cta--glow-pro-cta {
+  animation: ch-coinhub-gold-shimmer 1.5s var(--ch-ease-out, ease-in-out) infinite;
+}
+
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-pro.ch-coinhub-gold-cta--glow-pro-cta:hover:enabled {
+  transform: scale(1.03);
+}
+
+.ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-pro.ch-coinhub-gold-cta--glow-pro-cta:active:enabled {
+  transform: scale(0.99);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-pro.ch-coinhub-gold-cta--glow-pro-cta:hover:enabled,
+  .ch-coinhub-gold-cta.ch-coinhub-gold-cta--glow-pro.ch-coinhub-gold-cta--glow-pro-cta:active:enabled {
+    transform: none;
+  }
+}
+
+.ch-coinhub-gold-cta:hover:enabled {
+  transform: scale(1.02);
+  box-shadow:
+    0 0 0 1px rgba(255, 240, 160, 0.5),
+    0 0 42px rgba(255, 210, 100, 0.55),
+    0 12px 40px rgba(255, 180, 50, 0.45),
+    0 0 36px rgba(255, 200, 100, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+.ch-coinhub-gold-cta:active:enabled {
+  transform: scale(0.99);
+}
+
+.ch-coinhub-gold-cta:disabled {
+  cursor: not-allowed;
+  opacity: 0.86;
+  transform: none;
+  animation: none;
+  box-shadow:
+    0 0 0 1px rgba(255, 200, 100, 0.28),
+    0 6px 20px rgba(255, 180, 60, 0.2),
+    0 0 18px rgba(255, 200, 80, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.ch-coinhub-gold-cta:disabled::before {
+  opacity: 0.5;
+  filter: blur(12px);
+}
+
+.ch-coinhub-gold-cta:focus-visible {
+  outline: 2px solid rgba(251, 191, 36, 0.9);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-coinhub-gold-cta,
+  .ch-coinhub-gold-cta::before {
+    transition: none;
+  }
+
+  .ch-coinhub-gold-cta {
+    animation: none;
+    background-image: linear-gradient(135deg, #ffd86b, #ffb300);
+  }
+}
+
+.ch-ds-crest {
+  background:
+    radial-gradient(90% 70% at 50% 0%, rgba(168, 85, 247, 0.2) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(124, 58, 237, 0.42) 0%, #0b0e17 100%);
+  border: 1px solid var(--ch-border);
+  box-shadow:
+    inset 0 1px 0 var(--ch-border-inner),
+    inset 0 0 52px var(--ch-glow-inset),
+    0 16px 48px rgba(0, 0, 0, 0.72),
+    0 0 48px -12px var(--ch-glow-outer);
+}
+
+/* —— Hero strip (3-col: balance | art | CTA) —— */
+.ch-hero-shell {
+  position: relative;
+  width: 100%;
+  max-width: 1280px;
+  margin-inline: auto;
+}
+
+/* Full page width: hero strip sits outside AppContainer; content still rail-limited in HeroSection. */
+.ch-hero-shell--full-bleed {
+  max-width: none;
+  margin-inline: 0;
+}
+
+/* Break out of padded container so `<section class="hero">` spans the viewport */
+.ch-hero-fullbleed {
+  width: 100vw;
+  max-width: 100vw;
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Hero UI grid — sits in HeroSection slot (relative, not over full-viewport art) */
+.ch-hero-grid {
+  position: relative;
+  z-index: 0;
+  display: grid;
+  gap: 0.75rem 24px;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  align-content: center;
+  pointer-events: none;
+  grid-template-columns: 1fr;
+  padding-block: 12px;
+}
+
+.ch-hero-grid__col {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  pointer-events: auto;
+}
+
+.ch-hero-grid__gutter {
+  display: none;
+  min-width: 0;
+}
+
+@media (min-width: 900px) {
+  .ch-hero-grid {
+    grid-template-columns: 1fr 1.2fr 1fr;
+  }
+
+  .ch-hero-grid__gutter {
+    display: block;
+    pointer-events: none;
+  }
+}
+
+/* Gold CTA — reference spec: 64px, 16px radius, 135° gold, outer glow */
+.ch-hero-cta {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  height: 64px;
+  min-height: 64px;
+  width: 100%;
+  max-width: 20rem;
+  margin-inline: auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  padding-inline: 1.25rem;
+  color: #0a0a0a;
+  font-weight: 600;
+  line-height: 1.2;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: linear-gradient(135deg, #ffd700 0%, #ffb800 50%, #f59e0b 100%);
+  box-shadow:
+    inset 0 2px 8px rgba(255, 255, 255, 0.45),
+    inset 0 -2px 8px rgba(180, 100, 0, 0.2),
+    0 0 30px rgba(255, 200, 0, 0.45),
+    0 8px 24px rgba(0, 0, 0, 0.4);
+  transition:
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ch-hero-cta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(125deg, rgba(255, 255, 255, 0.35) 0%, transparent 45%);
+  opacity: 0.35;
+  mix-blend-mode: screen;
+}
+
+.ch-hero-cta:hover:enabled {
+  filter: brightness(1.08) saturate(1.05);
+  transform: scale(1.02);
+  box-shadow:
+    inset 0 2px 10px rgba(255, 255, 255, 0.5),
+    0 0 42px rgba(255, 210, 60, 0.55),
+    0 10px 28px rgba(0, 0, 0, 0.35);
+}
+
+.ch-hero-cta:active:enabled {
+  transform: scale(0.99);
+  filter: brightness(0.98);
+}
+
+.ch-hero-cta:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  filter: grayscale(0.15) brightness(0.9);
+  transform: none;
+}
+
+.ch-hero-cta--focal {
+  box-shadow:
+    inset 0 2px 8px rgba(255, 255, 255, 0.45),
+    0 0 30px rgba(255, 200, 0, 0.45),
+    0 0 0 1px rgba(255, 230, 150, 0.35),
+    0 0 50px -8px rgba(250, 200, 80, 0.4),
+    0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.ch-hero-balance-digits {
+  font-size: 42px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.4),
+    0 0 32px rgba(255, 210, 120, 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-hero-cta:hover:enabled {
+    transform: none;
+  }
+
+  .ch-ds-ambient::before,
+  .ch-ds-ambient::after {
+    animation: none;
+    opacity: 0.72;
+  }
+
+  .ch-ds-card--interactive,
+  .ch-ds-btn-purple,
+  .ch-ds-btn-gold {
+    transition-duration: 0.01ms;
+  }
+
+  .ch-ds-card--interactive:hover {
+    transform: none;
+  }
+
+  .ch-ds-btn-purple:hover:enabled,
+  .ch-ds-btn-gold:hover:enabled {
+    transform: none;
+  }
+}
