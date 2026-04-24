@@ -2,10 +2,10 @@
 import { nextTick, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import heroSideAsset from '@/assets/landing-dev/hero-side.svg'
 import callCardOne from '@/assets/landing-dev/call-card-1.svg'
 import callCardTwo from '@/assets/landing-dev/call-card-2.svg'
 import callCardThree from '@/assets/landing-dev/call-card-3.svg'
+import twitchBrowseIllustration from '@/assets/landing/twitch-browse-illustration.svg'
 import bgBoltGlowLarge from '@/assets/landing-dev/bg-bolt-glow-large.svg'
 import bgBoltGlowLargeTwo from '@/assets/landing-dev/bg-bolt-glow-large-2.svg'
 import bgBoltGlowSmall from '@/assets/landing-dev/bg-bolt-glow-small.svg'
@@ -94,22 +94,6 @@ const localeButtons = Object.freeze([
   Object.freeze({ code: 'pl', label: 'Polish' }),
 ] as const)
 
-const heroLeftLineTops = [82.6, 95.98, 109.35, 122.73] as const
-const heroLeftLineStyles = Object.freeze(
-  heroLeftLineTops.map((top) =>
-    Object.freeze({
-      key: top,
-      style: Object.freeze({ top: px(top) }),
-    }),
-  ),
-)
-
-const heroLineTop136_1 = Object.freeze({ top: px(136.1) })
-const heroLineTop82_6 = Object.freeze({ top: px(82.6) })
-const heroLineTop95_98 = Object.freeze({ top: px(95.98) })
-const heroLineTop109_35 = Object.freeze({ top: px(109.35) })
-const heroLineTop122_73 = Object.freeze({ top: px(122.73) })
-
 const boltsRaw: PositionedBolt[] = [
   { asset: bgBoltSmall, x: 1142.96, y: 130.93, width: 67.25, height: 79.72, rotate: -16, opacity: 0.94, blur: 1.42 },
   { asset: bgBoltSharpRight, x: 2438.47, y: 238.25, width: 108.38, height: 79.33, rotate: 156, opacity: 0.96, blur: 0 },
@@ -142,37 +126,6 @@ const bolts = Object.freeze(
     }),
   ),
 )
-
-const heroCards = Object.freeze([
-  Object.freeze({
-    variant: 'purple' as const,
-    avatar: '#f5a875',
-    body: '#2a2a2d',
-    avatarStyle: Object.freeze({ background: '#f5a875' }),
-    bodyStyle: Object.freeze({ background: '#2a2a2d' }),
-  }),
-  Object.freeze({
-    variant: 'gray' as const,
-    avatar: '#f5a875',
-    body: '#2a2a2d',
-    avatarStyle: Object.freeze({ background: '#f5a875' }),
-    bodyStyle: Object.freeze({ background: '#2a2a2d' }),
-  }),
-  Object.freeze({
-    variant: 'purple' as const,
-    avatar: '#f0bf67',
-    body: '#2a2a2d',
-    avatarStyle: Object.freeze({ background: '#f0bf67' }),
-    bodyStyle: Object.freeze({ background: '#2a2a2d' }),
-  }),
-  Object.freeze({
-    variant: 'gray' as const,
-    avatar: '#77b665',
-    body: '#2a2a2d',
-    avatarStyle: Object.freeze({ background: '#77b665' }),
-    bodyStyle: Object.freeze({ background: '#2a2a2d' }),
-  }),
-])
 
 const callBannerCards = Object.freeze([
   Object.freeze({ asset: callCardOne, style: Object.freeze({ left: px(14.35) }) }),
@@ -505,52 +458,7 @@ useLandingCosmicParallax(landingCanvasEl)
 
       <section class="landing-hero" aria-label="Hero" v-once>
         <div class="landing-hero__screen" aria-hidden="true">
-          <div class="landing-hero__screen-notch" />
-          <div class="landing-hero__core">
-            <div class="landing-hero__main-panel">
-              <span class="landing-hero__live-pill" />
-
-              <span
-                v-for="line in heroLeftLineStyles"
-                :key="`hero-left-${line.key}`"
-                class="landing-hero__side-line landing-hero__side-line--left"
-                :style="line.style"
-              />
-              <span
-                class="landing-hero__side-line landing-hero__side-line--left landing-hero__side-line--blue"
-                :style="heroLineTop136_1"
-              />
-
-              <span class="landing-hero__side-line landing-hero__side-line--right" :style="heroLineTop82_6" />
-              <span
-                class="landing-hero__side-line landing-hero__side-line--right landing-hero__side-line--yellow"
-                :style="heroLineTop95_98"
-              />
-              <span class="landing-hero__side-line landing-hero__side-line--right" :style="heroLineTop109_35" />
-              <span class="landing-hero__side-line landing-hero__side-line--right" :style="heroLineTop122_73" />
-              <span class="landing-hero__side-line landing-hero__side-line--right" :style="heroLineTop136_1" />
-            </div>
-
-            <img class="landing-hero__side-asset" :src="heroSideAsset" alt="" />
-
-            <div class="landing-hero__card-row">
-              <article
-                v-for="(card, index) in heroCards"
-                :key="`hero-card-${index}`"
-                class="landing-hero__mini-card"
-                :class="{
-                  'landing-hero__mini-card--purple': card.variant === 'purple',
-                  'landing-hero__mini-card--gray': card.variant === 'gray',
-                }"
-              >
-                <span class="landing-hero__mini-card-pill" />
-                <span class="landing-hero__mini-card-avatar" :style="card.avatarStyle" />
-                <span class="landing-hero__mini-card-line landing-hero__mini-card-line--white" />
-                <span class="landing-hero__mini-card-line landing-hero__mini-card-line--violet" />
-                <span class="landing-hero__mini-card-line" :style="card.bodyStyle" />
-              </article>
-            </div>
-          </div>
+          <img class="landing-hero__browse-illustration" :src="twitchBrowseIllustration" alt="" />
         </div>
 
         <div class="landing-hero__copy">
@@ -1174,10 +1082,10 @@ useLandingCosmicParallax(landingCanvasEl)
   position: absolute;
   left: calc(var(--u) * 707.06);
   top: calc(var(--u) * 213.75);
-  width: calc(var(--u) * 648.64);
-  height: calc(var(--u) * 372.6);
-  border-radius: calc(var(--u) * 37.5);
-  background: #fff;
+  width: calc(var(--u) * 651);
+  height: calc(var(--u) * 375);
+  border-radius: calc(var(--u) * 34);
+  background: transparent;
 }
 
 .landing-hero__screen::before {
@@ -1190,6 +1098,7 @@ useLandingCosmicParallax(landingCanvasEl)
   border-radius: calc(var(--u) * 7.87);
   background: #1f1f23;
   z-index: 1;
+  display: none;
 }
 
 .landing-hero__screen::after {
@@ -1202,6 +1111,14 @@ useLandingCosmicParallax(landingCanvasEl)
   border-radius: calc(var(--u) * 7.87);
   background: #e7e7e8;
   z-index: 2;
+  display: none;
+}
+
+.landing-hero__browse-illustration {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .landing-hero__core {
@@ -2211,7 +2128,7 @@ useLandingCosmicParallax(landingCanvasEl)
     top: auto;
     width: min(100%, 594px);
     height: auto;
-    aspect-ratio: 648.64 / 372.6;
+    aspect-ratio: 651 / 375;
     margin-inline: auto;
     overflow: hidden;
     border-radius: calc(var(--u) * 37.5);
