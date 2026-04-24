@@ -51,6 +51,7 @@ const canEatFirstHost = computed(() => {
 const { theme, setTheme, toggleTheme } = useTheme()
 
 const isEatRoute = computed(() => route.path.startsWith('/app/eat'))
+const isHomeRoute = computed(() => route.name === 'home')
 
 /** Nadle stream + Nadraw: дати viewport `min-height: 0`, щоб сторінка могла займати залишок висоти без нескінченного росту. */
 const isNadleStreamRoute = computed(
@@ -63,7 +64,7 @@ const isNadleStreamRoute = computed(
 const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route) : 'join'))
 
 const showChrome = computed(
-  () => !isEatRoute.value || currentEatView.value !== 'overlay',
+  () => !isHomeRoute.value && (!isEatRoute.value || currentEatView.value !== 'overlay'),
 )
 
 const showSiteFooter = computed(
