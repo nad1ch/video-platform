@@ -3,7 +3,8 @@ import { nextTick, onUnmounted, ref, watch } from 'vue'
 import {
   isAudioPlaybackUnlocked,
   playAllPageAudioThrottled,
-} from 'call-core'
+  registerAudioUnlockHook,
+} from 'call-core/audio-unlock'
 import { getSharedCallPlaybackContext, resumeSharedCallPlaybackContext } from '@/audio/callPlaybackAudioContext'
 import { createLogger } from '@/utils/logger'
 
@@ -34,6 +35,25 @@ let playUnlockHandler: (() => void) | null = null
 let sourceNode: MediaStreamAudioSourceNode | null = null
 let gainNode: GainNode | null = null
 let usingWebAudio = false
+
+function shouldUseWebAudioPlayback(): boolean {
+  if (props.listenMuted) {
+    return false
+  }
+  const raw = Number(props.listenVolume ?? 1)
+  return Number.isFinite(raw) && raw > 1
+}
+
+const offAudioUnlock = registerAudioUnlockHook(() => {
+  const a = el.value
+  if (!usingWebAudio && a?.srcObject) {
+    void a.play().catch(() => {})
+    return
+  }
+  if (usingWebAudio) {
+    void resumeSharedCallPlaybackContext()
+  }
+})
 
 function clearPlayUnlock(): void {
   if (playUnlockHandler) {
@@ -78,22 +98,57 @@ function applyElementVolume(): void {
   a.muted = vol <= 0.0001
 }
 
+function silenceElement(detach: boolean): void {
+  const a = el.value
+  if (!a) {
+    return
+  }
+  try {
+    a.pause()
+  } catch {
+    /* ignore */
+  }
+  a.muted = true
+  a.volume = 0
+  if (detach) {
+    a.srcObject = null
+  }
+}
+
 async function bindAudioGraph(): Promise<void> {
   await nextTick()
   clearPlayUnlock()
   teardownWebAudio()
 
   const s = props.stream
-  const a = el.value
 
   if (!s || s.getAudioTracks().length === 0) {
-    if (a) {
-      a.srcObject = null
-    }
+    silenceElement(true)
     return
   }
 
-  if (typeof AudioContext === 'undefined') {
+  if (import.meta.env.DEV) {
+    let ctxState = 'no-audio-context'
+    if (typeof AudioContext !== 'undefined') {
+      try {
+        ctxState = getSharedCallPlaybackContext().state
+      } catch {
+        ctxState = 'unavailable'
+      }
+    }
+    console.log('[stream-audio] bind', {
+      tracks: s.getAudioTracks().map((t) => ({
+        id: t.id,
+        muted: t.muted,
+        readyState: t.readyState,
+        enabled: t.enabled,
+      })),
+      ctxState,
+      unlocked: isAudioPlaybackUnlocked(),
+    })
+  }
+
+  if (typeof AudioContext === 'undefined' || !shouldUseWebAudioPlayback()) {
     await bindElementFallback(s)
     return
   }
@@ -101,6 +156,7 @@ async function bindAudioGraph(): Promise<void> {
   try {
     await resumeSharedCallPlaybackContext()
     const ctx = getSharedCallPlaybackContext()
+    silenceElement(true)
     sourceNode = ctx.createMediaStreamSource(s)
     gainNode = ctx.createGain()
     applyGain()
@@ -131,6 +187,14 @@ async function bindElementFallback(s: MediaStream): Promise<void> {
   ;(a as HTMLAudioElement & { playsInline?: boolean }).playsInline = true
   if (a.srcObject !== s) {
     a.srcObject = s
+  }
+  if (props.listenMuted) {
+    try {
+      a.pause()
+    } catch {
+      /* ignore */
+    }
+    return
   }
   try {
     await a.play()
@@ -169,22 +233,22 @@ watch(
 watch(
   () => [props.listenVolume ?? 1, props.listenMuted ?? false] as const,
   () => {
-    if (usingWebAudio && gainNode) {
-      applyGain()
-    } else if (!usingWebAudio && el.value?.srcObject) {
-      applyElementVolume()
+    const s = props.stream
+    if (s && s.getAudioTracks().length > 0) {
+      void bindAudioGraph()
+      return
     }
+    applyGain()
+    applyElementVolume()
   },
   { flush: 'post' },
 )
 
 onUnmounted(() => {
+  offAudioUnlock()
   clearPlayUnlock()
   teardownWebAudio()
-  const a = el.value
-  if (a) {
-    a.srcObject = null
-  }
+  silenceElement(true)
 })
 </script>
 

@@ -417,6 +417,7 @@ export function useRoomConnection(wsUrl?: string) {
         lastRoomState.value = {
           ...lastRoomState.value,
           peers: lastRoomState.value.peers.filter((p) => p.peerId !== id),
+          existingProducers: lastRoomState.value.existingProducers.filter((p) => p.peerId !== id),
         }
       }
     }

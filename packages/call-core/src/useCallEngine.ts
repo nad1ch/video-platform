@@ -409,6 +409,14 @@ export function useCallEngine(options?: CallEngineOptions) {
     return normalizeDisplayName(roomId.value) || 'demo'
   }
 
+  function remoteListenPrefsKey(peerId: string): string {
+    const parts = peerId.trim().split('-')
+    if (parts.length >= 2 && parts[0] === 'peer' && parts[1]) {
+      return `${parts[0]}-${parts[1]}`
+    }
+    return peerId
+  }
+
   function syncListenPrefsFromStorage(): void {
     remoteListenPrefs.value = loadRemoteListeningPrefs(roomStorageKey())
   }
@@ -419,18 +427,22 @@ export function useCallEngine(options?: CallEngineOptions) {
 
   function setRemoteListenVolume(peerId: string, volume: number): void {
     const next = new Map(remoteListenPrefs.value)
-    const cur = next.get(peerId) ?? { volume: 1, muted: false }
+    const key = remoteListenPrefsKey(peerId)
+    const cur = next.get(key) ?? next.get(peerId) ?? { volume: 1, muted: false }
     cur.volume = Math.min(2, Math.max(0, volume))
-    next.set(peerId, cur)
+    next.delete(peerId)
+    next.set(key, cur)
     remoteListenPrefs.value = next
     persistListenPrefs()
   }
 
   function setRemoteListenMuted(peerId: string, muted: boolean): void {
     const next = new Map(remoteListenPrefs.value)
-    const cur = next.get(peerId) ?? { volume: 1, muted: false }
+    const key = remoteListenPrefsKey(peerId)
+    const cur = next.get(key) ?? next.get(peerId) ?? { volume: 1, muted: false }
     cur.muted = muted
-    next.set(peerId, cur)
+    next.delete(peerId)
+    next.set(key, cur)
     remoteListenPrefs.value = next
     persistListenPrefs()
   }
@@ -794,8 +806,8 @@ export function useCallEngine(options?: CallEngineOptions) {
         videoFillCover: remoteSource === 'camera',
         videoPresentation: remoteSource,
         playRev: remotePeerPlayRevs.value.get(peerId) ?? 0,
-        remoteListenVolume: remoteListenPrefs.value.get(peerId)?.volume ?? 1,
-        remoteListenMuted: remoteListenPrefs.value.get(peerId)?.muted ?? false,
+        remoteListenVolume: (remoteListenPrefs.value.get(remoteListenPrefsKey(peerId)) ?? remoteListenPrefs.value.get(peerId))?.volume ?? 1,
+        remoteListenMuted: (remoteListenPrefs.value.get(remoteListenPrefsKey(peerId)) ?? remoteListenPrefs.value.get(peerId))?.muted ?? false,
         handRaised: Boolean(peerHandRaised.value[peerId]),
       })
     }

@@ -278,6 +278,15 @@ export function useSendTransport() {
         }
         outboundVideoProducer.value = producer
       } else {
+        if (import.meta.env.DEV) {
+          console.log('[produce-audio] before produce', {
+            trackId: track.id,
+            enabled: track.enabled,
+            muted: track.muted,
+            readyState: track.readyState,
+            transportState: transport.connectionState,
+          })
+        }
         const audioProducer = await transport.produce({
           track,
           codecOptions: {
@@ -286,6 +295,12 @@ export function useSendTransport() {
             opusMaxAverageBitrate: OUTBOUND_AUDIO_OPUS_MAX_AVG_BITRATE_BPS,
           },
         })
+        if (import.meta.env.DEV) {
+          console.log('[produce-audio] created', {
+            producerId: audioProducer.id,
+            transportState: transport.connectionState,
+          })
+        }
         outboundAudioProducer.value = audioProducer
       }
     }

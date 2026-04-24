@@ -168,18 +168,6 @@ function onNameInputEnter(ev: KeyboardEvent): void {
   }
 }
 
-function persistVolumeMirror(gain: number): void {
-  const id = typeof props.peerId === 'string' ? props.peerId.trim() : ''
-  if (!id || typeof localStorage === 'undefined') {
-    return
-  }
-  try {
-    localStorage.setItem(`volume_${id}`, String(Math.round(gain * 100)))
-  } catch {
-    /* ignore */
-  }
-}
-
 function onDocPointerDown(ev: PointerEvent): void {
   if (!menuOpen.value) {
     return
@@ -199,29 +187,6 @@ watch(menuOpen, (open) => {
     document.addEventListener('pointerdown', onDocPointerDown, true)
   } else {
     document.removeEventListener('pointerdown', onDocPointerDown, true)
-  }
-})
-
-onMounted(() => {
-  if (props.isLocal) {
-    return
-  }
-  const id = typeof props.peerId === 'string' ? props.peerId.trim() : ''
-  if (!id || typeof localStorage === 'undefined') {
-    return
-  }
-  try {
-    const raw = localStorage.getItem(`volume_${id}`)
-    if (raw == null) {
-      return
-    }
-    const n = Number(raw)
-    if (!Number.isFinite(n) || n < 0 || n > 200) {
-      return
-    }
-    emit('update:listenVolume', n / 100)
-  } catch {
-    /* ignore */
   }
 })
 
@@ -395,7 +360,6 @@ function onVolumeSliderInput(ev: Event): void {
   const pct = Math.min(200, Math.max(0, Number(t.value)))
   const gain = pct / 100
   emit('update:listenVolume', gain)
-  persistVolumeMirror(gain)
 }
 
 function onMuteCheckboxChange(ev: Event): void {
@@ -852,7 +816,16 @@ if (import.meta.env.DEV) {
             >
               ⋯
             </button>
-            <div v-if="menuOpen" class="tile-menu__dropdown">
+            <div
+              v-if="menuOpen"
+              class="tile-menu__dropdown"
+              draggable="false"
+              @click.stop
+              @dragstart.stop.prevent
+              @mousedown.stop
+              @pointerdown.stop
+              @touchstart.stop
+            >
               <label class="tile-menu__row">
                 <span class="tile-menu__label">{{ t('callPage.listenVolume') }}</span>
                 <span class="tile-menu__pct">{{ volumePercentUi }}%</span>
@@ -863,13 +836,23 @@ if (import.meta.env.DEV) {
                 min="0"
                 max="200"
                 :value="volumePercentUi"
+                draggable="false"
                 @input="onVolumeSliderInput"
+                @click.stop
+                @dragstart.stop.prevent
+                @mousedown.stop
+                @pointerdown.stop
+                @touchstart.stop
               />
               <label class="tile-menu__row tile-menu__row--check">
                 <input
                   type="checkbox"
                   :checked="remoteListenMuted ?? false"
                   @change="onMuteCheckboxChange"
+                  @click.stop
+                  @mousedown.stop
+                  @pointerdown.stop
+                  @touchstart.stop
                 />
                 <span>{{ t('callPage.listenMuteLocal') }}</span>
               </label>
