@@ -1,13 +1,13 @@
 /**
- * Підбір сітки як у Discord / Zoom gallery: cols×rows для N плиток,
- * щоб заповнити контейнер і зберегти плитки близькими до 16:9.
+ * Gallery-style grid: cols×rows for N tiles to fill the container
+ * and keep cells close to 16:9.
  *
  * @param {number} tileCount
  * @param {number} containerWidth
  * @param {number} containerHeight
  * @returns {{ cols: number, rows: number }}
  */
-export function discordLikeGridDims(tileCount, containerWidth, containerHeight) {
+export function mosaicGridDimensions(tileCount, containerWidth, containerHeight) {
   const n = Math.max(0, Math.floor(Number(tileCount) || 0))
   const w = Math.max(1, Number(containerWidth) || 1)
   const h = Math.max(1, Number(containerHeight) || 1)

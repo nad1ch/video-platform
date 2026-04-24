@@ -2,9 +2,35 @@ import { describe, expect, it } from 'vitest'
 import {
   ACTIVE_CAMERA_SMALL_ROOM_MAX,
   countActiveCameraPublishersAtWire,
+  getSimulcastEncodingsForPreset,
   isVideoQualityPreset,
   resolveOutgoingVideoPublishTier,
 } from '../call-core/src/media/videoQualityPreset'
+
+describe('getSimulcastEncodingsForPreset (auto_large_room)', () => {
+  it('uses Mafia large-room ladder: ×4/×2/×1, 150k / 600k / 1.2M, 12/20/24 fps', () => {
+    const e = getSimulcastEncodingsForPreset('auto_large_room')
+    expect(e).toHaveLength(3)
+    expect(e[0]).toMatchObject({
+      scaleResolutionDownBy: 4,
+      maxBitrate: 150_000,
+      maxFramerate: 12,
+      rid: 'r0',
+    })
+    expect(e[1]).toMatchObject({
+      scaleResolutionDownBy: 2,
+      maxBitrate: 600_000,
+      maxFramerate: 20,
+      rid: 'r1',
+    })
+    expect(e[2]).toMatchObject({
+      scaleResolutionDownBy: 1,
+      maxBitrate: 1_200_000,
+      maxFramerate: 24,
+      rid: 'r2',
+    })
+  })
+})
 
 describe('isVideoQualityPreset', () => {
   it('accepts known presets only', () => {

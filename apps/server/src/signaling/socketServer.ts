@@ -4,6 +4,7 @@ import type { RoomManager } from '../rooms/RoomManager'
 import type { Peer } from '../peers/Peer'
 import WebSocket from 'ws'
 import type { WebSocket as WsType } from 'ws'
+import type { SignalingDeps } from './messageHandlers'
 import {
   clientMessageSchema,
   handleConnectTransport,
@@ -35,9 +36,10 @@ const WS_JSON_PING_INTERVAL_MS = 25_000
 
 type WsWithAlive = WsType & { isAlive?: boolean }
 
-export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManager): void {
+export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManager): SignalingDeps {
   const socketPeer = new Map<WebSocket, Peer>()
-  const deps = { roomManager, socketPeer }
+  const deps: SignalingDeps = { roomManager, socketPeer }
+  roomManager.bindSignalingDeps(deps)
 
   const jsonPing = setInterval(() => {
     for (const socket of wss.clients) {
@@ -167,8 +169,8 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'set-consumer-preferred-layers': {
-              const { consumerId, spatialLayer } = parsed.data.payload
-              await handleSetConsumerPreferredLayers(socket, consumerId, spatialLayer, deps)
+              const { consumerId, spatialLayer, temporalLayer } = parsed.data.payload
+              await handleSetConsumerPreferredLayers(socket, consumerId, spatialLayer, temporalLayer, deps)
               break
             }
             case 'call-chat': {
@@ -225,4 +227,6 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
     socket.on('close', onDisconnect)
     socket.on('error', onDisconnect)
   })
+
+  return deps
 }

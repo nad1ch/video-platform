@@ -18,19 +18,40 @@ export function isVideoQualityPreset(v: string): v is VideoQualityPreset {
 }
 
 /**
- * Large-room capture: ~576p ideal @ ~25fps for stability (many tiles / streams); max allows up to 720p
- * when the browser/device can — no `exact` constraints, so downscale is still possible under load.
+ * Main large-room (Mafia / 6–12) capture: **960×540** @ 24 fps — strong balance of clarity vs CPU and uplink.
+ * Paired with {@link AUTO_LARGE_ROOM_SIMULCAST}: “720-class” *feel* on tile without 720p-for-all cost.
  */
-export const AUTO_LARGE_ROOM_VIDEO_CAPTURE = {
-  WIDTH_IDEAL: 1024,
-  HEIGHT_IDEAL: 576,
-  WIDTH_MAX: 1280,
-  HEIGHT_MAX: 720,
-  FPS_IDEAL: 25,
-  FPS_MAX: 30,
+export const VIDEO_PRESET_MAFIA: MediaTrackConstraints = {
+  width: { ideal: 960, max: 960 },
+  height: { ideal: 540, max: 540 },
+  frameRate: { ideal: 24, max: 24 },
 } as const
 
-/** Small-room capture: 720p ideal; fps targets match `AUTO_LARGE_ROOM_VIDEO_CAPTURE` (shared ~25fps auto tier). */
+/**
+ * Weaker devices / last-resort camera hint. Not auto-selected by `resolveOutgoingVideoPublishTier` (export for
+ * admin or future gating), but kept as the single place for the numbers.
+ */
+export const VIDEO_PRESET_FALLBACK: MediaTrackConstraints = {
+  width: { ideal: 640, max: 640 },
+  height: { ideal: 360, max: 360 },
+  frameRate: { ideal: 20, max: 20 },
+} as const
+
+/**
+ * Numeric view of `VIDEO_PRESET_MAFIA` for call sites that read `WIDTH_IDEAL` / `FPS_MAX` (send transport, tests).
+ * Single-room **normal** should not *encode* 360p as the only layer — that is the **R0** simulcast rung + receive
+ * degradation, not the default capture target.
+ */
+export const AUTO_LARGE_ROOM_VIDEO_CAPTURE = {
+  WIDTH_IDEAL: 960,
+  HEIGHT_IDEAL: 540,
+  WIDTH_MAX: 960,
+  HEIGHT_MAX: 540,
+  FPS_IDEAL: 24,
+  FPS_MAX: 24,
+} as const
+
+/** Small-room capture: 720p ideal; fps cap follows large-room (24) for a consistent feel when switching tiers. */
 export const AUTO_SMALL_ROOM_VIDEO_CAPTURE = {
   WIDTH_IDEAL: 1280,
   HEIGHT_IDEAL: 720,
@@ -39,20 +60,19 @@ export const AUTO_SMALL_ROOM_VIDEO_CAPTURE = {
 } as const
 
 /**
- * Outbound VP8 max bitrates (bps) — mediasoup `maxBitrate` caps, not guaranteed throughput; CC/congestion
- * can send less. Tuned for voice-first calls with auto capture roughly ~576p–720p @ ~25fps:
- * - Single-layer (no simulcast): one encoding worth of headroom for motion/clarity.
- * - Simulcast `auto_large_room`: R0≈quarter spatial, R1≈half, R2≈full; R2 matches typical good 720p-class VP8
- *   need under cap; large-room *camera ideal* is ~576p but max allows 720p — caps leave margin.
- * Revisit after prod metrics if sustained sender quality or congestion needs adjustment.
+ * `auto_large_room` VP8 simulcast ladder (r0 / r1 / r2) — mediasoup `maxBitrate` caps; CC can send less.
+ * - **low** (~240p-class @12fps): pressure / off-tile; not the default “normal” receive look.
+ * - **medium** (×2 of 960×540 → 480×270, ~20fps): main UX rung for {@link MAX_MEDIUM_STREAMS} visible peers.
+ * - **high** (540p @24fps, ≤1.2Mbps): active speaker / host; {@link MAX_HIGH_STREAMS} slots.
+ * Single-layer (no simulcast): one encoding capped like **high** (no 2M+ bloat).
  */
-const AUTO_LARGE_SINGLE_LAYER_MAX_BITRATE_BPS = 2_000_000
-
-const AUTO_LARGE_SIMULCAST_MAX_BITRATE_BPS = {
-  R0: 250_000,
-  R1: 700_000,
-  R2: 2_000_000,
+export const AUTO_LARGE_ROOM_SIMULCAST = {
+  low: { scaleResolutionDownBy: 4, maxBitrate: 150_000, maxFramerate: 12 },
+  medium: { scaleResolutionDownBy: 2, maxBitrate: 600_000, maxFramerate: 20 },
+  high: { scaleResolutionDownBy: 1, maxBitrate: 1_200_000, maxFramerate: 24 },
 } as const
+
+const AUTO_LARGE_SINGLE_LAYER_MAX_BITRATE_BPS = AUTO_LARGE_ROOM_SIMULCAST.high.maxBitrate
 
 export type ProducerKindList = { peerId: string; kind: string }[]
 
@@ -112,11 +132,7 @@ export function resolveVideoPublishTier(preset: VideoQualityPreset, explicit: bo
 export function getCallVideoConstraints(tier: VideoPublishTier): MediaTrackConstraints {
   switch (tier) {
     case 'auto_large_room':
-      return {
-        width: { ideal: AUTO_LARGE_ROOM_VIDEO_CAPTURE.WIDTH_IDEAL, max: AUTO_LARGE_ROOM_VIDEO_CAPTURE.WIDTH_MAX },
-        height: { ideal: AUTO_LARGE_ROOM_VIDEO_CAPTURE.HEIGHT_IDEAL, max: AUTO_LARGE_ROOM_VIDEO_CAPTURE.HEIGHT_MAX },
-        frameRate: { ideal: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL, max: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_MAX },
-      }
+      return { ...VIDEO_PRESET_MAFIA }
     case 'auto_small_room':
       return {
         width: { ideal: AUTO_SMALL_ROOM_VIDEO_CAPTURE.WIDTH_IDEAL, max: AUTO_SMALL_ROOM_VIDEO_CAPTURE.WIDTH_MAX },
@@ -152,7 +168,12 @@ export function getCallVideoConstraints(tier: VideoPublishTier): MediaTrackConst
 export function getSingleLayerEncodingsForPreset(tier: VideoPublishTier): RtpEncodingParameters[] {
   switch (tier) {
     case 'auto_large_room':
-      return [{ maxBitrate: AUTO_LARGE_SINGLE_LAYER_MAX_BITRATE_BPS, maxFramerate: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL }]
+      return [
+        {
+          maxBitrate: AUTO_LARGE_SINGLE_LAYER_MAX_BITRATE_BPS,
+          maxFramerate: AUTO_LARGE_ROOM_SIMULCAST.high.maxFramerate,
+        },
+      ]
     case 'auto_small_room':
       return [{ maxBitrate: 2_800_000, maxFramerate: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL }]
     case 'economy':
@@ -167,7 +188,7 @@ export function getSingleLayerEncodingsForPreset(tier: VideoPublishTier): RtpEnc
 
 /** Outbound VP8 simulcast (large rooms). */
 export function getSimulcastEncodingsForPreset(tier: VideoPublishTier): RtpEncodingParameters[] {
-  const fpsLarge = AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL
+  const fpsLarge = Math.min(30, Math.max(1, AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL))
   const fps =
     tier === 'auto_large_room' || tier === 'auto_small_room'
       ? fpsLarge
@@ -175,12 +196,14 @@ export function getSimulcastEncodingsForPreset(tier: VideoPublishTier): RtpEncod
         ? 24
         : 30
   switch (tier) {
-    case 'auto_large_room':
+    case 'auto_large_room': {
+      const s = AUTO_LARGE_ROOM_SIMULCAST
       return [
-        { rid: 'r0', maxBitrate: AUTO_LARGE_SIMULCAST_MAX_BITRATE_BPS.R0, scaleResolutionDownBy: 4, maxFramerate: fpsLarge },
-        { rid: 'r1', maxBitrate: AUTO_LARGE_SIMULCAST_MAX_BITRATE_BPS.R1, scaleResolutionDownBy: 2, maxFramerate: fpsLarge },
-        { rid: 'r2', maxBitrate: AUTO_LARGE_SIMULCAST_MAX_BITRATE_BPS.R2, scaleResolutionDownBy: 1, maxFramerate: fpsLarge },
+        { rid: 'r0', ...s.low },
+        { rid: 'r1', ...s.medium },
+        { rid: 'r2', ...s.high },
       ]
+    }
     case 'auto_small_room':
       return [
         { rid: 'r0', maxBitrate: 280_000, scaleResolutionDownBy: 4, maxFramerate: fps },

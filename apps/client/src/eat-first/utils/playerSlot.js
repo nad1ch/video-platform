@@ -12,7 +12,7 @@ export function normalizePlayerSlotId(raw) {
   return lower
 }
 
-/** Число для сортування слотів p1…p10 (Discord-подібний стабільний порядок). */
+/** Число для сортування слотів p1…p10 (стабільний детермінований порядок). */
 export function playerSlotOrderIndex(raw) {
   const id = normalizePlayerSlotId(raw)
   const m = String(id).match(/^p(\d+)$/i)

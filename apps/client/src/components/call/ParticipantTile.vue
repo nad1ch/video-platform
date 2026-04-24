@@ -29,6 +29,8 @@ const emit = defineEmits<{
   'commit-local-display-name': [payload: { peerId: string; name: string | null }]
   /** Mafia host: toggle eliminated / alive for this remote tile. */
   'mafia-toggle-life': [peerId: string]
+  /** Mafia: tile intersects viewport (for `setPeerVisible` / simulcast layers). */
+  'mafia-viewport-layers': [visible: boolean]
 }>()
 
 const props = withDefaults(
@@ -74,12 +76,28 @@ const props = withDefaults(
     mafiaEliminationKind?: MafiaEliminationAvatarKind
     /** Mafia: host, round started — show persistent 💀/❤️ life toggle (top-right). */
     mafiaHostShowLifeToggle?: boolean
+    /**
+     * Mafia: track tile intersection with the viewport; parent maps to `setPeerVisible` for simulcast
+     * spatial layer (0 offscreen). Remotes only; no-op on `/app/call`.
+     */
+    mafiaLayerViewportObserve?: boolean
   }>(),
-  { streamViewMode: false, mafiaEliminated: false, mafiaEliminationKind: 'skull', mafiaHostShowLifeToggle: false, rowSpeaking: false },
+  {
+    streamViewMode: false,
+    mafiaEliminated: false,
+    mafiaEliminationKind: 'skull',
+    mafiaHostShowLifeToggle: false,
+    mafiaLayerViewportObserve: false,
+    rowSpeaking: false,
+  },
 )
 
 const menuOpen = ref(false)
 const menuRoot = ref<HTMLElement | null>(null)
+/** Mafia: IntersectionObserver root (`.tile`). */
+const tileRootRef = ref<HTMLElement | null>(null)
+let mafiaLayerObserver: IntersectionObserver | null = null
+let mafiaLayerLastEmitted: boolean | null = null
 
 const editingName = ref(false)
 const nameDraft = ref('')
@@ -421,6 +439,76 @@ onBeforeUnmount(() => {
   if (mafiaReviveAnimTimer != null) {
     clearTimeout(mafiaReviveAnimTimer)
   }
+  disconnectMafiaLayerObserver()
+  mafiaLayerLastEmitted = null
+  if (props.mafiaLayerViewportObserve && !props.isLocal) {
+    emit('mafia-viewport-layers', true)
+  }
+})
+
+function disconnectMafiaLayerObserver(): void {
+  if (mafiaLayerObserver) {
+    mafiaLayerObserver.disconnect()
+    mafiaLayerObserver = null
+  }
+}
+
+function emitMafiaLayerViewport(visible: boolean): void {
+  if (mafiaLayerLastEmitted === visible) {
+    return
+  }
+  mafiaLayerLastEmitted = visible
+  emit('mafia-viewport-layers', visible)
+}
+
+function connectMafiaLayerObserver(): void {
+  disconnectMafiaLayerObserver()
+  mafiaLayerLastEmitted = null
+  if (typeof window === 'undefined' || !props.mafiaLayerViewportObserve || props.isLocal) {
+    return
+  }
+  const id = peerIdForNameEdit()
+  if (!id) {
+    return
+  }
+  const el = tileRootRef.value
+  if (!el) {
+    return
+  }
+  mafiaLayerObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.target === el) {
+          emitMafiaLayerViewport(entry.isIntersecting)
+        }
+      }
+    },
+    { root: null, rootMargin: '10% 10% 10% 10%', threshold: 0 },
+  )
+  mafiaLayerObserver.observe(el)
+}
+
+function scheduleMafiaLayerObserverConnect(): void {
+  void nextTick(() => {
+    if (!props.mafiaLayerViewportObserve || props.isLocal) {
+      disconnectMafiaLayerObserver()
+      mafiaLayerLastEmitted = null
+      return
+    }
+    connectMafiaLayerObserver()
+  })
+}
+
+watch(
+  () => [props.mafiaLayerViewportObserve, props.isLocal, props.peerId] as const,
+  () => {
+    scheduleMafiaLayerObserverConnect()
+  },
+  { flush: 'post' },
+)
+
+onMounted(() => {
+  scheduleMafiaLayerObserverConnect()
 })
 
 if (import.meta.env.DEV) {
@@ -464,6 +552,7 @@ if (import.meta.env.DEV) {
 
 <template>
   <div
+    ref="tileRootRef"
     class="tile"
     draggable="false"
     :data-video-presentation="videoPresentation"

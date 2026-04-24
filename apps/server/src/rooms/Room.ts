@@ -1,11 +1,7 @@
-import type {
-  AudioLevelObserver,
-  AudioLevelObserverVolume,
-  Router,
-  Worker,
-} from 'mediasoup/types'
+import type { AudioLevelObserver, AudioLevelObserverVolume, Router } from 'mediasoup/types'
 import type { Peer } from '../peers/Peer'
 import { createRouter } from '../mediasoup/createRouter'
+import type { PooledWorker } from '../mediasoup/mediasoupWorkerTypes'
 
 function envNumber(name: string, fallback: number): number {
   const raw = process.env[name]?.trim()
@@ -19,6 +15,10 @@ function envNumber(name: string, fallback: number): number {
 export class Room {
   readonly id: string
   readonly router: Router
+  /**
+   * Mediasoup process this room’s {@link router} is pinned to. Never changes for the room lifetime.
+   */
+  private readonly pooledWorker: PooledWorker
   private readonly peers = new Map<string, Peer>()
   private audioLevelObserver: AudioLevelObserver | null = null
   /** Last `peerId` sent in `active-speaker` (null = last send was clear). `undefined` = nothing sent yet. */
@@ -31,16 +31,21 @@ export class Room {
   /** Shared Mafia round timer; host `mafia:timer-start`, clients derive remaining from wall clock. */
   private mafiaTimer: { startedAt: number; duration: number } | null = null
 
-  private constructor(id: string, router: Router) {
+  private constructor(id: string, router: Router, pooledWorker: PooledWorker) {
     this.id = id
     this.router = router
+    this.pooledWorker = pooledWorker
   }
 
-  static async create(id: string, worker: Worker): Promise<Room> {
-    const router = await createRouter(worker)
-    const room = new Room(id, router)
+  static async create(id: string, pooledWorker: PooledWorker): Promise<Room> {
+    const router = await createRouter(pooledWorker.worker)
+    const room = new Room(id, router, pooledWorker)
     await room.initAudioLevelObserver()
     return room
+  }
+
+  getPooledWorker(): PooledWorker {
+    return this.pooledWorker
   }
 
   private clearSilenceHoldTimer(): void {

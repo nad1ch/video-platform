@@ -2,7 +2,7 @@ import { computed, shallowRef, watch } from 'vue'
 import { normalizePlayerSlotId, playerSlotOrderIndex } from '../utils/playerSlot.js'
 
 /**
- * Мозаїка глобального overlay: порядок гравців (Discord-like) без computed, що кожен раз
+ * Мозаїка глобального overlay: порядок гравців (стабільний порядок плиток) без computed, що кожен раз
  * копіює/сортує players при будь-якому реактивному оновленні сторінки.
  *
  * Перерахунок лише коли змінюється відбиток складу/елімінацій або множина speaking.

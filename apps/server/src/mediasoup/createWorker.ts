@@ -4,6 +4,11 @@ import pino from 'pino'
 
 export type CreateMediasoupWorkerOptions = {
   isShuttingDown?: () => boolean
+  /**
+   * When the mediasoup child process dies. If set, the default `process.exit(1)` is **not** run
+   * (e.g. worker pool will evict rooms on that worker only).
+   */
+  onDied?: (error: Error) => void
 }
 
 const WORKER_LOG_LEVELS: readonly WorkerLogLevel[] = ['debug', 'warn', 'error', 'none']
@@ -72,6 +77,10 @@ export async function createMediasoupWorker(options?: CreateMediasoupWorkerOptio
   worker.on('died', (error: Error) => {
     if (options?.isShuttingDown?.()) {
       log.info({ err: error }, 'mediasoup worker subprocess exited during shutdown')
+      return
+    }
+    if (options?.onDied) {
+      options.onDied(error)
       return
     }
     log.error({ err: error }, 'mediasoup worker died')

@@ -63,6 +63,7 @@ export {
 export { normalizeDisplayName } from './utils/normalizeDisplayName'
 export {
   ACTIVE_CAMERA_SMALL_ROOM_MAX,
+  AUTO_LARGE_ROOM_SIMULCAST,
   AUTO_LARGE_ROOM_VIDEO_CAPTURE,
   AUTO_SMALL_ROOM_VIDEO_CAPTURE,
   countActiveCameraPublishersAtWire,
@@ -72,6 +73,8 @@ export {
   isVideoQualityPreset,
   resolveOutgoingVideoPublishTier,
   resolveVideoPublishTier,
+  VIDEO_PRESET_FALLBACK,
+  VIDEO_PRESET_MAFIA,
   VIDEO_QUALITY_PRESETS,
   type VideoPublishTier,
   type VideoQualityPreset,
@@ -83,6 +86,16 @@ export {
   VP8_SIMULCAST_ENCODINGS,
   VP8_SINGLE_LAYER_ENCODING,
 } from './media/videoSimulcast'
+export {
+  assignAdaptivePreferredLayersByPeerId,
+  MAX_HIGH_STREAMS,
+  MAX_MEDIUM_STREAMS,
+  type SimulcastPreferredLayers,
+} from './media/adaptiveVideoPreferredLayers'
+export {
+  applyReceiveQualityPressureToLayers,
+  type ReceiveQualityPressure,
+} from './media/receiveVideoQualityPressure'
 export { useMediasoupDevice } from './media/useMediasoupDevice'
 export {
   useRemoteMedia,

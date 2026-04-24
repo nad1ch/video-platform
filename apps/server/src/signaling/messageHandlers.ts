@@ -104,6 +104,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     payload: z.object({
       consumerId: z.string().min(1),
       spatialLayer: z.number().int().min(0).max(2),
+      temporalLayer: z.number().int().min(0).max(2).optional(),
     }),
   }),
   /** App-level keepalive so proxies / CDNs do not close idle signaling (background tabs). */
@@ -490,7 +491,7 @@ function finalizeRoomIfEmpty(room: Room, roomManager: RoomManager): void {
   roomManager.removeRoom(room.id)
 }
 
-function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
+export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
   const room = deps.roomManager.getRoom(peer.roomId)
   if (room) {
     detachPeerAudioProducersFromLevelObserver(peer, room)
@@ -1420,6 +1421,7 @@ export async function handleSetConsumerPreferredLayers(
   socket: WsSocket,
   consumerId: string,
   spatialLayer: number,
+  temporalLayer: number | undefined,
   deps: SignalingDeps,
 ): Promise<void> {
   const peer = getPeerForSocket(socket, deps)
@@ -1432,15 +1434,26 @@ export async function handleSetConsumerPreferredLayers(
     return
   }
 
-  try {
-    // Spatial simulcast only — do not pass temporalLayer (forces low temporal FPS on some codecs).
+  const trySpatialOnly = async (): Promise<void> => {
     await consumer.setPreferredLayers({ spatialLayer })
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[layers] server setPreferredLayers', { consumerId, spatialLayer })
+  }
+
+  try {
+    if (temporalLayer !== undefined && Number.isInteger(temporalLayer)) {
+      try {
+        await consumer.setPreferredLayers({ spatialLayer, temporalLayer })
+      } catch {
+        await trySpatialOnly()
+      }
+    } else {
+      await trySpatialOnly()
+    }
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[call-qa:layers] server setPreferredLayers', { consumerId, spatialLayer, temporalLayer })
     }
   } catch (err) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('[layers] server setPreferredLayers failed', { consumerId, spatialLayer, err })
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[call-qa:layers] server setPreferredLayers failed', { consumerId, spatialLayer, temporalLayer, err })
     } else {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[layers] setPreferredLayers failed', consumerId, spatialLayer, msg)

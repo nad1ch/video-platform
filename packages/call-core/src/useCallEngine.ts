@@ -272,8 +272,10 @@ export function useCallEngine(options?: CallEngineOptions) {
     setActiveSpeaker,
     setNetworkQualityOverride,
     collectInboundVideoDebugStats,
+    setPeerVisible,
     removeRemotePeer,
     requestForcedProducerResync,
+    receiveQualityPressure,
   } = useRemoteMedia()
 
   const remoteListenPrefs = shallowRef(new Map<string, RemoteListenEntry>())
@@ -335,7 +337,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   })
 
   /**
-   * Camera ↔ screen are mutually exclusive (Discord-style): toggling camera while sharing
+   * Camera ↔ screen are mutually exclusive: toggling camera while sharing
    * stops screen share first; outbound state stays consistent via {@link applyCamStateForOutbound}.
    */
   async function toggleCam(): Promise<void> {
@@ -583,6 +585,17 @@ export function useCallEngine(options?: CallEngineOptions) {
     lastWireVideoSimulcast.value = videoSimulcast
 
     const mode = readEngineRole(options)
+    if (import.meta.env.DEV) {
+      console.log('[call-qa:wire] wireCallMediaAfterRoomState', {
+        mode,
+        peerCount,
+        videoSimulcast,
+        branch:
+          mode === 'participant'
+            ? 'participant: create send transport, publishLocalMedia'
+            : 'viewer: recv-only, no send transport, no publish',
+      })
+    }
     const activeCam = countActiveCameraPublishersAtWire(
       existing,
       selfPeerId.value,
@@ -831,6 +844,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     publishSimulcast: lastWireVideoSimulcast.value,
     activeSpeakerPeerId: activeSpeakerPeerId.value,
     serverActiveSpeakerPeerId: serverActiveSpeakerPeerId.value,
+    receiveQualityPressure: receiveQualityPressure.value,
   }))
 
   const sizeTier = computed<'sm' | 'md' | 'lg'>(() =>
@@ -1189,7 +1203,10 @@ export function useCallEngine(options?: CallEngineOptions) {
     setCallVideoInputDevice,
     wsStatus,
     callDebugSnapshot,
+    receiveQualityPressure,
     refreshInboundVideoDebugStats: collectInboundVideoDebugStats,
+    /** Remote simulcast helper: `useRemoteMedia` maps this to `set-consumer-preferred-layers` (consumers stay open). */
+    setPeerVisible,
     callPresenceMessages,
     setRemoteListenVolume,
     setRemoteListenMuted,

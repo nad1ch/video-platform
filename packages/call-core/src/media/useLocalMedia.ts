@@ -71,7 +71,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
   const resolveTier = (): VideoPublishTier => options?.getVideoPublishTier?.() ?? 'auto_large_room'
   const localStream = shallowRef<MediaStream | null>(null)
   const micEnabled = ref(true)
-  /** Camera off until the user turns it on (Meet / Discord style). */
+  /** Camera off until the user turns it on (typical in video calls). */
   const camEnabled = ref(false)
   /** Bumps when local stream or tracks change so <video> re-runs play(). */
   const localPlayRev = ref(0)

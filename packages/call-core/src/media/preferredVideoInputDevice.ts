@@ -1,4 +1,4 @@
-/** @internal — unit-tested; stable across sessions like Discord device memory */
+/** @internal — unit-tested; stable device id across sessions when the browser exposes it */
 export const PREFERRED_VIDEO_INPUT_DEVICE_ID_STORAGE_KEY = 'call.preferredVideoInputDeviceId'
 
 export function readPreferredVideoInputDeviceId(): string | null {

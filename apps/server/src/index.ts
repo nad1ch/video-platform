@@ -4,7 +4,7 @@ import cookieParser from 'cookie-parser'
 import express from 'express'
 import http from 'http'
 import { WebSocketServer } from 'ws'
-import { createMediasoupWorker } from './mediasoup/createWorker'
+import { MediasoupWorkerPool } from './mediasoup/workerPool'
 import { RoomManager } from './rooms/RoomManager'
 import { attachSocketServer } from './signaling/socketServer'
 import { corsAllowedOrigins } from './auth/clientOrigin'
@@ -23,11 +23,14 @@ import { mountCoinHubRoutes } from './coinHub/coinHubRouter'
 
 async function bootstrap(): Promise<void> {
   let shuttingDown = false
+  const services: { roomManager?: RoomManager } = {}
 
-  const worker = await createMediasoupWorker({
-    isShuttingDown: () => shuttingDown,
+  const workerPool = await MediasoupWorkerPool.create(() => shuttingDown, (entry, err) => {
+    workerPool.markEntryDead(entry, err, () => shuttingDown)
+    services.roomManager?.evacuateRoomsForDeadWorker(entry)
   })
-  const roomManager = new RoomManager(worker)
+  const roomManager = new RoomManager(workerPool)
+  services.roomManager = roomManager
 
   const app = express()
 
@@ -122,6 +125,11 @@ async function bootstrap(): Promise<void> {
     res.json({
       status: 'ok',
       service: 'mediasoup-server',
+      mediasoupWorkers: workerPool.entriesForDebug.map((e) => ({
+        index: e.index,
+        roomCount: e.roomCount,
+        dead: e.dead,
+      })),
     })
   })
 
@@ -141,9 +149,15 @@ async function bootstrap(): Promise<void> {
     })
 
     try {
-      roomManager.disposeAllRooms()
+      roomManager?.disposeAllRooms()
     } catch (err: unknown) {
       console.error('disposeAllRooms failed', err)
+    }
+
+    try {
+      workerPool.closeAllWorkers()
+    } catch (err: unknown) {
+      console.error('workerPool.closeAllWorkers failed', err)
     }
 
     const closeWss = (w: WebSocketServer, name: string, cb: () => void): void => {
@@ -162,11 +176,6 @@ async function bootstrap(): Promise<void> {
             server.close((httpErr) => {
               if (httpErr) {
                 console.error('HTTP server close error', httpErr)
-              }
-              try {
-                worker.close()
-              } catch (err: unknown) {
-                console.error('worker.close failed', err)
               }
               process.exit(0)
             })

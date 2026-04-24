@@ -228,6 +228,13 @@ export function useSendTransport() {
   }
 
   async function publishLocalMedia(stream: MediaStream, options?: PublishLocalMediaOptions): Promise<void> {
+    if (import.meta.env.DEV) {
+      console.log('[call-qa:publish] publishLocalMedia', {
+        trackKinds: stream.getTracks().map((t) => t.kind),
+        videoSimulcast: options?.videoSimulcast === true,
+        videoPublishTier: options?.videoPublishTier,
+      })
+    }
     const transport = sendTransport.value
     if (!transport || transport.closed) {
       throw new Error('Send transport required')

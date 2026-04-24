@@ -10,7 +10,7 @@ import {
   shallowRef,
   watch,
 } from 'vue'
-import type { CallChatLine } from 'call-core'
+import type { CallChatLine, CallEngineRole } from 'call-core'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -82,6 +82,12 @@ const props = withDefaults(
 /** Mafia stream layout: no dock, no host tile actions, no per-tile menus / rename. */
 const mafiaViewUi = computed(() => isMafiaRoute.value && props.mafiaStreamView)
 
+/**
+ * Mafia `?mode=view` (OBS / Browser Source): recv-only in call-core — no camera/mic publish
+ * (`wireCallMediaAfterRoomState` skips send transport for `viewer`). `/app/call` stays `participant`.
+ */
+const callEngineRole = computed((): CallEngineRole => (mafiaViewUi.value ? 'viewer' : 'participant'))
+
 watch(
   () => isCallAppRoute.value,
   (onCallShell) => {
@@ -138,11 +144,53 @@ const {
   toggleScreenShare,
   sendSignalingMessage,
   subscribeSignalingMessage,
-} = useCallOrchestrator({ allowManualVideoQuality, joinAvatarUrl })
+  setPeerVisible,
+} = useCallOrchestrator({ allowManualVideoQuality, joinAvatarUrl, role: callEngineRole })
+
+if (import.meta.env.DEV) {
+  watch(
+    callEngineRole,
+    (role) => {
+      callPageLog.info('[call-qa:role] callEngineRole', {
+        role,
+        mafiaViewUi: mafiaViewUi.value,
+        routeName: route.name,
+        isMafiaRoute: isMafiaRoute.value,
+      })
+    },
+    { immediate: true },
+  )
+}
 
 useMafiaHostSignaling(sendSignalingMessage, subscribeSignalingMessage, wsStatus)
 
 const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
+
+/**
+ * Toggling Mafia `?mode=view` (header / router) flips `callEngineRole` only after a new wire; re-join
+ * so OBS drops any existing send transport from a prior participant session in the same tab.
+ */
+watch(
+  mafiaViewUi,
+  (v, oldV) => {
+    if (!isMafiaRoute.value) {
+      return
+    }
+    if (v === oldV) {
+      return
+    }
+    if (!session.inCall) {
+      return
+    }
+    if (joining.value) {
+      return
+    }
+    void (async () => {
+      await leaveCall()
+      await joinCall()
+    })()
+  },
+)
 
 /** SSOT for call UI names: tiles + remote-only peers (see `buildCallParticipantMap`). */
 const participantsByPeerId = computed(() =>
@@ -220,6 +268,32 @@ function remoteListenMutedHandler(peerId: string) {
   return h
 }
 
+/** Deduplicated Mafia IntersectionObserver → `setPeerVisible` (simulcast layer 0 off-viewport; consumers stay open). */
+const mafiaTileViewportVisibleByPeer = new Map<string, boolean>()
+
+function onMafiaTileViewportForLayers(peerId: string, visible: boolean): void {
+  if (!isMafiaRoute.value) {
+    return
+  }
+  const id = typeof peerId === 'string' ? peerId.trim() : ''
+  if (!id) {
+    return
+  }
+  const prev = mafiaTileViewportVisibleByPeer.get(id)
+  if (prev === visible) {
+    return
+  }
+  mafiaTileViewportVisibleByPeer.set(id, visible)
+  if (import.meta.env.DEV) {
+    callPageLog.info('[call-qa:mafia-viewport] setPeerVisible (Mafia remote tile IO)', {
+      peerId: id,
+      visible,
+      isLocalSelf: id === selfPeerId.value,
+    })
+  }
+  setPeerVisible(id, visible)
+}
+
 watch(
   () => tiles.value.map((t) => t.peerId).join(),
   () => {
@@ -229,6 +303,9 @@ watch(
     }
     for (const id of remoteListenMutedByPeer.keys()) {
       if (!ids.has(id)) remoteListenMutedByPeer.delete(id)
+    }
+    for (const id of mafiaTileViewportVisibleByPeer.keys()) {
+      if (!ids.has(id)) mafiaTileViewportVisibleByPeer.delete(id)
     }
     const o = localTileDisplayOverrides.value
     let next: Record<string, string> | null = null
@@ -1351,10 +1428,12 @@ watch(joining, (j) => {
                   mafiaGameStore.isMafiaHost &&
                   mafiaGameStore.phase != null
                 "
+                :mafia-layer-viewport-observe="isMafiaRoute && !row.tile.isLocal"
                 @update:listen-volume="remoteListenVolumeHandler(row.tile.peerId)"
                 @update:listen-muted="remoteListenMutedHandler(row.tile.peerId)"
                 @commit-local-display-name="onCommitLocalTileDisplayName"
                 @mafia-toggle-life="onMafiaToggleLifeFromTile(row.tile.peerId)"
+                @mafia-viewport-layers="(v) => onMafiaTileViewportForLayers(row.tile.peerId, v)"
               />
             </div>
           </div>
@@ -2096,7 +2175,7 @@ watch(joining, (j) => {
   padding: 0 var(--sa-space-5) var(--sa-space-8);
 }
 
-/* Flex column + height:100% on a flex child often resolves wrong; flex:1 + min-height:0 matches Discord-style fill. */
+/* Flex column + height:100% on a flex child often resolves wrong; flex:1 + min-height:0 for reliable fill. */
 .call-page__grid {
   flex: 1;
   min-height: 0;

@@ -8,7 +8,7 @@ import ParticipantTile from '../ParticipantTile.vue'
 import OverlayPlayerCard from '../OverlayPlayerCard.vue'
 import OverlayStatusLayer from './OverlayStatusLayer.vue'
 import { useAuth } from '@/composables/useAuth'
-import { discordLikeGridDims } from '../../utils/discordLikeGrid.js'
+import { mosaicGridDimensions } from '../../utils/mosaicGridLayout.js'
 import { normalizePlayerSlotId } from '../../utils/playerSlot.js'
 import { overlayAvatarUrlForTile } from '../../utils/overlayParticipantDisplay.js'
 const props = defineProps({
@@ -81,7 +81,7 @@ watchEffect((onCleanup) => {
 const globalMosaicGridStyle = computed(() => {
   const n = props.globalMosaicCardViewModels.length
   const { width: w, height: h } = globalMosaicSize.value
-  const { cols, rows } = discordLikeGridDims(n, w, h)
+  const { cols, rows } = mosaicGridDimensions(n, w, h)
   return {
     gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
     gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
