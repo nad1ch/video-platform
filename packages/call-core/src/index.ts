@@ -90,12 +90,34 @@ export {
   assignAdaptivePreferredLayersByPeerId,
   MAX_HIGH_STREAMS,
   MAX_MEDIUM_STREAMS,
+  type AdaptiveVideoLayerSlotLimits,
   type SimulcastPreferredLayers,
 } from './media/adaptiveVideoPreferredLayers'
+export {
+  readNavigatorDeviceProfileInput,
+  resolveReceiveDeviceProfile,
+  RECEIVE_DEVICE_DEFAULT_MAX_HIGH,
+  RECEIVE_DEVICE_DEFAULT_MAX_MEDIUM,
+  type ReceiveDeviceProfile,
+  type ReceiveDeviceProfileInput,
+  type ReceiveDeviceProfileKind,
+} from './media/receiveDeviceProfile'
 export {
   applyReceiveQualityPressureToLayers,
   type ReceiveQualityPressure,
 } from './media/receiveVideoQualityPressure'
+export {
+  advancePlaybackRenderFpsPressureByPeer,
+  aggregateInboundVideoStatsByPeerId,
+  applyFpsRenderPressure,
+  evaluateInboundFpsRenderPressure,
+  FPS_RENDER_PRESSURE_BAD_STREAK_DOWN,
+  FPS_RENDER_PRESSURE_GOOD_STREAK_UP,
+  FPS_RENDER_PRESSURE_MIN_FPS,
+  type FpsRenderPressure,
+  type FpsRenderPressureHysteresis,
+  type InboundVideoStatsRowInput,
+} from './media/videoFpsPressure'
 export { useMediasoupDevice } from './media/useMediasoupDevice'
 export {
   useRemoteMedia,

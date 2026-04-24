@@ -1,34 +1,52 @@
 import { describe, expect, it } from 'vitest'
 import {
   ACTIVE_CAMERA_SMALL_ROOM_MAX,
+  CALL_VIDEO_MAX_FRAMERATE,
+  CALL_VIDEO_MIN_FRAMERATE,
   countActiveCameraPublishersAtWire,
+  getSingleLayerEncodingsForPreset,
   getSimulcastEncodingsForPreset,
   isVideoQualityPreset,
   resolveOutgoingVideoPublishTier,
+  type VideoPublishTier,
 } from '../call-core/src/media/videoQualityPreset'
 
 describe('getSimulcastEncodingsForPreset (auto_large_room)', () => {
-  it('uses Mafia large-room ladder: ×4/×2/×1, 150k / 600k / 1.2M, 12/20/24 fps', () => {
+  it('uses Mafia large-room ladder: x3/x2/x1, 500k / 700k / 1.0M, 14/20/22 fps', () => {
     const e = getSimulcastEncodingsForPreset('auto_large_room')
     expect(e).toHaveLength(3)
     expect(e[0]).toMatchObject({
-      scaleResolutionDownBy: 4,
-      maxBitrate: 150_000,
-      maxFramerate: 12,
+      scaleResolutionDownBy: 3,
+      maxBitrate: 500_000,
+      maxFramerate: 14,
       rid: 'r0',
     })
     expect(e[1]).toMatchObject({
       scaleResolutionDownBy: 2,
-      maxBitrate: 600_000,
+      maxBitrate: 700_000,
       maxFramerate: 20,
       rid: 'r1',
     })
     expect(e[2]).toMatchObject({
       scaleResolutionDownBy: 1,
-      maxBitrate: 1_200_000,
-      maxFramerate: 24,
+      maxBitrate: 1_000_000,
+      maxFramerate: 22,
       rid: 'r2',
     })
+  })
+
+  it('keeps all outbound fps caps inside the call fps range', () => {
+    const tiers: VideoPublishTier[] = ['auto_large_room', 'auto_small_room', 'economy', 'balanced', 'hd']
+    for (const tier of tiers) {
+      for (const enc of getSimulcastEncodingsForPreset(tier)) {
+        expect(enc.maxFramerate).toBeGreaterThanOrEqual(CALL_VIDEO_MIN_FRAMERATE)
+        expect(enc.maxFramerate).toBeLessThanOrEqual(CALL_VIDEO_MAX_FRAMERATE)
+      }
+      for (const enc of getSingleLayerEncodingsForPreset(tier)) {
+        expect(enc.maxFramerate).toBeGreaterThanOrEqual(CALL_VIDEO_MIN_FRAMERATE)
+        expect(enc.maxFramerate).toBeLessThanOrEqual(CALL_VIDEO_MAX_FRAMERATE)
+      }
+    }
   })
 })
 

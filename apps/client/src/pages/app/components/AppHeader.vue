@@ -12,6 +12,8 @@ const props = withDefaults(
     brandName: string
     logoSrc: string
     coinHubTo: RouteLocationRaw
+    /** Formatted balance (Coin Hub); placeholder when guest. */
+    coinBalanceLabel: string
     locale: string
     localeOptions: LocaleOption[]
     authLoading?: boolean
@@ -38,11 +40,15 @@ const userInitial = computed(() => {
   const s = props.userName.trim()
   return (s[0] ?? 'S').toUpperCase()
 })
+const displayName = computed(() => props.userName.trim())
+const activeLocaleLabel = computed(
+  () => props.localeOptions.find((option) => option.value === props.locale)?.label ?? props.localeOptions[0]?.label ?? 'English',
+)
 
-function onLocaleChange(event: Event) {
-  const el = event.target as HTMLSelectElement | null
-  if (!el) return
-  emit('update:locale', el.value)
+function selectLocale(value: string, event: MouseEvent) {
+  emit('update:locale', value)
+  const details = (event.currentTarget as HTMLElement | null)?.closest('details')
+  details?.removeAttribute('open')
 }
 </script>
 
@@ -53,14 +59,23 @@ function onLocaleChange(event: Event) {
         <img class="app-landing-header__logo" :src="logoSrc" alt="" width="42" height="42" />
       </RouterLink>
 
-      <label class="app-landing-header__locale">
-        <span class="sr-only">Language</span>
-        <select class="app-landing-header__locale-select" :value="locale" @change="onLocaleChange">
-          <option v-for="option in localeOptions" :key="option.value" :value="option.value">
+      <details class="app-landing-header__locale">
+        <summary class="app-landing-header__locale-trigger" aria-label="Choose language">
+          <span>{{ activeLocaleLabel }}</span>
+        </summary>
+        <div class="app-landing-header__locale-list">
+          <button
+            v-for="option in localeOptions"
+            :key="option.value"
+            class="app-landing-header__locale-option"
+            :class="{ 'app-landing-header__locale-option--active': option.value === locale }"
+            type="button"
+            @click="selectLocale(option.value, $event)"
+          >
             {{ option.label }}
-          </option>
-        </select>
-      </label>
+          </button>
+        </div>
+      </details>
 
       <RouterLink class="app-landing-header__title" :to="{ name: 'home' }">
         {{ brandName }}
@@ -68,7 +83,7 @@ function onLocaleChange(event: Event) {
 
       <div class="app-landing-header__actions">
         <RouterLink class="app-landing-header__coin" :to="coinHubTo" aria-label="Open Coin Hub">
-          <span class="app-landing-header__coin-label">Coin Hub</span>
+          <span class="app-landing-header__coin-label">{{ coinBalanceLabel }}</span>
           <span class="app-landing-header__coin-icon" aria-hidden="true" />
         </RouterLink>
 
@@ -77,7 +92,7 @@ function onLocaleChange(event: Event) {
           <span
             v-else-if="isAuthenticated"
             class="app-landing-header__user"
-            :title="userName"
+            :title="displayName || undefined"
           >
             <span class="app-landing-header__avatar" aria-hidden="true">
               <img
@@ -90,7 +105,7 @@ function onLocaleChange(event: Event) {
               />
               <span v-else>{{ userInitial }}</span>
             </span>
-            <span class="app-landing-header__user-name">{{ userName }}</span>
+            <span class="app-landing-header__user-name">{{ displayName || userInitial }}</span>
           </span>
           <span v-else class="app-landing-header__auth-buttons">
             <button type="button" class="app-landing-header__auth-link" @click="$emit('login')">
@@ -114,7 +129,7 @@ function onLocaleChange(event: Event) {
 .app-landing-header {
   position: relative;
   z-index: 3;
-  padding: clamp(0.75rem, 1.8vw, 1.15rem) clamp(0.85rem, 2vw, 1.5rem) 0;
+  padding: 0.9rem clamp(1.35rem, 1.6vw, 1.55rem) 0;
 }
 
 .app-landing-header__bar {
@@ -122,9 +137,10 @@ function onLocaleChange(event: Event) {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: clamp(0.6rem, 1.4vw, 1rem);
-  min-height: 4.25rem;
-  padding: 0.55rem clamp(0.75rem, 2vw, 1.5rem);
+  gap: 1rem;
+  min-height: 5rem;
+  overflow: visible;
+  padding: 0 1.6rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   background:
@@ -133,6 +149,7 @@ function onLocaleChange(event: Event) {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 16px 56px rgba(11, 3, 23, 0.35);
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
 }
 
@@ -147,68 +164,117 @@ function onLocaleChange(event: Event) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.9rem;
-  height: 2.9rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 0;
 }
 
 .app-landing-header__logo {
   display: block;
-  width: 2rem;
-  height: 2rem;
+  width: 2.45rem;
+  height: 2.45rem;
   object-fit: contain;
 }
 
 .app-landing-header__locale {
   position: relative;
-  display: inline-flex;
-  align-items: center;
+  z-index: 4;
+  align-self: center;
+  width: 7.9rem;
+  height: 2.15rem;
 }
 
-.app-landing-header__locale::after {
+.app-landing-header__locale[open] {
+  z-index: 6;
+}
+
+.app-landing-header__locale-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 2.15rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 1.25rem;
+  background: rgba(81, 48, 117, 0.52);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 12px 28px rgba(10, 3, 24, 0.22);
+  color: #fff;
+  cursor: pointer;
+  list-style: none;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.app-landing-header__locale-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.app-landing-header__locale-trigger::after {
   position: absolute;
-  right: 0.75rem;
+  right: 1rem;
   top: 50%;
   width: 0.42rem;
   height: 0.42rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.75);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.75);
+  border-right: 1px solid rgba(255, 255, 255, 0.78);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.78);
   content: '';
-  pointer-events: none;
   transform: translateY(-66%) rotate(45deg);
 }
 
-.app-landing-header__locale-select {
-  width: 7.25rem;
-  min-height: 2.25rem;
-  appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1.2rem;
-  padding: 0 1.8rem 0 0.9rem;
-  background: rgba(102, 56, 143, 0.45);
+.app-landing-header__locale-list {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  display: none;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 1.25rem;
+  background: rgba(77, 55, 104, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 34px rgba(10, 3, 24, 0.3);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.app-landing-header__locale[open] .app-landing-header__locale-list {
+  display: grid;
+}
+
+.app-landing-header__locale-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.45rem;
+  border: 0;
+  background: transparent;
   color: #fff;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.95rem;
   line-height: 1;
   cursor: pointer;
 }
 
-.app-landing-header__locale-select option {
-  color: #111827;
+.app-landing-header__locale-option--active {
+  background: rgba(81, 48, 117, 0.6);
 }
 
 .app-landing-header__title {
   justify-self: center;
   min-width: 0;
   color: #fff;
-  font-family: var(--sa-font-display, system-ui, sans-serif);
-  font-size: 1.85rem;
-  font-weight: 700;
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+  font-size: 2rem;
+  font-weight: 800;
   line-height: 1.05;
   text-align: center;
   text-transform: uppercase;
+  transform: none;
   text-shadow: 0 5px 16px rgba(0, 0, 0, 0.24);
   white-space: nowrap;
 }
@@ -219,27 +285,31 @@ function onLocaleChange(event: Event) {
   justify-content: flex-end;
   gap: 0.65rem;
   min-width: 0;
+  margin-right: 0.15rem;
 }
 
 .app-landing-header__coin {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  min-height: 2.25rem;
-  padding: 0.18rem 0.2rem 0.18rem 0.85rem;
+  gap: 0.5rem;
+  min-height: 2.15rem;
+  padding: 0 0 0 1rem;
+  margin-right: 0.25rem;
+  transform: translateX(-0.2rem);
   border: 1px solid rgba(255, 218, 68, 0.16);
   border-radius: 999px;
   background: rgba(255, 163, 108, 0.18);
   color: #ffda44;
-  font-size: 0.76rem;
+  font-size: 0.82rem;
   font-weight: 800;
 }
 
 .app-landing-header__coin-icon {
   position: relative;
   display: inline-flex;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 2.45rem;
+  height: 2.45rem;
+  margin: -0.22rem -0.2rem -0.22rem 0;
   flex-shrink: 0;
   border-radius: 999px;
   background: linear-gradient(135deg, #ffda44, #ffa733 58%, #cc7400);
@@ -250,7 +320,7 @@ function onLocaleChange(event: Event) {
 
 .app-landing-header__coin-icon::after {
   position: absolute;
-  inset: 0.42rem;
+  inset: 0.55rem;
   border-radius: inherit;
   border: 2px solid rgba(238, 135, 0, 0.78);
   content: '';
@@ -260,7 +330,7 @@ function onLocaleChange(event: Event) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 8.75rem;
+  min-width: 8.8rem;
   min-height: 2.35rem;
   border-radius: 999px;
   background: rgba(102, 56, 143, 0.48);
@@ -307,7 +377,8 @@ function onLocaleChange(event: Event) {
 .app-landing-header__coin:focus-visible,
 .app-landing-header__brand:focus-visible,
 .app-landing-header__title:focus-visible,
-.app-landing-header__locale-select:focus-visible {
+.app-landing-header__locale-trigger:focus-visible,
+.app-landing-header__locale-option:focus-visible {
   outline: 2px solid rgba(255, 218, 68, 0.78);
   outline-offset: 3px;
 }
@@ -318,9 +389,11 @@ function onLocaleChange(event: Event) {
 }
 
 .app-landing-header__user {
-  gap: 0.45rem;
-  max-width: 12rem;
-  padding: 0.25rem 0.65rem 0.25rem 0.3rem;
+  justify-content: flex-start;
+  width: 100%;
+  max-width: 12.5rem;
+  padding: 0 1rem 0 0.85rem;
+  gap: 0.5rem;
 }
 
 .app-landing-header__avatar {
@@ -347,7 +420,7 @@ function onLocaleChange(event: Event) {
 .app-landing-header__user-name {
   min-width: 0;
   overflow: hidden;
-  font-size: 0.76rem;
+  font-size: 0.82rem;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -365,6 +438,61 @@ function onLocaleChange(event: Event) {
   border: 0;
 }
 
+@media (max-width: 1200px) {
+  .app-landing-header {
+    padding: 0.75rem clamp(0.8rem, 2vw, 1.25rem) 0;
+  }
+
+  .app-landing-header__bar {
+    gap: 0.85rem;
+    min-height: 4.9rem;
+    padding: 0 1rem;
+  }
+
+  .app-landing-header__brand {
+    width: 3.2rem;
+    height: 3.2rem;
+  }
+
+  .app-landing-header__logo {
+    width: 2.55rem;
+    height: 2.55rem;
+  }
+
+  .app-landing-header__title {
+    font-size: 2rem;
+    transform: scaleX(1.08);
+  }
+
+  .app-landing-header__locale {
+    width: 8.9rem;
+  }
+
+  .app-landing-header__actions {
+    gap: 0.7rem;
+  }
+
+  .app-landing-header__coin {
+    min-height: 2.15rem;
+    padding-left: 1rem;
+    font-size: 0.82rem;
+  }
+
+  .app-landing-header__coin-icon {
+    width: 2.55rem;
+    height: 2.55rem;
+  }
+
+  .app-landing-header__auth {
+    min-width: 8.6rem;
+    min-height: 2.4rem;
+  }
+
+  .app-landing-header__user-name {
+    font-size: 0.82rem;
+  }
+}
+
 @media (max-width: 900px) {
   .app-landing-header__bar {
     grid-template-columns: auto minmax(0, 1fr) auto;
@@ -378,6 +506,7 @@ function onLocaleChange(event: Event) {
   .app-landing-header__title {
     justify-self: start;
     font-size: 1.35rem;
+    transform: none;
   }
 }
 

@@ -41,21 +41,26 @@ const previewTiles = [
 .app-call__panel {
   position: relative;
   display: block;
-  min-height: clamp(9.25rem, 17vw, 11.25rem);
-  padding: clamp(1.3rem, 2.4vw, 2rem);
+  max-width: 100%;
+  min-height: clamp(8rem, 13vw, 9.7rem);
+  padding: clamp(1.05rem, 1.8vw, 1.55rem);
   overflow: hidden;
+  box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 1.8rem;
   background:
     radial-gradient(circle at 22% 22%, rgba(255, 255, 255, 0.2) 0 1px, transparent 1.6px),
     radial-gradient(circle at 36% 46%, rgba(255, 255, 255, 0.16) 0 1px, transparent 1.6px),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.24), rgba(60, 36, 99, 0.2));
+    linear-gradient(120deg, rgba(124, 77, 219, 0.26), rgba(60, 36, 99, 0.22)),
+    rgba(28, 12, 52, 0.36);
   color: #fff;
   text-decoration: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
     0 24px 80px rgba(9, 2, 20, 0.24);
-  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(22px) saturate(1.08);
+  backdrop-filter: blur(22px) saturate(1.08);
   transition:
     transform 0.18s ease,
     border-color 0.18s ease,
@@ -103,10 +108,10 @@ const previewTiles = [
 .app-call__title {
   position: relative;
   z-index: 1;
-  margin: 0 0 1rem;
+  margin: 0 0 1.1rem;
   color: #fff;
-  font-family: var(--sa-font-display, system-ui, sans-serif);
-  font-size: 1.35rem;
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+  font-size: 1.28rem;
   line-height: 1;
   text-align: center;
   text-transform: uppercase;
@@ -116,29 +121,31 @@ const previewTiles = [
 .app-call__screen {
   position: relative;
   z-index: 1;
-  padding: 0.7rem;
-  border: 5px solid rgba(255, 255, 255, 0.94);
-  border-radius: 1.45rem;
+  padding: 0.55rem;
+  border: 4px solid rgba(255, 255, 255, 0.94);
+  border-radius: 1.35rem;
   background:
     linear-gradient(120deg, rgba(124, 77, 219, 0.16), rgba(60, 36, 99, 0.22)),
     rgba(60, 36, 99, 0.54);
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.12),
     0 18px 38px rgba(0, 0, 0, 0.16);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
 }
 
 .app-call__tile-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(0.7rem, 2vw, 1.2rem);
-  padding: 0.55rem;
+  gap: clamp(0.55rem, 1.4vw, 0.95rem);
+  padding: 0.45rem;
   border-radius: 1rem;
   background: rgba(60, 36, 99, 0.62);
 }
 
 .app-call__tile {
   position: relative;
-  min-height: clamp(3.1rem, 7vw, 3.9rem);
+  min-height: clamp(2.65rem, 5.4vw, 3.35rem);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 0.55rem;
@@ -207,6 +214,45 @@ const previewTiles = [
 
   .app-call__tile-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 581px) and (max-width: 1200px) {
+  .app-call__panel {
+    min-height: clamp(7.2rem, 18vh, 8.8rem);
+    padding: 0.9rem;
+  }
+
+  .app-call__title {
+    margin-bottom: 0.75rem;
+    font-size: 1.05rem;
+  }
+
+  .app-call__screen {
+    border-width: 3px;
+  }
+
+  .app-call__tile {
+    min-height: clamp(2rem, 5.6vh, 2.6rem);
+  }
+}
+
+@media (min-width: 581px) and (max-width: 900px) {
+  .app-call__panel {
+    min-height: auto;
+    padding: 1.25rem;
+  }
+
+  .app-call__title {
+    font-size: 1.25rem;
+  }
+
+  .app-call__screen {
+    border-width: 4px;
+  }
+
+  .app-call__tile {
+    min-height: 3rem;
   }
 }
 </style>

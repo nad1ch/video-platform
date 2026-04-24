@@ -26,6 +26,11 @@ import {
   type SimulcastPreferredLayers,
 } from './adaptiveVideoPreferredLayers'
 import {
+  readNavigatorDeviceProfileInput,
+  resolveReceiveDeviceProfile,
+  type ReceiveDeviceProfile,
+} from './receiveDeviceProfile'
+import {
   applyReceiveQualityPressureToLayers,
   evaluateInboundVideoStatsForPressure,
   RECEIVE_PRESSURE_GOOD_STREAK_UP,
@@ -34,12 +39,14 @@ import {
   type ReceiveQualityPressure,
   type VideoInboundStatsRow,
 } from './receiveVideoQualityPressure'
-/** Downgrade / upgrade steps use the same streak count for minimal tuning surface. */
-const RECEIVE_PRESSURE_STREAK_TO_SHIFT = 3
-
+import {
+  advancePlaybackRenderFpsPressureByPeer,
+  type FpsRenderPressure,
+} from './videoFpsPressure'
 export type { RemoteProducerInfo }
 
 const TIMEOUT_MS = 45_000
+const SPEAKER_LINGER_MS = 2500
 
 /** Coalesce rapid visibility / speaker / pin updates (producer-sync storms). */
 const PREFERRED_LAYERS_DEBOUNCE_MS = 80
@@ -224,6 +231,14 @@ async function logInboundVideoDebug(consumer: Consumer, peerId: string): Promise
 }
 
 export function useRemoteMedia() {
+  const receiveDeviceProfile = shallowRef<ReceiveDeviceProfile>(
+    resolveReceiveDeviceProfile(readNavigatorDeviceProfileInput()),
+  )
+  /** Last applied targets after receive-quality pressure (for debug overlay). */
+  const lastPreferredLayerTargetsByPeerId = shallowRef<
+    Record<string, { spatialLayer: number; temporalLayer: number }>
+  >({})
+
   const recvTransport = shallowRef<Transport | null>(null)
   /** Stable MediaStream per remote peer (mutate with addTrack / removeTrack only). */
   const streamsByPeerId = new Map<string, MediaStream>()
@@ -249,10 +264,22 @@ export function useRemoteMedia() {
   const peerPriority = shallowRef(new Map<string, number>())
   const pinnedPeerId = shallowRef<string | null>(null)
   const activeSpeakerPeerId = shallowRef<string | null>(null)
+  /** App Web Audio dominant remote; merged into layer ranking with SFU {@link activeSpeakerPeerId}. */
+  const uiActiveSpeakerPeerIdForPreferredLayers = shallowRef<string | null>(null)
+  /** Last time a peer was active speaker; keeps layer priority briefly after speech stops. */
+  const recentSpeakerAtByPeerId = new Map<string, number>()
   /** Last preferred layers sent per recv video consumer (skip duplicate signaling). */
   const lastSentPreferredLayersByConsumerId = new Map<string, SimulcastPreferredLayers>()
   /** Local receive-only: lowers remote *video* preferred layers when inbound stats look unhealthy. */
   const receiveQualityPressure = shallowRef<ReceiveQualityPressure>('normal')
+  /**
+   * Phase 3.5: per-peer stable render-FPS pressure from inbound-rtp drop ratios (same poll as recv pressure).
+   */
+  const playbackRenderFpsPressureByPeerId = shallowRef(new Map<string, FpsRenderPressure>())
+  const playbackRenderFpsHysteresisByPeer = new Map<
+    string,
+    { bad: number; good: number; stable: FpsRenderPressure }
+  >()
   let receivePressurePollTimer: ReturnType<typeof setInterval> | null = null
   let receivePressureBadStreak = 0
   let receivePressureGoodStreak = 0
@@ -260,6 +287,7 @@ export function useRemoteMedia() {
   let receivePressureLastDowngradeAt = 0
   let signalingRoom: SendTransportRoomApi | null = null
   let preferredLayersDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  let speakerLingerTimer: ReturnType<typeof setTimeout> | null = null
   /** Set per `setupReceivePath` — avoids spatial-layer WS traffic when everyone publishes single-layer. */
   const videoSpatialLayerSignalingEnabled = shallowRef(false)
   let unsubscribeNewProducer: (() => void) | null = null
@@ -344,6 +372,61 @@ export function useRemoteMedia() {
     return 'low'
   }
 
+  function clearSpeakerLingerTimer(): void {
+    if (speakerLingerTimer !== null) {
+      clearTimeout(speakerLingerTimer)
+      speakerLingerTimer = null
+    }
+  }
+
+  function pruneRecentSpeakers(now = Date.now()): void {
+    const videoPeerIds = new Set(getVideoPeerIds())
+    for (const [peerId, at] of recentSpeakerAtByPeerId) {
+      if (!videoPeerIds.has(peerId) || now - at >= SPEAKER_LINGER_MS) {
+        recentSpeakerAtByPeerId.delete(peerId)
+      }
+    }
+  }
+
+  function getRecentSpeakerPeerIds(now = Date.now()): string[] {
+    pruneRecentSpeakers(now)
+    return [...recentSpeakerAtByPeerId.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([peerId]) => peerId)
+  }
+
+  function scheduleSpeakerLingerExpiryUpdate(): void {
+    clearSpeakerLingerTimer()
+    const now = Date.now()
+    let nextDelay: number | null = null
+    for (const at of recentSpeakerAtByPeerId.values()) {
+      const delay = at + SPEAKER_LINGER_MS - now
+      if (delay <= 0) {
+        nextDelay = 0
+        break
+      }
+      nextDelay = nextDelay === null ? delay : Math.min(nextDelay, delay)
+    }
+    if (nextDelay === null) {
+      return
+    }
+    speakerLingerTimer = setTimeout(() => {
+      speakerLingerTimer = null
+      pruneRecentSpeakers()
+      schedulePreferredLayersUpdate()
+      scheduleSpeakerLingerExpiryUpdate()
+    }, Math.max(0, nextDelay + 20))
+  }
+
+  function rememberRecentSpeaker(peerId: string | null): void {
+    const id = typeof peerId === 'string' ? peerId.trim() : ''
+    if (!id) {
+      return
+    }
+    recentSpeakerAtByPeerId.set(id, Date.now())
+    scheduleSpeakerLingerExpiryUpdate()
+  }
+
   function stopReceivePressureMonitor(): void {
     if (receivePressurePollTimer !== null) {
       clearInterval(receivePressurePollTimer)
@@ -353,23 +436,36 @@ export function useRemoteMedia() {
     receivePressureGoodStreak = 0
     receivePressureLastPacketsLostSum = null
     receiveQualityPressure.value = 'normal'
+    playbackRenderFpsPressureByPeerId.value = new Map()
+    playbackRenderFpsHysteresisByPeer.clear()
   }
 
   function startReceivePressureMonitor(): void {
     stopReceivePressureMonitor()
-    if (!videoSpatialLayerSignalingEnabled.value) {
-      return
-    }
     receivePressurePollTimer = setInterval(() => {
       void tickReceiveQualityPressure()
     }, RECEIVE_PRESSURE_POLL_MS)
   }
 
+  function updatePlaybackRenderFpsPressureFromInboundRows(rows: InboundVideoDebugRow[]): void {
+    const next = advancePlaybackRenderFpsPressureByPeer({
+      videoPeerIds: getVideoPeerIds(),
+      inboundRows: rows,
+      hysteresisByPeer: playbackRenderFpsHysteresisByPeer,
+    })
+    playbackRenderFpsPressureByPeerId.value = next
+  }
+
   async function tickReceiveQualityPressure(): Promise<void> {
-    if (!videoSpatialLayerSignalingEnabled.value || signalingRoom === null) {
+    if (signalingRoom === null) {
       return
     }
     const rows = await collectInboundVideoDebugStats()
+    updatePlaybackRenderFpsPressureFromInboundRows(rows)
+
+    if (!videoSpatialLayerSignalingEnabled.value) {
+      return
+    }
     const slim: VideoInboundStatsRow[] = rows.map((r) => ({
       framesDecoded: r.framesDecoded,
       framesDropped: r.framesDropped,
@@ -388,24 +484,25 @@ export function useRemoteMedia() {
     if (ev.verdict === 'bad') {
       receivePressureGoodStreak = 0
       receivePressureBadStreak += 1
-      if (before === 'normal' && receivePressureBadStreak >= RECEIVE_PRESSURE_STREAK_TO_SHIFT) {
+      const streakShift = receiveDeviceProfile.value.pressureBadStreakToShift
+      if (before === 'normal' && receivePressureBadStreak >= streakShift) {
         receiveQualityPressure.value = 'constrained'
         receivePressureLastDowngradeAt = Date.now()
         receivePressureBadStreak = 0
         if (import.meta.env.DEV) {
           console.log('[recv-pressure] downgraded to constrained', {
-            badStreak: RECEIVE_PRESSURE_STREAK_TO_SHIFT,
+            badStreak: streakShift,
             debug: ev.debug,
           })
         }
         schedulePreferredLayersUpdate()
-      } else if (before === 'constrained' && receivePressureBadStreak >= RECEIVE_PRESSURE_STREAK_TO_SHIFT) {
+      } else if (before === 'constrained' && receivePressureBadStreak >= streakShift) {
         receiveQualityPressure.value = 'critical'
         receivePressureLastDowngradeAt = Date.now()
         receivePressureBadStreak = 0
         if (import.meta.env.DEV) {
           console.log('[recv-pressure] downgraded to critical', {
-            badStreak: RECEIVE_PRESSURE_STREAK_TO_SHIFT,
+            badStreak: streakShift,
             debug: ev.debug,
           })
         }
@@ -456,17 +553,31 @@ export function useRemoteMedia() {
       return
     }
 
+    const prof = receiveDeviceProfile.value
     const baseByPeer = assignAdaptivePreferredLayersByPeerId({
       videoPeerIds: getVideoPeerIds(),
       activeSpeakerPeerId: activeSpeakerPeerId.value,
+      uiActiveSpeakerPeerId: uiActiveSpeakerPeerIdForPreferredLayers.value,
+      recentSpeakerPeerIds: getRecentSpeakerPeerIds(),
       pinnedPeerId: pinnedPeerId.value,
       peerVisibility: peerVisibility.value,
+      layerSlots: {
+        maxHighStreams: prof.maxHighStreams,
+        maxMediumStreams: prof.maxMediumStreams,
+      },
     })
     const byPeer = applyReceiveQualityPressureToLayers(baseByPeer, receiveQualityPressure.value, {
       activeSpeakerPeerId: activeSpeakerPeerId.value,
+      uiActiveSpeakerPeerId: uiActiveSpeakerPeerIdForPreferredLayers.value,
       pinnedPeerId: pinnedPeerId.value,
       peerVisibility: peerVisibility.value,
     })
+
+    const layerRecord: Record<string, { spatialLayer: number; temporalLayer: number }> = {}
+    for (const [pid, layers] of byPeer) {
+      layerRecord[pid] = { spatialLayer: layers.spatialLayer, temporalLayer: layers.temporalLayer }
+    }
+    lastPreferredLayerTargetsByPeerId.value = layerRecord
 
     const devRows: {
       consumerId: string
@@ -517,7 +628,11 @@ export function useRemoteMedia() {
 
     if (import.meta.env.DEV) {
       console.log('[call-qa:layers] flushPreferredLayersToServer', {
+        receiveDeviceProfile: prof.profile,
+        maxHighStreams: prof.maxHighStreams,
+        maxMediumStreams: prof.maxMediumStreams,
         receiveQualityPressure: receiveQualityPressure.value,
+        preferredLayersByPeerId: layerRecord,
         consumers: devRows,
       })
     }
@@ -1058,10 +1173,24 @@ export function useRemoteMedia() {
   }
 
   function setActiveSpeaker(peerId: string | null): void {
+    rememberRecentSpeaker(activeSpeakerPeerId.value)
+    rememberRecentSpeaker(peerId)
     if (activeSpeakerPeerId.value !== peerId && import.meta.env.DEV) {
       console.log('[speaker] active speaker changed', { peerId })
     }
     activeSpeakerPeerId.value = peerId
+    schedulePreferredLayersUpdate()
+  }
+
+  function setUiActiveSpeakerPeerIdForPreferredLayers(peerId: string | null): void {
+    const t = typeof peerId === 'string' ? peerId.trim() : ''
+    const next = t.length > 0 ? t : null
+    if (uiActiveSpeakerPeerIdForPreferredLayers.value === next) {
+      return
+    }
+    rememberRecentSpeaker(uiActiveSpeakerPeerIdForPreferredLayers.value)
+    rememberRecentSpeaker(next)
+    uiActiveSpeakerPeerIdForPreferredLayers.value = next
     schedulePreferredLayersUpdate()
   }
 
@@ -1108,6 +1237,10 @@ export function useRemoteMedia() {
     if (activeSpeakerPeerId.value === peerId) {
       activeSpeakerPeerId.value = null
     }
+    if (uiActiveSpeakerPeerIdForPreferredLayers.value === peerId) {
+      uiActiveSpeakerPeerIdForPreferredLayers.value = null
+    }
+    recentSpeakerAtByPeerId.delete(peerId)
 
     const vis = new Map(peerVisibility.value)
     vis.delete(peerId)
@@ -1197,8 +1330,12 @@ export function useRemoteMedia() {
       clearTimeout(preferredLayersDebounceTimer)
       preferredLayersDebounceTimer = null
     }
+    clearSpeakerLingerTimer()
     pinnedPeerId.value = null
     activeSpeakerPeerId.value = null
+    uiActiveSpeakerPeerIdForPreferredLayers.value = null
+    recentSpeakerAtByPeerId.clear()
+    lastPreferredLayerTargetsByPeerId.value = {}
     signalingRoom = null
     const t = recvTransport.value
     if (t && !t.closed) {
@@ -1230,6 +1367,7 @@ export function useRemoteMedia() {
     setPeerConsumePriority,
     setPinnedPeer,
     setActiveSpeaker,
+    setUiActiveSpeakerPeerIdForPreferredLayers,
     removeRemotePeer,
     stopRemoteMedia,
     collectInboundVideoDebugStats,
@@ -1238,5 +1376,8 @@ export function useRemoteMedia() {
     requestForcedProducerResync,
     requestHardProducerResync,
     receiveQualityPressure,
+    receiveDeviceProfile,
+    lastPreferredLayerTargetsByPeerId,
+    playbackRenderFpsPressureByPeerId,
   }
 }

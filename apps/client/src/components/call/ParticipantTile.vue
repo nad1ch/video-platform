@@ -31,6 +31,8 @@ const emit = defineEmits<{
   'mafia-toggle-life': [peerId: string]
   /** Mafia: tile intersects viewport (for `setPeerVisible` / simulcast layers). */
   'mafia-viewport-layers': [visible: boolean]
+  /** Remote `<video>` `waiting`: fast playback stall signal for adaptive FPS (CallPage). */
+  'remote-playback-stall': [payload: { peerId: string; stalling: boolean }]
 }>()
 
 const props = withDefaults(
@@ -77,10 +79,16 @@ const props = withDefaults(
     /** Mafia: host, round started — show persistent 💀/❤️ life toggle (top-right). */
     mafiaHostShowLifeToggle?: boolean
     /**
-     * Mafia: track tile intersection with the viewport; parent maps to `setPeerVisible` for simulcast
-     * spatial layer (0 offscreen). Remotes only; no-op on `/app/call`.
+     * Call / Mafia: track tile intersection with the viewport; parent maps to `setPeerVisible` for simulcast.
+     * Remotes only.
      */
     mafiaLayerViewportObserve?: boolean
+    /**
+     * Remote-only: pause `<video>` playback while tile is off-screen (Phase 2); audio unchanged.
+     */
+    videoPlaybackSuppressed?: boolean
+    /** Phase 3.5: optional `<video>` presentation cap (see `StreamVideo.targetPlaybackFps`). */
+    videoTargetPlaybackFps?: number
   }>(),
   {
     streamViewMode: false,
@@ -88,6 +96,7 @@ const props = withDefaults(
     mafiaEliminationKind: 'skull',
     mafiaHostShowLifeToggle: false,
     mafiaLayerViewportObserve: false,
+    videoPlaybackSuppressed: false,
     rowSpeaking: false,
   },
 )
@@ -106,6 +115,14 @@ const nameInputRef = ref<HTMLInputElement | null>(null)
 function peerIdForNameEdit(): string {
   return typeof props.peerId === 'string' ? props.peerId.trim() : ''
 }
+
+const remotePlaybackStallPeerIdForVideo = computed(() => {
+  if (props.isLocal) {
+    return null
+  }
+  const id = typeof props.peerId === 'string' ? props.peerId.trim() : ''
+  return id.length > 0 ? id : null
+})
 
 function startNameEdit(): void {
   if (props.streamViewMode) {
@@ -369,6 +386,8 @@ const streamVideoMemoDeps = computed(() => [
   props.isLocal,
   props.videoPresentation,
   props.mafiaEliminated,
+  Boolean(props.videoPlaybackSuppressed),
+  props.videoTargetPlaybackFps ?? null,
 ])
 
 function onVolumeSliderInput(ev: Event): void {
@@ -590,11 +609,15 @@ if (import.meta.env.DEV) {
             muted
             :play-rev="playRev"
             :report-video-ui="false"
+            :remote-playback-stall-peer-id="remotePlaybackStallPeerIdForVideo"
             :video-presentation="
               videoPresentation && videoPresentation !== 'none' ? videoPresentation : undefined
             "
             fill
             :fill-cover="Boolean(videoFillCover)"
+            :playback-suppressed="Boolean(videoPlaybackSuppressed)"
+            :target-playback-fps="videoTargetPlaybackFps"
+            @remote-playback-stall="(p) => emit('remote-playback-stall', p)"
           />
         </div>
         <div v-if="mafiaDeadShade" class="tile-dead-veneer" aria-hidden="true" />

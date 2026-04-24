@@ -221,11 +221,9 @@ const mafiaHeaderHasRoom = computed(() => {
   return Boolean(mafiaQueryAsStringRecord(route.query).room)
 })
 
-const mafiaHeaderModeToggleLabel = computed(() =>
-  isMafiaViewMode.value ? t('mafiaPage.headerCenterHostButton') : t('mafiaPage.headerCenterObsButton'),
-)
+const mafiaHeaderObsCopyLabel = computed(() => t('mafiaPage.headerCenterObsButton'))
 
-async function toggleMafiaViewMode(): Promise<void> {
+async function copyMafiaObsViewUrl(): Promise<void> {
   if (route.name !== 'mafia') {
     return
   }
@@ -233,21 +231,14 @@ async function toggleMafiaViewMode(): Promise<void> {
   if (typeof room !== 'string' || room.length < 1) {
     return
   }
-  if (!isMafiaViewMode.value) {
-    const next = { ...mafiaQueryAsStringRecord(route.query), mode: 'view' as const }
-    const viewUrl = `${window.location.origin}/app/mafia?${new URLSearchParams(next).toString()}`
-    try {
-      await navigator.clipboard.writeText(viewUrl)
-    } catch {
-      /* clipboard may be denied */
-    }
-    window.dispatchEvent(new CustomEvent(MAFIA_OBS_URL_TOAST_EVENT))
-    await router.replace({ name: 'mafia', query: next })
-    return
+  const next = { ...mafiaQueryAsStringRecord(route.query), mode: 'view' as const }
+  const viewUrl = `${window.location.origin}/app/mafia?${new URLSearchParams(next).toString()}`
+  try {
+    await navigator.clipboard.writeText(viewUrl)
+  } catch {
+    /* clipboard may be denied */
   }
-  const rest = { ...mafiaQueryAsStringRecord(route.query) }
-  delete rest.mode
-  await router.replace({ name: 'mafia', query: rest })
+  window.dispatchEvent(new CustomEvent(MAFIA_OBS_URL_TOAST_EVENT))
 }
 </script>
 
@@ -320,11 +311,11 @@ async function toggleMafiaViewMode(): Promise<void> {
               type="button"
               class="stream-nav__link stream-nav__link--btn"
               :class="{ 'stream-nav__link--active': isMafiaViewMode }"
-              :title="mafiaHeaderModeToggleLabel"
-              :aria-label="mafiaHeaderModeToggleLabel"
-              @click="toggleMafiaViewMode"
+              :title="mafiaHeaderObsCopyLabel"
+              :aria-label="mafiaHeaderObsCopyLabel"
+              @click="copyMafiaObsViewUrl"
             >
-              {{ mafiaHeaderModeToggleLabel }}
+              {{ mafiaHeaderObsCopyLabel }}
             </button>
           </div>
         </template>

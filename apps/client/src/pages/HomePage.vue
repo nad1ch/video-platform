@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
+import { useCoinHubStore } from '@/stores/coinHub'
 import AppEconomySection from '@/pages/app/components/AppEconomySection.vue'
 import AppFooter from '@/pages/app/components/AppFooter.vue'
 import AppGamesSection from '@/pages/app/components/AppGamesSection.vue'
@@ -58,8 +60,7 @@ const nadrawRoute = computed<RouteLocationRaw>(() => ({
 const gameCards = computed<AppGameCard[]>(() => [
   {
     id: 'eat-first',
-    title: 'Eat First',
-    subtitle: 'Show game',
+    title: 'Who should eat first',
     to: eatRoute,
     image: eatFirstImage,
     ariaLabel: 'Open Eat First',
@@ -68,7 +69,6 @@ const gameCards = computed<AppGameCard[]>(() => [
   {
     id: 'mafia',
     title: 'Mafia',
-    subtitle: 'Live roles',
     to: mafiaRoute,
     image: mafiaImage,
     ariaLabel: 'Open Mafia',
@@ -77,7 +77,6 @@ const gameCards = computed<AppGameCard[]>(() => [
   {
     id: 'wordle',
     title: 'Wordle',
-    subtitle: 'Chat puzzle',
     to: wordleRoute.value,
     image: nadleImage,
     ariaLabel: 'Open Wordle',
@@ -85,8 +84,7 @@ const gameCards = computed<AppGameCard[]>(() => [
   },
   {
     id: 'nadraw',
-    title: 'Nadraw',
-    subtitle: 'Draw show',
+    title: 'Gartic phone',
     to: nadrawRoute.value,
     image: nadrawImage,
     ariaLabel: 'Open Nadraw',
@@ -95,7 +93,6 @@ const gameCards = computed<AppGameCard[]>(() => [
   {
     id: 'spy',
     title: 'Spy',
-    subtitle: 'Party roles',
     to: mafiaRoute,
     image: spyImage,
     ariaLabel: 'Open Spy party roles',
@@ -103,8 +100,7 @@ const gameCards = computed<AppGameCard[]>(() => [
   },
   {
     id: 'hot-seat',
-    title: 'Hot Seat',
-    subtitle: 'Show pick',
+    title: 'Who takes the mic',
     to: eatRoute,
     image: eatFirstImage,
     ariaLabel: 'Open Hot Seat',
@@ -112,7 +108,21 @@ const gameCards = computed<AppGameCard[]>(() => [
   },
 ])
 
-const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.label }))
+const localeLabelByCode: Record<string, string> = {
+  en: 'English',
+  de: 'Germany',
+  uk: 'Ukrainian',
+  pl: 'Polish',
+}
+
+const localeMenuOrder = ['en', 'de', 'uk', 'pl']
+const localeMenuOptions = localeMenuOrder
+  .map((code) => LOCALE_OPTIONS.find((o) => o.code === code))
+  .filter((o): o is (typeof LOCALE_OPTIONS)[number] => Boolean(o))
+  .map((o) => ({
+    value: o.code,
+    label: localeLabelByCode[o.code] ?? o.label,
+  }))
 const needLoginBanner = computed(() => route.query.needLogin === '1')
 const authRedirectTarget = computed(() => {
   const r = route.query.authRedirect
@@ -124,9 +134,29 @@ const userName = computed(() => auth.user.value?.displayName ?? '')
 const userAvatar = computed(() => auth.user.value?.avatar ?? '')
 const footerYear = new Date().getFullYear()
 
+const coinHub = useCoinHubStore()
+const { balance: coinHubBalance } = storeToRefs(coinHub)
+
+const headerCoinBalanceLabel = computed(() => {
+  if (!auth.isAuthenticated.value) {
+    return '—'
+  }
+  return new Intl.NumberFormat(locale.value, { maximumFractionDigits: 0 }).format(coinHubBalance.value)
+})
+
 onMounted(() => {
   void auth.refresh()
 })
+
+watch(
+  () => auth.isAuthenticated.value,
+  (authed) => {
+    if (authed) {
+      void coinHub.loadSnapshot({ background: true })
+    }
+  },
+  { immediate: true },
+)
 
 function openAuth(mode: AuthMode) {
   openStreamAuthModal(route.fullPath || '/app', mode)
@@ -172,6 +202,7 @@ watch(
       <AppHeader
         :auth-loading="authLoading"
         :brand-name="appHeaderBrand"
+        :coin-balance-label="headerCoinBalanceLabel"
         :coin-hub-to="coinHubRoute"
         :is-authenticated="auth.isAuthenticated.value"
         :locale="locale"
@@ -200,7 +231,7 @@ watch(
         </div>
       </main>
 
-      <AppFooter :brand-name="STREAMER_NICK" :feedback-href="feedbackHref" :year="footerYear" />
+      <AppFooter brand-name="Nad1ch" :feedback-href="feedbackHref" :year="footerYear" />
     </div>
   </div>
 </template>
@@ -210,11 +241,14 @@ watch(
   position: relative;
   flex: 1 1 auto;
   width: 100%;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   overflow: hidden;
+  overflow-x: hidden;
   color: #fff;
   letter-spacing: 0;
+  --app-home-display: "Arial Black", Impact, var(--sa-font-display, system-ui), sans-serif;
   background:
     radial-gradient(circle at 18% 28%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.7px),
     radial-gradient(circle at 46% 62%, rgba(255, 255, 255, 0.16) 0 1px, transparent 1.7px),
@@ -262,8 +296,9 @@ watch(
   position: relative;
   z-index: 1;
   display: flex;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   flex-direction: column;
 }
 
@@ -271,9 +306,10 @@ watch(
   display: flex;
   width: 100%;
   flex: 1 1 auto;
+  min-height: 0;
   flex-direction: column;
   justify-content: center;
-  padding: clamp(1.8rem, 5vw, 4rem) clamp(1rem, 5vw, 5.4rem);
+  padding: clamp(1.25rem, 2.6vh, 1.8rem) clamp(1rem, 4vw, 5.4rem) clamp(1.25rem, 2.6vh, 1.8rem);
   box-sizing: border-box;
 }
 
@@ -290,35 +326,74 @@ watch(
 
 .app-home__grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.36fr) minmax(21rem, 0.96fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: stretch;
-  gap: clamp(1.2rem, 3.2vw, 2rem);
-  width: min(100%, 74rem);
+  gap: 1.25rem;
+  width: min(92vw, 88rem);
+  max-width: 100%;
   margin: 0 auto;
 }
 
 .app-home__feature-stack {
   display: grid;
   grid-template-rows: 1fr 1fr;
-  gap: clamp(1.2rem, 3.2vw, 3.6rem);
+  gap: clamp(4.4rem, 10.8vh, 7.2rem);
+  min-width: 0;
+  align-self: stretch;
+}
+
+.app-home__feature-stack > * {
   min-width: 0;
 }
 
-@media (max-width: 1020px) {
+@media (max-width: 1200px) {
   .app-home {
-    overflow: visible;
+    overflow-x: hidden;
+  }
+
+  .app-home__main {
+    padding: clamp(1rem, 2.2vh, 1.45rem) clamp(0.8rem, 2.6vw, 1.6rem);
+  }
+
+  .app-home__grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    width: min(calc(100vw - 2.5rem), 60rem);
+    gap: 0.9rem;
+  }
+
+  .app-home__feature-stack {
+    gap: clamp(1.1rem, 3.4vh, 2rem);
+  }
+}
+
+@media (max-width: 900px) {
+  .app-home {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
+
+  .app-home__shell {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .app-home__main {
     justify-content: flex-start;
+    padding: 1.45rem clamp(1rem, 4vw, 2rem) 2.4rem;
   }
 
   .app-home__grid {
     grid-template-columns: 1fr;
+    width: min(100%, 56rem);
+    gap: 1.4rem;
   }
 
   .app-home__feature-stack {
     grid-template-rows: auto;
+    gap: 1.4rem;
   }
 }
 

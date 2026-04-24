@@ -2,6 +2,7 @@ import WebSocket from 'ws'
 import type { WebSocket as WsSocket } from 'ws'
 import { z } from 'zod'
 import type {
+  Consumer,
   DtlsParameters,
   IceCandidate,
   IceParameters,
@@ -1312,6 +1313,52 @@ function sendConsumeFailed(socket: WsSocket, producerId: string, reason: string)
   sendServerMessage(socket, { type: 'consume-failed', payload: { producerId, reason } })
 }
 
+/**
+ * Mediasoup defaults video consumers to the highest simulcast/SVC layer until preferred layers are set.
+ * Apply a conservative rung before `resume()` so the first RTP/decodes are not full resolution.
+ * Safe to no-op: non-simulcast / unsupported encodings throw — caller still resumes.
+ */
+async function applyInitialLowVideoConsumerLayersBeforeResume(consumer: Consumer): Promise<void> {
+  if (consumer.kind !== 'video') {
+    return
+  }
+  const trySpatialOnly = async (): Promise<void> => {
+    await consumer.setPreferredLayers({ spatialLayer: 0 })
+  }
+  try {
+    await consumer.setPreferredLayers({ spatialLayer: 0, temporalLayer: 0 })
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[call-qa:layers] consume initial setPreferredLayers (pre-resume)', {
+        consumerId: consumer.id,
+        producerId: consumer.producerId,
+        spatialLayer: 0,
+        temporalLayer: 0,
+        consumerType: consumer.type,
+      })
+    }
+  } catch {
+    try {
+      await trySpatialOnly()
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[call-qa:layers] consume initial setPreferredLayers spatial-only (pre-resume)', {
+          consumerId: consumer.id,
+          producerId: consumer.producerId,
+          spatialLayer: 0,
+          consumerType: consumer.type,
+        })
+      }
+    } catch {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[call-qa:layers] consume initial setPreferredLayers skipped (simple/non-layered)', {
+          consumerId: consumer.id,
+          producerId: consumer.producerId,
+          consumerType: consumer.type,
+        })
+      }
+    }
+  }
+}
+
 export async function handleConsume(
   socket: WsSocket,
   transportId: string,
@@ -1361,11 +1408,36 @@ export async function handleConsume(
     // Never resume a paused outbound producer here. Camera-off intentionally keeps the SFU producer paused;
     // resuming would restart RTP for everyone and breaks Meet-style mute. Consumers are still created fine.
 
-    const consumer = await transport.consume({
+    const baseConsume = {
       producerId,
       rtpCapabilities: caps,
-      paused: true,
-    })
+      paused: true as const,
+    }
+
+    let consumer: Consumer
+    /** When true, `transport.consume` already set low rungs; skip redundant `setPreferredLayers`. */
+    let videoInitialLayersFromConsumeOptions = false
+    if (sourceProducer.kind === 'video') {
+      try {
+        consumer = await transport.consume({
+          ...baseConsume,
+          preferredLayers: { spatialLayer: 0, temporalLayer: 0 },
+        })
+        videoInitialLayersFromConsumeOptions = true
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[call-qa:layers] consume created with preferredLayers in options', {
+            producerId,
+            consumerId: consumer.id,
+            spatialLayer: 0,
+            temporalLayer: 0,
+          })
+        }
+      } catch {
+        consumer = await transport.consume(baseConsume)
+      }
+    } else {
+      consumer = await transport.consume(baseConsume)
+    }
 
     if (process.env.NODE_ENV !== 'production') {
       console.log('[consume] consumer created', {
@@ -1380,6 +1452,10 @@ export async function handleConsume(
 
     if (process.env.NODE_ENV !== 'production') {
       console.log('[mediasoup] SERVER CONSUMER', consumer.producerId, consumer.kind, consumer.id)
+    }
+
+    if (sourceProducer.kind === 'video' && !videoInitialLayersFromConsumeOptions) {
+      await applyInitialLowVideoConsumerLayersBeforeResume(consumer)
     }
 
     sendServerMessage(socket, {

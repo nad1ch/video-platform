@@ -270,12 +270,16 @@ export function useCallEngine(options?: CallEngineOptions) {
     setupReceivePath,
     stopRemoteMedia,
     setActiveSpeaker,
+    setUiActiveSpeakerPeerIdForPreferredLayers,
     setNetworkQualityOverride,
     collectInboundVideoDebugStats,
     setPeerVisible,
     removeRemotePeer,
     requestForcedProducerResync,
     receiveQualityPressure,
+    receiveDeviceProfile,
+    lastPreferredLayerTargetsByPeerId,
+    playbackRenderFpsPressureByPeerId,
   } = useRemoteMedia()
 
   const remoteListenPrefs = shallowRef(new Map<string, RemoteListenEntry>())
@@ -821,9 +825,9 @@ export function useCallEngine(options?: CallEngineOptions) {
   })
 
   /**
-   * UI highlight: derived from local Web Audio analysis of inbound/outbound media streams
-   * (dominant talker with hysteresis). `active-speaker` from the SFU still updates
-   * {@link serverActiveSpeakerPeerId} for simulcast layer policy only.
+   * UI highlight: derived from local Web Audio analysis of remote tile streams
+   * (dominant talker with hysteresis). The same id is mirrored into recv preferred-layer ranking
+   * so perceived speaker gets high simulcast before SFU `active-speaker` catches up.
    */
   const activeSpeakerTileInputs = computed<ActiveSpeakerTile[]>(() =>
     tiles.value.map((t) => ({
@@ -835,6 +839,14 @@ export function useCallEngine(options?: CallEngineOptions) {
   )
   const { activeSpeakerPeerId } = useActiveSpeaker(activeSpeakerTileInputs, inCall)
 
+  watch(
+    activeSpeakerPeerId,
+    (id) => {
+      setUiActiveSpeakerPeerIdForPreferredLayers(id)
+    },
+    { flush: 'post', immediate: true },
+  )
+
   const callDebugSnapshot = computed(() => ({
     videoQualityPreset: videoQualityPreset.value,
     videoQualityExplicit: videoQualityExplicit.value,
@@ -842,9 +854,17 @@ export function useCallEngine(options?: CallEngineOptions) {
     activeCameraPublishersAtWire: lastWireActiveCameraPublishers.value,
     peerCountAtWire: lastWirePeerCount.value,
     publishSimulcast: lastWireVideoSimulcast.value,
+    effectiveActiveSpeakerPeerId: activeSpeakerPeerId.value ?? serverActiveSpeakerPeerId.value,
     activeSpeakerPeerId: activeSpeakerPeerId.value,
     serverActiveSpeakerPeerId: serverActiveSpeakerPeerId.value,
     receiveQualityPressure: receiveQualityPressure.value,
+    receiveDeviceProfile: receiveDeviceProfile.value.profile,
+    receiveAdaptiveMaxHigh: receiveDeviceProfile.value.maxHighStreams,
+    receiveAdaptiveMaxMedium: receiveDeviceProfile.value.maxMediumStreams,
+    receiveAllowRenderSuppression: receiveDeviceProfile.value.allowRenderSuppression,
+    receiveMaxActiveRemoteVideos: receiveDeviceProfile.value.maxActiveRemoteVideos,
+    receivePressureBadStreakToShift: receiveDeviceProfile.value.pressureBadStreakToShift,
+    receivePreferredLayersByPeerId: lastPreferredLayerTargetsByPeerId.value,
   }))
 
   const sizeTier = computed<'sm' | 'md' | 'lg'>(() =>
@@ -1204,6 +1224,10 @@ export function useCallEngine(options?: CallEngineOptions) {
     wsStatus,
     callDebugSnapshot,
     receiveQualityPressure,
+    /** SFU `active-speaker` id (simulcast policy); differs from UI {@link activeSpeakerPeerId} from Web Audio. */
+    serverActiveSpeakerPeerId,
+    receiveDeviceProfile,
+    playbackRenderFpsPressureByPeerId,
     refreshInboundVideoDebugStats: collectInboundVideoDebugStats,
     /** Remote simulcast helper: `useRemoteMedia` maps this to `set-consumer-preferred-layers` (consumers stay open). */
     setPeerVisible,

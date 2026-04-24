@@ -16,17 +16,34 @@ const props = withDefaults(
     reportVideoUi?: boolean
     /** Local preview: `none` = no outbound video (paused / no track). Remotes omit this prop. */
     videoPresentation?: 'camera' | 'screen' | 'none'
+    /**
+     * Remote tiles: pause element playback only (keeps `srcObject`); does not stop consumers.
+     * When false, resumes `play()` after bind / tab visible.
+     */
+    playbackSuppressed?: boolean
+    /**
+     * Phase 3.5: soft cap on element presentation rate (remote grid). Omit or use ≥28 for native cadence.
+     * Ignored when {@link playbackSuppressed} is true. Does not change WebRTC decode/consume.
+     */
+    targetPlaybackFps?: number
+    /**
+     * Remote grid: when set, `waiting` on the element emits `remotePlaybackStall` for CallPage
+     * (fast signal — complements inbound getStats pressure).
+     */
+    remotePlaybackStallPeerId?: string | null
   }>(),
   {
     muted: false,
     fill: false,
     fillCover: false,
     reportVideoUi: true,
+    playbackSuppressed: false,
   },
 )
 
 const emit = defineEmits<{
   videoUi: [payload: { readyState: number; videoWidth: number; videoHeight: number }]
+  remotePlaybackStall: [payload: { peerId: string; stalling: boolean }]
 }>()
 
 const el = ref<HTMLVideoElement | null>(null)
@@ -53,6 +70,7 @@ const hasUsableVideoTrack = computed(() => {
 })
 
 function cleanupVideoElement(v: HTMLVideoElement | null): void {
+  clearPlaybackFpsThrottle()
   if (!v) {
     return
   }
@@ -89,6 +107,273 @@ async function playIgnoringAbort(v: HTMLVideoElement): Promise<void> {
   }
 }
 
+/** Pause or play without detaching `srcObject` (WebRTC / replaceTrack safe). */
+async function applyPlaybackSuppression(v: HTMLVideoElement): Promise<void> {
+  if (props.playbackSuppressed) {
+    try {
+      v.pause()
+    } catch {
+      /* ignore */
+    }
+    return
+  }
+  await playIgnoringAbort(v)
+}
+
+/** Aligned with `FPS_RENDER_PRESSURE_MIN_FPS` / call video max fps in call-core. */
+const PLAYBACK_FPS_THROTTLE_MIN = 12
+const PLAYBACK_FPS_THROTTLE_MAX_EXCLUSIVE = 25
+/** Fast local signal before inbound getStats catches up (buffer underrun / decode stall). */
+const LOCAL_WAITING_FPS_STALL_MS = 1500
+const LOCAL_WAITING_FPS_RELATIVE = 0.85
+
+const CAN_USE_PLAYBACK_RVFC =
+  typeof HTMLVideoElement !== 'undefined' &&
+  typeof HTMLVideoElement.prototype.requestVideoFrameCallback === 'function'
+
+/** Invalidates in-flight RVFC / pulse closures after bind or prop changes. */
+let playbackFpsPacingGen = 0
+let playbackFpsThrottleInterval: ReturnType<typeof setInterval> | null = null
+let playbackFpsThrottlePlayTimer: ReturnType<typeof setTimeout> | null = null
+let playbackFpsThrottleBoundEl: HTMLVideoElement | null = null
+let rvfcHandle: number | null = null
+let rvfcBoundVideo: HTMLVideoElement | null = null
+let rvfcSkipPlayTimer: ReturnType<typeof setTimeout> | null = null
+let localWaitingStallUntil = 0
+let localWaitingRestoreTimer: ReturnType<typeof setTimeout> | null = null
+
+/** Dedupe `remotePlaybackStall` emissions across timer / detach. */
+let remotePlaybackStallActive = false
+
+function notifyRemotePlaybackStall(stalling: boolean): void {
+  if (props.reportVideoUi) {
+    return
+  }
+  const id = typeof props.remotePlaybackStallPeerId === 'string' ? props.remotePlaybackStallPeerId.trim() : ''
+  if (!id) {
+    return
+  }
+  if (stalling) {
+    if (!remotePlaybackStallActive) {
+      remotePlaybackStallActive = true
+      emit('remotePlaybackStall', { peerId: id, stalling: true })
+    }
+    return
+  }
+  if (remotePlaybackStallActive) {
+    remotePlaybackStallActive = false
+    emit('remotePlaybackStall', { peerId: id, stalling: false })
+  }
+}
+
+function clearWaitingStallState(): void {
+  notifyRemotePlaybackStall(false)
+  localWaitingStallUntil = 0
+  if (localWaitingRestoreTimer !== null) {
+    clearTimeout(localWaitingRestoreTimer)
+    localWaitingRestoreTimer = null
+  }
+}
+
+function getEffectivePlaybackFpsCap(): number | undefined {
+  const cap = props.targetPlaybackFps
+  if (
+    typeof cap !== 'number' ||
+    !Number.isFinite(cap) ||
+    cap < PLAYBACK_FPS_THROTTLE_MIN ||
+    cap >= PLAYBACK_FPS_THROTTLE_MAX_EXCLUSIVE
+  ) {
+    return undefined
+  }
+  const now = typeof performance !== 'undefined' ? performance.now() : 0
+  if (localWaitingStallUntil > 0 && now < localWaitingStallUntil) {
+    return Math.max(
+      PLAYBACK_FPS_THROTTLE_MIN,
+      Math.round(cap * LOCAL_WAITING_FPS_RELATIVE),
+    )
+  }
+  return cap
+}
+
+function cancelRvfcIfAny(): void {
+  const v = rvfcBoundVideo
+  if (v != null && rvfcHandle !== null && typeof v.cancelVideoFrameCallback === 'function') {
+    try {
+      v.cancelVideoFrameCallback(rvfcHandle)
+    } catch {
+      /* ignore */
+    }
+  }
+  rvfcHandle = null
+  rvfcBoundVideo = null
+  if (rvfcSkipPlayTimer !== null) {
+    clearTimeout(rvfcSkipPlayTimer)
+    rvfcSkipPlayTimer = null
+  }
+}
+
+function clearPlaybackFpsThrottle(): void {
+  playbackFpsPacingGen += 1
+  cancelRvfcIfAny()
+  if (playbackFpsThrottleInterval !== null) {
+    clearInterval(playbackFpsThrottleInterval)
+    playbackFpsThrottleInterval = null
+  }
+  if (playbackFpsThrottlePlayTimer !== null) {
+    clearTimeout(playbackFpsThrottlePlayTimer)
+    playbackFpsThrottlePlayTimer = null
+  }
+  playbackFpsThrottleBoundEl = null
+}
+
+/**
+ * Phase 4: decode-aligned pacing via requestVideoFrameCallback (Chrome/Edge/Firefox).
+ * Skips presentation beats by pausing only when frames arrive faster than target FPS.
+ */
+function startRvfcPlaybackFpsThrottle(v: HTMLVideoElement, token: number): void {
+  rvfcBoundVideo = v
+  let lastAcceptedMs = 0
+
+  const scheduleNextFrame = (): void => {
+    if (token !== playbackFpsPacingGen || v !== el.value) {
+      return
+    }
+    if (props.playbackSuppressed) {
+      return
+    }
+    const eff = getEffectivePlaybackFpsCap()
+    if (
+      eff === undefined ||
+      eff < PLAYBACK_FPS_THROTTLE_MIN ||
+      eff >= PLAYBACK_FPS_THROTTLE_MAX_EXCLUSIVE
+    ) {
+      clearPlaybackFpsThrottle()
+      return
+    }
+    const id = v.requestVideoFrameCallback(() => {
+      if (token !== playbackFpsPacingGen || v !== el.value) {
+        return
+      }
+      rvfcHandle = null
+      if (props.playbackSuppressed) {
+        return
+      }
+      const effective = getEffectivePlaybackFpsCap()
+      if (
+        effective === undefined ||
+        effective < PLAYBACK_FPS_THROTTLE_MIN ||
+        effective >= PLAYBACK_FPS_THROTTLE_MAX_EXCLUSIVE
+      ) {
+        clearPlaybackFpsThrottle()
+        return
+      }
+      const t = typeof performance !== 'undefined' ? performance.now() : 0
+      const minDelta = 1000 / effective
+      if (lastAcceptedMs === 0 || t - lastAcceptedMs >= minDelta) {
+        lastAcceptedMs = t
+        scheduleNextFrame()
+      } else {
+        const wait = Math.min(72, Math.max(8, minDelta - (t - lastAcceptedMs)))
+        try {
+          v.pause()
+        } catch {
+          /* ignore */
+        }
+        if (rvfcSkipPlayTimer !== null) {
+          clearTimeout(rvfcSkipPlayTimer)
+        }
+        rvfcSkipPlayTimer = window.setTimeout(() => {
+          rvfcSkipPlayTimer = null
+          if (token !== playbackFpsPacingGen || v !== el.value) {
+            return
+          }
+          void playIgnoringAbort(v).finally(() => {
+            if (token !== playbackFpsPacingGen || v !== el.value) {
+              return
+            }
+            scheduleNextFrame()
+          })
+        }, wait)
+      }
+    })
+    rvfcHandle = id
+  }
+
+  scheduleNextFrame()
+}
+
+/**
+ * Legacy fallback: fixed-interval pause/play pulse (Safari / no RVFC).
+ */
+function startPulsePlaybackFpsThrottle(v: HTMLVideoElement, token: number): void {
+  playbackFpsThrottleBoundEl = v
+  const cap = getEffectivePlaybackFpsCap()
+  if (cap === undefined) {
+    return
+  }
+  const period = Math.max(55, Math.floor(1000 / cap))
+
+  playbackFpsThrottleInterval = window.setInterval(() => {
+    if (token !== playbackFpsPacingGen) {
+      clearPlaybackFpsThrottle()
+      return
+    }
+    const bound = playbackFpsThrottleBoundEl
+    if (!bound || bound !== el.value) {
+      clearPlaybackFpsThrottle()
+      return
+    }
+    const effective = getEffectivePlaybackFpsCap()
+    if (
+      props.playbackSuppressed ||
+      effective === undefined ||
+      effective < PLAYBACK_FPS_THROTTLE_MIN ||
+      effective >= PLAYBACK_FPS_THROTTLE_MAX_EXCLUSIVE
+    ) {
+      clearPlaybackFpsThrottle()
+      return
+    }
+    const activePeriod = Math.max(55, Math.floor(1000 / effective))
+    const activePulse = Math.min(50, Math.max(12, Math.floor(activePeriod * 0.28)))
+    try {
+      bound.pause()
+    } catch {
+      /* ignore */
+    }
+    if (playbackFpsThrottlePlayTimer !== null) {
+      clearTimeout(playbackFpsThrottlePlayTimer)
+    }
+    playbackFpsThrottlePlayTimer = window.setTimeout(() => {
+      playbackFpsThrottlePlayTimer = null
+      void playIgnoringAbort(bound)
+    }, activePulse)
+  }, period)
+}
+
+/**
+ * Remote grid: RVFC pacing when supported, else pulse. Local preview (`reportVideoUi`) never throttles.
+ */
+function syncPlaybackFpsThrottle(v: HTMLVideoElement): void {
+  clearPlaybackFpsThrottle()
+  if (props.reportVideoUi) {
+    return
+  }
+  if (props.playbackSuppressed) {
+    return
+  }
+  const cap = getEffectivePlaybackFpsCap()
+  if (cap === undefined || cap < PLAYBACK_FPS_THROTTLE_MIN || cap >= PLAYBACK_FPS_THROTTLE_MAX_EXCLUSIVE) {
+    return
+  }
+
+  const token = playbackFpsPacingGen
+  if (CAN_USE_PLAYBACK_RVFC) {
+    startRvfcPlaybackFpsThrottle(v, token)
+  } else {
+    startPulsePlaybackFpsThrottle(v, token)
+  }
+}
+
 /**
  * Skip heavy work only when stream ref, video track id, and playRev are unchanged — then `play()` (+ UI emit).
  * When `playRev` bumps (e.g. track unmute / source change) on the **same** `MediaStream`, do not clear
@@ -119,9 +404,48 @@ function detachVideoUi(): void {
   detachUiListeners = null
 }
 
-/** Reserved for inbound track lifecycle; do not clear `<video>` on `track.muted` (flag can disagree with RTP). */
+/** Inbound tile: `waiting` → short lower effective FPS (before getStats reflects pressure). */
 function attachInboundVideoTrackListeners(): void {
   clearInboundVideoTrackListeners()
+  const v = el.value
+  if (!v || props.reportVideoUi) {
+    return
+  }
+  const onWaiting = (): void => {
+    if (props.playbackSuppressed) {
+      return
+    }
+    notifyRemotePlaybackStall(true)
+    const cap = props.targetPlaybackFps
+    const capOk =
+      typeof cap === 'number' &&
+      Number.isFinite(cap) &&
+      cap >= PLAYBACK_FPS_THROTTLE_MIN &&
+      cap < PLAYBACK_FPS_THROTTLE_MAX_EXCLUSIVE
+    const now = typeof performance !== 'undefined' ? performance.now() : 0
+    localWaitingStallUntil = capOk ? now + LOCAL_WAITING_FPS_STALL_MS : 0
+    if (localWaitingRestoreTimer !== null) {
+      clearTimeout(localWaitingRestoreTimer)
+    }
+    if (capOk) {
+      syncPlaybackFpsThrottle(v)
+    }
+    localWaitingRestoreTimer = window.setTimeout(() => {
+      localWaitingRestoreTimer = null
+      localWaitingStallUntil = 0
+      notifyRemotePlaybackStall(false)
+      const cur = el.value
+      if (cur === v && !props.playbackSuppressed && hasUsableVideoTrack.value) {
+        syncPlaybackFpsThrottle(cur)
+      }
+    }, LOCAL_WAITING_FPS_STALL_MS)
+  }
+  v.addEventListener('waiting', onWaiting)
+  detachInboundVideoListeners = (): void => {
+    v.removeEventListener('waiting', onWaiting)
+    clearWaitingStallState()
+    detachInboundVideoListeners = null
+  }
 }
 
 function attachVideoUiListeners(v: HTMLVideoElement): void {
@@ -200,10 +524,11 @@ async function bindStream(): Promise<void> {
 
   if (sameStreamAndTrack) {
     v.muted = Boolean(props.muted)
-    await playIgnoringAbort(v)
+    await applyPlaybackSuppression(v)
     if (generation !== bindStreamGeneration) {
       return
     }
+    syncPlaybackFpsThrottle(v)
     // Same bound track can go muted→unmuted (RTP start); re-emit so tiles leave “connecting” / frozen UI.
     if (props.reportVideoUi) {
       emit('videoUi', {
@@ -238,10 +563,11 @@ async function bindStream(): Promise<void> {
     attachVideoUiListeners(v)
   }
 
-  await playIgnoringAbort(v)
+  await applyPlaybackSuppression(v)
   if (generation !== bindStreamGeneration) {
     return
   }
+  syncPlaybackFpsThrottle(v)
 
   if (!props.reportVideoUi && vid) {
     clearLocalVideoEndedListener()
@@ -278,7 +604,8 @@ watch(
 )
 
 watch(
-  () => [props.stream, props.playRev ?? 0, props.reportVideoUi, hasUsableVideoTrack] as const,
+  () =>
+    [props.stream, props.playRev ?? 0, props.reportVideoUi, hasUsableVideoTrack.value, props.playbackSuppressed] as const,
   () => {
     if (!hasUsableVideoTrack.value) {
       return
@@ -286,6 +613,23 @@ watch(
     void bindStream()
   },
   { immediate: true, flush: 'post' },
+)
+
+watch(
+  () => [props.targetPlaybackFps ?? null, props.playbackSuppressed, hasUsableVideoTrack.value] as const,
+  () => {
+    const v = el.value
+    if (!hasUsableVideoTrack.value || !v) {
+      clearPlaybackFpsThrottle()
+      return
+    }
+    void nextTick(() => {
+      if (el.value === v) {
+        syncPlaybackFpsThrottle(v)
+      }
+    })
+  },
+  { flush: 'post' },
 )
 
 watch(

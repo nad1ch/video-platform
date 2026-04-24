@@ -27,11 +27,13 @@ defineProps<{
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 4.8rem;
-  padding: 1rem clamp(1rem, 2.4vw, 1.8rem);
+  min-height: 4.6rem;
+  padding: 1rem clamp(1.4rem, 2.2vw, 2.8rem);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(32, 20, 52, 0.68);
   color: #fff;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
 }
 
 .app-landing-footer__rights {
@@ -42,6 +44,9 @@ defineProps<{
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   background: rgba(81, 48, 116, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
 .app-landing-footer__brand {
@@ -51,7 +56,7 @@ defineProps<{
   padding: 0 0.8rem;
   border-radius: inherit;
   background: rgba(81, 48, 116, 0.6);
-  font-family: var(--sa-font-display, system-ui, sans-serif);
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: 0.72rem;
   line-height: 1;
   white-space: nowrap;
@@ -72,12 +77,15 @@ defineProps<{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 8.6rem;
-  min-height: 2.25rem;
+  min-width: 8.7rem;
+  min-height: 2.35rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   background: rgba(81, 48, 116, 0.62);
   color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   font-size: 0.82rem;
   font-weight: 700;
   text-decoration: none;
@@ -109,6 +117,18 @@ defineProps<{
 
   .app-landing-footer__feedback {
     width: 100%;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1200px) {
+  .app-landing-footer {
+    min-height: 5.2rem;
+  }
+
+  .app-landing-footer__feedback {
+    min-width: 9.5rem;
+    min-height: 2.55rem;
+    font-size: 0.9rem;
   }
 }
 </style>

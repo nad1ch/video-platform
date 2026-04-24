@@ -1,7 +1,7 @@
 import { computed, type ComputedRef } from 'vue'
 import { useRoute, type LocationQueryValue, type RouteLocationNormalizedLoaded } from 'vue-router'
 
-/** App shell → CallPage: show copy-to-clipboard toast after switching to `?mode=view` (OBS URL). */
+/** App shell → CallPage: show copy-to-clipboard toast after copying the `?mode=view` OBS URL. */
 export const MAFIA_OBS_URL_TOAST_EVENT = 'stream-assist:mafia-obs-url-copied'
 
 /** CallPage / tile → MafiaOverlay: open kick dialog with a pre-selected peer. */

@@ -10,3 +10,15 @@ export {
   type RemoteProducerInfo,
   type SetupReceivePathOptions,
 } from './useRemoteMedia'
+export {
+  advancePlaybackRenderFpsPressureByPeer,
+  aggregateInboundVideoStatsByPeerId,
+  applyFpsRenderPressure,
+  evaluateInboundFpsRenderPressure,
+  FPS_RENDER_PRESSURE_BAD_STREAK_DOWN,
+  FPS_RENDER_PRESSURE_GOOD_STREAK_UP,
+  FPS_RENDER_PRESSURE_MIN_FPS,
+  type FpsRenderPressure,
+  type FpsRenderPressureHysteresis,
+  type InboundVideoStatsRowInput,
+} from './videoFpsPressure'

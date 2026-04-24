@@ -12,9 +12,15 @@ export const VIDEO_QUALITY_PRESETS: VideoQualityPreset[] = ['economy', 'balanced
 
 /** Inclusive: <= this many active camera publishers → high small-room profile. */
 export const ACTIVE_CAMERA_SMALL_ROOM_MAX = 4
+export const CALL_VIDEO_MIN_FRAMERATE = 12
+export const CALL_VIDEO_MAX_FRAMERATE = 24
 
 export function isVideoQualityPreset(v: string): v is VideoQualityPreset {
   return v === 'economy' || v === 'balanced' || v === 'hd'
+}
+
+function clampCallVideoFramerate(fps: number): number {
+  return Math.min(CALL_VIDEO_MAX_FRAMERATE, Math.max(CALL_VIDEO_MIN_FRAMERATE, Math.round(fps)))
 }
 
 /**
@@ -47,8 +53,8 @@ export const AUTO_LARGE_ROOM_VIDEO_CAPTURE = {
   HEIGHT_IDEAL: 540,
   WIDTH_MAX: 960,
   HEIGHT_MAX: 540,
-  FPS_IDEAL: 24,
-  FPS_MAX: 24,
+  FPS_IDEAL: CALL_VIDEO_MAX_FRAMERATE,
+  FPS_MAX: CALL_VIDEO_MAX_FRAMERATE,
 } as const
 
 /** Small-room capture: 720p ideal; fps cap follows large-room (24) for a consistent feel when switching tiers. */
@@ -61,15 +67,15 @@ export const AUTO_SMALL_ROOM_VIDEO_CAPTURE = {
 
 /**
  * `auto_large_room` VP8 simulcast ladder (r0 / r1 / r2) — mediasoup `maxBitrate` caps; CC can send less.
- * - **low** (~240p-class @12fps): pressure / off-tile; not the default “normal” receive look.
- * - **medium** (×2 of 960×540 → 480×270, ~20fps): main UX rung for {@link MAX_MEDIUM_STREAMS} visible peers.
- * - **high** (540p @24fps, ≤1.2Mbps): active speaker / host; {@link MAX_HIGH_STREAMS} slots.
+ * - **low** (~320p-class @12fps): pressure / off-tile; low, but still watchable in large grids.
+ * - **medium** (x2 of 960x540 -> 480x270, ~20fps): main UX rung for {@link MAX_MEDIUM_STREAMS} visible peers.
+ * - **high** (540p @22fps, <=1Mbps): active speaker / host; {@link MAX_HIGH_STREAMS} slots.
  * Single-layer (no simulcast): one encoding capped like **high** (no 2M+ bloat).
  */
 export const AUTO_LARGE_ROOM_SIMULCAST = {
-  low: { scaleResolutionDownBy: 4, maxBitrate: 150_000, maxFramerate: 12 },
-  medium: { scaleResolutionDownBy: 2, maxBitrate: 600_000, maxFramerate: 20 },
-  high: { scaleResolutionDownBy: 1, maxBitrate: 1_200_000, maxFramerate: 24 },
+  low: { scaleResolutionDownBy: 3, maxBitrate: 500_000, maxFramerate: 14 },
+  medium: { scaleResolutionDownBy: 2, maxBitrate: 700_000, maxFramerate: 20 },
+  high: { scaleResolutionDownBy: 1, maxBitrate: 1_000_000, maxFramerate: 22 },
 } as const
 
 const AUTO_LARGE_SINGLE_LAYER_MAX_BITRATE_BPS = AUTO_LARGE_ROOM_SIMULCAST.high.maxBitrate
@@ -171,30 +177,30 @@ export function getSingleLayerEncodingsForPreset(tier: VideoPublishTier): RtpEnc
       return [
         {
           maxBitrate: AUTO_LARGE_SINGLE_LAYER_MAX_BITRATE_BPS,
-          maxFramerate: AUTO_LARGE_ROOM_SIMULCAST.high.maxFramerate,
+          maxFramerate: clampCallVideoFramerate(AUTO_LARGE_ROOM_SIMULCAST.high.maxFramerate),
         },
       ]
     case 'auto_small_room':
-      return [{ maxBitrate: 2_800_000, maxFramerate: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL }]
+      return [{ maxBitrate: 2_800_000, maxFramerate: clampCallVideoFramerate(AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL) }]
     case 'economy':
-      return [{ maxBitrate: 600_000, maxFramerate: 24 }]
+      return [{ maxBitrate: 600_000, maxFramerate: clampCallVideoFramerate(24) }]
     case 'hd':
-      return [{ maxBitrate: 4_000_000, maxFramerate: 30 }]
+      return [{ maxBitrate: 4_000_000, maxFramerate: clampCallVideoFramerate(30) }]
     case 'balanced':
     default:
-      return [{ maxBitrate: 2_800_000, maxFramerate: 30 }]
+      return [{ maxBitrate: 2_800_000, maxFramerate: clampCallVideoFramerate(30) }]
   }
 }
 
 /** Outbound VP8 simulcast (large rooms). */
 export function getSimulcastEncodingsForPreset(tier: VideoPublishTier): RtpEncodingParameters[] {
-  const fpsLarge = Math.min(30, Math.max(1, AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL))
+  const fpsLarge = clampCallVideoFramerate(AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL)
   const fps =
     tier === 'auto_large_room' || tier === 'auto_small_room'
       ? fpsLarge
       : tier === 'economy'
-        ? 24
-        : 30
+        ? clampCallVideoFramerate(24)
+        : clampCallVideoFramerate(30)
   switch (tier) {
     case 'auto_large_room': {
       const s = AUTO_LARGE_ROOM_SIMULCAST

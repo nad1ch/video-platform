@@ -59,19 +59,22 @@ function toneClass(tone: AppGameCard['tone']) {
 
 .app-games__panel {
   position: relative;
-  min-height: 100%;
-  padding: clamp(1.35rem, 2.5vw, 2rem);
+  min-height: clamp(27rem, 52vh, 32rem);
+  padding: 1.25rem 1.8rem 1.35rem;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 1.8rem;
   background:
     radial-gradient(circle at 28% 14%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.6px),
     radial-gradient(circle at 78% 22%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.6px),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.24), rgba(60, 36, 99, 0.2));
+    linear-gradient(120deg, rgba(124, 77, 219, 0.26), rgba(60, 36, 99, 0.22)),
+    rgba(28, 12, 52, 0.36);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
     0 24px 80px rgba(9, 2, 20, 0.28);
-  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(22px) saturate(1.08);
+  backdrop-filter: blur(22px) saturate(1.08);
 }
 
 .app-games__panel::before,
@@ -104,8 +107,8 @@ function toneClass(tone: AppGameCard['tone']) {
   z-index: 1;
   margin: 0 0 1rem;
   color: #fff;
-  font-family: var(--sa-font-display, system-ui, sans-serif);
-  font-size: 1.35rem;
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+  font-size: 1.28rem;
   line-height: 1;
   text-align: center;
   text-transform: uppercase;
@@ -117,7 +120,7 @@ function toneClass(tone: AppGameCard['tone']) {
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(0.85rem, 1.8vw, 1rem);
+  gap: 1.05rem 1.1rem;
 }
 
 .app-game-card {
@@ -125,20 +128,24 @@ function toneClass(tone: AppGameCard['tone']) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  min-height: clamp(5.9rem, 9vw, 6.8rem);
-  padding: 0.85rem 1rem;
+  min-height: 6.85rem;
+  padding: 0.82rem 1.05rem;
   overflow: hidden;
-  border: 4px solid rgba(255, 255, 255, 0.92);
-  border-radius: 1.45rem;
+  border: 4px solid rgba(255, 255, 255, 0.94);
+  border-radius: 1.35rem;
   background:
     radial-gradient(circle at 5% 7%, rgba(255, 255, 255, 0.9) 0 1px, transparent 1.5px),
     radial-gradient(circle at 45% 36%, rgba(255, 255, 255, 0.22) 0 1px, transparent 1.5px),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.16), rgba(60, 36, 99, 0.22));
+    linear-gradient(120deg, rgba(124, 77, 219, 0.2), rgba(60, 36, 99, 0.24)),
+    rgba(42, 21, 73, 0.34);
   color: #fff;
   text-decoration: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
     0 14px 36px rgba(6, 2, 18, 0.24);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
   transition:
     border-color 0.18s ease,
     transform 0.18s ease,
@@ -199,8 +206,8 @@ function toneClass(tone: AppGameCard['tone']) {
 
 .app-game-card__title {
   color: #fff;
-  font-family: var(--sa-font-display, system-ui, sans-serif);
-  font-size: 0.95rem;
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+  font-size: 0.92rem;
   line-height: 1.08;
   text-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
 }
@@ -217,8 +224,8 @@ function toneClass(tone: AppGameCard['tone']) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: clamp(3.45rem, 6vw, 4.85rem);
-  height: clamp(3.45rem, 6vw, 4.85rem);
+  width: 4rem;
+  height: 4rem;
   flex-shrink: 0;
 }
 
@@ -252,15 +259,62 @@ function toneClass(tone: AppGameCard['tone']) {
   text-align: center;
 }
 
-@media (max-width: 1020px) {
+@media (max-width: 1200px) {
+  .app-games__panel {
+    min-height: clamp(22rem, 47vh, 27rem);
+    padding: 1rem 1.15rem 1.1rem;
+  }
+
+  .app-games__title {
+    margin-bottom: 0.85rem;
+    font-size: 1.05rem;
+  }
+
   .app-games__grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .app-game-card {
+    min-height: 5.7rem;
+    border-width: 3px;
+    border-radius: 1.1rem;
+    padding: 0.65rem 0.75rem;
+  }
+
+  .app-game-card__title {
+    font-size: 0.74rem;
+  }
+
+  .app-game-card__visual {
+    width: 3.35rem;
+    height: 3.35rem;
   }
 }
 
-@media (max-width: 760px) {
-  .app-games__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (max-width: 900px) {
+  .app-games__panel {
+    min-height: auto;
+    padding: 1.25rem 1.4rem;
+  }
+
+  .app-games__title {
+    font-size: 1.25rem;
+  }
+
+  .app-game-card {
+    min-height: 6.4rem;
+    border-width: 4px;
+    border-radius: 1.25rem;
+    padding: 0.8rem 1rem;
+  }
+
+  .app-game-card__title {
+    font-size: 0.95rem;
+  }
+
+  .app-game-card__visual {
+    width: 4rem;
+    height: 4rem;
   }
 }
 

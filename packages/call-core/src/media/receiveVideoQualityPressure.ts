@@ -26,6 +26,13 @@ function clampDown(
   }
 }
 
+function constrainVisibleSoftly(): SimulcastPreferredLayers {
+  return {
+    spatialLayer: 1,
+    temporalLayer: 0,
+  }
+}
+
 /**
  * Per-user category for layer caps. `visible` = on-screen (default when key missing).
  */
@@ -33,11 +40,12 @@ export function peerRecvLayerCategory(
   peerId: string,
   input: {
     activeSpeakerPeerId: string | null
+    uiActiveSpeakerPeerId?: string | null
     pinnedPeerId: string | null
     peerVisibility: ReadonlyMap<string, boolean>
   },
 ): PeerRecvLayerCategory {
-  if (input.activeSpeakerPeerId === peerId) {
+  if (input.activeSpeakerPeerId === peerId || input.uiActiveSpeakerPeerId === peerId) {
     return 'active'
   }
   if (input.pinnedPeerId === peerId) {
@@ -50,19 +58,30 @@ export function peerRecvLayerCategory(
 }
 
 /**
- * Further reduces {@link base} when receive path is under pressure. `normal` is identity.
+ * Further reduces {@link base} when receive path is under pressure.
+ * In `normal`, avoid LOW entirely so healthy clients do not get unnecessary low-quality tiles.
  */
 export function applyReceiveQualityPressureToLayers(
   base: Map<string, SimulcastPreferredLayers>,
   pressure: ReceiveQualityPressure,
   input: {
     activeSpeakerPeerId: string | null
+    uiActiveSpeakerPeerId?: string | null
     pinnedPeerId: string | null
     peerVisibility: ReadonlyMap<string, boolean>
   },
 ): Map<string, SimulcastPreferredLayers> {
   if (pressure === 'normal') {
-    return new Map(base)
+    const out = new Map<string, SimulcastPreferredLayers>()
+    for (const [peerId, layers] of base) {
+      out.set(
+        peerId,
+        layers.spatialLayer === 0
+          ? { spatialLayer: 1, temporalLayer: Math.max(1, layers.temporalLayer) as 1 | 2 }
+          : layers,
+      )
+    }
+    return out
   }
 
   const out = new Map<string, SimulcastPreferredLayers>()
@@ -73,7 +92,7 @@ export function applyReceiveQualityPressureToLayers(
       if (cat === 'active' || cat === 'pinned') {
         out.set(peerId, clampDown(layers, { spatialLayer: 2, temporalLayer: 1 }))
       } else if (cat === 'visible') {
-        out.set(peerId, clampDown(layers, { spatialLayer: 1, temporalLayer: 1 }))
+        out.set(peerId, constrainVisibleSoftly())
       } else {
         out.set(peerId, clampDown(layers, { spatialLayer: 0, temporalLayer: 0 }))
       }

@@ -66,6 +66,72 @@ describe('assignAdaptivePreferredLayersByPeerId', () => {
     }
   })
 
+  it('respects custom layerSlots (mobile-style 1 high, 3 medium)', () => {
+    const act = 'active-1'
+    const b = 'p-b'
+    const c = 'p-c'
+    const d = 'p-d'
+    const e = 'p-e'
+    const m = assignAdaptivePreferredLayersByPeerId({
+      videoPeerIds: [e, d, c, b, act],
+      activeSpeakerPeerId: act,
+      pinnedPeerId: null,
+      peerVisibility: new Map([
+        [act, true],
+        [b, true],
+        [c, true],
+        [d, true],
+        [e, true],
+      ]),
+      layerSlots: { maxHighStreams: 1, maxMediumStreams: 3 },
+    })
+    expect(m.get(act)).toEqual({ spatialLayer: 2, temporalLayer: 2 })
+    expect(m.get(b)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
+    expect(m.get(c)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
+    expect(m.get(d)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
+    expect(m.get(e)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+  })
+
+  it('orders ui VAD speaker before SFU id when both differ (single high slot)', () => {
+    const ui = 'vad-ahead'
+    const sfu = 'sfu-late'
+    const other = 'z-other'
+    const m = assignAdaptivePreferredLayersByPeerId({
+      videoPeerIds: [other, sfu, ui],
+      activeSpeakerPeerId: sfu,
+      uiActiveSpeakerPeerId: ui,
+      pinnedPeerId: null,
+      peerVisibility: new Map([
+        [ui, true],
+        [sfu, true],
+        [other, true],
+      ]),
+      layerSlots: { maxHighStreams: 1, maxMediumStreams: 1 },
+    })
+    expect(m.get(ui)).toEqual({ spatialLayer: 2, temporalLayer: 2 })
+    expect(m.get(sfu)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
+    expect(m.get(other)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+  })
+
+  it('keeps recent speaker ahead of regular visible peers', () => {
+    const recent = 'recent-speaker'
+    const visible = 'visible-peer'
+    const m = assignAdaptivePreferredLayersByPeerId({
+      videoPeerIds: [visible, recent],
+      activeSpeakerPeerId: null,
+      uiActiveSpeakerPeerId: null,
+      recentSpeakerPeerIds: [recent],
+      pinnedPeerId: null,
+      peerVisibility: new Map([
+        [visible, true],
+        [recent, true],
+      ]),
+      layerSlots: { maxHighStreams: 1, maxMediumStreams: 1 },
+    })
+    expect(m.get(recent)).toEqual({ spatialLayer: 2, temporalLayer: 2 })
+    expect(m.get(visible)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
+  })
+
   it('places pinned after active, visible before off-screen', () => {
     const active = 'a-s'
     const pinned = 'p-in'
