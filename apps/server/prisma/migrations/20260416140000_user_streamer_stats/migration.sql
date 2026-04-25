@@ -1,4 +1,4 @@
--- Per-user Wordle stats scoped to a Streamer (multi-tenant).
+-- Per-user Nadle stats scoped to a Streamer (multi-tenant).
 CREATE TABLE "UserStreamerStats" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,

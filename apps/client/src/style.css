@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Arbutus&family=Climate+Crisis:YEAR@1979&family=Marmelad&display=swap');
+
 :root {
   /* Уникаємо горизонтального «стрибка», коли скролбар з’являється/зникає між сторінками різної висоти. */
   scrollbar-gutter: stable;

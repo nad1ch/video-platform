@@ -112,6 +112,8 @@ const previewTiles = [
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: 1.28rem;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
   line-height: 1;
   text-align: center;
   text-transform: uppercase;

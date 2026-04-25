@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink, type RouteLocationRaw } from 'vue-router'
-
-type LocaleOption = {
-  value: string
-  label: string
-}
+import coinIcon from '@/assets/landing/coin-streamassist.png'
 
 const props = withDefaults(
   defineProps<{
@@ -14,8 +10,6 @@ const props = withDefaults(
     coinHubTo: RouteLocationRaw
     /** Formatted balance (Coin Hub); placeholder when guest. */
     coinBalanceLabel: string
-    locale: string
-    localeOptions: LocaleOption[]
     authLoading?: boolean
     isAuthenticated?: boolean
     userName?: string
@@ -29,10 +23,9 @@ const props = withDefaults(
   },
 )
 
-const emit = defineEmits<{
+defineEmits<{
   login: []
   signup: []
-  'update:locale': [value: string]
 }>()
 
 const hasUserAvatar = computed(() => props.userAvatar.trim().length > 0)
@@ -41,15 +34,6 @@ const userInitial = computed(() => {
   return (s[0] ?? 'S').toUpperCase()
 })
 const displayName = computed(() => props.userName.trim())
-const activeLocaleLabel = computed(
-  () => props.localeOptions.find((option) => option.value === props.locale)?.label ?? props.localeOptions[0]?.label ?? 'English',
-)
-
-function selectLocale(value: string, event: MouseEvent) {
-  emit('update:locale', value)
-  const details = (event.currentTarget as HTMLElement | null)?.closest('details')
-  details?.removeAttribute('open')
-}
 </script>
 
 <template>
@@ -59,24 +43,6 @@ function selectLocale(value: string, event: MouseEvent) {
         <img class="app-landing-header__logo" :src="logoSrc" alt="" width="42" height="42" />
       </RouterLink>
 
-      <details class="app-landing-header__locale">
-        <summary class="app-landing-header__locale-trigger" aria-label="Choose language">
-          <span>{{ activeLocaleLabel }}</span>
-        </summary>
-        <div class="app-landing-header__locale-list">
-          <button
-            v-for="option in localeOptions"
-            :key="option.value"
-            class="app-landing-header__locale-option"
-            :class="{ 'app-landing-header__locale-option--active': option.value === locale }"
-            type="button"
-            @click="selectLocale(option.value, $event)"
-          >
-            {{ option.label }}
-          </button>
-        </div>
-      </details>
-
       <RouterLink class="app-landing-header__title" :to="{ name: 'home' }">
         {{ brandName }}
       </RouterLink>
@@ -84,7 +50,9 @@ function selectLocale(value: string, event: MouseEvent) {
       <div class="app-landing-header__actions">
         <RouterLink class="app-landing-header__coin" :to="coinHubTo" aria-label="Open Coin Hub">
           <span class="app-landing-header__coin-label">{{ coinBalanceLabel }}</span>
-          <span class="app-landing-header__coin-icon" aria-hidden="true" />
+          <span class="app-landing-header__coin-icon" aria-hidden="true">
+            <img class="app-landing-header__coin-img" :src="coinIcon" alt="" width="44" height="44" />
+          </span>
         </RouterLink>
 
         <div class="app-landing-header__auth" :aria-busy="authLoading">
@@ -135,7 +103,7 @@ function selectLocale(value: string, event: MouseEvent) {
 .app-landing-header__bar {
   position: relative;
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 1rem;
   min-height: 5rem;
@@ -176,105 +144,22 @@ function selectLocale(value: string, event: MouseEvent) {
   object-fit: contain;
 }
 
-.app-landing-header__locale {
-  position: relative;
-  z-index: 4;
-  align-self: center;
-  width: 7.9rem;
-  height: 2.15rem;
-}
-
-.app-landing-header__locale[open] {
-  z-index: 6;
-}
-
-.app-landing-header__locale-trigger {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: 2.15rem;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 1.25rem;
-  background: rgba(81, 48, 117, 0.52);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 12px 28px rgba(10, 3, 24, 0.22);
-  color: #fff;
-  cursor: pointer;
-  list-style: none;
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-}
-
-.app-landing-header__locale-trigger::-webkit-details-marker {
-  display: none;
-}
-
-.app-landing-header__locale-trigger::after {
-  position: absolute;
-  right: 1rem;
-  top: 50%;
-  width: 0.42rem;
-  height: 0.42rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.78);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.78);
-  content: '';
-  transform: translateY(-66%) rotate(45deg);
-}
-
-.app-landing-header__locale-list {
-  position: absolute;
-  left: 0;
-  top: 0;
-  z-index: 1;
-  display: none;
-  width: 100%;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 1.25rem;
-  background: rgba(77, 55, 104, 0.5);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 18px 34px rgba(10, 3, 24, 0.3);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-}
-
-.app-landing-header__locale[open] .app-landing-header__locale-list {
-  display: grid;
-}
-
-.app-landing-header__locale-option {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.45rem;
-  border: 0;
-  background: transparent;
-  color: #fff;
-  font: inherit;
-  font-size: 0.95rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.app-landing-header__locale-option--active {
-  background: rgba(81, 48, 117, 0.6);
-}
-
 .app-landing-header__title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
   justify-self: center;
   min-width: 0;
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: 2rem;
-  font-weight: 800;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
   line-height: 1.05;
   text-align: center;
   text-transform: uppercase;
-  transform: none;
+  transform: translate(-50%, -50%);
   text-shadow: 0 5px 16px rgba(0, 0, 0, 0.24);
   white-space: nowrap;
 }
@@ -300,8 +185,9 @@ function selectLocale(value: string, event: MouseEvent) {
   border-radius: 999px;
   background: rgba(255, 163, 108, 0.18);
   color: #ffda44;
+  font-family: var(--app-home-ui, var(--sa-font-main, system-ui, sans-serif));
   font-size: 0.82rem;
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .app-landing-header__coin-icon {
@@ -312,18 +198,14 @@ function selectLocale(value: string, event: MouseEvent) {
   margin: -0.22rem -0.2rem -0.22rem 0;
   flex-shrink: 0;
   border-radius: 999px;
-  background: linear-gradient(135deg, #ffda44, #ffa733 58%, #cc7400);
-  box-shadow:
-    inset -0.35rem 0 0 rgba(204, 116, 0, 0.34),
-    0 0 18px rgba(255, 218, 68, 0.24);
+  filter: drop-shadow(0 0 18px rgba(255, 218, 68, 0.24));
 }
 
-.app-landing-header__coin-icon::after {
-  position: absolute;
-  inset: 0.55rem;
-  border-radius: inherit;
-  border: 2px solid rgba(238, 135, 0, 0.78);
-  content: '';
+.app-landing-header__coin-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .app-landing-header__auth {
@@ -336,6 +218,7 @@ function selectLocale(value: string, event: MouseEvent) {
   background: rgba(102, 56, 143, 0.48);
   color: #fff;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  font-family: var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);
 }
 
 .app-landing-header__auth-loading {
@@ -364,7 +247,7 @@ function selectLocale(value: string, event: MouseEvent) {
   color: rgba(255, 255, 255, 0.78);
   font: inherit;
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 400;
   cursor: pointer;
 }
 
@@ -376,9 +259,7 @@ function selectLocale(value: string, event: MouseEvent) {
 .app-landing-header__auth-link:focus-visible,
 .app-landing-header__coin:focus-visible,
 .app-landing-header__brand:focus-visible,
-.app-landing-header__title:focus-visible,
-.app-landing-header__locale-trigger:focus-visible,
-.app-landing-header__locale-option:focus-visible {
+.app-landing-header__title:focus-visible {
   outline: 2px solid rgba(255, 218, 68, 0.78);
   outline-offset: 3px;
 }
@@ -408,7 +289,7 @@ function selectLocale(value: string, event: MouseEvent) {
   background: linear-gradient(135deg, #8b5cf6, #1a1133);
   color: #fff;
   font-size: 0.72rem;
-  font-weight: 900;
+  font-weight: 400;
 }
 
 .app-landing-header__avatar-img {
@@ -421,7 +302,7 @@ function selectLocale(value: string, event: MouseEvent) {
   min-width: 0;
   overflow: hidden;
   font-size: 0.82rem;
-  font-weight: 800;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -461,11 +342,7 @@ function selectLocale(value: string, event: MouseEvent) {
 
   .app-landing-header__title {
     font-size: 2rem;
-    transform: scaleX(1.08);
-  }
-
-  .app-landing-header__locale {
-    width: 8.9rem;
+    transform: translate(-50%, -50%) scaleX(1.08);
   }
 
   .app-landing-header__actions {
@@ -499,11 +376,8 @@ function selectLocale(value: string, event: MouseEvent) {
     border-radius: 1.65rem;
   }
 
-  .app-landing-header__locale {
-    display: none;
-  }
-
   .app-landing-header__title {
+    position: static;
     justify-self: start;
     font-size: 1.35rem;
     transform: none;

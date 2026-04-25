@@ -47,7 +47,7 @@ const coinHubRoute = { name: 'coin-hub' } satisfies RouteLocationRaw
 const feedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
 const appHeaderBrand = 'Stream Assist'
 
-const wordleRoute = computed<RouteLocationRaw>(() => ({
+const nadleRoute = computed<RouteLocationRaw>(() => ({
   name: 'nadle-streamer',
   params: { streamer: defaultNadleStreamer },
 }))
@@ -75,11 +75,11 @@ const gameCards = computed<AppGameCard[]>(() => [
     tone: 'slate',
   },
   {
-    id: 'wordle',
-    title: 'Wordle',
-    to: wordleRoute.value,
+    id: 'nadle',
+    title: 'Nadle',
+    to: nadleRoute.value,
     image: nadleImage,
-    ariaLabel: 'Open Wordle',
+    ariaLabel: 'Open Nadle',
     tone: 'green',
   },
   {
@@ -205,14 +205,11 @@ watch(
         :coin-balance-label="headerCoinBalanceLabel"
         :coin-hub-to="coinHubRoute"
         :is-authenticated="auth.isAuthenticated.value"
-        :locale="locale"
-        :locale-options="localeMenuOptions"
         :logo-src="BRAND_LOGO_LIGHT_SVG"
         :user-avatar="userAvatar"
         :user-name="userName"
         @login="openAuth('login')"
         @signup="openAuth('login')"
-        @update:locale="onLocaleUpdate"
       />
 
       <main class="app-home__main">
@@ -231,7 +228,14 @@ watch(
         </div>
       </main>
 
-      <AppFooter brand-name="Nad1ch" :feedback-href="feedbackHref" :year="footerYear" />
+      <AppFooter
+        brand-name="Nad1ch"
+        :feedback-href="feedbackHref"
+        :locale="locale"
+        :locale-options="localeMenuOptions"
+        :year="footerYear"
+        @update:locale="onLocaleUpdate"
+      />
     </div>
   </div>
 </template>
@@ -248,7 +252,9 @@ watch(
   overflow-x: hidden;
   color: #fff;
   letter-spacing: 0;
-  --app-home-display: "Arial Black", Impact, var(--sa-font-display, system-ui), sans-serif;
+  --app-home-display: "Climate Crisis", "Arial Black", Impact, var(--sa-font-display, system-ui), sans-serif;
+  --app-home-ui: "Marmelad", var(--sa-font-main, system-ui), sans-serif;
+  --app-home-jackpot: "Arbutus", Georgia, serif;
   background:
     radial-gradient(circle at 18% 28%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.7px),
     radial-gradient(circle at 46% 62%, rgba(255, 255, 255, 0.16) 0 1px, transparent 1.7px),
@@ -344,6 +350,33 @@ watch(
 
 .app-home__feature-stack > * {
   min-width: 0;
+}
+
+.app-home__feature-stack > *,
+.app-home__grid > :deep(.app-games) {
+  animation: app-home-body-block-breathe 7.5s ease-in-out infinite;
+  transform-origin: center;
+  will-change: transform;
+}
+
+@keyframes app-home-body-block-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.01);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-home__feature-stack > *,
+  .app-home__grid > :deep(.app-games) {
+    animation: none;
+    transform: none;
+    will-change: auto;
+  }
 }
 
 @media (max-width: 1200px) {

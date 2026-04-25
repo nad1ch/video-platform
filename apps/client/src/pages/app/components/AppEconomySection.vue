@@ -80,6 +80,8 @@ const jackpotLetters = ['T', 'W', 'I', 'T', 'C', 'H'] as const
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: 1.28rem;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
   line-height: 1;
   text-align: center;
   text-transform: uppercase;
@@ -115,6 +117,8 @@ const jackpotLetters = ['T', 'W', 'I', 'T', 'C', 'H'] as const
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: 1.15rem;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
   line-height: 1.08;
 }
 
@@ -128,9 +132,9 @@ const jackpotLetters = ['T', 'W', 'I', 'T', 'C', 'H'] as const
   border-radius: 999px;
   background: rgba(255, 59, 48, 0.74);
   color: #fff;
-  font-family: Georgia, serif;
+  font-family: var(--app-home-jackpot, Georgia, serif);
   font-size: 0.66rem;
-  font-weight: 900;
+  font-weight: 400;
   line-height: 1;
   text-transform: uppercase;
 }
@@ -154,9 +158,9 @@ const jackpotLetters = ['T', 'W', 'I', 'T', 'C', 'H'] as const
   border-right: 1px solid #b3c2f5;
   background: #f7f8ff;
   color: rgba(87, 38, 130, 0.78);
-  font-family: Georgia, serif;
+  font-family: var(--app-home-jackpot, Georgia, serif);
   font-size: 1.45rem;
-  font-weight: 900;
+  font-weight: 400;
   line-height: 1;
 }
 

@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import '@/eat-first/style.css'
 import '@/eat-first/styles/theme.css'
+import { storeToRefs } from 'pinia'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppHeader from '@/components/ui/AppHeader.vue'
-import AppFooter from '@/components/ui/AppFooter.vue'
+import LegacyAppFooter from '@/components/ui/AppFooter.vue'
 import AppShellStreamNav from '@/components/ui/AppShellStreamNav.vue'
 import AppShellChromeToolbar from '@/components/ui/AppShellChromeToolbar.vue'
+import AppLandingHeader from '@/pages/app/components/AppHeader.vue'
+import AppLandingFooter from '@/pages/app/components/AppFooter.vue'
 import AppHeaderToolbar from '@/eat-first/ui/organisms/AppHeaderToolbar.vue'
 import HostControlChromeBar from '@/eat-first/components/showdesk/HostControlChromeBar.vue'
 import OnboardingTourModal from '@/eat-first/ui/organisms/OnboardingTourModal.vue'
@@ -36,6 +39,9 @@ import '@/eat-first/styles/host-chrome.css'
 import LandingCosmicBackdrop from '@/components/ui/LandingCosmicBackdrop.vue'
 import PurpleLightningBackdrop from '@/components/ui/PurpleLightningBackdrop.vue'
 import '@/eat-first/styles/motion.css'
+import { useCoinHubStore } from '@/stores/coinHub'
+import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
+import type { AuthMode } from '@/types/authMode'
 
 useSeoApp()
 
@@ -44,6 +50,9 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const callRoomHeaderJoin = useCallRoomHeaderJoinStore()
 const auth = useAuth()
+const { openStreamAuthModal } = useStreamAuthModal()
+const coinHub = useCoinHubStore()
+const { balance: coinHubBalance } = storeToRefs(coinHub)
 const canEatFirstHost = computed(() => {
   const r = auth.user.value?.role
   return r === 'admin' || r === 'host'
@@ -52,6 +61,9 @@ const { theme, setTheme, toggleTheme } = useTheme()
 
 const isEatRoute = computed(() => route.path.startsWith('/app/eat'))
 const isHomeRoute = computed(() => route.name === 'home')
+const isNadleAppHeaderRoute = computed(
+  () => route.name === 'nadle-streamer' || route.name === 'app-streamer',
+)
 
 /** Nadle stream + Nadraw: дати viewport `min-height: 0`, щоб сторінка могла займати залишок висоти без нескінченного росту. */
 const isNadleStreamRoute = computed(
@@ -66,6 +78,8 @@ const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route
 const showChrome = computed(
   () => !isHomeRoute.value && (!isEatRoute.value || currentEatView.value !== 'overlay'),
 )
+
+const showLegacyShellHeader = computed(() => showChrome.value && !isNadleAppHeaderRoute.value)
 
 const showSiteFooter = computed(
   () => showChrome.value && route.name !== 'call' && route.name !== 'mafia' && route.name !== 'nadraw-show',
@@ -121,6 +135,32 @@ const eatHeaderClass = computed(() => ({
 }))
 
 const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.label }))
+const appLandingHeaderBrand = 'NADLE'
+const appLandingFooterBrand = 'Nad1ch'
+const appLandingFeedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
+const appLandingCoinHubRoute = { name: 'coin-hub' } satisfies RouteLocationRaw
+const appLandingLocaleLabelByCode: Record<string, string> = {
+  en: 'English',
+  de: 'Germany',
+  uk: 'Ukrainian',
+  pl: 'Polish',
+}
+const appLandingLocaleMenuOrder = ['en', 'de', 'uk', 'pl']
+const appLandingLocaleMenuOptions = appLandingLocaleMenuOrder
+  .map((code) => LOCALE_OPTIONS.find((o) => o.code === code))
+  .filter((o): o is (typeof LOCALE_OPTIONS)[number] => Boolean(o))
+  .map((o) => ({
+    value: o.code,
+    label: appLandingLocaleLabelByCode[o.code] ?? o.label,
+  }))
+const appLandingHeaderCoinBalanceLabel = computed(() => {
+  if (!auth.isAuthenticated.value) {
+    return '—'
+  }
+  return new Intl.NumberFormat(locale.value, { maximumFractionDigits: 0 }).format(coinHubBalance.value)
+})
+const appLandingHeaderUserName = computed(() => auth.user.value?.displayName ?? '')
+const appLandingHeaderUserAvatar = computed(() => auth.user.value?.avatar ?? '')
 const themeIcon = computed(() => (theme.value === 'dark' ? '☀️' : '🌙'))
 const themeLabel = computed(() => (theme.value === 'dark' ? t('app.themeLight') : t('app.themeDark')))
 const footerYear = new Date().getFullYear()
@@ -164,6 +204,10 @@ function openOnboardingForCurrentRoute() {
   onboardingOpen.value = true
 }
 
+function openAppLandingAuth(mode: AuthMode) {
+  openStreamAuthModal(route.fullPath || '/app', mode)
+}
+
 function tryAutoOnboarding() {
   if (!isEatRoute.value) return
   const k = onboardingForRoute.value
@@ -192,8 +236,19 @@ watch(
 
 watch(() => route.fullPath, tryAutoOnboarding, { immediate: true })
 
+watch(
+  () => auth.isAuthenticated.value,
+  (authed) => {
+    if (authed) {
+      void coinHub.loadSnapshot({ background: true })
+    }
+  },
+  { immediate: true },
+)
+
 onMounted(() => {
   setTheme(theme.value)
+  void auth.ensureAuthLoaded()
 })
 
 const isMafiaRoute = computed(() => route.name === 'mafia')
@@ -248,7 +303,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
     <PurpleLightningBackdrop :light="theme === 'light'" />
     <div class="app-shell-layout__body app-layout">
       <AppHeader
-        v-if="showChrome"
+        v-if="showLegacyShellHeader"
         :header-class="isEatRoute ? eatHeaderClass : undefined"
         :title="headerTitle"
       >
@@ -348,6 +403,20 @@ async function copyMafiaObsViewUrl(): Promise<void> {
         </template>
       </AppHeader>
 
+      <AppLandingHeader
+        v-else-if="showChrome && isNadleAppHeaderRoute"
+        :auth-loading="!auth.loaded.value"
+        :brand-name="appLandingHeaderBrand"
+        :coin-balance-label="appLandingHeaderCoinBalanceLabel"
+        :coin-hub-to="appLandingCoinHubRoute"
+        :is-authenticated="auth.isAuthenticated.value"
+        :logo-src="BRAND_LOGO_LIGHT_SVG"
+        :user-avatar="appLandingHeaderUserAvatar"
+        :user-name="appLandingHeaderUserName"
+        @login="openAppLandingAuth('login')"
+        @signup="openAppLandingAuth('login')"
+      />
+
       <main class="app-shell-main" :class="{ 'app-shell-main--full': !showChrome }">
         <div
           class="app-shell-main__viewport"
@@ -366,7 +435,16 @@ async function copyMafiaObsViewUrl(): Promise<void> {
         </div>
       </main>
 
-      <AppFooter v-if="showSiteFooter" :year="footerYear" />
+      <AppLandingFooter
+        v-if="showChrome && isNadleAppHeaderRoute"
+        :brand-name="appLandingFooterBrand"
+        :feedback-href="appLandingFeedbackHref"
+        :locale="locale"
+        :locale-options="appLandingLocaleMenuOptions"
+        :year="footerYear"
+        @update:locale="persistLocale"
+      />
+      <LegacyAppFooter v-else-if="showSiteFooter" :year="footerYear" />
 
       <OnboardingTourModal
         v-if="isEatRoute"

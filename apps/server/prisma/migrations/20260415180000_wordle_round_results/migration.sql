@@ -1,4 +1,4 @@
--- Wordle round persistence (no FK to User — keeps existing User/UserStats relations unchanged)
+-- Nadle round persistence (no FK to User — keeps existing User/UserStats relations unchanged)
 
 CREATE TABLE "GameRound" (
     "id" TEXT NOT NULL,

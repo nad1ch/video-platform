@@ -1,4 +1,4 @@
--- Link persisted Wordle rounds to a Streamer (multi-tenant history).
+-- Link persisted Nadle rounds to a Streamer (multi-tenant history).
 ALTER TABLE "GameRound" ADD COLUMN "streamerId" TEXT;
 
 CREATE INDEX "GameRound_streamerId_idx" ON "GameRound"("streamerId");

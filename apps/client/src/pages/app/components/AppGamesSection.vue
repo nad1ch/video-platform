@@ -109,6 +109,8 @@ function toneClass(tone: AppGameCard['tone']) {
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: 1.28rem;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
   line-height: 1;
   text-align: center;
   text-transform: uppercase;
@@ -208,14 +210,17 @@ function toneClass(tone: AppGameCard['tone']) {
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: 0.92rem;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
   line-height: 1.08;
   text-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
 }
 
 .app-game-card__subtitle {
   color: rgba(255, 255, 255, 0.7);
+  font-family: var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);
   font-size: 0.7rem;
-  font-weight: 800;
+  font-weight: 400;
   line-height: 1.15;
   text-transform: uppercase;
 }
