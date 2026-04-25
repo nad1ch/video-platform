@@ -5,8 +5,7 @@ import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AuthForm from '@/components/auth/AuthForm.vue'
-import LandingCosmicBackdrop from '@/components/ui/LandingCosmicBackdrop.vue'
-import PurpleLightningBackdrop from '@/components/ui/PurpleLightningBackdrop.vue'
+import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
 import { useAuth } from '@/composables/useAuth'
 import { safeOAuthRedirectPath } from '@/utils/safeOAuthRedirectPath'
 import { useTheme } from '@/eat-first'
@@ -43,8 +42,7 @@ watch([loaded, isAuthenticated], () => {
 
 <template>
   <div class="auth-page eat-first-root page-stack" :data-theme="theme">
-    <LandingCosmicBackdrop />
-    <PurpleLightningBackdrop :light="theme === 'light'" />
+    <LandingCloudBackdrop class="auth-page__backdrop" />
     <div class="auth-page__surface">
       <div class="auth-page__inner">
         <header class="auth-page__head">
@@ -94,10 +92,15 @@ watch([loaded, isAuthenticated], () => {
   color: var(--sa-color-text-main);
 }
 
+.auth-page__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
 .auth-page__surface {
   position: relative;
-  /* Above `PurpleLightningBackdrop` (z-index 1) */
-  z-index: 2;
+  z-index: 1;
   flex: 1;
   display: flex;
   flex-direction: column;

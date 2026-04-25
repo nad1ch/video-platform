@@ -59,22 +59,23 @@ function toneClass(tone: AppGameCard['tone']) {
 
 .app-games__panel {
   position: relative;
-  min-height: clamp(27rem, 52vh, 32rem);
-  padding: 1.25rem 1.8rem 1.35rem;
+  min-height: clamp(23rem, 30.6vw, 27.6rem);
+  padding: 1.15rem 1rem 1.2rem;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 1.8rem;
   background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 38%),
     radial-gradient(circle at 28% 14%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.6px),
-    radial-gradient(circle at 78% 22%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.6px),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.26), rgba(60, 36, 99, 0.22)),
-    rgba(28, 12, 52, 0.36);
+    radial-gradient(circle at 78% 22%, rgba(255, 255, 255, 0.14) 0 1px, transparent 1.6px),
+    linear-gradient(120deg, rgba(124, 77, 219, 0.2), rgba(60, 36, 99, 0.18)),
+    rgba(28, 12, 52, 0.24);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.13),
     inset 0 -1px 0 rgba(255, 255, 255, 0.05),
     0 24px 80px rgba(9, 2, 20, 0.28);
-  -webkit-backdrop-filter: blur(22px) saturate(1.08);
-  backdrop-filter: blur(22px) saturate(1.08);
+  -webkit-backdrop-filter: blur(24px) saturate(1.18);
+  backdrop-filter: blur(24px) saturate(1.18);
 }
 
 .app-games__panel::before,
@@ -122,7 +123,7 @@ function toneClass(tone: AppGameCard['tone']) {
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.05rem 1.1rem;
+  gap: 0.95rem 1rem;
 }
 
 .app-game-card {
@@ -130,24 +131,25 @@ function toneClass(tone: AppGameCard['tone']) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  min-height: 6.85rem;
-  padding: 0.82rem 1.05rem;
+  min-height: 6.8rem;
+  padding: 0.72rem 0.85rem;
   overflow: hidden;
-  border: 4px solid rgba(255, 255, 255, 0.94);
-  border-radius: 1.35rem;
+  border: 5px solid rgba(255, 255, 255, 0.96);
+  border-radius: 1.77rem;
   background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 42%),
     radial-gradient(circle at 5% 7%, rgba(255, 255, 255, 0.9) 0 1px, transparent 1.5px),
     radial-gradient(circle at 45% 36%, rgba(255, 255, 255, 0.22) 0 1px, transparent 1.5px),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.2), rgba(60, 36, 99, 0.24)),
-    rgba(42, 21, 73, 0.34);
+    linear-gradient(120deg, rgba(124, 77, 219, 0.084), rgba(60, 36, 99, 0.144)),
+    rgba(42, 21, 73, 0.3);
   color: #fff;
   text-decoration: none;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
     inset 0 -1px 0 rgba(255, 255, 255, 0.04),
     0 14px 36px rgba(6, 2, 18, 0.24);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+  backdrop-filter: blur(18px) saturate(1.18);
   transition:
     border-color 0.18s ease,
     transform 0.18s ease,

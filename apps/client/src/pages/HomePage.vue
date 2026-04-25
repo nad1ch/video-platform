@@ -9,6 +9,7 @@ import AppFooter from '@/pages/app/components/AppFooter.vue'
 import AppGamesSection from '@/pages/app/components/AppGamesSection.vue'
 import AppHeader from '@/pages/app/components/AppHeader.vue'
 import AppVideoCallSection from '@/pages/app/components/AppVideoCallSection.vue'
+import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
 import eatFirstImage from '@/assets/landing/eat-first.png'
 import mafiaImage from '@/assets/landing/mafia.png'
 import nadleImage from '@/assets/landing/nadle.png'
@@ -195,8 +196,7 @@ watch(
 
 <template>
   <div class="app-home" :aria-busy="authLoading">
-    <div class="app-home__glow app-home__glow--one" aria-hidden="true" />
-    <div class="app-home__glow app-home__glow--two" aria-hidden="true" />
+    <LandingCloudBackdrop class="app-home__background" />
 
     <div class="app-home__shell">
       <AppHeader
@@ -209,7 +209,6 @@ watch(
         :user-avatar="userAvatar"
         :user-name="userName"
         @login="openAuth('login')"
-        @signup="openAuth('login')"
       />
 
       <main class="app-home__main">
@@ -255,47 +254,14 @@ watch(
   --app-home-display: "Climate Crisis", "Arial Black", Impact, var(--sa-font-display, system-ui), sans-serif;
   --app-home-ui: "Marmelad", var(--sa-font-main, system-ui), sans-serif;
   --app-home-jackpot: "Arbutus", Georgia, serif;
-  background:
-    radial-gradient(circle at 18% 28%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.7px),
-    radial-gradient(circle at 46% 62%, rgba(255, 255, 255, 0.16) 0 1px, transparent 1.7px),
-    radial-gradient(circle at 78% 34%, rgba(255, 255, 255, 0.12) 0 1px, transparent 1.7px),
-    linear-gradient(120deg, #0b0317 0%, rgba(74, 50, 116, 0.82) 100%);
+  background: #0b0317;
   isolation: isolate;
 }
 
-.app-home::before {
+.app-home__background {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background:
-    radial-gradient(circle at 12% 88%, rgba(124, 77, 219, 0.2), transparent 36%),
-    radial-gradient(circle at 72% 8%, rgba(255, 163, 108, 0.13), transparent 30%);
-  content: '';
-  pointer-events: none;
-}
-
-.app-home__glow {
-  position: absolute;
-  z-index: 0;
-  border-radius: 999px;
-  pointer-events: none;
-  filter: blur(70px);
-}
-
-.app-home__glow--one {
-  left: -7rem;
-  top: 18%;
-  width: 22rem;
-  height: 22rem;
-  background: rgba(124, 77, 219, 0.22);
-}
-
-.app-home__glow--two {
-  right: -9rem;
-  bottom: 14%;
-  width: 27rem;
-  height: 27rem;
-  background: rgba(102, 56, 143, 0.28);
 }
 
 .app-home__shell {
@@ -315,7 +281,7 @@ watch(
   min-height: 0;
   flex-direction: column;
   justify-content: center;
-  padding: clamp(1.25rem, 2.6vh, 1.8rem) clamp(1rem, 4vw, 5.4rem) clamp(1.25rem, 2.6vh, 1.8rem);
+  padding: clamp(1rem, 2.2vh, 1.55rem) clamp(1rem, 4vw, 5.4rem) clamp(1rem, 2.2vh, 1.55rem);
   box-sizing: border-box;
 }
 
@@ -332,18 +298,18 @@ watch(
 
 .app-home__grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 671fr) minmax(0, 503fr);
   align-items: stretch;
   gap: 1.25rem;
-  width: min(92vw, 88rem);
+  width: min(86vw, 74.25rem);
   max-width: 100%;
   margin: 0 auto;
 }
 
 .app-home__feature-stack {
   display: grid;
-  grid-template-rows: 1fr 1fr;
-  gap: clamp(4.4rem, 10.8vh, 7.2rem);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 0.92fr);
+  gap: clamp(1rem, 3vh, 1.8rem);
   min-width: 0;
   align-self: stretch;
 }
@@ -390,7 +356,7 @@ watch(
 
   .app-home__grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    width: min(calc(100vw - 2.5rem), 60rem);
+    width: min(calc(100vw - 2.5rem), 62rem);
     gap: 0.9rem;
   }
 

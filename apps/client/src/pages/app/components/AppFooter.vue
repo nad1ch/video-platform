@@ -101,12 +101,12 @@ onUnmounted(() => {
     </div>
 
     <div class="app-landing-footer__actions">
-      <a class="app-landing-footer__feedback" :href="feedbackHref">
+      <a class="app-landing-footer__feedback sa-glass-button" :href="feedbackHref">
         Feedback
       </a>
 
       <details ref="localeDetailsRef" class="app-landing-footer__locale">
-        <summary class="app-landing-footer__locale-trigger" aria-label="Choose language">
+        <summary class="app-landing-footer__locale-trigger sa-glass-button" aria-label="Choose language">
           <span>{{ activeLocaleLabel }}</span>
         </summary>
         <div class="app-landing-footer__locale-list">
@@ -263,13 +263,17 @@ onUnmounted(() => {
   justify-content: center;
   min-width: 8.7rem;
   min-height: 2.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;
-  background: rgba(81, 48, 116, 0.62);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.14), transparent 46%),
+    rgba(81, 48, 116, 0.62);
   color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 12px 28px rgba(10, 3, 24, 0.22);
+  -webkit-backdrop-filter: blur(20px) saturate(1.24);
+  backdrop-filter: blur(20px) saturate(1.24);
   font-size: 0.82rem;
   font-weight: 400;
   text-decoration: none;
@@ -298,17 +302,20 @@ onUnmounted(() => {
   min-height: 2.35rem;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 1.25rem;
-  background: rgba(81, 48, 117, 0.52);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.14), transparent 46%),
+    rgba(81, 48, 117, 0.54);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
     0 12px 28px rgba(10, 3, 24, 0.22);
   color: #fff;
   cursor: pointer;
   font-size: 0.82rem;
   font-weight: 400;
   list-style: none;
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(22px) saturate(1.24);
+  backdrop-filter: blur(22px) saturate(1.24);
   transition:
     background 0.18s ease,
     border-color 0.18s ease,
@@ -341,12 +348,14 @@ onUnmounted(() => {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 1.25rem;
-  background: rgba(65, 43, 91, 0.88);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent 40%),
+    rgba(65, 43, 91, 0.9);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 -18px 34px rgba(10, 3, 24, 0.3);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(22px) saturate(1.22);
+  backdrop-filter: blur(22px) saturate(1.22);
 }
 
 .app-landing-footer__locale[open] .app-landing-footer__locale-list {
@@ -371,7 +380,8 @@ onUnmounted(() => {
 }
 
 .app-landing-footer__locale-option--active {
-  background: rgba(81, 48, 117, 0.6);
+  background: rgba(255, 255, 255, 0.94);
+  color: #1a1a1a;
 }
 
 .app-landing-footer__locale-trigger:hover,
@@ -391,7 +401,8 @@ onUnmounted(() => {
 
 .app-landing-footer__locale-option--active:hover,
 .app-landing-footer__locale-option--active:focus-visible {
-  background: rgba(124, 77, 219, 0.56);
+  background: #fff;
+  color: #1a1a1a;
 }
 
 .app-landing-footer__feedback:hover {

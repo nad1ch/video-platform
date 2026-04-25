@@ -1,17 +1,12 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import callCardOne from '@/assets/landing-dev/call-card-1.svg'
 import callCardTwo from '@/assets/landing-dev/call-card-2.svg'
 import callCardThree from '@/assets/landing-dev/call-card-3.svg'
 import twitchBrowseIllustration from '@/assets/landing/twitch-browse-illustration.svg'
-import bgBoltGlowLarge from '@/assets/landing-dev/bg-bolt-glow-large.svg'
-import bgBoltGlowLargeTwo from '@/assets/landing-dev/bg-bolt-glow-large-2.svg'
-import bgBoltGlowSmall from '@/assets/landing-dev/bg-bolt-glow-small.svg'
-import bgBoltSharpLeft from '@/assets/landing-dev/bg-bolt-sharp-left.svg'
-import bgBoltSharpRight from '@/assets/landing-dev/bg-bolt-sharp-right.svg'
-import bgBoltSmall from '@/assets/landing-dev/bg-bolt-small.svg'
+import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
 import eatFirstIcon from '@/assets/landing/eat-first.png'
 import nadrawPhoneIcon from '@/assets/landing/nadraw-phone.png'
 import instagramIcon from '@/assets/landing/instagram.png'
@@ -20,19 +15,15 @@ import spyIcon from '@/assets/landing/spy.png'
 import telegramIcon from '@/assets/landing/telegram.png'
 import tiktokIcon from '@/assets/landing/tiktok.png'
 import twitchIcon from '@/assets/landing/twitch.png'
-import whoTakeShitIcon from '@/assets/landing/who-take-shit.png'
 import nadleGameIcon from '@/assets/landing/nadle.png'
 import { persistLocale } from '@/eat-first/i18n/index.js'
 import {
   BRAND_LOGO_LIGHT_SVG,
-  STREAM_APP_BRAND_NAME,
   STREAMER_NICK,
   STREAMER_TWITCH_URL,
 } from '@/eat-first/constants/brand.js'
 import { getLandingScrollTopForHash } from '@/utils/landingAnchorScroll'
 import { landingDesignPx as px } from '@/utils/landingDesignPx'
-import { landingCosmicGlows as glows, landingCosmicSparkleDots as sparkleDots } from '@/utils/landingCosmicDecor'
-import { useLandingCosmicParallax } from '@/composables/useLandingCosmicParallax'
 
 const { locale } = useI18n()
 const route = useRoute()
@@ -41,17 +32,6 @@ const router = useRouter()
 const defaultNadleStreamer =
   (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
   STREAMER_NICK
-
-type PositionedBolt = {
-  asset: string
-  x: number
-  y: number
-  width: number
-  height: number
-  rotate: number
-  opacity: number
-  blur: number
-}
 
 type NavItem = {
   label: string
@@ -73,7 +53,6 @@ type GameCard = {
 }
 
 const authRouteLogin = { path: '/auth', query: { redirect: '/app', mode: 'login' as const } } as const
-const authRouteSignup = { path: '/auth', query: { redirect: '/app', mode: 'signup' as const } } as const
 const callRoute = { name: 'call' } as const
 const homeRoute = { name: 'home' } as const
 
@@ -93,39 +72,6 @@ const localeButtons = Object.freeze([
   Object.freeze({ code: 'uk', label: 'Ukrainian' }),
   Object.freeze({ code: 'pl', label: 'Polish' }),
 ] as const)
-
-const boltsRaw: PositionedBolt[] = [
-  { asset: bgBoltSmall, x: 1142.96, y: 130.93, width: 67.25, height: 79.72, rotate: -16, opacity: 0.94, blur: 1.42 },
-  { asset: bgBoltSharpRight, x: 2438.47, y: 238.25, width: 108.38, height: 79.33, rotate: 156, opacity: 0.96, blur: 0 },
-  { asset: bgBoltSharpLeft, x: 1810.77, y: 2029, width: 108.38, height: 79.33, rotate: 24, opacity: 0.96, blur: 0 },
-  { asset: bgBoltSmall, x: 898.64, y: 1845.14, width: 71.05, height: 84.22, rotate: -164, opacity: 0.92, blur: 1.5 },
-  { asset: bgBoltGlowLarge, x: 863.81, y: 411.53, width: 135.69, height: 134.07, rotate: 18, opacity: 0.5, blur: 3.07 },
-  { asset: bgBoltGlowLargeTwo, x: 1307.83, y: 2169.14, width: 135.69, height: 134.07, rotate: 162, opacity: 0.34, blur: 3.07 },
-  { asset: bgBoltGlowLargeTwo, x: 2302.33, y: 2226.54, width: 135.69, height: 134.07, rotate: 162, opacity: 0.18, blur: 3.07 },
-  { asset: bgBoltGlowSmall, x: 429, y: 372.4, width: 90.21, height: 112.94, rotate: -15, opacity: 0.94, blur: 3.07 },
-  { asset: bgBoltGlowSmall, x: 246.42, y: 1420.07, width: 90.21, height: 112.94, rotate: 165, opacity: 0.82, blur: 3.07 },
-  { asset: bgBoltGlowSmall, x: 2431.12, y: 2344.47, width: 90.21, height: 112.94, rotate: -165, opacity: 0.72, blur: 3.07 },
-  { asset: bgBoltGlowSmall, x: 860.42, y: 1146.07, width: 90.21, height: 112.94, rotate: 165, opacity: 0.88, blur: 3.07 },
-  { asset: bgBoltGlowSmall, x: 2254.42, y: 1422.07, width: 90.21, height: 112.94, rotate: 165, opacity: 0.72, blur: 3.07 },
-  { asset: bgBoltGlowSmall, x: 235.38, y: 2464.5, width: 90.21, height: 112.94, rotate: 15, opacity: 0.82, blur: 3.07 },
-]
-
-const bolts = Object.freeze(
-  boltsRaw.map((bolt) =>
-    Object.freeze({
-      ...bolt,
-      style: Object.freeze({
-        left: px(bolt.x),
-        top: px(bolt.y),
-        width: px(bolt.width),
-        height: px(bolt.height),
-        opacity: String(bolt.opacity),
-        filter: `blur(${px(bolt.blur)})`,
-        transform: `translate3d(var(--landing-parallax-bolt-x, 0px), var(--landing-parallax-bolt-y, 0px), 0) rotate(${bolt.rotate}deg)`,
-      }),
-    }),
-  ),
-)
 
 const callBannerCards = Object.freeze([
   Object.freeze({ asset: callCardOne, style: Object.freeze({ left: px(14.35) }) }),
@@ -251,8 +197,8 @@ const games = Object.freeze([
     }),
   } satisfies GameCard),
   Object.freeze({
-    title: 'Who\ntake a\nshit',
-    icon: whoTakeShitIcon,
+    title: 'Who takes\nthe mic',
+    icon: eatFirstIcon,
     to: { name: 'home' },
     cardStyle: Object.freeze({
       left: px(1473.75),
@@ -330,8 +276,13 @@ const slotLetters = Object.freeze(['N', 'A', 'D', 'L', 'E', '?'] as const)
 
 type LandingLocaleCode = (typeof localeButtons)[number]['code']
 
-async function selectLocale(code: LandingLocaleCode) {
+const activeLandingLocaleLabel = computed(
+  () => localeButtons.find((item) => item.code === locale.value)?.label ?? localeButtons[0]?.label ?? 'English',
+)
+
+async function selectLocale(code: LandingLocaleCode, event?: MouseEvent) {
   await persistLocale(code)
+  ;(event?.currentTarget as HTMLElement | null)?.closest('details')?.removeAttribute('open')
 }
 
 const LANDING_FLOW_LAYOUT_MEDIA = '(max-width: 960px)'
@@ -374,50 +325,12 @@ watch(
   { immediate: true },
 )
 
-/** Layered scroll parallax (px) on decorative layers — shared with `LandingCosmicBackdrop`. */
-const landingCanvasEl = ref<HTMLElement | null>(null)
-useLandingCosmicParallax(landingCanvasEl)
-
 </script>
 
 <template>
   <div class="landing page-stack">
-    <div ref="landingCanvasEl" class="landing__canvas">
-      <div v-once>
-        <div class="landing__background" aria-hidden="true" />
-
-        <p class="landing__wordmark landing__wordmark--1" aria-hidden="true">{{ STREAM_APP_BRAND_NAME }}</p>
-        <p class="landing__wordmark landing__wordmark--2" aria-hidden="true">{{ STREAM_APP_BRAND_NAME }}</p>
-        <p class="landing__wordmark landing__wordmark--3" aria-hidden="true">{{ STREAM_APP_BRAND_NAME }}</p>
-        <p class="landing__wordmark landing__wordmark--4" aria-hidden="true">{{ STREAM_APP_BRAND_NAME }}</p>
-
-        <span
-          v-for="(dot, index) in sparkleDots"
-          :key="`dot-${index}`"
-          class="landing__dot"
-          :class="`landing__dot--ph${dot.phase}`"
-          :style="dot.style"
-          aria-hidden="true"
-        />
-
-        <span
-          v-for="(glow, index) in glows"
-          :key="`glow-${index}`"
-          class="landing__glow"
-          :style="glow.style"
-          aria-hidden="true"
-        />
-
-        <img
-          v-for="(bolt, index) in bolts"
-          :key="`bolt-${index}`"
-          class="landing__bolt"
-          :src="bolt.asset"
-          alt=""
-          :style="bolt.style"
-          aria-hidden="true"
-        />
-      </div>
+    <div class="landing__canvas">
+      <LandingCloudBackdrop class="landing__background" />
 
       <header class="landing-topbar" aria-label="Site header">
         <div class="landing-topbar__start">
@@ -450,9 +363,8 @@ useLandingCosmicParallax(landingCanvasEl)
           </a>
         </nav>
 
-        <div class="landing-topbar__end landing-auth" aria-label="Account">
+        <div class="landing-topbar__end landing-auth sa-glass-button" aria-label="Account">
           <RouterLink class="landing-auth__link" :to="authRouteLogin">Log In</RouterLink>
-          <RouterLink class="landing-auth__link" :to="authRouteSignup">Sign Up</RouterLink>
         </div>
       </header>
 
@@ -558,18 +470,23 @@ useLandingCosmicParallax(landingCanvasEl)
           <a class="landing-footer__seo-link" href="/stream-overlay-tools/">Stream overlay tools</a>
         </nav>
         <div class="landing-footer__panel">
-          <div class="landing-footer__languages" role="group" aria-label="Interface language">
-            <button
-              v-for="item in localeButtons"
-              :key="item.code"
-              class="landing-footer__language"
-              :class="{ 'landing-footer__language--active': locale === item.code }"
-              type="button"
-              @click="selectLocale(item.code)"
-            >
-              {{ item.label }}
-            </button>
-          </div>
+          <details class="landing-footer__locale" aria-label="Interface language">
+            <summary class="landing-footer__locale-trigger sa-glass-button" aria-label="Choose language">
+              <span>{{ activeLandingLocaleLabel }}</span>
+            </summary>
+            <div class="landing-footer__locale-list">
+              <button
+                v-for="item in localeButtons"
+                :key="item.code"
+                class="landing-footer__locale-option"
+                :class="{ 'landing-footer__locale-option--active': locale === item.code }"
+                type="button"
+                @click="selectLocale(item.code, $event)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </details>
 
           <div class="landing-footer__static" v-once>
             <div class="landing-footer__socials">
@@ -587,7 +504,7 @@ useLandingCosmicParallax(landingCanvasEl)
               </a>
             </div>
 
-            <RouterLink class="landing-footer__feedback" :to="homeRoute">Feedback</RouterLink>
+            <RouterLink class="landing-footer__feedback sa-glass-button" :to="homeRoute">Feedback</RouterLink>
 
             <div class="landing-footer__columns">
               <div class="landing-footer__product">
@@ -1039,43 +956,34 @@ useLandingCosmicParallax(landingCanvasEl)
   position: relative;
   left: auto;
   top: auto;
-  width: calc(var(--u) * 82.969);
-  height: calc(var(--u) * 67.5);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--u) * 160.59);
+  height: calc(var(--u) * 39.38);
   border-radius: calc(var(--u) * 19.5);
-  background: rgba(255, 255, 255, 0.45);
+  border-color: rgba(255, 255, 255, 0.45);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.78)),
+    rgba(255, 255, 255, 0.82);
   overflow: hidden;
   z-index: 2;
   align-self: center;
 }
 
 .landing-auth::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto auto 0;
-  width: calc(var(--u) * 82.969);
-  height: calc(var(--u) * 39.38);
-  border-radius: calc(var(--u) * 19.5);
-  background: #fff;
+  opacity: 0.58;
 }
 
 .landing-auth__link {
-  position: absolute;
+  position: relative;
   z-index: 1;
   color: #111827;
   font-family: 'Marmelad', sans-serif;
   font-size: calc(var(--u) * 13.5);
   line-height: 1;
   text-decoration: none;
-}
-
-.landing-auth__link:first-child {
-  left: calc(var(--u) * 20.25);
-  top: calc(var(--u) * 10.5);
-}
-
-.landing-auth__link:last-child {
-  left: calc(var(--u) * 16.5);
-  top: calc(var(--u) * 43.5);
+  white-space: nowrap;
 }
 
 .landing-hero__screen {
@@ -1346,7 +1254,7 @@ useLandingCosmicParallax(landingCanvasEl)
 
 .landing-hero__lead,
 .landing-section__lead,
-.landing-footer__language,
+.landing-footer__locale,
 .landing-footer__product,
 .landing-footer__about,
 .landing-footer__feedback,
@@ -1411,10 +1319,17 @@ useLandingCosmicParallax(landingCanvasEl)
   align-items: center;
   border-radius: calc(var(--u) * 41.25);
   background:
-    radial-gradient(circle at calc(var(--u) * 195) calc(var(--u) * 13.5), rgba(139, 92, 246, 0.14) 0, rgba(139, 92, 246, 0.14) calc(var(--u) * 45), transparent calc(var(--u) * 90)),
-    radial-gradient(circle at calc(var(--u) * 240) calc(var(--u) * 72), rgba(124, 77, 219, 0.12) 0, rgba(124, 77, 219, 0.12) calc(var(--u) * 41.25), transparent calc(var(--u) * 82.5)),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.48) 0%, rgba(60, 36, 99, 0.47) 100%);
-  box-shadow: 0 calc(var(--u) * 13.5) calc(var(--u) * 30) rgba(0, 0, 0, 0.18);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.025) 30%, transparent 62%),
+    radial-gradient(circle at calc(var(--u) * 195) calc(var(--u) * 13.5), rgba(176, 123, 255, 0.24) 0, rgba(176, 123, 255, 0.13) calc(var(--u) * 45), transparent calc(var(--u) * 94)),
+    radial-gradient(circle at calc(var(--u) * 240) calc(var(--u) * 72), rgba(124, 77, 219, 0.2) 0, rgba(124, 77, 219, 0.11) calc(var(--u) * 41.25), transparent calc(var(--u) * 86)),
+    linear-gradient(120deg, rgba(124, 77, 219, 0.16) 0%, rgba(60, 36, 99, 0.18) 100%),
+    rgba(41, 19, 73, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 calc(var(--u) * 13.5) calc(var(--u) * 34) rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(calc(var(--u) * 24)) saturate(1.26);
+  -webkit-backdrop-filter: blur(calc(var(--u) * 24)) saturate(1.26);
   outline: calc(var(--u) * 7.5) solid #fff;
   outline-offset: calc(var(--u) * -7.5);
   overflow: hidden;
@@ -1448,7 +1363,12 @@ useLandingCosmicParallax(landingCanvasEl)
   width: calc(var(--u) * 570.94);
   height: calc(var(--u) * 97.28);
   border-radius: calc(var(--u) * 12.76);
-  background: #3c2463;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent 48%),
+    rgba(60, 36, 99, 0.48);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(calc(var(--u) * 16)) saturate(1.2);
+  -webkit-backdrop-filter: blur(calc(var(--u) * 16)) saturate(1.2);
   z-index: 1;
 }
 
@@ -1489,10 +1409,17 @@ useLandingCosmicParallax(landingCanvasEl)
   display: block;
   border-radius: calc(var(--u) * 37.5);
   background:
-    radial-gradient(circle at calc(var(--u) * 180.36) calc(var(--u) * 12.49), rgba(139, 92, 246, 0.14) 0, rgba(139, 92, 246, 0.14) calc(var(--u) * 41.62), transparent calc(var(--u) * 83.24)),
-    radial-gradient(circle at calc(var(--u) * 221.98) calc(var(--u) * 66.59), rgba(124, 77, 219, 0.12) 0, rgba(124, 77, 219, 0.12) calc(var(--u) * 38.15), transparent calc(var(--u) * 76.3)),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.42) 0%, rgba(60, 36, 99, 0.72) 100%);
-  box-shadow: 0 calc(var(--u) * 12.486165046691895) calc(var(--u) * 27.747032165527344) rgba(0, 0, 0, 0.18);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.025) 32%, transparent 64%),
+    radial-gradient(circle at calc(var(--u) * 180.36) calc(var(--u) * 12.49), rgba(172, 119, 255, 0.22) 0, rgba(172, 119, 255, 0.12) calc(var(--u) * 41.62), transparent calc(var(--u) * 84)),
+    radial-gradient(circle at calc(var(--u) * 221.98) calc(var(--u) * 66.59), rgba(124, 77, 219, 0.2) 0, rgba(124, 77, 219, 0.1) calc(var(--u) * 38.15), transparent calc(var(--u) * 78)),
+    linear-gradient(120deg, rgba(124, 77, 219, 0.14) 0%, rgba(60, 36, 99, 0.2) 100%),
+    rgba(42, 21, 73, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 calc(var(--u) * 12.486165046691895) calc(var(--u) * 27.747032165527344) rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(calc(var(--u) * 22)) saturate(1.22);
+  -webkit-backdrop-filter: blur(calc(var(--u) * 22)) saturate(1.22);
   outline: calc(var(--u) * 7.5) solid #fff;
   outline-offset: calc(var(--u) * -3.75);
   overflow: hidden;
@@ -1553,8 +1480,17 @@ useLandingCosmicParallax(landingCanvasEl)
   display: flex;
   align-items: center;
   border-radius: calc(var(--u) * 41.25);
-  background: linear-gradient(120deg, rgba(124, 77, 219, 0.48) 0%, rgba(60, 36, 99, 0.47) 100%);
-  box-shadow: 0 calc(var(--u) * 13.5) calc(var(--u) * 30) rgba(0, 0, 0, 0.18);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.025) 30%, transparent 62%),
+    radial-gradient(circle at calc(var(--u) * 200) calc(var(--u) * 18), rgba(176, 123, 255, 0.22), transparent calc(var(--u) * 96)),
+    linear-gradient(120deg, rgba(124, 77, 219, 0.16) 0%, rgba(60, 36, 99, 0.18) 100%),
+    rgba(41, 19, 73, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 calc(var(--u) * 13.5) calc(var(--u) * 30) rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(calc(var(--u) * 24)) saturate(1.26);
+  -webkit-backdrop-filter: blur(calc(var(--u) * 24)) saturate(1.26);
   outline: calc(var(--u) * 7.5) solid #fff;
   outline-offset: calc(var(--u) * -7.5);
   overflow: hidden;
@@ -1731,79 +1667,107 @@ useLandingCosmicParallax(landingCanvasEl)
   pointer-events: auto;
 }
 
-.landing-footer__languages {
+.landing-footer__locale {
   position: absolute;
   left: calc(var(--u) * 700.03);
-  top: calc(var(--u) * 2227.5);
-  width: calc(var(--u) * 140);
-  height: calc(var(--u) * 156.09);
-  box-sizing: border-box;
-  border-radius: calc(var(--u) * 20);
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-.landing-footer__language {
-  position: absolute;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: calc(var(--u) * 18);
-  text-align: left;
-  cursor: pointer;
-  z-index: 1;
-  border-radius: calc(var(--u) * 14);
-  transition:
-    background 0.22s ease,
-    color 0.22s ease,
-    box-shadow 0.22s ease;
-}
-
-.landing-footer__language:nth-child(1) {
-  left: calc(var(--u) * 26.44);
-  top: calc(var(--u) * 9.84);
-}
-
-.landing-footer__language:nth-child(2) {
-  left: calc(var(--u) * 22.69);
-  top: calc(var(--u) * 53.44);
-}
-
-.landing-footer__language:nth-child(3) {
-  left: calc(var(--u) * 19.69);
-  top: calc(var(--u) * 86.44);
-}
-
-.landing-footer__language:nth-child(4) {
-  left: calc(var(--u) * 23.44);
-  top: calc(var(--u) * 119.44);
-}
-
-.landing-footer__language:hover:not(.landing-footer__language--active) {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
-}
-
-.landing-footer__language.landing-footer__language--active {
-  left: 0;
-  top: calc(var(--u) * -2.81);
-  width: calc(var(--u) * 117);
+  top: calc(var(--u) * 2230.31);
+  z-index: 7;
+  width: calc(var(--u) * 112);
   height: calc(var(--u) * 46.5);
-  padding-left: calc(var(--u) * 26.44);
-  border-radius: calc(var(--u) * 14);
-  background: #ffffff;
-  color: #1a1a1a;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 8) rgba(0, 0, 0, 0.12);
+  box-sizing: border-box;
+  font-family: 'Marmelad', sans-serif;
 }
 
-.landing-footer__language.landing-footer__language--active:hover {
-  background: #ffffff;
+.landing-footer__locale-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 100%;
+  padding: 0 calc(var(--u) * 31) 0 calc(var(--u) * 16);
+  box-sizing: border-box;
+  border-radius: calc(var(--u) * 26);
+  color: #fff;
+  cursor: pointer;
+  font-size: calc(var(--u) * 18);
+  font-weight: 400;
+  line-height: 1;
+  list-style: none;
+  text-align: center;
+}
+
+.landing-footer__locale-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.landing-footer__locale-trigger::after {
+  position: absolute;
+  right: calc(var(--u) * 18);
+  top: 50%;
+  width: calc(var(--u) * 8.5);
+  height: calc(var(--u) * 8.5);
+  border-right: calc(var(--u) * 2) solid rgba(255, 255, 255, 0.86);
+  border-bottom: calc(var(--u) * 2) solid rgba(255, 255, 255, 0.86);
+  content: '';
+  transform: translateY(-66%) rotate(45deg);
+}
+
+.landing-footer__locale-list {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + calc(var(--u) * 18));
+  display: none;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: calc(var(--u) * 31);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent 38%),
+    rgba(55, 38, 82, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 calc(var(--u) * -18) calc(var(--u) * 36) rgba(11, 3, 23, 0.26);
+  -webkit-backdrop-filter: blur(calc(var(--u) * 22)) saturate(1.22);
+  backdrop-filter: blur(calc(var(--u) * 22)) saturate(1.22);
+}
+
+.landing-footer__locale[open] .landing-footer__locale-list {
+  display: grid;
+}
+
+.landing-footer__locale-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(var(--u) * 60);
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(var(--u) * 22);
+  line-height: 1;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.landing-footer__locale-option--active {
+  background: rgba(255, 255, 255, 0.96);
   color: #1a1a1a;
+}
+
+.landing-footer__locale-option:hover,
+.landing-footer__locale-option:focus-visible {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.landing-footer__locale-option--active:hover,
+.landing-footer__locale-option--active:focus-visible {
+  color: #1a1a1a;
+  background: #fff;
 }
 
 .landing-footer__social {
@@ -1814,10 +1778,11 @@ useLandingCosmicParallax(landingCanvasEl)
 }
 
 .landing-footer__social img {
-  width: 100%;
-  height: 100%;
+  width: 84%;
+  height: 84%;
   object-fit: contain;
   opacity: 1;
+  filter: brightness(0) invert(1);
   transition:
     opacity 0.2s ease,
     transform 0.2s ease;
@@ -1840,12 +1805,20 @@ useLandingCosmicParallax(landingCanvasEl)
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: #ffffff;
-  color: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.035) 34%, rgba(255, 255, 255, 0) 62%),
+    linear-gradient(140deg, rgba(102, 56, 143, 0.58), rgba(60, 36, 99, 0.5));
+  color: #fff;
   font-size: calc(var(--u) * 18);
   font-weight: 500;
   text-decoration: none;
   opacity: 1;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 calc(var(--u) * 12) calc(var(--u) * 28) rgba(10, 3, 24, 0.22);
+  -webkit-backdrop-filter: blur(calc(var(--u) * 20)) saturate(1.22);
+  backdrop-filter: blur(calc(var(--u) * 20)) saturate(1.22);
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease;
@@ -1896,24 +1869,12 @@ useLandingCosmicParallax(landingCanvasEl)
   .landing-auth {
     height: calc(var(--u) * 39.375);
     border-radius: calc(var(--u) * 19.5);
-    background: transparent;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .landing-auth::before {
-    width: 100%;
-    height: 100%;
-  }
-
-  .landing-auth__link:first-child {
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    white-space: nowrap;
-  }
-
-  .landing-auth__link:last-child {
-    display: none;
+    width: auto;
+    height: auto;
   }
 }
 
@@ -2204,7 +2165,11 @@ useLandingCosmicParallax(landingCanvasEl)
     box-sizing: border-box;
     border-radius: 36px;
     border: 6.5px solid #fff;
-    background: linear-gradient(120deg, rgba(124, 77, 219, 0.6) 0%, rgba(60, 36, 99, 0.88) 100%);
+    background:
+      radial-gradient(circle at 30% 16%, rgba(176, 123, 255, 0.18), transparent 140px),
+      linear-gradient(120deg, rgba(124, 77, 219, 0.24) 0%, rgba(60, 36, 99, 0.34) 100%);
+    backdrop-filter: blur(16px) saturate(1.12);
+    -webkit-backdrop-filter: blur(16px) saturate(1.12);
   }
 
   .call-banner__title {
@@ -2261,7 +2226,11 @@ useLandingCosmicParallax(landingCanvasEl)
     box-sizing: border-box;
     border-radius: 33.445px;
     border: 6.689px solid #fff;
-    background: linear-gradient(120deg, rgba(124, 77, 219, 0.52) 0%, rgba(60, 36, 99, 0.9) 100%);
+    background:
+      radial-gradient(circle at 64% 22%, rgba(176, 123, 255, 0.18), transparent 120px),
+      linear-gradient(120deg, rgba(124, 77, 219, 0.22) 0%, rgba(60, 36, 99, 0.34) 100%);
+    backdrop-filter: blur(14px) saturate(1.1);
+    -webkit-backdrop-filter: blur(14px) saturate(1.1);
   }
 
   .games-grid__label {
@@ -2313,7 +2282,11 @@ useLandingCosmicParallax(landingCanvasEl)
     box-sizing: border-box;
     border-radius: 36.53px;
     border: 6.642px solid #fff;
-    background: linear-gradient(120deg, rgba(124, 77, 219, 0.6) 0%, rgba(60, 36, 99, 0.88) 100%);
+    background:
+      radial-gradient(circle at 32% 18%, rgba(176, 123, 255, 0.16), transparent 140px),
+      linear-gradient(120deg, rgba(124, 77, 219, 0.24) 0%, rgba(60, 36, 99, 0.34) 100%);
+    backdrop-filter: blur(16px) saturate(1.12);
+    -webkit-backdrop-filter: blur(16px) saturate(1.12);
   }
 
   .economy-banner__title {
@@ -2352,7 +2325,7 @@ useLandingCosmicParallax(landingCanvasEl)
     margin: 0 auto;
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
-      'languages . feedback columns'
+      'locale . feedback columns'
       'socials socials socials socials';
     align-items: start;
     gap: 20px clamp(14px, 3vw, 28px);
@@ -2362,43 +2335,35 @@ useLandingCosmicParallax(landingCanvasEl)
     display: contents;
   }
 
-  .landing-footer__languages {
-    grid-area: languages;
+  .landing-footer__locale {
+    grid-area: locale;
     position: relative;
     left: auto;
     top: auto;
-    width: 105px;
-    min-height: 140px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 0 0 10px;
-    border-radius: 17px;
-    background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    width: 142px;
+    height: 46px;
   }
 
-  .landing-footer__language {
-    position: relative;
-    left: auto !important;
-    top: auto !important;
-    width: auto;
-    height: auto;
-    padding: 8px 14px;
+  .landing-footer__locale-trigger {
     font-size: 16px;
-    line-height: 1.15;
-    text-align: left;
+    padding-inline: 28px 42px;
   }
 
-  .landing-footer__language.landing-footer__language--active {
-    left: auto;
-    top: auto;
-    width: auto;
-    height: auto;
-    min-height: 42px;
-    padding: 11px 14px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  .landing-footer__locale-trigger::after {
+    right: 23px;
+    width: 8px;
+    height: 8px;
+    border-width: 1.5px;
+  }
+
+  .landing-footer__locale-list {
+    bottom: calc(100% + 12px);
+    border-radius: 28px;
+  }
+
+  .landing-footer__locale-option {
+    min-height: 52px;
+    font-size: 20px;
   }
 
   .landing-footer__socials {
@@ -2422,6 +2387,7 @@ useLandingCosmicParallax(landingCanvasEl)
 
   .landing-footer__social img {
     opacity: 1;
+    filter: brightness(0) invert(1);
   }
 
   .landing-footer__feedback {
@@ -2595,13 +2561,13 @@ useLandingCosmicParallax(landingCanvasEl)
   .landing-auth {
     top: auto;
     right: auto;
-    width: clamp(39px, 12vw, 62px);
+    width: clamp(58px, 17vw, 82px);
     height: clamp(18px, 5.6vw, 30px);
     border-radius: 10px;
   }
 
   .landing-auth__link {
-    font-size: clamp(6.274px, 1.95vw, 9px);
+    font-size: clamp(7px, 2.2vw, 10px);
   }
 
   .landing-hero {
@@ -2736,22 +2702,30 @@ useLandingCosmicParallax(landingCanvasEl)
     align-items: start;
   }
 
-  .landing-footer__languages {
-    width: 64px;
-    min-height: 85px;
-    padding-bottom: 8px;
-    border-radius: 10.621px;
+  .landing-footer__locale {
+    width: 65px;
+    height: 34px;
   }
 
-  .landing-footer__language {
-    padding: 5px 10px;
-    font-size: 9.804px;
-    border-radius: 10.621px;
+  .landing-footer__locale-trigger {
+    padding-inline: 20px 34px;
+    font-size: 13px;
   }
 
-  .landing-footer__language.landing-footer__language--active {
-    min-height: 25px;
-    padding: 6px 10px;
+  .landing-footer__locale-trigger::after {
+    right: 17px;
+    width: 7px;
+    height: 7px;
+  }
+
+  .landing-footer__locale-list {
+    bottom: calc(100% + 9px);
+    border-radius: 20px;
+  }
+
+  .landing-footer__locale-option {
+    min-height: 38px;
+    font-size: 15px;
   }
 
   .landing-footer__feedback {
@@ -2830,12 +2804,12 @@ useLandingCosmicParallax(landingCanvasEl)
   }
 
   .landing-auth {
-    width: 36px;
+    width: 54px;
     height: 17px;
   }
 
   .landing-auth__link {
-    font-size: 5.8px;
+    font-size: 6.4px;
   }
 
   .landing-hero__headline {
@@ -2940,8 +2914,8 @@ useLandingCosmicParallax(landingCanvasEl)
     height: 22px !important;
   }
 
-  .landing-footer__languages {
-    width: 60px;
+  .landing-footer__locale {
+    width: 62px;
   }
 
   .landing-footer__feedback {

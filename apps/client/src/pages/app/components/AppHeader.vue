@@ -25,7 +25,6 @@ const props = withDefaults(
 
 defineEmits<{
   login: []
-  signup: []
 }>()
 
 const hasUserAvatar = computed(() => props.userAvatar.trim().length > 0)
@@ -55,7 +54,7 @@ const displayName = computed(() => props.userName.trim())
           </span>
         </RouterLink>
 
-        <div class="app-landing-header__auth" :aria-busy="authLoading">
+        <div class="app-landing-header__auth sa-glass-button" :aria-busy="authLoading">
           <span v-if="authLoading" class="app-landing-header__auth-loading">Loading</span>
           <span
             v-else-if="isAuthenticated"
@@ -78,13 +77,6 @@ const displayName = computed(() => props.userName.trim())
           <span v-else class="app-landing-header__auth-buttons">
             <button type="button" class="app-landing-header__auth-link" @click="$emit('login')">
               Log In
-            </button>
-            <button
-              type="button"
-              class="app-landing-header__auth-link app-landing-header__auth-link--primary"
-              @click="$emit('signup')"
-            >
-              Sign Up
             </button>
           </span>
         </div>
@@ -112,13 +104,15 @@ const displayName = computed(() => props.userName.trim())
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   background:
-    linear-gradient(120deg, rgba(102, 56, 143, 0.3), rgba(59, 34, 96, 0.22)),
-    rgba(18, 8, 34, 0.6);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent 34%),
+    linear-gradient(120deg, rgba(102, 56, 143, 0.24), rgba(59, 34, 96, 0.2)),
+    rgba(18, 8, 34, 0.48);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
     0 16px 56px rgba(11, 3, 23, 0.35);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(24px) saturate(1.18);
+  backdrop-filter: blur(24px) saturate(1.18);
 }
 
 .app-landing-header__brand,
@@ -181,10 +175,17 @@ const displayName = computed(() => props.userName.trim())
   padding: 0 0 0 1rem;
   margin-right: 0.25rem;
   transform: translateX(-0.2rem);
-  border: 1px solid rgba(255, 218, 68, 0.16);
+  border: 1px solid rgba(255, 218, 68, 0.22);
   border-radius: 999px;
-  background: rgba(255, 163, 108, 0.18);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 42%),
+    rgba(255, 163, 108, 0.2);
   color: #ffda44;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 12px 28px rgba(11, 3, 23, 0.22);
+  -webkit-backdrop-filter: blur(18px) saturate(1.24);
+  backdrop-filter: blur(18px) saturate(1.24);
   font-family: var(--app-home-ui, var(--sa-font-main, system-ui, sans-serif));
   font-size: 0.82rem;
   font-weight: 400;
@@ -215,9 +216,13 @@ const displayName = computed(() => props.userName.trim())
   min-width: 8.8rem;
   min-height: 2.35rem;
   border-radius: 999px;
-  background: rgba(102, 56, 143, 0.48);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 46%),
+    rgba(102, 56, 143, 0.52);
   color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 12px 28px rgba(10, 3, 24, 0.24);
   font-family: var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);
 }
 
@@ -234,12 +239,14 @@ const displayName = computed(() => props.userName.trim())
 }
 
 .app-landing-header__auth-buttons {
-  gap: 0.15rem;
-  padding: 0.18rem;
+  justify-content: center;
+  width: 100%;
+  padding: 0.18rem 0.4rem;
 }
 
 .app-landing-header__auth-link {
   min-height: 1.85rem;
+  width: 100%;
   border: 0;
   border-radius: 999px;
   padding: 0 0.7rem;

@@ -36,8 +36,7 @@ import {
   STREAM_APP_BRAND_NAME,
 } from '@/eat-first/constants/brand.js'
 import '@/eat-first/styles/host-chrome.css'
-import LandingCosmicBackdrop from '@/components/ui/LandingCosmicBackdrop.vue'
-import PurpleLightningBackdrop from '@/components/ui/PurpleLightningBackdrop.vue'
+import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
 import '@/eat-first/styles/motion.css'
 import { useCoinHubStore } from '@/stores/coinHub'
 import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
@@ -299,8 +298,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
 
 <template>
   <div class="app-shell-layout eat-first-root page-stack" :data-theme="theme">
-    <LandingCosmicBackdrop />
-    <PurpleLightningBackdrop :light="theme === 'light'" />
+    <LandingCloudBackdrop class="app-shell-layout__backdrop" />
     <div class="app-shell-layout__body app-layout">
       <AppHeader
         v-if="showLegacyShellHeader"
@@ -469,6 +467,12 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.app-shell-layout__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
 }
 
 .app-shell-layout__body {
