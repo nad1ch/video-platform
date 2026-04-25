@@ -39,22 +39,19 @@ const jackpotLetters = ['T', 'W', 'I', 'T', 'C', 'H'] as const
   padding: clamp(1.05rem, 1.8vw, 1.55rem);
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 1.8rem;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 38%),
-    radial-gradient(circle at 22% 22%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.6px),
-    radial-gradient(circle at 82% 58%, rgba(255, 255, 255, 0.13) 0 1px, transparent 1.6px),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.2), rgba(60, 36, 99, 0.18)),
-    rgba(28, 12, 52, 0.24);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 34%),
+    rgba(18, 8, 34, 0.015);
   color: #fff;
   text-decoration: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.13),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
-    0 24px 80px rgba(9, 2, 20, 0.24);
-  -webkit-backdrop-filter: blur(24px) saturate(1.18);
-  backdrop-filter: blur(24px) saturate(1.18);
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 58px rgba(11, 3, 23, 0.42);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   transition:
     transform 0.18s ease,
     border-color 0.18s ease,
@@ -107,12 +104,12 @@ const jackpotLetters = ['T', 'W', 'I', 'T', 'C', 'H'] as const
     linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 46%),
     radial-gradient(circle at 14% 26%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.6px),
     linear-gradient(120deg, rgba(124, 77, 219, 0.096), rgba(60, 36, 99, 0.094)),
-    rgba(60, 36, 99, 0.34);
+    var(--app-home-glass-inner-bg, rgba(60, 36, 99, 0.1));
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.1),
     0 18px 38px rgba(0, 0, 0, 0.16);
-  -webkit-backdrop-filter: blur(18px) saturate(1.18);
-  backdrop-filter: blur(18px) saturate(1.18);
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
 }
 
 .app-economy__copy {

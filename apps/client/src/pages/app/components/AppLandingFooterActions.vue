@@ -126,13 +126,13 @@ onUnmounted(() => {
   border-radius: 999px;
   background:
     linear-gradient(135deg, var(--app-landing-footer-action-shine, rgba(255, 255, 255, 0.14)), transparent 46%),
-    var(--app-landing-footer-feedback-bg, rgba(81, 48, 116, 0.62));
+    var(--app-landing-footer-feedback-bg, var(--app-home-glass-action-bg, rgba(81, 48, 116, 0.1)));
   color: var(--app-landing-footer-action-color, #fff);
   box-shadow:
     inset 0 1px 0 var(--app-landing-footer-action-inset-shadow, rgba(255, 255, 255, 0.2)),
     0 12px 28px var(--app-landing-footer-action-drop-shadow, rgba(10, 3, 24, 0.22));
-  -webkit-backdrop-filter: blur(20px) saturate(1.24);
-  backdrop-filter: blur(20px) saturate(1.24);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   font-size: var(--app-landing-footer-action-font-size, 0.82rem);
   font-weight: 400;
   text-decoration: none;
@@ -163,7 +163,7 @@ onUnmounted(() => {
   border-radius: 1.25rem;
   background:
     linear-gradient(135deg, var(--app-landing-footer-action-shine, rgba(255, 255, 255, 0.14)), transparent 46%),
-    var(--app-landing-footer-locale-bg, rgba(81, 48, 117, 0.54));
+    var(--app-landing-footer-locale-bg, var(--app-home-glass-action-bg, rgba(81, 48, 116, 0.1)));
   box-shadow:
     inset 0 1px 0 var(--app-landing-footer-action-inset-shadow, rgba(255, 255, 255, 0.22)),
     inset 0 -1px 0 rgba(255, 255, 255, 0.06),
@@ -173,8 +173,8 @@ onUnmounted(() => {
   font-size: var(--app-landing-footer-action-font-size, 0.82rem);
   font-weight: 400;
   list-style: none;
-  -webkit-backdrop-filter: blur(22px) saturate(1.24);
-  backdrop-filter: blur(22px) saturate(1.24);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   transition:
     background 0.18s ease,
     border-color 0.18s ease,
@@ -209,12 +209,12 @@ onUnmounted(() => {
   border-radius: 1.25rem;
   background:
     linear-gradient(135deg, var(--app-landing-footer-list-shine, rgba(255, 255, 255, 0.1)), transparent 40%),
-    var(--app-landing-footer-locale-list-bg, rgba(65, 43, 91, 0.9));
+    var(--app-landing-footer-locale-list-bg, rgba(65, 43, 91, 0.72));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 -18px 34px rgba(10, 3, 24, 0.3);
-  -webkit-backdrop-filter: blur(22px) saturate(1.22);
-  backdrop-filter: blur(22px) saturate(1.22);
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.22);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.22);
 }
 
 .app-landing-footer-actions__locale[open] .app-landing-footer-actions__locale-list {

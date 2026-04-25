@@ -230,7 +230,7 @@ const socialLinks = Object.freeze([
   Object.freeze({
     alt: 'Instagram',
     icon: instagramIcon,
-    href: 'https://www.instagram.com/',
+    href: 'https://www.instagram.com/nad1ch_/',
     style: Object.freeze({
       left: px(884.25),
       top: px(2227.5),
@@ -241,7 +241,7 @@ const socialLinks = Object.freeze([
   Object.freeze({
     alt: 'TikTok',
     icon: tiktokIcon,
-    href: 'https://www.tiktok.com/',
+    href: 'https://www.tiktok.com/@nad1ch',
     style: Object.freeze({
       left: px(993.94),
       top: px(2230.31),
@@ -252,7 +252,7 @@ const socialLinks = Object.freeze([
   Object.freeze({
     alt: 'Telegram',
     icon: telegramIcon,
-    href: 'https://telegram.org/',
+    href: 'https://t.me/nad1ch_tgh',
     style: Object.freeze({
       left: px(1100.81),
       top: px(2227.5),
