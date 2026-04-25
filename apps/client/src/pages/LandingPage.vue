@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, watch } from 'vue'
+import { nextTick, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import callCardOne from '@/assets/landing-dev/call-card-1.svg'
@@ -7,6 +7,7 @@ import callCardTwo from '@/assets/landing-dev/call-card-2.svg'
 import callCardThree from '@/assets/landing-dev/call-card-3.svg'
 import twitchBrowseIllustration from '@/assets/landing/twitch-browse-illustration.svg'
 import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
+import AppLandingFooterActions from '@/pages/app/components/AppLandingFooterActions.vue'
 import eatFirstIcon from '@/assets/landing/eat-first.png'
 import nadrawPhoneIcon from '@/assets/landing/nadraw-phone.png'
 import instagramIcon from '@/assets/landing/instagram.png'
@@ -54,7 +55,7 @@ type GameCard = {
 
 const authRouteLogin = { path: '/auth', query: { redirect: '/app', mode: 'login' as const } } as const
 const callRoute = { name: 'call' } as const
-const homeRoute = { name: 'home' } as const
+const landingFeedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
 
 const navItems = Object.freeze([
   Object.freeze({ label: 'VideoCall', href: '#videocall' }),
@@ -72,6 +73,10 @@ const localeButtons = Object.freeze([
   Object.freeze({ code: 'uk', label: 'Ukrainian' }),
   Object.freeze({ code: 'pl', label: 'Polish' }),
 ] as const)
+
+const landingFooterLocaleOptions = Object.freeze(
+  localeButtons.map((item) => Object.freeze({ value: item.code, label: item.label })),
+)
 
 const callBannerCards = Object.freeze([
   Object.freeze({ asset: callCardOne, style: Object.freeze({ left: px(14.35) }) }),
@@ -274,15 +279,8 @@ const footerAbout = Object.freeze(['About', 'Jobs', 'Brand', 'Newsroom', 'Develo
 /** Economy slot strip: **Nadle** (five cells) + wildcard; keeps the six-column jackpot layout. */
 const slotLetters = Object.freeze(['N', 'A', 'D', 'L', 'E', '?'] as const)
 
-type LandingLocaleCode = (typeof localeButtons)[number]['code']
-
-const activeLandingLocaleLabel = computed(
-  () => localeButtons.find((item) => item.code === locale.value)?.label ?? localeButtons[0]?.label ?? 'English',
-)
-
-async function selectLocale(code: LandingLocaleCode, event?: MouseEvent) {
+async function selectLocale(code: string) {
   await persistLocale(code)
-  ;(event?.currentTarget as HTMLElement | null)?.closest('details')?.removeAttribute('open')
 }
 
 const LANDING_FLOW_LAYOUT_MEDIA = '(max-width: 960px)'
@@ -470,23 +468,14 @@ watch(
           <a class="landing-footer__seo-link" href="/stream-overlay-tools/">Stream overlay tools</a>
         </nav>
         <div class="landing-footer__panel">
-          <details class="landing-footer__locale" aria-label="Interface language">
-            <summary class="landing-footer__locale-trigger sa-glass-button" aria-label="Choose language">
-              <span>{{ activeLandingLocaleLabel }}</span>
-            </summary>
-            <div class="landing-footer__locale-list">
-              <button
-                v-for="item in localeButtons"
-                :key="item.code"
-                class="landing-footer__locale-option"
-                :class="{ 'landing-footer__locale-option--active': locale === item.code }"
-                type="button"
-                @click="selectLocale(item.code, $event)"
-              >
-                {{ item.label }}
-              </button>
-            </div>
-          </details>
+          <AppLandingFooterActions
+            class="landing-footer__locale-action"
+            :locale="locale"
+            :locale-options="landingFooterLocaleOptions"
+            mode="locale"
+            tone="light"
+            @update:locale="selectLocale"
+          />
 
           <div class="landing-footer__static" v-once>
             <div class="landing-footer__socials">
@@ -504,7 +493,12 @@ watch(
               </a>
             </div>
 
-            <RouterLink class="landing-footer__feedback sa-glass-button" :to="homeRoute">Feedback</RouterLink>
+            <AppLandingFooterActions
+              class="landing-footer__feedback-action"
+              :feedback-href="landingFeedbackHref"
+              mode="feedback"
+              tone="light"
+            />
 
             <div class="landing-footer__columns">
               <div class="landing-footer__product">
@@ -1254,10 +1248,10 @@ watch(
 
 .landing-hero__lead,
 .landing-section__lead,
-.landing-footer__locale,
+.landing-footer__locale-action,
+.landing-footer__feedback-action,
 .landing-footer__product,
 .landing-footer__about,
-.landing-footer__feedback,
 .landing-auth__link {
   font-family: 'Marmelad', sans-serif;
 }
@@ -1319,17 +1313,17 @@ watch(
   align-items: center;
   border-radius: calc(var(--u) * 41.25);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.025) 30%, transparent 62%),
-    radial-gradient(circle at calc(var(--u) * 195) calc(var(--u) * 13.5), rgba(176, 123, 255, 0.24) 0, rgba(176, 123, 255, 0.13) calc(var(--u) * 45), transparent calc(var(--u) * 94)),
-    radial-gradient(circle at calc(var(--u) * 240) calc(var(--u) * 72), rgba(124, 77, 219, 0.2) 0, rgba(124, 77, 219, 0.11) calc(var(--u) * 41.25), transparent calc(var(--u) * 86)),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.16) 0%, rgba(60, 36, 99, 0.18) 100%),
-    rgba(41, 19, 73, 0.28);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.006) 34%, transparent 70%),
+    radial-gradient(circle at calc(var(--u) * 190) calc(var(--u) * 12), rgba(176, 123, 255, 0.04) 0, rgba(176, 123, 255, 0.02) calc(var(--u) * 70), transparent calc(var(--u) * 140)),
+    radial-gradient(circle at calc(var(--u) * 772) calc(var(--u) * 80), rgba(124, 77, 219, 0.035) 0, rgba(124, 77, 219, 0.018) calc(var(--u) * 100), transparent calc(var(--u) * 190)),
+    linear-gradient(120deg, rgba(124, 77, 219, 0.016) 0%, rgba(60, 36, 99, 0.026) 100%),
+    rgba(41, 19, 73, 0.025);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.28),
     inset 0 -1px 0 rgba(255, 255, 255, 0.08),
     0 calc(var(--u) * 13.5) calc(var(--u) * 34) rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(calc(var(--u) * 24)) saturate(1.26);
-  -webkit-backdrop-filter: blur(calc(var(--u) * 24)) saturate(1.26);
+  backdrop-filter: blur(calc(var(--u) * 1.2)) saturate(1.02);
+  -webkit-backdrop-filter: blur(calc(var(--u) * 1.2)) saturate(1.02);
   outline: calc(var(--u) * 7.5) solid #fff;
   outline-offset: calc(var(--u) * -7.5);
   overflow: hidden;
@@ -1364,11 +1358,11 @@ watch(
   height: calc(var(--u) * 97.28);
   border-radius: calc(var(--u) * 12.76);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent 48%),
-    rgba(60, 36, 99, 0.48);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.13);
-  backdrop-filter: blur(calc(var(--u) * 16)) saturate(1.2);
-  -webkit-backdrop-filter: blur(calc(var(--u) * 16)) saturate(1.2);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.032), transparent 48%),
+    rgba(60, 36, 99, 0.065);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(calc(var(--u) * 0.8)) saturate(1.02);
+  -webkit-backdrop-filter: blur(calc(var(--u) * 0.8)) saturate(1.02);
   z-index: 1;
 }
 
@@ -1409,17 +1403,17 @@ watch(
   display: block;
   border-radius: calc(var(--u) * 37.5);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.025) 32%, transparent 64%),
-    radial-gradient(circle at calc(var(--u) * 180.36) calc(var(--u) * 12.49), rgba(172, 119, 255, 0.22) 0, rgba(172, 119, 255, 0.12) calc(var(--u) * 41.62), transparent calc(var(--u) * 84)),
-    radial-gradient(circle at calc(var(--u) * 221.98) calc(var(--u) * 66.59), rgba(124, 77, 219, 0.2) 0, rgba(124, 77, 219, 0.1) calc(var(--u) * 38.15), transparent calc(var(--u) * 78)),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.14) 0%, rgba(60, 36, 99, 0.2) 100%),
-    rgba(42, 21, 73, 0.26);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.006) 36%, transparent 70%),
+    radial-gradient(circle at calc(var(--u) * 180.36) calc(var(--u) * 12.49), rgba(172, 119, 255, 0.04) 0, rgba(172, 119, 255, 0.02) calc(var(--u) * 62), transparent calc(var(--u) * 116)),
+    radial-gradient(circle at calc(var(--u) * 221.98) calc(var(--u) * 66.59), rgba(124, 77, 219, 0.035) 0, rgba(124, 77, 219, 0.018) calc(var(--u) * 58), transparent calc(var(--u) * 108)),
+    linear-gradient(120deg, rgba(124, 77, 219, 0.014) 0%, rgba(60, 36, 99, 0.024) 100%),
+    rgba(42, 21, 73, 0.025);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.26),
     inset 0 -1px 0 rgba(255, 255, 255, 0.08),
     0 calc(var(--u) * 12.486165046691895) calc(var(--u) * 27.747032165527344) rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(calc(var(--u) * 22)) saturate(1.22);
-  -webkit-backdrop-filter: blur(calc(var(--u) * 22)) saturate(1.22);
+  backdrop-filter: blur(calc(var(--u) * 1)) saturate(1.02);
+  -webkit-backdrop-filter: blur(calc(var(--u) * 1)) saturate(1.02);
   outline: calc(var(--u) * 7.5) solid #fff;
   outline-offset: calc(var(--u) * -3.75);
   overflow: hidden;
@@ -1481,16 +1475,16 @@ watch(
   align-items: center;
   border-radius: calc(var(--u) * 41.25);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.025) 30%, transparent 62%),
-    radial-gradient(circle at calc(var(--u) * 200) calc(var(--u) * 18), rgba(176, 123, 255, 0.22), transparent calc(var(--u) * 96)),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.16) 0%, rgba(60, 36, 99, 0.18) 100%),
-    rgba(41, 19, 73, 0.28);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.006) 34%, transparent 70%),
+    radial-gradient(circle at calc(var(--u) * 200) calc(var(--u) * 18), rgba(176, 123, 255, 0.04), transparent calc(var(--u) * 140)),
+    linear-gradient(120deg, rgba(124, 77, 219, 0.016) 0%, rgba(60, 36, 99, 0.026) 100%),
+    rgba(41, 19, 73, 0.025);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.28),
     inset 0 -1px 0 rgba(255, 255, 255, 0.08),
     0 calc(var(--u) * 13.5) calc(var(--u) * 30) rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(calc(var(--u) * 24)) saturate(1.26);
-  -webkit-backdrop-filter: blur(calc(var(--u) * 24)) saturate(1.26);
+  backdrop-filter: blur(calc(var(--u) * 1.2)) saturate(1.02);
+  -webkit-backdrop-filter: blur(calc(var(--u) * 1.2)) saturate(1.02);
   outline: calc(var(--u) * 7.5) solid #fff;
   outline-offset: calc(var(--u) * -7.5);
   overflow: hidden;
@@ -1667,107 +1661,24 @@ watch(
   pointer-events: auto;
 }
 
-.landing-footer__locale {
+.landing-footer__locale-action,
+.landing-footer__feedback-action {
   position: absolute;
-  left: calc(var(--u) * 700.03);
   top: calc(var(--u) * 2230.31);
   z-index: 7;
-  width: calc(var(--u) * 112);
-  height: calc(var(--u) * 46.5);
-  box-sizing: border-box;
-  font-family: 'Marmelad', sans-serif;
+  --app-landing-footer-action-height: calc(var(--u) * 39);
+  --app-landing-footer-action-font-size: calc(var(--u) * 13.5);
+  --app-landing-footer-action-drop-shadow: rgba(10, 3, 24, 0.12);
 }
 
-.landing-footer__locale-trigger {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: 100%;
-  padding: 0 calc(var(--u) * 31) 0 calc(var(--u) * 16);
-  box-sizing: border-box;
-  border-radius: calc(var(--u) * 26);
-  color: #fff;
-  cursor: pointer;
-  font-size: calc(var(--u) * 18);
-  font-weight: 400;
-  line-height: 1;
-  list-style: none;
-  text-align: center;
+.landing-footer__locale-action {
+  left: calc(var(--u) * 700.03);
+  --app-landing-footer-locale-width: calc(var(--u) * 128);
 }
 
-.landing-footer__locale-trigger::-webkit-details-marker {
-  display: none;
-}
-
-.landing-footer__locale-trigger::after {
-  position: absolute;
-  right: calc(var(--u) * 18);
-  top: 50%;
-  width: calc(var(--u) * 8.5);
-  height: calc(var(--u) * 8.5);
-  border-right: calc(var(--u) * 2) solid rgba(255, 255, 255, 0.86);
-  border-bottom: calc(var(--u) * 2) solid rgba(255, 255, 255, 0.86);
-  content: '';
-  transform: translateY(-66%) rotate(45deg);
-}
-
-.landing-footer__locale-list {
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + calc(var(--u) * 18));
-  display: none;
-  width: 100%;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: calc(var(--u) * 31);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent 38%),
-    rgba(55, 38, 82, 0.9);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 calc(var(--u) * -18) calc(var(--u) * 36) rgba(11, 3, 23, 0.26);
-  -webkit-backdrop-filter: blur(calc(var(--u) * 22)) saturate(1.22);
-  backdrop-filter: blur(calc(var(--u) * 22)) saturate(1.22);
-}
-
-.landing-footer__locale[open] .landing-footer__locale-list {
-  display: grid;
-}
-
-.landing-footer__locale-option {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: calc(var(--u) * 60);
-  border: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.72);
-  cursor: pointer;
-  font: inherit;
-  font-size: calc(var(--u) * 22);
-  line-height: 1;
-  transition:
-    background 0.18s ease,
-    color 0.18s ease;
-}
-
-.landing-footer__locale-option--active {
-  background: rgba(255, 255, 255, 0.96);
-  color: #1a1a1a;
-}
-
-.landing-footer__locale-option:hover,
-.landing-footer__locale-option:focus-visible {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.13);
-}
-
-.landing-footer__locale-option--active:hover,
-.landing-footer__locale-option--active:focus-visible {
-  color: #1a1a1a;
-  background: #fff;
+.landing-footer__feedback-action {
+  left: calc(var(--u) * 1376.44);
+  --app-landing-footer-feedback-width: calc(var(--u) * 128);
 }
 
 .landing-footer__social {
@@ -1791,42 +1702,6 @@ watch(
 .landing-footer__social:hover img {
   opacity: 1;
   transform: translateY(calc(var(--u) * -3)) scale(1.1);
-}
-
-.landing-footer__feedback {
-  position: absolute;
-  left: calc(var(--u) * 1376.44);
-  top: calc(var(--u) * 2230.31);
-  min-width: calc(var(--u) * 160.59);
-  height: calc(var(--u) * 46.5);
-  padding: calc(var(--u) * 10) calc(var(--u) * 22);
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.035) 34%, rgba(255, 255, 255, 0) 62%),
-    linear-gradient(140deg, rgba(102, 56, 143, 0.58), rgba(60, 36, 99, 0.5));
-  color: #fff;
-  font-size: calc(var(--u) * 18);
-  font-weight: 500;
-  text-decoration: none;
-  opacity: 1;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.26),
-    0 calc(var(--u) * 12) calc(var(--u) * 28) rgba(10, 3, 24, 0.22);
-  -webkit-backdrop-filter: blur(calc(var(--u) * 20)) saturate(1.22);
-  backdrop-filter: blur(calc(var(--u) * 20)) saturate(1.22);
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.landing-footer__feedback:hover {
-  transform: translateY(calc(var(--u) * -2));
-  box-shadow: 0 calc(var(--u) * 8) calc(var(--u) * 20) rgba(0, 0, 0, 0.25);
 }
 
 .landing-footer__product,
@@ -2166,10 +2041,12 @@ watch(
     border-radius: 36px;
     border: 6.5px solid #fff;
     background:
-      radial-gradient(circle at 30% 16%, rgba(176, 123, 255, 0.18), transparent 140px),
-      linear-gradient(120deg, rgba(124, 77, 219, 0.24) 0%, rgba(60, 36, 99, 0.34) 100%);
-    backdrop-filter: blur(16px) saturate(1.12);
-    -webkit-backdrop-filter: blur(16px) saturate(1.12);
+      linear-gradient(135deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.006) 34%, transparent 70%),
+      radial-gradient(circle at 30% 16%, rgba(176, 123, 255, 0.04), transparent 150px),
+      linear-gradient(120deg, rgba(124, 77, 219, 0.016) 0%, rgba(60, 36, 99, 0.026) 100%),
+      rgba(41, 19, 73, 0.025);
+    backdrop-filter: blur(1px) saturate(1.02);
+    -webkit-backdrop-filter: blur(1px) saturate(1.02);
   }
 
   .call-banner__title {
@@ -2192,7 +2069,11 @@ watch(
     overflow: hidden;
     box-sizing: border-box;
     border-radius: 20px;
-    background: #3c2463;
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent 48%),
+      rgba(60, 36, 99, 0.06);
+    backdrop-filter: blur(0.8px) saturate(1.02);
+    -webkit-backdrop-filter: blur(0.8px) saturate(1.02);
     order: -1;
   }
 
@@ -2227,10 +2108,12 @@ watch(
     border-radius: 33.445px;
     border: 6.689px solid #fff;
     background:
-      radial-gradient(circle at 64% 22%, rgba(176, 123, 255, 0.18), transparent 120px),
-      linear-gradient(120deg, rgba(124, 77, 219, 0.22) 0%, rgba(60, 36, 99, 0.34) 100%);
-    backdrop-filter: blur(14px) saturate(1.1);
-    -webkit-backdrop-filter: blur(14px) saturate(1.1);
+      linear-gradient(135deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.006) 36%, transparent 70%),
+      radial-gradient(circle at 64% 22%, rgba(176, 123, 255, 0.04), transparent 130px),
+      linear-gradient(120deg, rgba(124, 77, 219, 0.014) 0%, rgba(60, 36, 99, 0.024) 100%),
+      rgba(42, 21, 73, 0.025);
+    backdrop-filter: blur(0.9px) saturate(1.02);
+    -webkit-backdrop-filter: blur(0.9px) saturate(1.02);
   }
 
   .games-grid__label {
@@ -2283,10 +2166,12 @@ watch(
     border-radius: 36.53px;
     border: 6.642px solid #fff;
     background:
-      radial-gradient(circle at 32% 18%, rgba(176, 123, 255, 0.16), transparent 140px),
-      linear-gradient(120deg, rgba(124, 77, 219, 0.24) 0%, rgba(60, 36, 99, 0.34) 100%);
-    backdrop-filter: blur(16px) saturate(1.12);
-    -webkit-backdrop-filter: blur(16px) saturate(1.12);
+      linear-gradient(135deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.006) 34%, transparent 70%),
+      radial-gradient(circle at 32% 18%, rgba(176, 123, 255, 0.04), transparent 150px),
+      linear-gradient(120deg, rgba(124, 77, 219, 0.016) 0%, rgba(60, 36, 99, 0.026) 100%),
+      rgba(41, 19, 73, 0.025);
+    backdrop-filter: blur(1px) saturate(1.02);
+    -webkit-backdrop-filter: blur(1px) saturate(1.02);
   }
 
   .economy-banner__title {
@@ -2323,10 +2208,9 @@ watch(
     display: grid;
     width: min(100%, var(--landing-panel-width));
     margin: 0 auto;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
     grid-template-areas:
-      'locale . feedback columns'
-      'socials socials socials socials';
+      'locale socials . feedback columns';
     align-items: start;
     gap: 20px clamp(14px, 3vw, 28px);
   }
@@ -2335,35 +2219,28 @@ watch(
     display: contents;
   }
 
-  .landing-footer__locale {
+  .landing-footer__locale-action {
     grid-area: locale;
     position: relative;
     left: auto;
     top: auto;
-    width: 142px;
-    height: 46px;
+    align-self: start;
+    justify-self: start;
+    --app-landing-footer-action-height: 40px;
+    --app-landing-footer-action-font-size: 14px;
+    --app-landing-footer-locale-width: 122px;
   }
 
-  .landing-footer__locale-trigger {
-    font-size: 16px;
-    padding-inline: 28px 42px;
-  }
-
-  .landing-footer__locale-trigger::after {
-    right: 23px;
-    width: 8px;
-    height: 8px;
-    border-width: 1.5px;
-  }
-
-  .landing-footer__locale-list {
-    bottom: calc(100% + 12px);
-    border-radius: 28px;
-  }
-
-  .landing-footer__locale-option {
-    min-height: 52px;
-    font-size: 20px;
+  .landing-footer__feedback-action {
+    grid-area: feedback;
+    position: relative;
+    left: auto;
+    top: auto;
+    align-self: start;
+    justify-self: start;
+    --app-landing-footer-action-height: 40px;
+    --app-landing-footer-action-font-size: 14px;
+    --app-landing-footer-feedback-width: 122px;
   }
 
   .landing-footer__socials {
@@ -2388,19 +2265,6 @@ watch(
   .landing-footer__social img {
     opacity: 1;
     filter: brightness(0) invert(1);
-  }
-
-  .landing-footer__feedback {
-    grid-area: feedback;
-    position: relative;
-    left: auto;
-    top: auto;
-    min-width: 142px;
-    height: 41px;
-    padding: 10px 18px;
-    font-size: 16px;
-    justify-self: start;
-    align-self: start;
   }
 
   .landing-footer__columns {
@@ -2696,45 +2560,21 @@ watch(
     width: min(100%, var(--landing-panel-width));
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
-      'languages . feedback columns'
-      'socials socials socials socials';
+      'locale socials feedback columns';
     gap: 16px 10px;
     align-items: start;
   }
 
-  .landing-footer__locale {
-    width: 65px;
-    height: 34px;
+  .landing-footer__locale-action {
+    --app-landing-footer-action-height: 28px;
+    --app-landing-footer-action-font-size: 10.5px;
+    --app-landing-footer-locale-width: 82px;
   }
 
-  .landing-footer__locale-trigger {
-    padding-inline: 20px 34px;
-    font-size: 13px;
-  }
-
-  .landing-footer__locale-trigger::after {
-    right: 17px;
-    width: 7px;
-    height: 7px;
-  }
-
-  .landing-footer__locale-list {
-    bottom: calc(100% + 9px);
-    border-radius: 20px;
-  }
-
-  .landing-footer__locale-option {
-    min-height: 38px;
-    font-size: 15px;
-  }
-
-  .landing-footer__feedback {
-    min-width: 65px;
-    height: 24px;
-    padding: 6px 12px;
-    font-size: 9.412px;
-    align-self: start;
-    justify-self: start;
+  .landing-footer__feedback-action {
+    --app-landing-footer-action-height: 28px;
+    --app-landing-footer-action-font-size: 10.5px;
+    --app-landing-footer-feedback-width: 82px;
   }
 
   .landing-footer__columns {
@@ -2912,14 +2752,6 @@ watch(
   .landing-footer__social {
     width: 22px !important;
     height: 22px !important;
-  }
-
-  .landing-footer__locale {
-    width: 62px;
-  }
-
-  .landing-footer__feedback {
-    min-width: 62px;
   }
 
   .landing-footer__columns {
