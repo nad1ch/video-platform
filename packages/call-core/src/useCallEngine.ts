@@ -428,10 +428,10 @@ export function useCallEngine(options?: CallEngineOptions) {
   function setRemoteListenVolume(peerId: string, volume: number): void {
     const next = new Map(remoteListenPrefs.value)
     const key = remoteListenPrefsKey(peerId)
-    const cur = next.get(key) ?? next.get(peerId) ?? { volume: 1, muted: false }
-    cur.volume = Math.min(2, Math.max(0, volume))
+    const prev = next.get(key) ?? next.get(peerId) ?? { volume: 1, muted: false }
+    const entry = { ...prev, volume: Math.min(2, Math.max(0, volume)) }
     next.delete(peerId)
-    next.set(key, cur)
+    next.set(key, entry)
     remoteListenPrefs.value = next
     persistListenPrefs()
   }
@@ -439,10 +439,10 @@ export function useCallEngine(options?: CallEngineOptions) {
   function setRemoteListenMuted(peerId: string, muted: boolean): void {
     const next = new Map(remoteListenPrefs.value)
     const key = remoteListenPrefsKey(peerId)
-    const cur = next.get(key) ?? next.get(peerId) ?? { volume: 1, muted: false }
-    cur.muted = muted
+    const prev = next.get(key) ?? next.get(peerId) ?? { volume: 1, muted: false }
+    const entry = { ...prev, muted }
     next.delete(peerId)
-    next.set(key, cur)
+    next.set(key, entry)
     remoteListenPrefs.value = next
     persistListenPrefs()
   }

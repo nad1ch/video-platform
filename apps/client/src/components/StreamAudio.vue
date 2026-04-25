@@ -35,6 +35,7 @@ let playUnlockHandler: (() => void) | null = null
 let sourceNode: MediaStreamAudioSourceNode | null = null
 let gainNode: GainNode | null = null
 let usingWebAudio = false
+let bindGeneration = 0
 
 function shouldUseWebAudioPlayback(): boolean {
   if (props.listenMuted) {
@@ -116,7 +117,11 @@ function silenceElement(detach: boolean): void {
 }
 
 async function bindAudioGraph(): Promise<void> {
+  const generation = ++bindGeneration
   await nextTick()
+  if (generation !== bindGeneration) {
+    return
+  }
   clearPlayUnlock()
   teardownWebAudio()
 
@@ -149,12 +154,15 @@ async function bindAudioGraph(): Promise<void> {
   }
 
   if (typeof AudioContext === 'undefined' || !shouldUseWebAudioPlayback()) {
-    await bindElementFallback(s)
+    await bindElementFallback(s, generation)
     return
   }
 
   try {
     await resumeSharedCallPlaybackContext()
+    if (generation !== bindGeneration) {
+      return
+    }
     const ctx = getSharedCallPlaybackContext()
     silenceElement(true)
     sourceNode = ctx.createMediaStreamSource(s)
@@ -166,17 +174,20 @@ async function bindAudioGraph(): Promise<void> {
 
     if (isAudioPlaybackUnlocked()) {
       requestAnimationFrame(() => {
+        if (generation !== bindGeneration) {
+          return
+        }
         playAllPageAudioThrottled()
       })
     }
   } catch (err) {
     streamAudioLog.warn('Web Audio path failed, falling back to element', err)
     teardownWebAudio()
-    await bindElementFallback(s)
+    await bindElementFallback(s, generation)
   }
 }
 
-async function bindElementFallback(s: MediaStream): Promise<void> {
+async function bindElementFallback(s: MediaStream, generation = bindGeneration): Promise<void> {
   const a = el.value
   if (!a) {
     return
@@ -199,6 +210,9 @@ async function bindElementFallback(s: MediaStream): Promise<void> {
   try {
     await a.play()
   } catch (e) {
+    if (generation !== bindGeneration) {
+      return
+    }
     streamAudioLog.warn('play failed', e)
     const isNotAllowed =
       e instanceof DOMException
@@ -217,6 +231,9 @@ async function bindElementFallback(s: MediaStream): Promise<void> {
   }
   if (isAudioPlaybackUnlocked()) {
     requestAnimationFrame(() => {
+      if (generation !== bindGeneration) {
+        return
+      }
       playAllPageAudioThrottled()
     })
   }
@@ -245,6 +262,7 @@ watch(
 )
 
 onUnmounted(() => {
+  bindGeneration++
   offAudioUnlock()
   clearPlayUnlock()
   teardownWebAudio()

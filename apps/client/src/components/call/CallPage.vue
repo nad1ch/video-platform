@@ -1003,6 +1003,7 @@ async function refreshInboundDebug(): Promise<void> {
 const tileOrder = ref<string[]>([])
 const dragPeerId = ref<string | null>(null)
 const dragOverPeerId = ref<string | null>(null)
+const tileDragStartedFromControls = ref(false)
 
 watch(
   tiles,
@@ -1381,7 +1382,28 @@ const gridStyle = computed(() => {
 /** Повна ширина вьюпорта для сітки тільки коли хоча б один учасник з увімкненим відео. */
 const stageFullBleed = computed(() => session.inCall && tiles.value.some((t) => t.videoEnabled))
 
+function isTileControlDragTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false
+  }
+  return Boolean(
+    target.closest(
+      'button,input,select,textarea,label,.tile-menu-cluster,.tile-menu-hoverable,.tile-menu__dropdown',
+    ),
+  )
+}
+
+function onTilePointerDownForDrag(e: PointerEvent): void {
+  tileDragStartedFromControls.value = isTileControlDragTarget(e.target)
+}
+
 function onTileDragStart(e: DragEvent, peerId: string): void {
+  if (tileDragStartedFromControls.value || isTileControlDragTarget(e.target)) {
+    e.preventDefault()
+    dragPeerId.value = null
+    dragOverPeerId.value = null
+    return
+  }
   dragPeerId.value = peerId
   e.dataTransfer?.setData('text/plain', peerId)
   if (e.dataTransfer) {
@@ -1424,6 +1446,7 @@ function onTileDrop(peerId: string): void {
 function onTileDragEnd(): void {
   dragPeerId.value = null
   dragOverPeerId.value = null
+  tileDragStartedFromControls.value = false
 }
 
 onBeforeUnmount(() => {
@@ -1720,6 +1743,7 @@ watch(joining, (j) => {
                   isMafiaRoute && (mafiaViewUi || !mafiaGameStore.isMafiaHost),
                 'call-page__tile-wrap--speaking': isTileRowSpeaking(row),
               }"
+              @pointerdown.capture="onTilePointerDownForDrag"
               @click="onMafiaHostTileClick($event, row)"
               @dragstart="onTileDragStart($event, row.tile.peerId)"
               @dragover.prevent="onTileDragOver($event, row.tile.peerId)"
@@ -1763,8 +1787,8 @@ watch(joining, (j) => {
                   !row.tile.isLocal && videoPlaybackSuppressedForPeer(row.tile.peerId)
                 "
                 :video-target-playback-fps="remoteVideoTargetPlaybackFpsForPeer(row.tile.peerId)"
-                @update:listen-volume="remoteListenVolumeHandler(row.tile.peerId)"
-                @update:listen-muted="remoteListenMutedHandler(row.tile.peerId)"
+                @update:listen-volume="(v) => remoteListenVolumeHandler(row.tile.peerId)(v)"
+                @update:listen-muted="(v) => remoteListenMutedHandler(row.tile.peerId)(v)"
                 @commit-local-display-name="onCommitLocalTileDisplayName"
                 @mafia-toggle-life="onMafiaToggleLifeFromTile(row.tile.peerId)"
                 @mafia-viewport-layers="(v) => onCallTileViewportForLayers(row.tile.peerId, v)"
