@@ -132,9 +132,9 @@ onUnmounted(() => {
   color: var(--app-landing-footer-action-color, #fff);
   box-shadow:
     inset 0 1px 0 var(--app-landing-footer-action-inset-shadow, rgba(255, 255, 255, 0.2)),
-    0 12px 28px var(--app-landing-footer-action-drop-shadow, rgba(10, 3, 24, 0.22));
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+    0 10px 22px var(--app-landing-footer-action-drop-shadow, rgba(10, 3, 24, 0.2));
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
   font-size: var(--app-landing-footer-action-font-size, 0.82rem);
   font-weight: 400;
   text-decoration: none;
@@ -170,14 +170,14 @@ onUnmounted(() => {
   box-shadow:
     inset 0 1px 0 var(--app-landing-footer-action-inset-shadow, rgba(255, 255, 255, 0.22)),
     inset 0 -1px 0 rgba(255, 255, 255, 0.06),
-    0 12px 28px var(--app-landing-footer-action-drop-shadow, rgba(10, 3, 24, 0.22));
+    0 10px 22px var(--app-landing-footer-action-drop-shadow, rgba(10, 3, 24, 0.2));
   color: var(--app-landing-footer-action-color, #fff);
   cursor: pointer;
   font-size: var(--app-landing-footer-action-font-size, 0.82rem);
   font-weight: 400;
   list-style: none;
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
   transition:
     background 0.3s ease,
     border-color 0.3s ease,
@@ -203,7 +203,7 @@ onUnmounted(() => {
     var(--app-landing-footer-locale-list-bg, rgba(65, 43, 91, 0.72));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 -18px 34px rgba(10, 3, 24, 0.3);
+    0 -12px 24px rgba(10, 3, 24, 0.26);
   -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.22);
   backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.22);
 }

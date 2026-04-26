@@ -303,9 +303,7 @@ const starDots = Object.freeze(
   object-fit: cover;
   object-position: bottom center;
   image-rendering: auto;
-  filter: contrast(1.06) saturate(1.04);
-  transform: translateZ(0);
-  will-change: transform;
+  filter: contrast(1.03) saturate(1.02);
 }
 
 .landing-cloud-backdrop__cloud--wide {
@@ -331,12 +329,17 @@ const starDots = Object.freeze(
   --star-delay: 0s;
   position: absolute;
   background: rgba(255, 255, 255, var(--star-alpha));
-  box-shadow: 0 0 calc(var(--u) * 5) rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 calc(var(--u) * 3) rgba(255, 255, 255, 0.14);
+  opacity: var(--star-alpha);
+}
+
+.landing-cloud-backdrop__star--ph1,
+.landing-cloud-backdrop__star--ph3 {
   animation-duration: var(--star-dur);
   animation-delay: var(--star-delay);
   animation-fill-mode: both;
   animation-iteration-count: infinite;
-  animation-name: landingCloudStarTwinkle;
+  animation-name: landingCloudStarTwinkleSoft;
   animation-timing-function: ease-in-out;
 }
 
@@ -344,16 +347,8 @@ const starDots = Object.freeze(
   animation-name: landingCloudStarTwinkleSoft;
 }
 
-.landing-cloud-backdrop__star--ph2 {
-  animation-name: landingCloudStarTwinkleBright;
-}
-
 .landing-cloud-backdrop__star--ph3 {
   animation-name: landingCloudStarBlink;
-}
-
-.landing-cloud-backdrop__star--ph4 {
-  animation-name: landingCloudStarTwinkleSlow;
 }
 
 .landing-cloud-backdrop__veil {

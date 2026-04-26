@@ -145,9 +145,9 @@ const profileActionLabel = computed(() => (props.profileTo ? t('app.openAdminPan
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.24),
     inset 0 -1px 0 rgba(255, 255, 255, 0.08),
-    0 18px 58px rgba(11, 3, 23, 0.42);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+    0 14px 36px rgba(11, 3, 23, 0.34);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 
 .app-landing-header__brand,
@@ -237,7 +237,7 @@ const profileActionLabel = computed(() => (props.profileTo ? t('app.openAdminPan
   color: rgba(255, 255, 255, 0.86);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 12px 28px rgba(10, 3, 24, 0.24);
+    0 10px 22px rgba(10, 3, 24, 0.2);
   -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   cursor: pointer;
@@ -270,7 +270,7 @@ const profileActionLabel = computed(() => (props.profileTo ? t('app.openAdminPan
   color: #ffda44;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 12px 28px rgba(11, 3, 23, 0.22);
+    0 10px 22px rgba(11, 3, 23, 0.18);
   -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.24);
   backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.24);
   font-family: var(--app-home-ui, var(--sa-font-main, system-ui, sans-serif));
@@ -286,7 +286,7 @@ const profileActionLabel = computed(() => (props.profileTo ? t('app.openAdminPan
   margin: -0.22rem -0.2rem -0.22rem 0;
   flex-shrink: 0;
   border-radius: 999px;
-  filter: drop-shadow(0 0 18px rgba(255, 218, 68, 0.24));
+  filter: drop-shadow(0 0 10px rgba(255, 218, 68, 0.22));
 }
 
 .app-landing-header__coin-img {
@@ -309,7 +309,7 @@ const profileActionLabel = computed(() => (props.profileTo ? t('app.openAdminPan
   color: #fff;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 12px 28px rgba(10, 3, 24, 0.24);
+    0 10px 22px rgba(10, 3, 24, 0.2);
   -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   font-family: var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);

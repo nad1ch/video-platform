@@ -56,9 +56,9 @@ const previewTiles = [
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.24),
     inset 0 -1px 0 rgba(255, 255, 255, 0.08),
-    0 18px 58px rgba(11, 3, 23, 0.42);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+    0 14px 36px rgba(11, 3, 23, 0.34);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 
 .app-call__panel::before,
@@ -66,7 +66,7 @@ const previewTiles = [
   position: absolute;
   border-radius: 999px;
   content: '';
-  filter: blur(22px);
+  filter: blur(14px);
   pointer-events: none;
 }
 
@@ -114,7 +114,7 @@ const previewTiles = [
     var(--app-home-glass-inner-bg, rgba(60, 36, 99, 0.1));
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.12),
-    0 18px 38px rgba(0, 0, 0, 0.16);
+    0 12px 26px rgba(0, 0, 0, 0.14);
   -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   color: inherit;
@@ -130,7 +130,7 @@ const previewTiles = [
   border-color: #fff;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.16),
-    0 18px 46px rgba(6, 2, 18, 0.34);
+    0 14px 32px rgba(6, 2, 18, 0.3);
 }
 
 .app-call__screen:focus-visible {

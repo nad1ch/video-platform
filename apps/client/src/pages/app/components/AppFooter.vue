@@ -142,9 +142,9 @@ onUnmounted(() => {
   font-family: var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    0 -18px 58px rgba(11, 3, 23, 0.42);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+    0 -14px 36px rgba(11, 3, 23, 0.34);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 
 .app-landing-footer__rights {
@@ -158,8 +158,8 @@ onUnmounted(() => {
     linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 42%),
     rgba(18, 8, 34, 0.015);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 
 .app-landing-footer__brand {
@@ -243,7 +243,7 @@ onUnmounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 1rem;
   background: rgba(32, 20, 52, 0.95);
-  box-shadow: 0 16px 48px rgba(10, 3, 24, 0.55);
+  box-shadow: 0 14px 34px rgba(10, 3, 24, 0.48);
   color: #fff;
 }
 

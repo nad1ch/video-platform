@@ -9,7 +9,6 @@ import AppFooter from '@/pages/app/components/AppFooter.vue'
 import AppGamesSection from '@/pages/app/components/AppGamesSection.vue'
 import AppHeader from '@/pages/app/components/AppHeader.vue'
 import AppVideoCallSection from '@/pages/app/components/AppVideoCallSection.vue'
-import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
 import eatFirstImage from '@/assets/landing/eat-first.png'
 import mafiaImage from '@/assets/landing/mafia.png'
 import nadleImage from '@/assets/landing/nadle.png'
@@ -201,8 +200,6 @@ watch(
 
 <template>
   <div class="app-home" :aria-busy="authLoading">
-    <LandingCloudBackdrop class="app-home__background" />
-
     <div class="app-home__shell">
       <AppHeader
         :auth-loading="authLoading"
@@ -260,21 +257,15 @@ watch(
   --app-home-display: "Climate Crisis", "Arial Black", Impact, var(--sa-font-display, system-ui), sans-serif;
   --app-home-ui: "Marmelad", var(--sa-font-main, system-ui), sans-serif;
   --app-home-jackpot: "Arbutus", Georgia, serif;
-  --app-home-glass-blur: 10px;
-  --app-home-glass-panel-bg: rgba(28, 12, 52, 0.1);
-  --app-home-glass-inner-bg: rgba(60, 36, 99, 0.1);
-  --app-home-glass-chrome-bg: rgba(18, 8, 34, 0.1);
-  --app-home-glass-footer-bg: rgba(32, 20, 52, 0.1);
-  --app-home-glass-footer-chip-bg: rgba(81, 48, 116, 0.1);
-  --app-home-glass-action-bg: rgba(81, 48, 116, 0.1);
-  background: #0b0317;
+  --app-home-glass-blur: 6px;
+  --app-home-glass-panel-bg: rgba(28, 12, 52, 0.14);
+  --app-home-glass-inner-bg: rgba(60, 36, 99, 0.16);
+  --app-home-glass-chrome-bg: rgba(18, 8, 34, 0.14);
+  --app-home-glass-footer-bg: rgba(32, 20, 52, 0.14);
+  --app-home-glass-footer-chip-bg: rgba(81, 48, 116, 0.16);
+  --app-home-glass-action-bg: rgba(81, 48, 116, 0.16);
+  background: transparent;
   isolation: isolate;
-}
-
-.app-home__background {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
 }
 
 .app-home__shell {
@@ -329,33 +320,6 @@ watch(
 
 .app-home__feature-stack > * {
   min-width: 0;
-}
-
-.app-home__feature-stack > *,
-.app-home__grid > :deep(.app-games) {
-  animation: app-home-body-block-breathe 7.5s ease-in-out infinite;
-  transform-origin: center;
-  will-change: transform;
-}
-
-@keyframes app-home-body-block-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(1.01);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-home__feature-stack > *,
-  .app-home__grid > :deep(.app-games) {
-    animation: none;
-    transform: none;
-    will-change: auto;
-  }
 }
 
 @media (max-width: 1200px) {

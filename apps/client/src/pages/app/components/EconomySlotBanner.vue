@@ -70,11 +70,27 @@ const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
   border-radius: calc(var(--economy-slot-u) * 41.25);
   box-sizing: border-box;
   background: linear-gradient(166.6115811995453deg, rgba(124, 77, 219, 0.096) 0%, rgba(60, 36, 99, 0.094) 73.206%);
+  transform-origin: center;
+  transition: transform 0.18s ease;
+}
+
+.economy-slot-banner:hover .economy-slot-banner__frame {
+  transform: translateY(-2px);
 }
 
 .economy-slot-banner:focus-visible {
   outline: 3px solid rgba(255, 218, 68, 0.86);
   outline-offset: calc(var(--economy-slot-u, 1px) * 8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .economy-slot-banner__frame {
+    transition: none;
+  }
+
+  .economy-slot-banner:hover .economy-slot-banner__frame {
+    transform: none;
+  }
 }
 
 .economy-slot-banner__title {

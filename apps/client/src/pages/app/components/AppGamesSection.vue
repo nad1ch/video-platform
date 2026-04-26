@@ -72,9 +72,9 @@ function toneClass(tone: AppGameCard['tone']) {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.24),
     inset 0 -1px 0 rgba(255, 255, 255, 0.08),
-    0 18px 58px rgba(11, 3, 23, 0.42);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+    0 14px 36px rgba(11, 3, 23, 0.34);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 
 .app-games__panel::before,
@@ -138,7 +138,7 @@ function toneClass(tone: AppGameCard['tone']) {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     inset 0 -1px 0 rgba(255, 255, 255, 0.03),
-    0 14px 36px rgba(6, 2, 18, 0.24);
+    0 10px 24px rgba(6, 2, 18, 0.2);
   -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   transition:
@@ -174,7 +174,7 @@ function toneClass(tone: AppGameCard['tone']) {
   background: rgba(54, 27, 83, 0.42);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 18px 46px rgba(6, 2, 18, 0.34),
+    0 14px 32px rgba(6, 2, 18, 0.3),
     0 0 0 1px rgba(255, 255, 255, 0.16);
 }
 
@@ -227,7 +227,6 @@ function toneClass(tone: AppGameCard['tone']) {
   flex-shrink: 0;
   transform-origin: center;
   transition: transform 0.25s ease;
-  will-change: transform;
 }
 
 .app-game-card:hover .app-game-card__visual {
@@ -239,25 +238,24 @@ function toneClass(tone: AppGameCard['tone']) {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 12px 16px rgba(0, 0, 0, 0.28));
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.24));
 }
 
 .app-game-card--amber .app-game-card__visual {
-  filter: drop-shadow(0 0 14px rgba(255, 163, 108, 0.24));
+  filter: drop-shadow(0 0 10px rgba(255, 163, 108, 0.2));
 }
 
 .app-game-card--green .app-game-card__visual {
-  filter: drop-shadow(0 0 14px rgba(34, 197, 94, 0.22));
+  filter: drop-shadow(0 0 10px rgba(34, 197, 94, 0.18));
 }
 
 .app-game-card--slate .app-game-card__visual {
-  filter: drop-shadow(0 0 14px rgba(148, 163, 184, 0.2));
+  filter: drop-shadow(0 0 10px rgba(148, 163, 184, 0.17));
 }
 
 @media (prefers-reduced-motion: reduce) {
   .app-game-card__visual {
     transition: none;
-    will-change: auto;
   }
 
   .app-game-card:hover .app-game-card__visual {
