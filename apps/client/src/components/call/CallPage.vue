@@ -844,7 +844,7 @@ watch(roomPopoverOpen, (open) => {
 })
 
 async function copyRoomToClipboard(): Promise<void> {
-  const text = displayCallOrMafiaRoomCode()
+  const text = normalizeDisplayName(roomJoinDraft.value) || displayCallOrMafiaRoomCode()
   try {
     await navigator.clipboard.writeText(text)
   } catch {
@@ -872,7 +872,9 @@ async function copyRoomToClipboard(): Promise<void> {
 }
 
 async function onGenerateNewRoom(): Promise<void> {
-  await switchToRoom(generateCallRoomCode())
+  const nextRoom = generateCallRoomCode()
+  roomJoinDraft.value = nextRoom
+  await switchToRoom(nextRoom)
 }
 
 function submitRoomDraft(): void {
@@ -902,7 +904,8 @@ function onDocumentPointerForDevicePickers(ev: PointerEvent): void {
     return
   }
   const roomHost = typeof document !== 'undefined' ? document.getElementById(CALL_ROOM_DROPDOWN_HOST_ID) : null
-  if (roomHost?.contains(t)) {
+  const roomPanel = typeof document !== 'undefined' ? document.getElementById(CALL_ROOM_POPOVER_PANEL_ID) : null
+  if (roomHost?.contains(t) || roomPanel?.contains(t)) {
     return
   }
   if (callRoomHeaderJoin.roomPopoverOpen) {
@@ -1675,8 +1678,10 @@ watch(joining, (j) => {
 <template>
   <div class="page-route">
     <AppFullPageLoader :visible="joining" :aria-label="t('callPage.joining')" label="" />
-    <Teleport v-if="callRoomHeaderJoin.roomPopoverOpen" :to="`#${CALL_ROOM_DROPDOWN_HOST_ID}`">
+    <Teleport to="body">
+      <Transition name="call-page-room-pop">
       <div
+        v-if="callRoomHeaderJoin.roomPopoverOpen"
         :id="CALL_ROOM_POPOVER_PANEL_ID"
         class="call-page__room-pop sa-scrollbar"
         role="dialog"
@@ -1695,7 +1700,15 @@ watch(joining, (j) => {
         <div class="call-page__room-pop-code">
           <span class="call-page__room-pop-label">{{ t('callPage.roomCodeLabel') }}</span>
           <div class="call-page__room-pop-code-row">
-            <code class="call-page__room-pop-value call-page__room-pop-value--row">{{ displayCallOrMafiaRoomCode() }}</code>
+            <input
+              v-model="roomJoinDraft"
+              class="call-page__room-pop-code-input"
+              type="text"
+              name="call-room-code"
+              autocomplete="off"
+              :placeholder="t('callPage.roomJoinPlaceholder')"
+              @keydown.enter.prevent="submitRoomDraft"
+            />
             <div class="call-page__room-pop-code-tools">
               <div class="call-page__room-pop-copy-wrap">
                 <button
@@ -1762,17 +1775,6 @@ watch(joining, (j) => {
           </div>
         </div>
         <div class="call-page__room-pop-join">
-          <label class="call-page__room-pop-field">
-            <span>{{ t('callPage.roomJoinFieldLabel') }}</span>
-            <input
-              v-model="roomJoinDraft"
-              type="text"
-              name="call-room-code"
-              autocomplete="off"
-              :placeholder="t('callPage.roomJoinPlaceholder')"
-              @keydown.enter.prevent="submitRoomDraft"
-            />
-          </label>
           <AppButton variant="primary" :disabled="joining" @click="submitRoomDraft">
             {{ t('callPage.roomSwitch') }}
           </AppButton>
@@ -1799,6 +1801,7 @@ watch(joining, (j) => {
           {{ t('callPage.wsStatus', { status: wsStatus }) }}
         </p>
       </div>
+      </Transition>
     </Teleport>
     <AppContainer class="call-page" :class="{ 'call-page--stage-full': stageFullBleed }" :flush="true">
     <div class="call-page__shell">
@@ -2356,8 +2359,9 @@ watch(joining, (j) => {
 .call-page__fieldset {
   margin: 0;
   padding: 0.65rem 0.75rem;
-  border: 1px solid var(--sa-color-border);
+  border: 1px solid rgb(255 255 255 / 0.12);
   border-radius: var(--sa-radius-sm);
+  background: rgb(15 9 28 / 0.18);
 }
 
 .call-page__fieldset--in-pop {
@@ -2433,21 +2437,88 @@ watch(joining, (j) => {
   }
 }
 
-/* Room popover: Teleport target is `#call-room-dropdown-host` in AppShellLayout (positioned below header button). */
+/* Room popover is teleported to body so it is not trapped under header stacking contexts. */
 .call-page__room-pop {
-  position: absolute;
-  left: 0;
-  top: 100%;
-  margin-top: 0.35rem;
-  z-index: 100;
+  position: fixed;
+  left: 50%;
+  top: calc(4.3rem + env(safe-area-inset-top, 0px));
+  margin-top: 0;
+  z-index: 1000;
   width: min(22rem, calc(100vw - 2rem));
   max-height: min(70vh, 28rem);
   overflow: auto;
   padding: 0.75rem 0.85rem;
-  border-radius: var(--sa-radius-sm);
-  border: 1px solid var(--sa-color-border);
-  background: color-mix(in srgb, var(--sa-color-surface) 94%, rgb(8 10 14 / 0.92));
-  box-shadow: 0 16px 40px rgb(0 0 0 / 0.4);
+  border-radius: 0.9rem;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.1), transparent 40%),
+    rgb(31 17 52 / 0.74);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 16px 36px rgb(10 3 24 / 0.3);
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  scrollbar-color: rgb(167 139 250 / 0.36) transparent;
+  scrollbar-width: thin;
+  transform: translateX(-50%);
+  transform-origin: top center;
+}
+
+.call-page-room-pop-enter-active,
+.call-page-room-pop-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.call-page-room-pop-enter-from,
+.call-page-room-pop-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-0.45rem) scale(0.98);
+}
+
+.call-page__room-pop::-webkit-scrollbar {
+  width: 0.35rem;
+}
+
+.call-page__room-pop::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.call-page__room-pop::-webkit-scrollbar-track-piece {
+  background: transparent;
+}
+
+.call-page__room-pop::-webkit-scrollbar-button,
+.call-page__room-pop::-webkit-scrollbar-button:single-button,
+.call-page__room-pop::-webkit-scrollbar-button:vertical:start:decrement,
+.call-page__room-pop::-webkit-scrollbar-button:vertical:end:increment {
+  display: none;
+  width: 0;
+  height: 0;
+  background: transparent;
+  border: 0;
+}
+
+.call-page__room-pop::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.call-page__room-pop::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(167 139 250 / 0.34);
+}
+
+.call-page__room-pop::-webkit-scrollbar-thumb:hover {
+  background: rgb(167 139 250 / 0.5);
+}
+
+@media (max-width: 640px) {
+  .call-page__room-pop {
+    top: calc(5.25rem + env(safe-area-inset-top, 0px));
+    width: min(22rem, calc(100vw - 1rem));
+    max-height: calc(100vh - 6rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
 }
 
 .call-page__room-pop-field--top {
@@ -2466,7 +2537,7 @@ watch(joining, (j) => {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   opacity: 0.75;
-  color: var(--sa-color-text-muted);
+  color: rgb(255 255 255 / 0.66);
 }
 
 .call-page__room-pop-value {
@@ -2480,9 +2551,9 @@ watch(joining, (j) => {
   display: flex;
   align-items: stretch;
   min-height: 2.25rem;
-  border: 1px solid var(--sa-color-border);
+  border: 1px solid rgb(255 255 255 / 0.12);
   border-radius: var(--sa-radius-sm);
-  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  background: rgb(15 9 28 / 0.32);
   /* Visible so the copy feedback tooltip can sit above the icon without clipping. */
   overflow: visible;
 }
@@ -2497,13 +2568,31 @@ watch(joining, (j) => {
   border-radius: calc(var(--sa-radius-sm) - 1px) 0 0 calc(var(--sa-radius-sm) - 1px);
 }
 
+.call-page__room-pop-code-input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  border-radius: calc(var(--sa-radius-sm) - 1px) 0 0 calc(var(--sa-radius-sm) - 1px);
+  background: transparent;
+  color: var(--sa-color-text-main);
+  font: inherit;
+  font-family: var(--sa-font-mono, monospace);
+  font-size: 0.95rem;
+}
+
+.call-page__room-pop-code-input:focus {
+  outline: none;
+}
+
 .call-page__room-pop-code-tools {
   display: flex;
   align-items: stretch;
   flex-shrink: 0;
-  border-inline-start: 1px solid var(--sa-color-border);
+  border-inline-start: 1px solid rgb(255 255 255 / 0.1);
   padding: 0 0.1rem;
-  background: color-mix(in srgb, var(--sa-color-surface) 92%, transparent);
+  background: rgb(255 255 255 / 0.04);
   border-radius: 0 var(--sa-radius-sm) var(--sa-radius-sm) 0;
   overflow: visible;
 }
@@ -2525,8 +2614,8 @@ watch(joining, (j) => {
   line-height: 1.2;
   white-space: nowrap;
   color: var(--sa-color-text-main);
-  background: color-mix(in srgb, var(--sa-color-surface) 8%, rgb(18 20 26));
-  border: 1px solid var(--sa-color-border);
+  background: rgb(31 17 52 / 0.92);
+  border: 1px solid rgb(255 255 255 / 0.16);
   box-shadow: 0 6px 16px rgb(0 0 0 / 0.35);
   z-index: 3;
   pointer-events: none;
@@ -2543,13 +2632,13 @@ watch(joining, (j) => {
   border: none;
   border-radius: calc(var(--sa-radius-sm) - 1px);
   background: transparent;
-  color: var(--sa-color-text-muted);
+  color: rgb(255 255 255 / 0.68);
   cursor: pointer;
 }
 
 .call-page__room-pop-ico-btn:hover:not(:disabled) {
   color: var(--sa-color-text-main);
-  background: color-mix(in srgb, var(--sa-color-text-main) 10%, transparent);
+  background: rgb(255 255 255 / 0.08);
 }
 
 .call-page__room-pop-ico-btn:disabled {
@@ -2573,11 +2662,16 @@ watch(joining, (j) => {
 
 .call-page__room-pop-field input {
   padding: 0.45rem 0.55rem;
-  border: 1px solid var(--sa-color-border);
+  border: 1px solid rgb(255 255 255 / 0.12);
   border-radius: var(--sa-radius-sm);
-  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  background: rgb(15 9 28 / 0.32);
   color: var(--sa-color-text-main);
   font: inherit;
+}
+
+.call-page__room-pop-field input:focus {
+  outline: 2px solid color-mix(in srgb, var(--sa-color-primary) 45%, transparent);
+  outline-offset: 1px;
 }
 
 .call-page__join-error {
