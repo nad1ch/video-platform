@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink, type RouteLocationRaw } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 type AppGameCard = {
   id: string
@@ -16,6 +17,7 @@ const props = defineProps<{
   items: AppGameCard[]
 }>()
 
+const { t } = useI18n()
 const hasItems = computed(() => props.items.length > 0)
 
 function toneClass(tone: AppGameCard['tone']) {
@@ -26,7 +28,7 @@ function toneClass(tone: AppGameCard['tone']) {
 <template>
   <section class="app-games" aria-labelledby="app-games-title">
     <div class="app-games__panel">
-      <h2 id="app-games-title" class="app-games__title">Games</h2>
+      <h2 id="app-games-title" class="app-games__title">{{ t('home.sectionGames') }}</h2>
 
       <div v-if="hasItems" class="app-games__grid">
         <RouterLink
@@ -47,7 +49,7 @@ function toneClass(tone: AppGameCard['tone']) {
         </RouterLink>
       </div>
 
-      <p v-else class="app-games__empty" role="status">No games available yet.</p>
+      <p v-else class="app-games__empty" role="status">{{ t('home.emptyGames') }}</p>
     </div>
   </section>
 </template>
@@ -77,11 +79,7 @@ function toneClass(tone: AppGameCard['tone']) {
 
 .app-games__panel::before,
 .app-games__panel::after {
-  position: absolute;
-  border-radius: 999px;
-  content: '';
-  pointer-events: none;
-  filter: blur(24px);
+  display: none;
 }
 
 .app-games__panel::before {
@@ -126,25 +124,20 @@ function toneClass(tone: AppGameCard['tone']) {
 .app-game-card {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) clamp(3.25rem, 4.5vw, 4.2rem);
   align-items: center;
-  column-gap: 0.75rem;
+  column-gap: 0.45rem;
   min-height: 6.8rem;
-  padding: 0.72rem 0.85rem;
+  padding: 0.72rem 0.7rem 0.72rem 0.85rem;
   overflow: hidden;
   border: 5px solid rgba(255, 255, 255, 0.96);
   border-radius: 1.77rem;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 42%),
-    radial-gradient(circle at 5% 7%, rgba(255, 255, 255, 0.9) 0 1px, transparent 1.5px),
-    radial-gradient(circle at 45% 36%, rgba(255, 255, 255, 0.22) 0 1px, transparent 1.5px),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.084), rgba(60, 36, 99, 0.144)),
-    var(--app-home-glass-inner-bg, rgba(60, 36, 99, 0.1));
+  background: rgba(36, 17, 58, 0.34);
   color: #fff;
   text-decoration: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
     0 14px 36px rgba(6, 2, 18, 0.24);
   -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
@@ -156,11 +149,7 @@ function toneClass(tone: AppGameCard['tone']) {
 
 .app-game-card::before,
 .app-game-card::after {
-  position: absolute;
-  border-radius: 999px;
-  content: '';
-  filter: blur(16px);
-  pointer-events: none;
+  display: none;
 }
 
 .app-game-card::before {
@@ -182,6 +171,7 @@ function toneClass(tone: AppGameCard['tone']) {
 .app-game-card:hover {
   transform: translateY(-3px);
   border-color: #fff;
+  background: rgba(54, 27, 83, 0.42);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     0 18px 46px rgba(6, 2, 18, 0.34),
@@ -203,17 +193,20 @@ function toneClass(tone: AppGameCard['tone']) {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  max-width: 100%;
   gap: 0.24rem;
 }
 
 .app-game-card__title {
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
-  font-size: 0.92rem;
+  font-size: clamp(0.82rem, 1.08vw, 1.02rem);
   font-weight: 400;
   font-variation-settings: 'YEAR' 1979;
   line-height: 1.08;
+  overflow-wrap: normal;
   text-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  word-break: normal;
 }
 
 .app-game-card__subtitle {
@@ -229,8 +222,8 @@ function toneClass(tone: AppGameCard['tone']) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 4rem;
-  height: 4rem;
+  width: 100%;
+  height: clamp(3.25rem, 4.5vw, 4.2rem);
   flex-shrink: 0;
   transform-origin: center;
   transition: transform 0.25s ease;
@@ -302,15 +295,15 @@ function toneClass(tone: AppGameCard['tone']) {
     border-width: 3px;
     border-radius: 1.1rem;
     padding: 0.65rem 0.75rem;
+    grid-template-columns: minmax(0, 1fr) 3rem;
   }
 
   .app-game-card__title {
-    font-size: 0.74rem;
+    font-size: 0.78rem;
   }
 
   .app-game-card__visual {
-    width: 3.35rem;
-    height: 3.35rem;
+    height: 3rem;
   }
 }
 
@@ -329,6 +322,7 @@ function toneClass(tone: AppGameCard['tone']) {
     border-width: 4px;
     border-radius: 1.25rem;
     padding: 0.8rem 1rem;
+    grid-template-columns: minmax(0, 1fr) 4rem;
   }
 
   .app-game-card__title {
@@ -336,7 +330,6 @@ function toneClass(tone: AppGameCard['tone']) {
   }
 
   .app-game-card__visual {
-    width: 4rem;
     height: 4rem;
   }
 }

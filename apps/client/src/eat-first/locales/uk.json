@@ -22,7 +22,53 @@
     "featureOverlayTitle": "Оверлей для OBS",
     "featureOverlayBody": "Шар у браузері для джерела OBS — стан гри та брендинг на екрані.",
     "closingTitle": "Готові почати",
-    "closingLead": "Зайдіть у застосунок або оберіть режим нижче."
+    "closingLead": "Зайдіть у застосунок або оберіть режим нижче.",
+    "loadingAria": "Завантаження лендінгу",
+    "navVideoCall": "Відеодзвінок",
+    "navGames": "Ігри",
+    "navEconomy": "Економіка",
+    "navSafety": "Безпека",
+    "navSupport": "Підтримка",
+    "navDevelopers": "Розробникам",
+    "login": "Увійти",
+    "newHeroTagline": "ДЕ ЧАТ СТАЄ ГРОЮ",
+    "newHeroLead": "Ваш стрім — це не лише те, що дивляться. Це те, до чого долучаються. Перетворюйте кожен момент на спільний досвід із живим чатом, іграми та відеодзвінками. Взаємодійте, грайте й зближуйтеся з аудиторією як ніколи раніше — усе в одному місці й без зайвої складності.",
+    "videoCallTitle": "ВІДЕОДЗВІНОК",
+    "videoCallLead": "Створюйте приватні відеокімнати для ігор, челенджів та інтерактивних ефірів.",
+    "videoCallCta": "Запустити шоу",
+    "gamesTitle": "ІГРИ",
+    "gamesLead": "Грайте з друзями, кидайте виклики іншим або виводьте дію наживо для аудиторії.",
+    "gameEatFirst": "Кого ми\nз’їмо\nпершим",
+    "gameMafia": "Мафія",
+    "gameSpy": "Шпигун",
+    "gameNadle": "Nadle",
+    "gameNadraw": "Nadraw",
+    "gameMic": "Хто бере\nмікрофон",
+    "economyTitle": "ЕКОНОМІКА",
+    "economyLead": "Створіть власну економіку стріму з балами, бонусами та інтерактивними механіками, які повертають аудиторію знову.",
+    "seoVideoCalls": "Відеодзвінки для стрімерів",
+    "seoNadle": "Гра Nadle для чату",
+    "seoOverlay": "Інструменти оверлею для стріму",
+    "footerProductTitle": "Продукт",
+    "footerNitro": "Nitro",
+    "footerStatus": "Статус",
+    "footerPolicies": "Політики",
+    "footerTerms": "Умови",
+    "footerPrivacy": "Приватність",
+    "footerCookieSettings": "Налаштування cookie",
+    "footerAboutTitle": "Про нас",
+    "footerJobs": "Вакансії",
+    "footerBrand": "Бренд",
+    "footerNewsroom": "Новини",
+    "footerDevelopers": "Розробникам",
+    "economyCta": "Почати заробляти",
+    "economyJackpot": "ДЖЕКПОТ",
+    "siteHeaderAria": "Шапка сайту",
+    "primaryNavAria": "Основна навігація",
+    "accountAria": "Акаунт",
+    "heroAria": "Головний блок",
+    "siteFooterAria": "Футер сайту",
+    "guidesAria": "Довідкові матеріали"
   },
   "home": {
     "tagline": "Інтерактивні інструменти для стрімів",
@@ -33,7 +79,24 @@
     "nadleTitle": "Nadle",
     "nadleDesc": "Гра з чатом Twitch",
     "eatTitle": "Eat First",
-    "eatDesc": "Голосувальна гра для стріму (оверлей)"
+    "eatDesc": "Голосувальна гра для стріму (оверлей)",
+    "gameEatFirst": "Кого з’їсти першим",
+    "gameMafia": "Мафія",
+    "gameNadle": "Nadle",
+    "gameNadraw": "Nadle",
+    "gameSpy": "Шпигун",
+    "gameMic": "Хто бере мікрофон",
+    "openEatFirst": "Відкрити Eat First",
+    "openMafia": "Відкрити Мафію",
+    "openNadle": "Відкрити Nadle",
+    "openNadraw": "Відкрити Nadraw",
+    "openSpy": "Відкрити ролі для Шпигуна",
+    "openHotSeat": "Відкрити Hot Seat",
+    "openVideoCall": "Відкрити відеодзвінок",
+    "sectionVideoCall": "Відеодзвінок",
+    "sectionEconomy": "Економіка",
+    "sectionGames": "Ігри",
+    "emptyGames": "Ігор поки немає."
   },
   "routes": {
     "call": "Відеодзвінок",
@@ -133,31 +196,73 @@
     "premiumCardChatLinePlus": "🟣 nad1ch",
     "premiumCardChatLinePro": "👑 nad1ch",
     "premiumPlanBasicFeatures": [
-      { "text": "Щоденне обертання" },
-      { "text": "Стандартні монети" }
+      {
+        "text": "Щоденне обертання"
+      },
+      {
+        "text": "Стандартні монети"
+      }
     ],
     "premiumPlanPlusFeatures": [
-      { "text": "+50% монет" },
-      { "text": "Щомісячно: +100 монет" },
-      { "text": "Пріоритет у черзі" },
-      { "text": "Рідкісні дропи" },
-      { "text": "Фіолетовий нік" },
-      { "text": "Бейдж у чаті" },
-      { "text": "Щоденний бонус" },
-      { "text": "Швидші кейси" }
+      {
+        "text": "+50% монет"
+      },
+      {
+        "text": "Щомісячно: +100 монет"
+      },
+      {
+        "text": "Пріоритет у черзі"
+      },
+      {
+        "text": "Рідкісні дропи"
+      },
+      {
+        "text": "Фіолетовий нік"
+      },
+      {
+        "text": "Бейдж у чаті"
+      },
+      {
+        "text": "Щоденний бонус"
+      },
+      {
+        "text": "Швидші кейси"
+      }
     ],
     "premiumPlanProFeatures": [
-      { "text": "+100% монет" },
-      { "text": "Щомісячно: +200 монет" },
-      { "text": "Ексклюзивні кейси" },
-      { "text": "Легендарні дропи" },
-      { "text": "Золотий нік + бейдж" },
-      { "text": "VIP-чат" },
-      { "text": "Доступ до івентів" },
-      { "text": "Світіння ніка" },
-      { "text": "Анімація профілю" },
-      { "text": "Власні реакції" },
-      { "text": "Пріоритет у розіграшах" }
+      {
+        "text": "+100% монет"
+      },
+      {
+        "text": "Щомісячно: +200 монет"
+      },
+      {
+        "text": "Ексклюзивні кейси"
+      },
+      {
+        "text": "Легендарні дропи"
+      },
+      {
+        "text": "Золотий нік + бейдж"
+      },
+      {
+        "text": "VIP-чат"
+      },
+      {
+        "text": "Доступ до івентів"
+      },
+      {
+        "text": "Світіння ніка"
+      },
+      {
+        "text": "Анімація профілю"
+      },
+      {
+        "text": "Власні реакції"
+      },
+      {
+        "text": "Пріоритет у розіграшах"
+      }
     ],
     "errorAuth": "Увійдіть, щоб синхронізувати Монетний хаб.",
     "errorNetwork": "Проблема зі з’єднанням. Перевірте мережу й спробуйте знову.",
@@ -165,7 +270,9 @@
     "retry": "Повторити",
     "refreshing": "Оновлення…",
     "spinNextIn": "Наступне обертання за {t}",
-    "adminDevMode": "Режим адміна"
+    "adminDevMode": "Режим адміна",
+    "liveBadge": "Наживо",
+    "caseDefaultTitle": "Кейс"
   },
   "nadrawShow": {
     "title": "Nadraw",
@@ -451,7 +558,17 @@
     "debugOverlay": "Технічна панель (статистика)",
     "debugTitle": "Дебаг дзвінка",
     "debugRefresh": "Оновити inbound stats",
-    "debugRefreshing": "…"
+    "debugRefreshing": "…",
+    "debugAria": "Діагностика дзвінка",
+    "renameLocalHint": "Двічі клацніть, щоб перейменувати (лише локально)",
+    "debugPreset": "пресет",
+    "debugExplicit": "явне значення",
+    "debugPublishTier": "рівень публікації",
+    "debugActiveCamerasWire": "активні камери на дроті",
+    "debugPeersWire": "учасники на дроті",
+    "debugPublishSimulcast": "simulcast публікації",
+    "debugActiveSpeaker": "активний спікер",
+    "debugServerSpeaker": "спікер сервера"
   },
   "nadleUi": {
     "eyebrow": "Nadle",
@@ -572,7 +689,24 @@
     "authNeedLogin": "Увійдіть, щоб відкрити цю сторінку.",
     "authNeedLoginHeaderHint": "Натисни «Увійти» зверху справа.",
     "authHomeHint": "Twitch або Google — та сама сесія (cookie), що й для Nadle через Twitch.",
-    "routeLoadingAria": "Завантаження сторінки"
+    "routeLoadingAria": "Завантаження сторінки",
+    "footerRights": "{year} Усі права захищено.",
+    "feedback": "Зворотний зв’язок",
+    "chooseLanguage": "Обрати мову",
+    "localeEnglish": "Англійська",
+    "localeGerman": "Німецька",
+    "localeGermany": "Німецька",
+    "localeUkrainian": "Українська",
+    "localePolish": "Польська",
+    "headerAria": "StreamAssist",
+    "openCoinHub": "Відкрити Монетний хаб",
+    "loading": "Завантаження",
+    "logIn": "Увійти",
+    "openProfileMenu": "Відкрити меню профілю",
+    "openProfileMenuFor": "Відкрити меню профілю для {name}",
+    "mediaMuted": "Вимкнений звук",
+    "mediaVolume": "Гучність",
+    "openAdminPanel": "Відкрити адмінпанель"
   },
   "onboarding": {
     "openGuide": "Як користуватись",
@@ -740,7 +874,8 @@
     "default": "Завантаження…",
     "control": "Підтягуємо кімнату та картку…",
     "overlay": "Синхронізуємо оверлей…",
-    "panelCard": "Завантаження картки…"
+    "panelCard": "Завантаження картки…",
+    "ariaLoading": "Завантаження"
   },
   "desk": {
     "room": "Кімната:",
@@ -844,11 +979,26 @@
     "quirk": "Особливість"
   },
   "scenarios": {
-    "classic_crash": { "label": "Класика: авіакатастрофа", "hint": "Уламки, ліс або поле, мінімум провізії, класичний набір карт." },
-    "island_survival": { "label": "Острів", "hint": "Вода навколо, риба, сонце, сіль, дегідратація." },
-    "mountains_cold": { "label": "Гори / холод", "hint": "Висота, вітер, переохолодження, обмежена видимість." },
-    "forest_wilderness": { "label": "Ліс / глушина", "hint": "Дика природа, тварини, орієнтація, вогонь." },
-    "limited_supplies": { "label": "Мало припасів", "hint": "Після катастрофи майже нічого не врятували — акцент на дефіцит." }
+    "classic_crash": {
+      "label": "Класика: авіакатастрофа",
+      "hint": "Уламки, ліс або поле, мінімум провізії, класичний набір карт."
+    },
+    "island_survival": {
+      "label": "Острів",
+      "hint": "Вода навколо, риба, сонце, сіль, дегідратація."
+    },
+    "mountains_cold": {
+      "label": "Гори / холод",
+      "hint": "Висота, вітер, переохолодження, обмежена видимість."
+    },
+    "forest_wilderness": {
+      "label": "Ліс / глушина",
+      "hint": "Дика природа, тварини, орієнтація, вогонь."
+    },
+    "limited_supplies": {
+      "label": "Мало припасів",
+      "hint": "Після катастрофи майже нічого не врятували — акцент на дефіцит."
+    }
   },
   "toast": {
     "copied": "Скопійовано",
@@ -1085,7 +1235,8 @@
       "eliminatedNoPublish": "Вибув — камера й мік вимкнені.",
       "enableSound": "Увімкнути звук",
       "enableSoundHint": "Браузер без кліку не відтворює чужий голос. Натисни кнопку або спочатку Mic/Cam.",
-      "debugSummary": "Медіа debug (dev)"
+      "debugSummary": "Медіа debug (dev)",
+      "sectionAria": "Голос і відео"
     }
   },
   "adminPanel": {
@@ -1183,7 +1334,8 @@
     "sessionRole": "Роль (після перевірки allowlist)",
     "sessionRawJson": "Розпарсений об'єкт user",
     "sessionNotSignedIn": "(не ввійшов)",
-    "commonRetry": "Повторити"
+    "commonRetry": "Повторити",
+    "sectionsAria": "Розділи адмінпанелі"
   },
   "overlayCard": {
     "eliminated": "ВИБУВ",

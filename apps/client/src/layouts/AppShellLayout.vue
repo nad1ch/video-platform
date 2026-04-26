@@ -63,6 +63,24 @@ const isHomeRoute = computed(() => route.name === 'home')
 const isNadleAppHeaderRoute = computed(
   () => route.name === 'nadle-streamer' || route.name === 'app-streamer',
 )
+const isCallRoute = computed(() => route.name === 'call')
+const isMafiaRoute = computed(() => route.name === 'mafia')
+const isCoinHubRoute = computed(() => route.name === 'coin-hub')
+const isNadrawRoute = computed(() => route.name === 'nadraw-show')
+const isAdminRoute = computed(() => String(route.name ?? '').startsWith('admin-'))
+const isNewAppHeaderRoute = computed(
+  () =>
+    isNadleAppHeaderRoute.value ||
+    isAdminRoute.value ||
+    isCallRoute.value ||
+    isMafiaRoute.value ||
+    isCoinHubRoute.value ||
+    isNadrawRoute.value ||
+    isEatRoute.value,
+)
+const isNewAppFooterRoute = computed(
+  () => isNadleAppHeaderRoute.value || isAdminRoute.value || isCoinHubRoute.value || isEatRoute.value,
+)
 
 /** Nadle stream + Nadraw: дати viewport `min-height: 0`, щоб сторінка могла займати залишок висоти без нескінченного росту. */
 const isNadleStreamRoute = computed(
@@ -78,7 +96,7 @@ const showChrome = computed(
   () => !isHomeRoute.value && (!isEatRoute.value || currentEatView.value !== 'overlay'),
 )
 
-const showLegacyShellHeader = computed(() => showChrome.value && !isNadleAppHeaderRoute.value)
+const showLegacyShellHeader = computed(() => showChrome.value && !isNewAppHeaderRoute.value)
 
 const showSiteFooter = computed(
   () => showChrome.value && route.name !== 'call' && route.name !== 'mafia' && route.name !== 'nadraw-show',
@@ -134,24 +152,35 @@ const eatHeaderClass = computed(() => ({
 }))
 
 const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.label }))
-const appLandingHeaderBrand = 'NADLE'
+const appLandingHeaderBrand = computed(() =>
+  isAdminRoute.value ||
+  isCallRoute.value ||
+  isMafiaRoute.value ||
+  isCoinHubRoute.value ||
+  isNadrawRoute.value ||
+  isEatRoute.value
+    ? 'Stream Assist'
+    : 'NADLE',
+)
 const appLandingFooterBrand = 'Nad1ch'
 const appLandingFeedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
 const appLandingCoinHubRoute = { name: 'coin-hub' } satisfies RouteLocationRaw
 const appLandingLocaleLabelByCode: Record<string, string> = {
   en: 'English',
-  de: 'Germany',
-  uk: 'Ukrainian',
-  pl: 'Polish',
+  de: 'Deutsch',
+  uk: 'Українська',
+  pl: 'Polski',
 }
 const appLandingLocaleMenuOrder = ['en', 'de', 'uk', 'pl']
-const appLandingLocaleMenuOptions = appLandingLocaleMenuOrder
-  .map((code) => LOCALE_OPTIONS.find((o) => o.code === code))
-  .filter((o): o is (typeof LOCALE_OPTIONS)[number] => Boolean(o))
-  .map((o) => ({
-    value: o.code,
-    label: appLandingLocaleLabelByCode[o.code] ?? o.label,
-  }))
+const appLandingLocaleMenuOptions = computed(() =>
+  appLandingLocaleMenuOrder
+    .map((code) => LOCALE_OPTIONS.find((o) => o.code === code))
+    .filter((o): o is (typeof LOCALE_OPTIONS)[number] => Boolean(o))
+    .map((o) => ({
+      value: o.code,
+      label: appLandingLocaleLabelByCode[o.code] ?? o.label,
+    })),
+)
 const appLandingHeaderCoinBalanceLabel = computed(() => {
   if (!auth.isAuthenticated.value) {
     return '—'
@@ -160,6 +189,9 @@ const appLandingHeaderCoinBalanceLabel = computed(() => {
 })
 const appLandingHeaderUserName = computed(() => auth.user.value?.displayName ?? '')
 const appLandingHeaderUserAvatar = computed(() => auth.user.value?.avatar ?? '')
+const appLandingProfileTo = computed<RouteLocationRaw | undefined>(() =>
+  auth.user.value?.role === 'admin' ? { name: 'admin-users' } : undefined,
+)
 const themeIcon = computed(() => (theme.value === 'dark' ? '☀️' : '🌙'))
 const themeLabel = computed(() => (theme.value === 'dark' ? t('app.themeLight') : t('app.themeDark')))
 const footerYear = new Date().getFullYear()
@@ -249,8 +281,6 @@ onMounted(() => {
   setTheme(theme.value)
   void auth.ensureAuthLoaded()
 })
-
-const isMafiaRoute = computed(() => route.name === 'mafia')
 
 /** URL source of truth for OBS / stream layout (`?mode=view`). */
 const isMafiaViewMode = computed(() => mafiaViewQueryIsView(route.query.mode))
@@ -402,18 +432,49 @@ async function copyMafiaObsViewUrl(): Promise<void> {
       </AppHeader>
 
       <AppLandingHeader
-        v-else-if="showChrome && isNadleAppHeaderRoute"
+        v-else-if="showChrome && isNewAppHeaderRoute"
         :auth-loading="!auth.loaded.value"
         :brand-name="appLandingHeaderBrand"
         :coin-balance-label="appLandingHeaderCoinBalanceLabel"
         :coin-hub-to="appLandingCoinHubRoute"
+        :help-label="t('onboarding.openGuide')"
         :is-authenticated="auth.isAuthenticated.value"
         :logo-src="BRAND_LOGO_LIGHT_SVG"
+        :profile-to="appLandingProfileTo"
+        :show-help-button="isEatRoute && Boolean(onboardingForRoute)"
+        :title="headerTitle"
         :user-avatar="appLandingHeaderUserAvatar"
         :user-name="appLandingHeaderUserName"
+        @open-help="openOnboardingForCurrentRoute"
         @login="openAppLandingAuth('login')"
         @signup="openAppLandingAuth('login')"
-      />
+      >
+        <template v-if="isCallRoute || isMafiaRoute" #center>
+          <div :id="CALL_ROOM_DROPDOWN_HOST_ID" class="app-shell-call-room-anchor">
+            <button
+              type="button"
+              class="app-shell-call-join-room"
+              :aria-expanded="callRoomHeaderJoin.roomPopoverOpen"
+              aria-haspopup="dialog"
+              :aria-controls="CALL_ROOM_POPOVER_PANEL_ID"
+              @click.stop="callRoomHeaderJoin.toggleRoomPopover()"
+            >
+              {{ t('callPage.headerJoinRoom') }}
+            </button>
+          </div>
+          <button
+            v-if="isMafiaRoute && mafiaHeaderHasRoom"
+            type="button"
+            class="stream-nav__link stream-nav__link--btn"
+            :class="{ 'stream-nav__link--active': isMafiaViewMode }"
+            :title="mafiaHeaderObsCopyLabel"
+            :aria-label="mafiaHeaderObsCopyLabel"
+            @click="copyMafiaObsViewUrl"
+          >
+            {{ mafiaHeaderObsCopyLabel }}
+          </button>
+        </template>
+      </AppLandingHeader>
 
       <main class="app-shell-main" :class="{ 'app-shell-main--full': !showChrome }">
         <div
@@ -434,7 +495,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
       </main>
 
       <AppLandingFooter
-        v-if="showChrome && isNadleAppHeaderRoute"
+        v-if="showChrome && isNewAppFooterRoute"
         :brand-name="appLandingFooterBrand"
         :feedback-href="appLandingFeedbackHref"
         :locale="locale"

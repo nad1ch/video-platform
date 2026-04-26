@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 type LocaleOption = {
   value: string
@@ -27,11 +28,12 @@ const emit = defineEmits<{
   'update:locale': [value: string]
 }>()
 
+const { t } = useI18n()
 const showFeedback = computed(() => props.mode === 'both' || props.mode === 'feedback')
 const showLocale = computed(() => props.mode === 'both' || props.mode === 'locale')
 
 const activeLocaleLabel = computed(
-  () => props.localeOptions.find((option) => option.value === props.locale)?.label ?? props.localeOptions[0]?.label ?? 'English',
+  () => props.localeOptions.find((option) => option.value === props.locale)?.label ?? props.localeOptions[0]?.label ?? t('app.localeEnglish'),
 )
 
 const localeDetailsRef = ref<HTMLDetailsElement | null>(null)
@@ -81,11 +83,11 @@ onUnmounted(() => {
     ]"
   >
     <a v-if="showFeedback" class="app-landing-footer-actions__feedback sa-glass-button" :href="feedbackHref">
-      Feedback
+      {{ t('app.feedback') }}
     </a>
 
     <details v-if="showLocale" ref="localeDetailsRef" class="app-landing-footer-actions__locale">
-      <summary class="app-landing-footer-actions__locale-trigger sa-glass-button" aria-label="Choose language">
+      <summary class="app-landing-footer-actions__locale-trigger sa-glass-button" :aria-label="t('app.chooseLanguage')">
         <span>{{ activeLocaleLabel }}</span>
       </summary>
       <div class="app-landing-footer-actions__locale-list">
@@ -186,18 +188,6 @@ onUnmounted(() => {
   display: none;
 }
 
-.app-landing-footer-actions__locale-trigger::after {
-  position: absolute;
-  right: 1rem;
-  top: 50%;
-  width: 0.42rem;
-  height: 0.42rem;
-  border-right: 1px solid var(--app-landing-footer-chevron-color, rgba(255, 255, 255, 0.78));
-  border-bottom: 1px solid var(--app-landing-footer-chevron-color, rgba(255, 255, 255, 0.78));
-  content: '';
-  transform: translateY(-66%) rotate(45deg);
-}
-
 .app-landing-footer-actions__locale-list {
   position: absolute;
   left: 0;
@@ -271,31 +261,30 @@ onUnmounted(() => {
 }
 
 .app-landing-footer-actions--light {
-  --app-landing-footer-action-border: rgba(255, 255, 255, 0.72);
-  --app-landing-footer-locale-border: rgba(255, 255, 255, 0.72);
+  --app-landing-footer-action-border: rgba(255, 255, 255, 0.18);
+  --app-landing-footer-locale-border: rgba(255, 255, 255, 0.18);
   --app-landing-footer-locale-list-border: rgba(255, 255, 255, 0.54);
-  --app-landing-footer-action-shine: rgba(255, 255, 255, 0.62);
-  --app-landing-footer-list-shine: rgba(255, 255, 255, 0.42);
-  --app-landing-footer-feedback-bg: rgba(255, 255, 255, 0.92);
-  --app-landing-footer-locale-bg: rgba(255, 255, 255, 0.92);
-  --app-landing-footer-locale-list-bg: rgba(255, 255, 255, 0.94);
-  --app-landing-footer-feedback-hover-bg: #fff;
-  --app-landing-footer-action-color: #1f1432;
-  --app-landing-footer-locale-option-color: #1f1432;
-  --app-landing-footer-chevron-color: rgba(31, 20, 50, 0.62);
-  --app-landing-footer-action-inset-shadow: rgba(255, 255, 255, 0.5);
-  --app-landing-footer-action-drop-shadow: rgba(10, 3, 24, 0.16);
+  --app-landing-footer-action-shine: rgba(255, 255, 255, 0.16);
+  --app-landing-footer-list-shine: rgba(255, 255, 255, 0.16);
+  --app-landing-footer-feedback-bg: rgba(72, 42, 98, 0.82);
+  --app-landing-footer-locale-bg: rgba(72, 42, 98, 0.82);
+  --app-landing-footer-locale-list-bg: rgba(48, 27, 72, 0.94);
+  --app-landing-footer-feedback-hover-bg: rgba(91, 51, 125, 0.9);
+  --app-landing-footer-action-color: #fff;
+  --app-landing-footer-locale-option-color: #fff;
+  --app-landing-footer-action-inset-shadow: rgba(255, 255, 255, 0.18);
+  --app-landing-footer-action-drop-shadow: rgba(10, 3, 24, 0.28);
 }
 
 .app-landing-footer-actions--light .app-landing-footer-actions__locale-trigger:hover,
 .app-landing-footer-actions--light .app-landing-footer-actions__locale[open] .app-landing-footer-actions__locale-trigger {
-  background: #fff;
+  background: rgba(91, 51, 125, 0.9);
 }
 
 .app-landing-footer-actions--light .app-landing-footer-actions__locale-option:hover,
 .app-landing-footer-actions--light .app-landing-footer-actions__locale-option:focus-visible {
-  background: rgba(255, 255, 255, 0.72);
-  color: #1a1a1a;
+  background: rgba(124, 77, 219, 0.42);
+  color: #fff;
 }
 
 .app-landing-footer-actions__feedback:focus-visible,

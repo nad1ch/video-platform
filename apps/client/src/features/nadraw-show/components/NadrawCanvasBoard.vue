@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { NadrawDrawToolMeta, RemoteDrawPayload } from '../orchestrator/useNadrawShowOrchestrator'
 import NadrawToolbar from './NadrawToolbar.vue'
 import { floodFillImageData, hexToRgb } from './nadrawCanvasOps'
@@ -12,6 +13,8 @@ const props = defineProps<{
   /** Streamer drawing phases: show tool controls overlay. */
   showToolbar?: boolean
 }>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   drawStart: [strokeId: string, nx: number, ny: number, meta: NadrawDrawToolMeta]
@@ -625,7 +628,7 @@ watch(
       ref="canvasRef"
       class="z-0 min-h-0 w-full flex-1 touch-none"
       :class="showToolbar && canDraw ? 'mt-0.5 sm:mt-1' : $slots.hud ? 'mt-0.5' : ''"
-      aria-label="Drawing board"
+      :aria-label="t('nadrawShow.canvasTitle')"
       @pointerdown.prevent="onPointerDown"
       @pointermove.prevent="onPointerMove"
       @pointerup.prevent="onPointerUp"

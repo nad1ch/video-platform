@@ -172,7 +172,7 @@ watch(
 </script>
 
 <template>
-  <aside class="vvg" aria-label="Voice / video">
+  <aside class="vvg" :aria-label="t('overlayPage.voiceMedia.sectionAria')">
     <div class="vvg__head">
       <span
         class="vvg__status"

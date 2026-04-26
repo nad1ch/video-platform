@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 /**
  * Full-screen loader (Teleport → body). Uses global `--sa-*` tokens so it works outside `.eat-first-root`.
  */
@@ -19,6 +21,8 @@ withDefaults(
     teleport: true,
   },
 )
+
+const { t } = useI18n()
 </script>
 
 <template>
@@ -35,7 +39,7 @@ withDefaults(
           'app-full-page-loader--docked': !teleport,
         }"
         role="status"
-        :aria-label="label || ariaLabel || 'Loading'"
+        :aria-label="label || ariaLabel || t('loader.ariaLoading')"
       >
         <div class="app-full-page-loader__rings" aria-hidden="true">
           <span class="app-full-page-loader__ring" />

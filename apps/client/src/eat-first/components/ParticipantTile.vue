@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch, onUnmounted, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   /** Відео/аудіо з MediaStream (mediasoup / call-core). */
@@ -27,6 +28,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:volume'])
+const { t } = useI18n()
 
 const videoRef = ref(null)
 const audioRef = ref(null)
@@ -173,10 +175,10 @@ const avatarSrc = computed(() => (showAvatarImage.value ? props.avatarUrl.trim()
     </template>
     <div class="ptile__meta">
       <span class="ptile__name">{{ label }}</span>
-      <span v-if="isMuted" class="ptile__muted" title="Muted" aria-label="Muted">🔇</span>
+      <span v-if="isMuted" class="ptile__muted" :title="t('app.mediaMuted')" :aria-label="t('app.mediaMuted')">🔇</span>
     </div>
     <label v-if="!isLocal" class="ptile__vol">
-      <span class="sr-only">Volume</span>
+      <span class="sr-only">{{ t('app.mediaVolume') }}</span>
       <input
         type="range"
         min="0"

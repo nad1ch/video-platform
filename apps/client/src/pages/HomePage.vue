@@ -61,69 +61,71 @@ const nadrawRoute = computed<RouteLocationRaw>(() => ({
 const gameCards = computed<AppGameCard[]>(() => [
   {
     id: 'eat-first',
-    title: 'Who should eat first',
+    title: t('home.gameEatFirst'),
     to: eatRoute,
     image: eatFirstImage,
-    ariaLabel: 'Open Eat First',
+    ariaLabel: t('home.openEatFirst'),
     tone: 'amber',
   },
   {
     id: 'mafia',
-    title: 'Mafia',
+    title: t('home.gameMafia'),
     to: mafiaRoute,
     image: mafiaImage,
-    ariaLabel: 'Open Mafia',
+    ariaLabel: t('home.openMafia'),
     tone: 'slate',
   },
   {
     id: 'nadle',
-    title: 'Nadle',
+    title: t('home.gameNadle'),
     to: nadleRoute.value,
     image: nadleImage,
-    ariaLabel: 'Open Nadle',
+    ariaLabel: t('home.openNadle'),
     tone: 'green',
   },
   {
     id: 'nadraw',
-    title: 'Gartic phone',
+    title: t('home.gameNadraw'),
     to: nadrawRoute.value,
     image: nadrawImage,
-    ariaLabel: 'Open Nadraw',
+    ariaLabel: t('home.openNadraw'),
     tone: 'violet',
   },
   {
     id: 'spy',
-    title: 'Spy',
+    title: t('home.gameSpy'),
     to: mafiaRoute,
     image: spyImage,
-    ariaLabel: 'Open Spy party roles',
+    ariaLabel: t('home.openSpy'),
     tone: 'slate',
   },
   {
     id: 'hot-seat',
-    title: 'Who takes the mic',
+    title: t('home.gameMic'),
     to: eatRoute,
     image: eatFirstImage,
-    ariaLabel: 'Open Hot Seat',
+    ariaLabel: t('home.openHotSeat'),
     tone: 'amber',
   },
 ])
 
 const localeLabelByCode: Record<string, string> = {
   en: 'English',
-  de: 'Germany',
-  uk: 'Ukrainian',
-  pl: 'Polish',
+  de: 'Deutsch',
+  uk: 'Українська',
+  pl: 'Polski',
 }
 
 const localeMenuOrder = ['en', 'de', 'uk', 'pl']
-const localeMenuOptions = localeMenuOrder
-  .map((code) => LOCALE_OPTIONS.find((o) => o.code === code))
-  .filter((o): o is (typeof LOCALE_OPTIONS)[number] => Boolean(o))
-  .map((o) => ({
-    value: o.code,
-    label: localeLabelByCode[o.code] ?? o.label,
-  }))
+const localeMenuOptions = computed(() =>
+  localeMenuOrder
+    .map((code) => LOCALE_OPTIONS.find((o) => o.code === code))
+    .filter((o): o is (typeof LOCALE_OPTIONS)[number] => Boolean(o))
+    .map((o) => ({
+      value: o.code,
+      label: localeLabelByCode[o.code] ?? o.label,
+    })),
+)
 const needLoginBanner = computed(() => route.query.needLogin === '1')
 const authRedirectTarget = computed(() => {
   const r = route.query.authRedirect
@@ -133,6 +135,9 @@ const authRedirectTarget = computed(() => {
 const authLoading = computed(() => !auth.loaded.value)
 const userName = computed(() => auth.user.value?.displayName ?? '')
 const userAvatar = computed(() => auth.user.value?.avatar ?? '')
+const profileTo = computed<RouteLocationRaw | undefined>(() =>
+  auth.user.value?.role === 'admin' ? { name: 'admin-users' } : undefined,
+)
 const footerYear = new Date().getFullYear()
 
 const coinHub = useCoinHubStore()
@@ -206,6 +211,7 @@ watch(
         :coin-hub-to="coinHubRoute"
         :is-authenticated="auth.isAuthenticated.value"
         :logo-src="BRAND_LOGO_LIGHT_SVG"
+        :profile-to="profileTo"
         :user-avatar="userAvatar"
         :user-name="userName"
         @login="openAuth('login')"
@@ -219,7 +225,7 @@ watch(
 
         <div class="app-home__grid">
           <div class="app-home__feature-stack">
-            <AppVideoCallSection :to="callRoute" auth-hint="Open video call" />
+            <AppVideoCallSection :to="callRoute" :auth-hint="t('home.openVideoCall')" />
             <AppEconomySection :to="coinHubRoute" />
           </div>
 

@@ -220,22 +220,48 @@ const emit = defineEmits<{
   font-size: 16px;
   font-weight: 700;
   text-transform: none;
+  border-color: color-mix(in srgb, var(--sa-color-border) 82%, rgba(255, 255, 255, 0.16));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 48%),
+    color-mix(in srgb, var(--sa-color-surface-raised) 82%, transparent);
+  color: var(--sa-color-text-main);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 0 rgba(0, 0, 0, 0.18);
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    color 0.16s ease;
+}
+
+.nadle-page__kbd :deep(.nadle-page__kbd-key:hover:not(:disabled)) {
+  border-color: color-mix(in srgb, var(--sa-color-primary-border) 72%, var(--sa-color-border));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 48%),
+    color-mix(in srgb, var(--sa-color-primary) 12%, var(--sa-color-surface-raised));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 2px 0 rgba(0, 0, 0, 0.16),
+    0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 24%, transparent);
 }
 
 .nadle-page__kbd :deep(.nadle-page__kbd-key--absent) {
-  opacity: 0.38;
-  color: var(--sa-color-text-muted);
+  opacity: 0.52;
+  border-color: color-mix(in srgb, var(--sa-color-border) 58%, transparent);
+  background: color-mix(in srgb, var(--sa-color-surface) 78%, transparent);
+  color: color-mix(in srgb, var(--sa-color-text-muted) 86%, var(--sa-color-text-main));
 }
 
 .nadle-page__kbd :deep(.nadle-page__kbd-key--present) {
-  border-color: color-mix(in srgb, var(--sa-color-warning) 55%, var(--sa-color-border));
-  background: color-mix(in srgb, var(--sa-color-warning) 18%, var(--sa-color-surface-raised));
+  border-color: color-mix(in srgb, var(--sa-color-warning) 68%, var(--sa-color-border));
+  background: color-mix(in srgb, var(--sa-color-warning) 24%, var(--sa-color-surface-raised));
   color: var(--sa-color-text-main);
 }
 
 .nadle-page__kbd :deep(.nadle-page__kbd-key--correct) {
-  border-color: color-mix(in srgb, var(--sa-color-success) 55%, var(--sa-color-border));
-  background: color-mix(in srgb, var(--sa-color-success) 22%, var(--sa-color-surface-raised));
+  border-color: color-mix(in srgb, var(--sa-color-success) 68%, var(--sa-color-border));
+  background: color-mix(in srgb, var(--sa-color-success) 28%, var(--sa-color-surface-raised));
   color: var(--sa-color-text-strong);
 }
 
@@ -275,6 +301,13 @@ const emit = defineEmits<{
   text-transform: uppercase;
   letter-spacing: 0.04em;
   line-height: 1.1;
+  border-color: color-mix(in srgb, var(--sa-color-primary-border) 48%, var(--sa-color-border));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 48%),
+    color-mix(in srgb, var(--sa-color-primary) 10%, var(--sa-color-surface-raised));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 0 rgba(0, 0, 0, 0.18);
 }
 
 @media (min-width: 1201px) {

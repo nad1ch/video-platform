@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { RouterLink, type RouteLocationRaw } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 defineProps<{
   to: RouteLocationRaw
   authHint: string
 }>()
+
+const { t } = useI18n()
 
 const previewTiles = [
   { id: 'host', color: 'violet' },
@@ -16,7 +19,7 @@ const previewTiles = [
 
 <template>
   <section class="app-call app-call__panel" aria-labelledby="app-call-title">
-    <h2 id="app-call-title" class="app-call__title">Videocall</h2>
+    <h2 id="app-call-title" class="app-call__title">{{ t('home.sectionVideoCall') }}</h2>
 
     <RouterLink class="app-call__screen" :to="to" :aria-label="authHint">
       <div class="app-call__tile-grid" aria-hidden="true">

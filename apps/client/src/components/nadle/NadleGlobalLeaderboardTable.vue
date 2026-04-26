@@ -137,12 +137,18 @@ defineProps<{
   overflow-x: clip;
 }
 
+.nadle-page__global-lb :deep(.nadle-page__glb-scroll) {
+  border-radius: var(--sa-radius-sm);
+  background: color-mix(in srgb, var(--sa-color-surface) 22%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
 .nadle-page__glb-title {
   margin: 0 0 var(--sa-space-4);
   text-align: center;
   font-size: clamp(1.02rem, 3.4vw, 1.28rem);
   font-weight: 800;
-  color: var(--sa-color-text-muted);
+  color: color-mix(in srgb, var(--sa-color-text-main) 82%, var(--sa-color-text-muted));
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -159,8 +165,8 @@ defineProps<{
   width: 100%;
   min-width: 0;
   text-align: center;
-  border: 1px solid var(--sa-color-border);
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sa-color-border) 82%, rgba(255, 255, 255, 0.12));
+  background: color-mix(in srgb, var(--sa-color-surface-raised) 78%, transparent);
   color: var(--sa-color-text-main);
   font: inherit;
   font-weight: 600;
@@ -175,13 +181,16 @@ defineProps<{
 }
 
 .nadle-page__glb-tab:hover {
-  border-color: var(--sa-color-primary-border);
+  border-color: color-mix(in srgb, var(--sa-color-primary-border) 72%, var(--sa-color-border));
+  background: color-mix(in srgb, var(--sa-color-primary) 10%, var(--sa-color-surface-raised));
 }
 
 .nadle-page__glb-tab--active {
-  background: color-mix(in srgb, var(--sa-color-primary) 22%, var(--sa-color-surface-raised));
-  border-color: var(--sa-color-primary-border);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--sa-color-primary) 30%, var(--sa-color-surface-raised));
+  border-color: color-mix(in srgb, var(--sa-color-primary-border) 82%, var(--sa-color-border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 40%, transparent),
+    0 0 18px color-mix(in srgb, var(--sa-color-primary) 12%, transparent);
 }
 
 .nadle-page__glb-self-streak {
@@ -292,8 +301,8 @@ defineProps<{
 .nadle-page__glb-th {
   text-align: left;
   padding: 0.32rem 0.3rem;
-  border-bottom: 1px solid var(--sa-color-border);
-  color: var(--sa-color-text-muted);
+  border-bottom: 1px solid color-mix(in srgb, var(--sa-color-border) 88%, rgba(255, 255, 255, 0.12));
+  color: color-mix(in srgb, var(--sa-color-text-muted) 74%, var(--sa-color-text-main));
   font-weight: 700;
   font-size: 0.58rem;
   text-transform: uppercase;
@@ -325,8 +334,12 @@ defineProps<{
 
 .nadle-page__glb-td {
   padding: 0.35rem 0.35rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--sa-color-border) 85%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--sa-color-border) 78%, transparent);
   vertical-align: middle;
+}
+
+.nadle-page__glb-tr:hover .nadle-page__glb-td {
+  background: color-mix(in srgb, var(--sa-color-primary) 7%, transparent);
 }
 
 .nadle-page__glb-td--rank {
@@ -348,7 +361,10 @@ defineProps<{
 }
 
 .nadle-page__glb-tr--self .nadle-page__glb-td {
-  background: color-mix(in srgb, var(--sa-color-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--sa-color-primary) 16%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--sa-color-primary) 18%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--sa-color-primary) 8%, transparent);
 }
 
 .nadle-page__glb-tr--self .nadle-page__glb-td:first-child {
@@ -404,7 +420,7 @@ defineProps<{
   border-radius: 999px;
   background: color-mix(in srgb, var(--sa-color-primary) 35%, transparent);
   color: var(--sa-color-text-strong);
-  border: 1px solid var(--sa-color-primary-border);
+  border: 1px solid color-mix(in srgb, var(--sa-color-primary-border) 78%, var(--sa-color-border));
 }
 
 @media (max-width: 1200px) {

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink, type RouteLocationRaw } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import coinIcon from '@/assets/landing/coin-streamassist.png'
 
 const props = withDefaults(
   defineProps<{
     brandName: string
+    title?: string
     logoSrc: string
     coinHubTo: RouteLocationRaw
     /** Formatted balance (Coin Hub); placeholder when guest. */
@@ -14,40 +16,71 @@ const props = withDefaults(
     isAuthenticated?: boolean
     userName?: string
     userAvatar?: string
+    profileTo?: RouteLocationRaw
+    showHelpButton?: boolean
+    helpLabel?: string
   }>(),
   {
+    title: '',
     authLoading: false,
     isAuthenticated: false,
     userName: '',
     userAvatar: '',
+    profileTo: undefined,
+    showHelpButton: false,
+    helpLabel: '',
   },
 )
 
 defineEmits<{
   login: []
+  openHelp: []
 }>()
 
 const hasUserAvatar = computed(() => props.userAvatar.trim().length > 0)
+const { t } = useI18n()
 const userInitial = computed(() => {
   const s = props.userName.trim()
   return (s[0] ?? 'S').toUpperCase()
 })
 const displayName = computed(() => props.userName.trim())
+const displayTitle = computed(() => props.title.trim() || props.brandName)
+const resolvedHelpLabel = computed(() => props.helpLabel.trim() || t('onboarding.openGuide'))
+const profileMenuLabel = computed(() =>
+  displayName.value ? t('app.openProfileMenuFor', { name: displayName.value }) : t('app.openProfileMenu'),
+)
+const profileActionLabel = computed(() => (props.profileTo ? t('app.openAdminPanel') : profileMenuLabel.value))
 </script>
 
 <template>
-  <header class="app-landing-header" aria-label="StreamAssist">
+  <header class="app-landing-header" :aria-label="t('app.headerAria')">
     <div class="app-landing-header__bar">
       <RouterLink class="app-landing-header__brand" :to="{ name: 'home' }" :aria-label="brandName">
         <img class="app-landing-header__logo" :src="logoSrc" alt="" width="42" height="42" />
       </RouterLink>
 
-      <RouterLink class="app-landing-header__title" :to="{ name: 'home' }">
-        {{ brandName }}
-      </RouterLink>
+      <div class="app-landing-header__center">
+        <RouterLink class="app-landing-header__title" :to="{ name: 'home' }">
+          {{ displayTitle }}
+        </RouterLink>
+        <span v-if="$slots.center" class="app-landing-header__center-extra">
+          <slot name="center" />
+        </span>
+      </div>
 
       <div class="app-landing-header__actions">
-        <RouterLink class="app-landing-header__coin" :to="coinHubTo" aria-label="Open Coin Hub">
+        <button
+          v-if="showHelpButton"
+          type="button"
+          class="app-landing-header__help"
+          :title="resolvedHelpLabel"
+          :aria-label="resolvedHelpLabel"
+          @click="$emit('openHelp')"
+        >
+          ?
+        </button>
+
+        <RouterLink class="app-landing-header__coin" :to="coinHubTo" :aria-label="t('app.openCoinHub')">
           <span class="app-landing-header__coin-label">{{ coinBalanceLabel }}</span>
           <span class="app-landing-header__coin-icon" aria-hidden="true">
             <img class="app-landing-header__coin-img" :src="coinIcon" alt="" width="44" height="44" />
@@ -55,12 +88,13 @@ const displayName = computed(() => props.userName.trim())
         </RouterLink>
 
         <div class="app-landing-header__auth sa-glass-button" :aria-busy="authLoading">
-          <span v-if="authLoading" class="app-landing-header__auth-loading">Loading</span>
-          <button
+          <span v-if="authLoading" class="app-landing-header__auth-loading">{{ t('app.loading') }}</span>
+          <component
+            :is="profileTo ? RouterLink : 'button'"
             v-else-if="isAuthenticated"
-            type="button"
+            v-bind="profileTo ? { to: profileTo } : { type: 'button' }"
             class="app-landing-header__user"
-            :aria-label="displayName ? `Open profile menu for ${displayName}` : 'Open profile menu'"
+            :aria-label="profileActionLabel"
             :title="displayName || undefined"
           >
             <span class="app-landing-header__avatar" aria-hidden="true">
@@ -75,10 +109,10 @@ const displayName = computed(() => props.userName.trim())
               <span v-else>{{ userInitial }}</span>
             </span>
             <span class="app-landing-header__user-name">{{ displayName || userInitial }}</span>
-          </button>
+          </component>
           <span v-else class="app-landing-header__auth-buttons">
             <button type="button" class="app-landing-header__auth-link" @click="$emit('login')">
-              Log In
+              {{ t('app.logIn') }}
             </button>
           </span>
         </div>
@@ -91,7 +125,7 @@ const displayName = computed(() => props.userName.trim())
 .app-landing-header {
   position: relative;
   z-index: 3;
-  padding: 0.9rem clamp(1.35rem, 1.6vw, 1.55rem) 0;
+  padding: 0.6rem clamp(1.35rem, 1.6vw, 1.55rem) 0;
 }
 
 .app-landing-header__bar {
@@ -100,7 +134,7 @@ const displayName = computed(() => props.userName.trim())
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 1rem;
-  min-height: 5rem;
+  min-height: 4.5rem;
   overflow: visible;
   padding: 0 1.6rem;
   border: 1px solid rgba(255, 255, 255, 0.11);
@@ -139,13 +173,24 @@ const displayName = computed(() => props.userName.trim())
   object-fit: contain;
 }
 
-.app-landing-header__title {
+.app-landing-header__center {
   position: absolute;
   left: 50%;
   top: 50%;
   z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
   justify-self: center;
   min-width: 0;
+  max-width: min(42rem, calc(100vw - 25rem));
+  transform: translate(-50%, -50%);
+}
+
+.app-landing-header__title {
+  min-width: 0;
+  overflow: hidden;
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: 2rem;
@@ -154,9 +199,16 @@ const displayName = computed(() => props.userName.trim())
   line-height: 1.05;
   text-align: center;
   text-transform: uppercase;
-  transform: translate(-50%, -50%);
   text-shadow: 0 5px 16px rgba(0, 0, 0, 0.24);
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.app-landing-header__center-extra {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .app-landing-header__actions {
@@ -166,6 +218,40 @@ const displayName = computed(() => props.userName.trim())
   gap: 0.65rem;
   min-width: 0;
   margin-right: 0.15rem;
+}
+
+.app-landing-header__help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 46%),
+    rgba(72, 42, 98, 0.82);
+  color: rgba(255, 255, 255, 0.86);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 12px 28px rgba(10, 3, 24, 0.24);
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  cursor: pointer;
+  font-family: var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.app-landing-header__help:hover,
+.app-landing-header__help:focus-visible {
+  background: rgba(91, 51, 125, 0.9);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.24);
 }
 
 .app-landing-header__coin {
@@ -267,6 +353,7 @@ const displayName = computed(() => props.userName.trim())
 }
 
 .app-landing-header__auth-link:focus-visible,
+.app-landing-header__help:focus-visible,
 .app-landing-header__user:focus-visible,
 .app-landing-header__coin:focus-visible,
 .app-landing-header__brand:focus-visible,
@@ -292,6 +379,7 @@ const displayName = computed(() => props.userName.trim())
   cursor: pointer;
   font: inherit;
   gap: 0.5rem;
+  text-decoration: none;
 }
 
 .app-landing-header__avatar {
@@ -338,12 +426,12 @@ const displayName = computed(() => props.userName.trim())
 
 @media (max-width: 1200px) {
   .app-landing-header {
-    padding: 0.75rem clamp(0.8rem, 2vw, 1.25rem) 0;
+    padding: 0.45rem clamp(0.8rem, 2vw, 1.25rem) 0;
   }
 
   .app-landing-header__bar {
     gap: 0.85rem;
-    min-height: 4.9rem;
+    min-height: 4.4rem;
     padding: 0 1rem;
   }
 
@@ -393,11 +481,15 @@ const displayName = computed(() => props.userName.trim())
     border-radius: 1.65rem;
   }
 
-  .app-landing-header__title {
+  .app-landing-header__center {
     position: static;
     justify-self: start;
-    font-size: 1.35rem;
+    max-width: 100%;
     transform: none;
+  }
+
+  .app-landing-header__title {
+    font-size: 1.35rem;
   }
 }
 

@@ -22,7 +22,53 @@
     "featureOverlayTitle": "Overlay für OBS",
     "featureOverlayBody": "Eine browserfreundliche Ebene für Shows mit On-Screen-Spielstand und Branding.",
     "closingTitle": "Wenn du soweit bist",
-    "closingLead": "Spring in die App oder wähle unten einen Modus."
+    "closingLead": "Spring in die App oder wähle unten einen Modus.",
+    "loadingAria": "Landingpage wird geladen",
+    "navVideoCall": "Videoanruf",
+    "navGames": "Spiele",
+    "navEconomy": "Economy",
+    "navSafety": "Sicherheit",
+    "navSupport": "Support",
+    "navDevelopers": "Entwickler",
+    "login": "Einloggen",
+    "newHeroTagline": "WO CHAT ZUM SPIEL WIRD",
+    "newHeroLead": "Dein Stream ist nicht nur etwas zum Zuschauen — er ist etwas zum Mitmachen. Verwandle jeden Moment in ein gemeinsames Erlebnis mit Live-Chat, Spielen und Videoanrufen. Interagiere, spiele und verbinde dich mit deiner Community wie nie zuvor — alles an einem Ort, ganz unkompliziert.",
+    "videoCallTitle": "VIDEOANRUF",
+    "videoCallLead": "Erstelle private Videoräume für Spiele, Challenges und interaktive Sessions.",
+    "videoCallCta": "Show starten",
+    "gamesTitle": "SPIELE",
+    "gamesLead": "Spiele mit Freundinnen und Freunden, fordere andere heraus oder bringe die Action live zu deinem Publikum.",
+    "gameEatFirst": "Wen wir\nzuerst\nessen",
+    "gameMafia": "Mafia",
+    "gameSpy": "Spion",
+    "gameNadle": "Nadle",
+    "gameNadraw": "Nadraw",
+    "gameMic": "Wer nimmt\ndas Mikro",
+    "economyTitle": "ECONOMY",
+    "economyLead": "Erstelle deine eigene Stream-Economy mit Punkten, Boni und interaktiven Mechaniken, die dein Publikum zurückbringen.",
+    "seoVideoCalls": "Videoanrufe für Streamer",
+    "seoNadle": "Nadle-Chatspiel",
+    "seoOverlay": "Stream-Overlay-Tools",
+    "footerProductTitle": "Produkt",
+    "footerNitro": "Nitro",
+    "footerStatus": "Status",
+    "footerPolicies": "Richtlinien",
+    "footerTerms": "Bedingungen",
+    "footerPrivacy": "Datenschutz",
+    "footerCookieSettings": "Cookie-Einstellungen",
+    "footerAboutTitle": "Über uns",
+    "footerJobs": "Jobs",
+    "footerBrand": "Brand",
+    "footerNewsroom": "Newsroom",
+    "footerDevelopers": "Entwickler",
+    "economyCta": "Verdienen starten",
+    "economyJackpot": "JACKPOT",
+    "siteHeaderAria": "Seitenkopf",
+    "primaryNavAria": "Hauptnavigation",
+    "accountAria": "Konto",
+    "heroAria": "Hero-Bereich",
+    "siteFooterAria": "Seitenfuß",
+    "guidesAria": "Guides"
   },
   "home": {
     "tagline": "Interaktive Tools für Streams",
@@ -33,7 +79,24 @@
     "nadleTitle": "Nadle",
     "nadleDesc": "Mit Twitch-Chat spielen",
     "eatTitle": "Eat First",
-    "eatDesc": "Abstimmungsspiel für Streams (Overlay)"
+    "eatDesc": "Abstimmungsspiel für Streams (Overlay)",
+    "gameEatFirst": "Wen essen wir zuerst",
+    "gameMafia": "Mafia",
+    "gameNadle": "Nadle",
+    "gameNadraw": "Nadle",
+    "gameSpy": "Spion",
+    "gameMic": "Wer nimmt das Mikro",
+    "openEatFirst": "Eat First öffnen",
+    "openMafia": "Mafia öffnen",
+    "openNadle": "Nadle öffnen",
+    "openNadraw": "Nadraw öffnen",
+    "openSpy": "Spy-Rollen öffnen",
+    "openHotSeat": "Hot Seat öffnen",
+    "openVideoCall": "Videoanruf öffnen",
+    "sectionVideoCall": "Videoanruf",
+    "sectionEconomy": "Economy",
+    "sectionGames": "Spiele",
+    "emptyGames": "Noch keine Spiele verfügbar."
   },
   "routes": {
     "call": "Videoanruf",
@@ -133,31 +196,73 @@
     "premiumCardChatLinePlus": "🟣 nad1ch",
     "premiumCardChatLinePro": "👑 nad1ch",
     "premiumPlanBasicFeatures": [
-      { "text": "Täglicher Spin" },
-      { "text": "Standard-Münzen" }
+      {
+        "text": "Täglicher Spin"
+      },
+      {
+        "text": "Standard-Münzen"
+      }
     ],
     "premiumPlanPlusFeatures": [
-      { "text": "+50 % Münzen" },
-      { "text": "Monatlich: +100 Münzen" },
-      { "text": "Prioritäts-Warteschlange" },
-      { "text": "Seltene Drops" },
-      { "text": "Lila Nickname" },
-      { "text": "Chat-Abzeichen" },
-      { "text": "Tagesbonus" },
-      { "text": "Schnellere Kisten" }
+      {
+        "text": "+50 % Münzen"
+      },
+      {
+        "text": "Monatlich: +100 Münzen"
+      },
+      {
+        "text": "Prioritäts-Warteschlange"
+      },
+      {
+        "text": "Seltene Drops"
+      },
+      {
+        "text": "Lila Nickname"
+      },
+      {
+        "text": "Chat-Abzeichen"
+      },
+      {
+        "text": "Tagesbonus"
+      },
+      {
+        "text": "Schnellere Kisten"
+      }
     ],
     "premiumPlanProFeatures": [
-      { "text": "+100 % Münzen" },
-      { "text": "Monatlich: +200 Münzen" },
-      { "text": "Exklusive Kisten" },
-      { "text": "Legendäre Drops" },
-      { "text": "Gold-Nickname + Abzeichen" },
-      { "text": "VIP-Chat" },
-      { "text": "Event-Zugang" },
-      { "text": "Leuchteffekt für den Nickname" },
-      { "text": "Profil-Animation" },
-      { "text": "Eigene Reaktionen" },
-      { "text": "Vorteil bei Giveaways" }
+      {
+        "text": "+100 % Münzen"
+      },
+      {
+        "text": "Monatlich: +200 Münzen"
+      },
+      {
+        "text": "Exklusive Kisten"
+      },
+      {
+        "text": "Legendäre Drops"
+      },
+      {
+        "text": "Gold-Nickname + Abzeichen"
+      },
+      {
+        "text": "VIP-Chat"
+      },
+      {
+        "text": "Event-Zugang"
+      },
+      {
+        "text": "Leuchteffekt für den Nickname"
+      },
+      {
+        "text": "Profil-Animation"
+      },
+      {
+        "text": "Eigene Reaktionen"
+      },
+      {
+        "text": "Vorteil bei Giveaways"
+      }
     ],
     "errorAuth": "Zum Synchronisieren des Coin-Hubs anmelden.",
     "errorNetwork": "Verbindungsproblem. Netz prüfen und erneut versuchen.",
@@ -165,7 +270,9 @@
     "retry": "Erneut",
     "refreshing": "Aktualisierung…",
     "spinNextIn": "Nächste Drehung in {t}",
-    "adminDevMode": "Admin mode"
+    "adminDevMode": "Admin mode",
+    "liveBadge": "Live",
+    "caseDefaultTitle": "Case"
   },
   "nadrawShow": {
     "title": "Nadraw",
@@ -348,8 +455,8 @@
     "modeNight": "Nacht",
     "modeSpeaking": "Reihenfolge",
     "modeSwap": "Tauschen",
-    "nightTargetClickHint": "Kachel: Sitz f\u00fcr die aktive Nachtrolle setzen. Nochmals derselbe Sitz: Ziel l\u00f6schen.",
-    "hostTileEliminateTitle": "Als drau\u00dfen markieren",
+    "nightTargetClickHint": "Kachel: Sitz für die aktive Nachtrolle setzen. Nochmals derselbe Sitz: Ziel löschen.",
+    "hostTileEliminateTitle": "Als draußen markieren",
     "hostTileReviveTitle": "Wieder an den Tisch",
     "speakingModeHint": "🎤: Sprechreihenfolge. Kachel → Warteschlange. ×: Warteschlange und Nachtziele an Kacheln leeren.",
     "swapModeHint": "Klick: Spieler wählen, zweiter Klick: Plätze tauschen. Nochmals derselbe: Auswahl aufheben.",
@@ -451,7 +558,17 @@
     "debugOverlay": "Technisches Debug-Panel (Statistik)",
     "debugTitle": "Call-Debug",
     "debugRefresh": "Inbound-Stats aktualisieren",
-    "debugRefreshing": "…"
+    "debugRefreshing": "…",
+    "debugAria": "Call-Debug",
+    "renameLocalHint": "Doppelklicken zum Umbenennen (nur lokal)",
+    "debugPreset": "Preset",
+    "debugExplicit": "explizit",
+    "debugPublishTier": "Publish-Stufe",
+    "debugActiveCamerasWire": "aktive Kameras am Wire",
+    "debugPeersWire": "Peers am Wire",
+    "debugPublishSimulcast": "Publish-Simulcast",
+    "debugActiveSpeaker": "aktiver Sprecher",
+    "debugServerSpeaker": "Server-Sprecher"
   },
   "nadleUi": {
     "eyebrow": "Nadle",
@@ -572,7 +689,24 @@
     "authNeedLogin": "Bitte anmelden, um diese Seite zu öffnen.",
     "authNeedLoginHeaderHint": "Oben rechts auf „Anmelden“ klicken.",
     "authHomeHint": "Twitch oder Google — dieselbe Session (Cookie) wie für nadle (Twitch).",
-    "routeLoadingAria": "Seite wird geladen"
+    "routeLoadingAria": "Seite wird geladen",
+    "footerRights": "{year} Alle Rechte vorbehalten.",
+    "feedback": "Feedback",
+    "chooseLanguage": "Sprache auswählen",
+    "localeEnglish": "Englisch",
+    "localeGerman": "Deutsch",
+    "localeGermany": "Deutsch",
+    "localeUkrainian": "Ukrainisch",
+    "localePolish": "Polnisch",
+    "headerAria": "StreamAssist",
+    "openCoinHub": "Coin-Hub öffnen",
+    "loading": "Lädt",
+    "logIn": "Einloggen",
+    "openProfileMenu": "Profilmenü öffnen",
+    "openProfileMenuFor": "Profilmenü für {name} öffnen",
+    "mediaMuted": "Stummgeschaltet",
+    "mediaVolume": "Lautstärke",
+    "openAdminPanel": "Adminbereich öffnen"
   },
   "onboarding": {
     "openGuide": "Kurzanleitung",
@@ -740,7 +874,8 @@
     "default": "Laden…",
     "control": "Raum und Karte werden geladen…",
     "overlay": "Overlay synchronisieren…",
-    "panelCard": "Karte laden…"
+    "panelCard": "Karte laden…",
+    "ariaLoading": "Lädt"
   },
   "desk": {
     "room": "Raum:",
@@ -1100,7 +1235,8 @@
       "eliminatedNoPublish": "Ausgeschieden — Kamera und Mikro bleiben aus.",
       "enableSound": "Ton aktivieren",
       "enableSoundHint": "Ohne Klick blockiert der Browser Remote-Audio. Button oder zuerst Mikro/Kamera.",
-      "debugSummary": "Medien debug (dev)"
+      "debugSummary": "Medien debug (dev)",
+      "sectionAria": "Sprache und Video"
     }
   },
   "adminPanel": {
@@ -1196,7 +1332,10 @@
     "sessionRole": "Aufgelöste Rolle",
     "sessionRawJson": "Geparstes User-Objekt",
     "sessionNotSignedIn": "(nicht angemeldet)",
-    "commonRetry": "Erneut versuchen"
+    "commonRetry": "Erneut versuchen",
+    "statsReload": "Daten aktualisieren",
+    "statsReloading": "Aktualisieren…",
+    "sectionsAria": "Admin-Bereiche"
   },
   "overlayCard": {
     "eliminated": "OUT",

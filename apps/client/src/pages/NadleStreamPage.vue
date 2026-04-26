@@ -1016,10 +1016,30 @@ onUnmounted(() => {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
+  border-color: color-mix(in srgb, var(--sa-color-border) 82%, rgba(255, 255, 255, 0.12));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--sa-color-bg-card) 94%, rgba(255, 255, 255, 0.02)), color-mix(in srgb, var(--sa-color-bg-card) 88%, transparent));
+  box-shadow:
+    var(--sa-shadow-card),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
 }
 
 .nadle-page__stack--game {
   justify-content: flex-start;
+  border-color: color-mix(in srgb, var(--sa-color-primary-border) 42%, var(--sa-color-border));
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--sa-color-primary) 10%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--sa-color-bg-card) 96%, rgba(255, 255, 255, 0.025)), color-mix(in srgb, var(--sa-color-bg-card) 90%, transparent));
+  box-shadow:
+    var(--sa-shadow-card),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 8%, transparent);
+}
+
+.nadle-page__stack--leader,
+.nadle-page__stack--chat {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--sa-color-bg-card) 91%, rgba(255, 255, 255, 0.015)), color-mix(in srgb, var(--sa-color-bg-card) 84%, transparent));
 }
 
 .nadle-page__grid :deep(.nadle-page__stack--game > p) {

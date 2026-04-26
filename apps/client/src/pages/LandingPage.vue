@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import callBannerCardOne from '@/assets/landing/call-banner/card-1.png'
@@ -10,6 +10,7 @@ import twitchBrowseIllustration from '@/assets/landing/twitch-browse-illustratio
 import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
 import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import AppLandingFooterActions from '@/pages/app/components/AppLandingFooterActions.vue'
+import EconomySlotBanner from '@/pages/app/components/EconomySlotBanner.vue'
 import landingCameraIcon from '@/assets/landing/decor/landing-camera.png'
 import landingMegaphoneIcon from '@/assets/landing/decor/landing-megaphone.png'
 import landingMicrophoneIcon from '@/assets/landing/decor/landing-microphone.png'
@@ -32,7 +33,7 @@ import {
 import { getLandingScrollTopForHash } from '@/utils/landingAnchorScroll'
 import { landingDesignPx as px } from '@/utils/landingDesignPx'
 
-const { locale } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
@@ -67,30 +68,36 @@ type GameCard = {
 
 const authRouteLogin = { path: '/auth', query: { redirect: '/app', mode: 'login' as const } } as const
 const callRoute = { name: 'call' } as const
+const coinHubRoute = { name: 'coin-hub' } as const
 const landingFeedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
 const landingPageLoading = ref(true)
 
 let landingReadyTimer: number | undefined
 
-const navItems = Object.freeze([
-  Object.freeze({ label: 'VideoCall', href: '#videocall' }),
-  Object.freeze({ label: 'Games', href: '#games' }),
-  Object.freeze({ label: 'Economy', href: '#economy' }),
-  Object.freeze({ label: 'Safety', href: '#footer' }),
-  Object.freeze({ label: 'Support', href: '#footer' }),
-  Object.freeze({ label: 'Developers', href: '#footer' }),
-] as readonly NavItem[])
+const navItems = computed(
+  () =>
+    [
+      { label: t('landing.navVideoCall'), href: '#videocall' },
+      { label: t('landing.navGames'), href: '#games' },
+      { label: t('landing.navEconomy'), href: '#economy' },
+      { label: t('landing.navSafety'), href: '#footer' },
+      { label: t('landing.navSupport'), href: '#footer' },
+      { label: t('landing.navDevelopers'), href: '#footer' },
+    ] as readonly NavItem[],
+)
 
 /** Labels match `eat-first` i18n locale codes (`VALID` in i18n/index.js includes pl, not es). */
-const localeButtons = Object.freeze([
-  Object.freeze({ code: 'en', label: 'English' }),
-  Object.freeze({ code: 'de', label: 'German' }),
-  Object.freeze({ code: 'uk', label: 'Ukrainian' }),
-  Object.freeze({ code: 'pl', label: 'Polish' }),
-] as const)
+const localeButtons = computed(() =>
+  [
+    { code: 'en', label: 'English' },
+    { code: 'de', label: 'Deutsch' },
+    { code: 'uk', label: 'Українська' },
+    { code: 'pl', label: 'Polski' },
+  ] as const,
+)
 
-const landingFooterLocaleOptions = Object.freeze(
-  localeButtons.map((item) => Object.freeze({ value: item.code, label: item.label })),
+const landingFooterLocaleOptions = computed(
+  () => localeButtons.value.map((item) => ({ value: item.code, label: item.label })),
 )
 
 const landingCriticalImageSources = Object.freeze([
@@ -156,9 +163,9 @@ const landingDecorIcons = Object.freeze([
   }),
 ] as readonly LandingDecorIcon[])
 
-const games = Object.freeze([
-  Object.freeze({
-    title: 'Who we\nshould\neat first',
+const games = computed<readonly GameCard[]>(() => [
+  {
+    title: t('landing.gameEatFirst'),
     icon: eatFirstIcon,
     to: { name: 'eat', query: { view: 'join' } },
     cardStyle: Object.freeze({
@@ -179,9 +186,9 @@ const games = Object.freeze([
       width: px(95.03),
       height: px(95.03),
     }),
-  } satisfies GameCard),
-  Object.freeze({
-    title: 'Mafia',
+  },
+  {
+    title: t('landing.gameMafia'),
     icon: mafiaIcon,
     to: { name: 'home' },
     cardStyle: Object.freeze({
@@ -202,9 +209,9 @@ const games = Object.freeze([
       width: px(119.31),
       height: px(119.31),
     }),
-  } satisfies GameCard),
-  Object.freeze({
-    title: 'Spy',
+  },
+  {
+    title: t('landing.gameSpy'),
     icon: spyIcon,
     to: { name: 'home' },
     cardStyle: Object.freeze({
@@ -225,9 +232,9 @@ const games = Object.freeze([
       width: px(136.65),
       height: px(136.65),
     }),
-  } satisfies GameCard),
-  Object.freeze({
-    title: 'Nadle',
+  },
+  {
+    title: t('landing.gameNadle'),
     icon: nadleGameIcon,
     to: { name: 'nadle-streamer', params: { streamer: defaultNadleStreamer } },
     cardStyle: Object.freeze({
@@ -248,9 +255,9 @@ const games = Object.freeze([
       width: px(108.21),
       height: px(108.21),
     }),
-  } satisfies GameCard),
-  Object.freeze({
-    title: 'Nadraw',
+  },
+  {
+    title: t('landing.gameNadraw'),
     icon: nadrawPhoneIcon,
     to: { name: 'nadraw-show', params: { streamer: defaultNadleStreamer } },
     cardStyle: Object.freeze({
@@ -271,9 +278,9 @@ const games = Object.freeze([
       width: px(108.21),
       height: px(108.21),
     }),
-  } satisfies GameCard),
-  Object.freeze({
-    title: 'Who takes\nthe mic',
+  },
+  {
+    title: t('landing.gameMic'),
     icon: eatFirstIcon,
     to: { name: 'home' },
     cardStyle: Object.freeze({
@@ -294,7 +301,7 @@ const games = Object.freeze([
       width: px(93.65),
       height: px(93.65),
     }),
-  } satisfies GameCard),
+  },
 ])
 
 const socialLinks = Object.freeze([
@@ -344,10 +351,22 @@ const socialLinks = Object.freeze([
   }),
 ])
 
-const footerProduct = Object.freeze(['Product', 'Nitro', 'Status', 'Policies', 'Terms', 'Privacy', 'Cookie Settings'])
-const footerAbout = Object.freeze(['About', 'Jobs', 'Brand', 'Newsroom', 'Developers'])
-
-const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
+const footerProduct = computed(() => [
+  t('landing.footerProductTitle'),
+  t('landing.footerNitro'),
+  t('landing.footerStatus'),
+  t('landing.footerPolicies'),
+  t('landing.footerTerms'),
+  t('landing.footerPrivacy'),
+  t('landing.footerCookieSettings'),
+])
+const footerAbout = computed(() => [
+  t('landing.footerAboutTitle'),
+  t('landing.footerJobs'),
+  t('landing.footerBrand'),
+  t('landing.footerNewsroom'),
+  t('landing.footerDevelopers'),
+])
 
 async function selectLocale(code: string) {
   await persistLocale(code)
@@ -444,7 +463,7 @@ watch(
 
 <template>
   <div class="landing page-stack">
-    <AppFullPageLoader :visible="landingPageLoading" aria-label="Loading landing page" label="" />
+    <AppFullPageLoader :visible="landingPageLoading" :aria-label="t('landing.loadingAria')" label="" />
 
     <div class="landing__canvas">
       <LandingCloudBackdrop class="landing__background" />
@@ -462,7 +481,7 @@ watch(
         />
       </div>
 
-      <header class="landing-topbar" aria-label="Site header">
+      <header class="landing-topbar" :aria-label="t('landing.siteHeaderAria')">
         <div class="landing-topbar__start">
           <div class="landing-header__brand">
             <img
@@ -481,7 +500,7 @@ watch(
           </div>
         </div>
 
-        <nav class="landing-topbar__mid landing-header__nav" aria-label="Primary">
+        <nav class="landing-topbar__mid landing-header__nav" :aria-label="t('landing.primaryNavAria')">
           <a
             v-for="item in navItems"
             :key="item.label"
@@ -493,12 +512,12 @@ watch(
           </a>
         </nav>
 
-        <div class="landing-topbar__end landing-auth sa-glass-button" aria-label="Account">
-          <RouterLink class="landing-auth__link" :to="authRouteLogin">Log In</RouterLink>
+        <div class="landing-topbar__end landing-auth sa-glass-button" :aria-label="t('landing.accountAria')">
+          <RouterLink class="landing-auth__link" :to="authRouteLogin">{{ t('landing.login') }}</RouterLink>
         </div>
       </header>
 
-      <section class="landing-hero" aria-label="Hero" v-once>
+      <section class="landing-hero" :aria-label="t('landing.heroAria')">
         <div class="landing-hero__screen" aria-hidden="true">
           <img class="landing-hero__browse-illustration" :src="twitchBrowseIllustration" alt="" />
         </div>
@@ -506,24 +525,22 @@ watch(
         <div class="landing-hero__copy">
           <div class="landing-hero__headline">
             <h1 class="landing-hero__title landing-u-text-outline-heading">StreamAssist</h1>
-            <p class="landing-hero__tagline landing-u-text-outline-heading">WHERE CHAT TURNS INTO THE GAME</p>
+            <p class="landing-hero__tagline landing-u-text-outline-heading">{{ t('landing.newHeroTagline') }}</p>
           </div>
           <p class="landing-hero__lead">
-            Your stream isn&rsquo;t just something to watch &mdash; it&rsquo;s something to join. Turn every moment into
-            a shared experience with real-time chat, games, and video calls. Interact, play, and connect with your
-            audience like never before &mdash; all in one place, effortlessly.
+            {{ t('landing.newHeroLead') }}
           </p>
         </div>
       </section>
 
       <section id="videocall" class="landing-section landing-section--videocall">
-        <h2 class="landing-section__title landing-u-text-outline-heading">VIDEOCALL</h2>
+        <h2 class="landing-section__title landing-u-text-outline-heading">{{ t('landing.videoCallTitle') }}</h2>
         <p class="landing-section__lead">
-          Create private video rooms for games, challenges, and interactive sessions.
+          {{ t('landing.videoCallLead') }}
         </p>
 
         <RouterLink class="call-banner" :to="callRoute">
-          <span class="call-banner__title landing-u-text-outline-cta">Run the show</span>
+          <span class="call-banner__title landing-u-text-outline-cta">{{ t('landing.videoCallCta') }}</span>
 
           <span class="call-banner__cards">
             <img
@@ -539,9 +556,9 @@ watch(
       </section>
 
       <section id="games" class="landing-section landing-section--games">
-        <h2 class="landing-section__title landing-u-text-outline-heading">GAMES</h2>
+        <h2 class="landing-section__title landing-u-text-outline-heading">{{ t('landing.gamesTitle') }}</h2>
         <p class="landing-section__lead">
-          Play with friends, challenge others, or bring the action live to your audience.
+          {{ t('landing.gamesLead') }}
         </p>
 
         <div class="games-grid">
@@ -569,44 +586,19 @@ watch(
       </section>
 
       <section id="economy" class="landing-section landing-section--economy">
-        <h2 class="landing-section__title landing-u-text-outline-heading">ECONOMY</h2>
+        <h2 class="landing-section__title landing-u-text-outline-heading">{{ t('landing.economyTitle') }}</h2>
         <p class="landing-section__lead">
-          Create your own in-stream economy with points, bonuses, and interactive mechanics that keep your audience
-          coming back.
+          {{ t('landing.economyLead') }}
         </p>
 
-        <div class="economy-banner">
-          <span class="economy-banner__title landing-u-text-outline-cta">Start earning</span>
-
-          <div class="economy-banner__slot">
-            <span class="economy-banner__jackpot">JACKPOT</span>
-
-            <span class="economy-banner__cells">
-              <span v-for="letter in slotLetters" :key="letter" class="economy-banner__cell">{{ letter }}</span>
-            </span>
-
-            <span class="economy-banner__underbar economy-banner__underbar--left" />
-            <span class="economy-banner__underbar economy-banner__underbar--right" />
-            <span class="economy-banner__slot-bar" />
-            <span class="economy-banner__sparkle economy-banner__sparkle--1" />
-            <span class="economy-banner__sparkle economy-banner__sparkle--2" />
-            <span class="economy-banner__sparkle economy-banner__sparkle--3" />
-            <span class="economy-banner__sparkle economy-banner__sparkle--4" />
-            <span class="economy-banner__sparkle economy-banner__sparkle--5" />
-            <span class="economy-banner__sparkle economy-banner__sparkle--6" />
-            <span class="economy-banner__sparkle economy-banner__sparkle--7" />
-            <span class="economy-banner__handle">
-              <span class="economy-banner__handle-stick" />
-            </span>
-          </div>
-        </div>
+        <EconomySlotBanner class="economy-banner" :to="coinHubRoute" />
       </section>
 
-      <footer id="footer" class="landing-footer" aria-label="Site footer">
-        <nav class="landing-footer__seo" aria-label="Guides">
-          <a class="landing-footer__seo-link" href="/video-calls-for-streamers/">Video calls for streamers</a>
-          <a class="landing-footer__seo-link" href="/twitch-nadle-game/">Nadle chat game</a>
-          <a class="landing-footer__seo-link" href="/stream-overlay-tools/">Stream overlay tools</a>
+      <footer id="footer" class="landing-footer" :aria-label="t('landing.siteFooterAria')">
+        <nav class="landing-footer__seo" :aria-label="t('landing.guidesAria')">
+          <a class="landing-footer__seo-link" href="/video-calls-for-streamers/">{{ t('landing.seoVideoCalls') }}</a>
+          <a class="landing-footer__seo-link" href="/twitch-nadle-game/">{{ t('landing.seoNadle') }}</a>
+          <a class="landing-footer__seo-link" href="/stream-overlay-tools/">{{ t('landing.seoOverlay') }}</a>
         </nav>
         <div class="landing-footer__panel">
           <AppLandingFooterActions
@@ -618,7 +610,7 @@ watch(
             @update:locale="selectLocale"
           />
 
-          <div class="landing-footer__static" v-once>
+          <div class="landing-footer__static">
             <div class="landing-footer__socials">
               <a
                 v-for="item in socialLinks"
@@ -1402,8 +1394,7 @@ watch(
 .landing-hero__title,
 .landing-hero__tagline,
 .landing-section__title,
-.call-banner__title,
-.economy-banner__title {
+.call-banner__title {
   margin: 0;
   font-family: var(--sa-font-display);
   font-weight: 400;
@@ -1499,16 +1490,29 @@ watch(
   border-radius: calc(var(--u) * 41.25);
   border: calc(var(--u) * 7.5) solid #fff;
   box-sizing: border-box;
-  background: linear-gradient(166.6115811995453deg, rgba(124, 77, 219, 0.096) 0%, rgba(60, 36, 99, 0.094) 73.206%);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.07), transparent 38%),
+    radial-gradient(circle at 68% 50%, rgba(124, 77, 219, 0.22), transparent 36%),
+    linear-gradient(166.6115811995453deg, rgba(124, 77, 219, 0.12) 0%, rgba(38, 18, 64, 0.18) 73.206%);
   overflow: hidden;
   text-decoration: none;
   color: inherit;
   cursor: pointer;
-  transition: filter 0.2s ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+    0 calc(var(--u) * 14) calc(var(--u) * 32) rgba(8, 2, 20, 0.24);
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 
 .call-banner:hover {
-  filter: brightness(1.04);
+  transform: translateY(calc(var(--u) * -2));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 calc(var(--u) * 18) calc(var(--u) * 38) rgba(8, 2, 20, 0.3);
 }
 
 .call-banner__title {
@@ -1531,20 +1535,27 @@ watch(
 
 .call-banner__cards {
   position: absolute;
-  left: calc(var(--u) * 400.5);
-  top: calc(var(--u) * 6.5);
-  width: calc(var(--u) * 703);
-  height: calc(var(--u) * 128);
-  border-radius: calc(var(--u) * 30);
-  background: rgba(79, 57, 116, 0.37);
+  left: calc(var(--u) * 397.5);
+  top: calc(var(--u) * 10.5);
+  width: calc(var(--u) * 708);
+  height: calc(var(--u) * 120);
+  border: calc(var(--u) * 1.5) solid rgba(255, 255, 255, 0.16);
+  border-radius: calc(var(--u) * 28);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 42%),
+    rgba(63, 37, 93, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 calc(var(--u) * 8) calc(var(--u) * 20) rgba(8, 2, 20, 0.18);
   z-index: 1;
 }
 
 .call-banner__card {
   position: absolute;
-  top: calc(var(--u) * 23.5);
-  height: calc(var(--u) * 96);
+  top: calc(var(--u) * 17.5);
+  height: calc(var(--u) * 91);
   object-fit: fill;
+  filter: drop-shadow(0 calc(var(--u) * 8) calc(var(--u) * 8) rgba(8, 2, 20, 0.2));
 }
 
 .landing-section--games .landing-section__title {
@@ -1636,210 +1647,6 @@ watch(
   top: calc(var(--u) * 1860.47);
   width: calc(var(--u) * 1129.22);
   height: calc(var(--u) * 154.5);
-  display: block;
-  border-radius: calc(var(--u) * 41.25);
-  border: calc(var(--u) * 7.5) solid #fff;
-  box-sizing: border-box;
-  background: linear-gradient(166.6115811995453deg, rgba(124, 77, 219, 0.096) 0%, rgba(60, 36, 99, 0.094) 73.206%);
-  overflow: hidden;
-  transition: filter 0.2s ease;
-}
-
-.economy-banner:hover {
-  filter: brightness(1.04);
-}
-
-.economy-banner__title {
-  position: absolute;
-  left: calc(var(--u) * 42.5);
-  top: calc(var(--u) * 36.5);
-  width: calc(var(--u) * 402);
-  height: calc(var(--u) * 61);
-  margin: 0;
-  font-family: 'Climate Crisis', var(--sa-font-display);
-  font-size: calc(var(--u) * 36);
-  font-variation-settings: 'YEAR' 1979;
-  font-weight: 400;
-  letter-spacing: 0;
-  line-height: calc(var(--u) * 58.5);
-  text-align: left;
-  text-transform: none;
-  white-space: nowrap;
-}
-
-.economy-banner__slot {
-  position: absolute;
-  left: calc(var(--u) * 654);
-  top: calc(var(--u) * 19.87);
-  width: calc(var(--u) * 429.19);
-  height: calc(var(--u) * 97.03);
-}
-
-.economy-banner__jackpot {
-  position: absolute;
-  left: calc(var(--u) * 122.34);
-  top: 0;
-  z-index: 1;
-  width: calc(var(--u) * 142.031);
-  height: calc(var(--u) * 35.156);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: calc(var(--u) * 3.75) solid #7c4ddb;
-  box-sizing: border-box;
-  border-radius: calc(var(--u) * 18);
-  background: rgba(255, 59, 48, 0.52);
-  font-family: 'Arbutus', serif;
-  font-size: calc(var(--u) * 19.5);
-  line-height: 1;
-  letter-spacing: 0.04em;
-}
-
-.economy-banner__cells {
-  position: absolute;
-  left: 0;
-  top: calc(var(--u) * 22.87);
-  display: grid;
-  z-index: 0;
-  grid-template-columns:
-    calc(var(--u) * 58.479)
-    calc(var(--u) * 61.5)
-    calc(var(--u) * 58.8)
-    calc(var(--u) * 58.8)
-    calc(var(--u) * 58.5)
-    calc(var(--u) * 58.5);
-  overflow: hidden;
-  width: calc(var(--u) * 391.5);
-  height: calc(var(--u) * 70.5);
-  border: calc(var(--u) * 4.5) solid #66388f;
-  box-sizing: border-box;
-  border-radius: calc(var(--u) * 18);
-  background: #c9d6ff;
-}
-
-.economy-banner__cell {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-right: calc(var(--u) * 0.75) solid #b3c2f5;
-  background: #f7f8ff;
-  color: rgba(87, 38, 130, 0.77);
-  font-family: 'Arbutus', serif;
-  font-size: calc(var(--u) * 40.5);
-  line-height: 1;
-}
-
-.economy-banner__cell:last-child {
-  border-right: 0;
-}
-
-.economy-banner__underbar {
-  position: absolute;
-  top: calc(var(--u) * 112.5);
-  width: calc(var(--u) * 33);
-  height: calc(var(--u) * 6);
-  border-radius: calc(var(--u) * 3);
-  background: rgba(255, 59, 48, 0.51);
-}
-
-.economy-banner__underbar--left {
-  left: calc(var(--u) * 87.19);
-}
-
-.economy-banner__underbar--right {
-  left: calc(var(--u) * 277.69);
-}
-
-.economy-banner__slot-bar {
-  position: absolute;
-  left: calc(var(--u) * 143.25);
-  top: calc(var(--u) * 85.12);
-  width: calc(var(--u) * 105);
-  height: calc(var(--u) * 21);
-  border: calc(var(--u) * 2.25) solid #fff;
-  box-sizing: border-box;
-  border-radius: calc(var(--u) * 10.5);
-  background: rgba(60, 36, 99, 0.62);
-}
-
-.economy-banner__sparkle {
-  position: absolute;
-  width: calc(var(--u) * 2.249);
-  height: calc(var(--u) * 2.249);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.62);
-  transform: rotate(-5deg);
-}
-
-.economy-banner__sparkle--1 {
-  left: calc(var(--u) * 128.14);
-  top: calc(var(--u) * -16.87);
-}
-
-.economy-banner__sparkle--2 {
-  left: calc(var(--u) * 157.68);
-  top: calc(var(--u) * 2.38);
-  opacity: 0.56;
-}
-
-.economy-banner__sparkle--3 {
-  left: calc(var(--u) * 187.25);
-  top: calc(var(--u) * 75.51);
-  opacity: 0.5;
-}
-
-.economy-banner__sparkle--4 {
-  left: calc(var(--u) * 216.79);
-  top: calc(var(--u) * 94.76);
-}
-
-.economy-banner__sparkle--5 {
-  left: calc(var(--u) * 246.33);
-  top: calc(var(--u) * 113.94);
-  width: calc(var(--u) * 3.001);
-  height: calc(var(--u) * 3.001);
-}
-
-.economy-banner__sparkle--6 {
-  left: calc(var(--u) * 350.11);
-  top: calc(var(--u) * 26.62);
-  opacity: 0.56;
-}
-
-.economy-banner__sparkle--7 {
-  left: calc(var(--u) * 379.65);
-  top: calc(var(--u) * 45.87);
-}
-
-.economy-banner__handle {
-  position: absolute;
-  left: calc(var(--u) * 409.21);
-  top: calc(var(--u) * 30.94);
-  width: calc(var(--u) * 19.688);
-  height: calc(var(--u) * 66.094);
-  border-radius: calc(var(--u) * 9);
-  background: rgba(150, 131, 180, 0.63);
-}
-
-.economy-banner__handle::before {
-  content: '';
-  position: absolute;
-  left: calc(var(--u) * -1.4);
-  top: calc(var(--u) * -30.94);
-  width: calc(var(--u) * 22.5);
-  height: calc(var(--u) * 22.5);
-  border-radius: 999px;
-  background: radial-gradient(circle at 35% 35%, #ff786b, #d83c34 65%);
-}
-
-.economy-banner__handle-stick {
-  position: absolute;
-  left: calc(var(--u) * 6.28);
-  top: calc(var(--u) * -16.32);
-  width: calc(var(--u) * 6);
-  height: calc(var(--u) * 43.5);
-  border-radius: calc(var(--u) * 3);
-  background: #1a1133;
 }
 
 .landing-footer__seo {
@@ -2383,7 +2190,6 @@ watch(
   }
 
   .economy-banner {
-    --u: calc(100cqw / 1129.22);
     position: relative;
     left: auto;
     top: auto;
@@ -2391,32 +2197,6 @@ watch(
     height: auto;
     aspect-ratio: 1129.22 / 154.5;
     margin-top: 0;
-    padding: 0;
-    display: block;
-    box-sizing: border-box;
-    border-radius: calc(var(--u) * 41.25);
-    border-width: calc(var(--u) * 7.5);
-  }
-
-  .economy-banner__title {
-    position: absolute;
-    left: calc(var(--u) * 42.5);
-    top: calc(var(--u) * 36.5);
-    width: calc(var(--u) * 402);
-    height: calc(var(--u) * 61);
-    margin: 0;
-    font-size: calc(var(--u) * 36);
-    line-height: calc(var(--u) * 58.5);
-    text-align: left;
-  }
-
-  .economy-banner__slot {
-    position: absolute;
-    left: calc(var(--u) * 654);
-    top: calc(var(--u) * 19.87);
-    width: calc(var(--u) * 429.19);
-    height: calc(var(--u) * 97.03);
-    transform: none;
   }
 
   .landing-footer {
@@ -2762,18 +2542,6 @@ watch(
 
   .economy-banner {
     width: min(100%, var(--landing-panel-width));
-    padding: 0;
-    border-radius: calc(var(--u) * 41.25);
-    border-width: calc(var(--u) * 7.5);
-    gap: 0;
-  }
-
-  .economy-banner__slot {
-    width: calc(var(--u) * 429.19);
-  }
-
-  .economy-banner__title {
-    font-size: calc(var(--u) * 36);
   }
 
   .landing-footer {
@@ -2947,18 +2715,7 @@ watch(
   }
 
   .economy-banner {
-    padding: 0;
-    gap: 0;
-    border-radius: calc(var(--u) * 41.25);
-    border-width: calc(var(--u) * 7.5);
-  }
-
-  .economy-banner__slot {
-    width: calc(var(--u) * 429.19);
-  }
-
-  .economy-banner__title {
-    font-size: calc(var(--u) * 36);
+    width: min(100%, var(--landing-panel-width));
   }
 
   .landing-footer {

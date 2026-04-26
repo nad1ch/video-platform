@@ -74,7 +74,7 @@ onUnmounted(() => {
         >
           {{ t('app.footerCopyrightSymbol') }}
         </button>
-        {{ year }} All rights reserved.
+        {{ t('app.footerRights', { year }) }}
       </span>
     </div>
 

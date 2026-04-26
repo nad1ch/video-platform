@@ -2112,7 +2112,7 @@ watch(joining, (j) => {
         <aside
           v-if="session.callDebugOverlay && showCallDebugControls && !mafiaViewUi"
           class="call-page__debug"
-          aria-label="Call debug"
+          :aria-label="t('callPage.debugAria')"
         >
           <div class="call-page__debug-head">
             <span class="call-page__debug-title">{{ t('callPage.debugTitle') }}</span>
@@ -2121,21 +2121,21 @@ watch(joining, (j) => {
             </AppButton>
           </div>
           <dl class="call-page__debug-dl">
-            <dt>preset</dt>
+            <dt>{{ t('callPage.debugPreset') }}</dt>
             <dd>{{ callDebugSnapshot.videoQualityPreset }}</dd>
-            <dt>explicit</dt>
+            <dt>{{ t('callPage.debugExplicit') }}</dt>
             <dd>{{ callDebugSnapshot.videoQualityExplicit }}</dd>
-            <dt>publish tier</dt>
+            <dt>{{ t('callPage.debugPublishTier') }}</dt>
             <dd>{{ callDebugSnapshot.videoPublishTier }}</dd>
-            <dt>active cameras @ wire</dt>
+            <dt>{{ t('callPage.debugActiveCamerasWire') }}</dt>
             <dd>{{ callDebugSnapshot.activeCameraPublishersAtWire }}</dd>
-            <dt>peers @ wire</dt>
+            <dt>{{ t('callPage.debugPeersWire') }}</dt>
             <dd>{{ callDebugSnapshot.peerCountAtWire }}</dd>
-            <dt>publish simulcast</dt>
+            <dt>{{ t('callPage.debugPublishSimulcast') }}</dt>
             <dd>{{ callDebugSnapshot.publishSimulcast }}</dd>
-            <dt>active speaker</dt>
+            <dt>{{ t('callPage.debugActiveSpeaker') }}</dt>
             <dd>{{ callDebugSnapshot.effectiveActiveSpeakerPeerId ?? '—' }}</dd>
-            <dt>server speaker</dt>
+            <dt>{{ t('callPage.debugServerSpeaker') }}</dt>
             <dd>{{ callDebugSnapshot.serverActiveSpeakerPeerId ?? '—' }}</dd>
           </dl>
           <ul v-if="inboundDebugRows.length" class="call-page__debug-list">

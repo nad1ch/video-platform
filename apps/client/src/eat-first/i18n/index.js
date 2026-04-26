@@ -3,12 +3,47 @@ import { createI18n } from 'vue-i18n'
 const LANG_KEY = 'eat-first:locale'
 const VALID = new Set(['uk', 'en', 'de', 'pl'])
 
+function normalizeLocaleCode(raw) {
+  const primary = String(raw || '').toLowerCase().split('-')[0]
+  if (primary === 'ru') return 'en'
+  if (VALID.has(primary)) return primary
+  return null
+}
+
+export function normalizeBrowserLocale(raw) {
+  return normalizeLocaleCode(raw) ?? 'uk'
+}
+
+export function resolveInitialLocale(storedLocale, browserLocale) {
+  return normalizeLocaleCode(storedLocale) ?? normalizeBrowserLocale(browserLocale)
+}
+
+function readStoredLocale() {
+  if (typeof localStorage === 'undefined') return null
+  try {
+    return localStorage.getItem(LANG_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeStoredLocale(code) {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(LANG_KEY, code)
+  } catch {
+    // Storage can be unavailable in restricted browser contexts.
+  }
+}
+
 function readInitialLocale() {
-  if (typeof localStorage === 'undefined') return 'uk'
-  const s = localStorage.getItem(LANG_KEY)
-  if (VALID.has(s)) return s
-  if (s) localStorage.setItem(LANG_KEY, 'uk')
-  return 'uk'
+  const browserLocale = typeof navigator !== 'undefined' ? (navigator.languages?.[0] ?? navigator.language) : undefined
+  const storedLocale = readStoredLocale()
+  const locale = resolveInitialLocale(storedLocale, browserLocale)
+  if (!VALID.has(storedLocale)) {
+    writeStoredLocale(locale)
+  }
+  return locale
 }
 
 const initialLocale = readInitialLocale()

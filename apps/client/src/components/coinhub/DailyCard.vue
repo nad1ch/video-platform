@@ -16,7 +16,7 @@ const props = withDefaults(
     /** Visual treatment: free = violet, subscriber = gold premium. */
     visualTier?: 'free' | 'subscriber'
   }>(),
-  { state: 'available', actionLabel: 'Open', visualTier: 'free' },
+  { state: 'available', actionLabel: undefined, visualTier: 'free' },
 )
 
 const emit = defineEmits<{

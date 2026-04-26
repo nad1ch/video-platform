@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import '@/styles/coinhub-design-system.css'
 
 type CaseState = 'available' | 'locked' | 'cooldown'
@@ -19,7 +20,7 @@ const props = withDefaults(
     rarityId?: number
   }>(),
   {
-    title: 'Case',
+    title: '',
     priceLabel: undefined,
     state: 'available',
     isRemoteBusy: false,
@@ -27,6 +28,8 @@ const props = withDefaults(
   },
 )
 
+const { t } = useI18n()
+const displayTitle = computed(() => props.title || t('coinHub.caseDefaultTitle'))
 const rarityKey = computed(() => (['common', 'rare', 'epic', 'legendary'] as const)[props.rarityId % 4])
 
 const isLegendary = computed(() => (props.rarityId % 4) === 3)
@@ -57,7 +60,7 @@ function onSelectClick() {
       isRemoteBusy && 'coinhub-case--remote-busy',
     ]"
     :aria-busy="isRemoteBusy"
-    :aria-label="title"
+    :aria-label="displayTitle"
     :disabled="isRemoteBusy"
     @click="onSelectClick"
   >
@@ -111,7 +114,7 @@ function onSelectClick() {
       class="coinhub-loot__body relative z-[2] flex min-h-0 flex-1 flex-col gap-2.5 px-4 pb-4 pt-3 sm:px-5"
     >
       <p class="text-center text-sm font-bold leading-tight text-[#FFFFFF]">
-        {{ title }}
+        {{ displayTitle }}
       </p>
       <p
         v-if="priceLabel"
@@ -161,7 +164,7 @@ function onSelectClick() {
           state === 'locked' ? 'text-[#6B7280]' : 'text-[#9CA3AF]',
         ]"
       >
-        {{ title }}
+        {{ displayTitle }}
       </p>
       <div class="mt-auto flex flex-1 flex-col justify-end">
         <div

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import '@/styles/coinhub-design-system.css'
 
 withDefaults(
@@ -11,6 +12,8 @@ withDefaults(
   }>(),
   { statusLabel: undefined, viewersLabel: undefined, live: false },
 )
+
+const { t } = useI18n()
 </script>
 
 <template>
@@ -29,7 +32,7 @@ withDefaults(
         <span
           v-if="live"
           class="shrink-0 rounded border border-rose-500/50 bg-rose-950/80 px-1.5 py-0.5 text-[0.6rem] font-extrabold uppercase tracking-wide text-rose-200 shadow-[0_0_10px_-2px_rgba(244,63,94,0.45)]"
-        >Live</span>
+        >{{ t('coinHub.liveBadge') }}</span>
       </div>
       <p
         v-if="statusLabel"

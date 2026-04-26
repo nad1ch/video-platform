@@ -590,7 +590,7 @@ if (import.meta.env.DEV) {
             v-if="!editingName"
             class="tile-overlay__label-group"
             :class="{ 'tile-overlay__label-group--editable': !streamViewMode }"
-            :title="streamViewMode ? undefined : 'Double-click to rename (local only)'"
+            :title="streamViewMode ? undefined : t('callPage.renameLocalHint')"
             @dblclick.stop="startNameEdit"
           >
             <span
@@ -697,7 +697,7 @@ if (import.meta.env.DEV) {
             v-if="!editingName"
             class="tile-overlay__label-group"
             :class="{ 'tile-overlay__label-group--editable': !streamViewMode }"
-            :title="streamViewMode ? undefined : 'Double-click to rename (local only)'"
+            :title="streamViewMode ? undefined : t('callPage.renameLocalHint')"
             @dblclick.stop="startNameEdit"
           >
             <span
