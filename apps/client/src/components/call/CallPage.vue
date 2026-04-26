@@ -1205,8 +1205,7 @@ const mafiaNumberByPeer = computed(() => {
 })
 
 const orderedTiles = computed(() => {
-  const map = new Map(tiles.value.map((t) => [t.peerId, t]))
-  const list = tiles.value
+  const list = tiles.value.slice()
   if (isMafiaRoute.value && list.length > 0) {
     const seats = mafiaNumberByPeer.value
     return [...list].sort((a, b) => {
@@ -1224,13 +1223,19 @@ const orderedTiles = computed(() => {
       return 0
     })
   }
-  const order = tileOrder.value.filter((id) => map.has(id))
-  for (const t of tiles.value) {
-    if (!order.includes(t.peerId)) {
-      order.push(t.peerId)
+
+  return list.sort((a, b) => {
+    if (spotlightDesktop.value && pinnedPeerId.value != null) {
+      if (a.peerId === pinnedPeerId.value) {
+        return -1
+      }
+      if (b.peerId === pinnedPeerId.value) {
+        return 1
+      }
     }
-  }
-  return order.map((id) => map.get(id)!).filter(Boolean)
+
+    return a.peerId.localeCompare(b.peerId)
+  })
 })
 
 const layoutMode = computed<'grid' | 'spotlight'>(() =>
@@ -1394,6 +1399,19 @@ function clearTileFlip(el: HTMLElement): void {
   el.style.removeProperty('--tile-flip-scale-y')
 }
 
+function clearAllTileFlips(): void {
+  if (typeof window !== 'undefined') {
+    window.cancelAnimationFrame(tileLayoutFlipRaf)
+    if (tileLayoutFlipTimer != null) {
+      window.clearTimeout(tileLayoutFlipTimer)
+      tileLayoutFlipTimer = null
+    }
+  }
+  for (const el of tileWrapEls.values()) {
+    clearTileFlip(el)
+  }
+}
+
 function playTileLayoutFlip(firstRects: TileRectMap): void {
   if (typeof window === 'undefined') {
     return
@@ -1470,6 +1488,14 @@ watch(
     if (firstRects.size > 0) {
       playTileLayoutFlip(firstRects)
     }
+  },
+  { flush: 'pre' },
+)
+
+watch(
+  () => orderedTiles.value.map((tile) => tile.peerId).join('|'),
+  () => {
+    clearAllTileFlips()
   },
   { flush: 'pre' },
 )
@@ -3063,7 +3089,7 @@ watch(joining, (j) => {
   align-items: stretch;
   align-content: stretch;
   justify-content: stretch;
-  overflow: hidden;
+  /* overflow: hidden; */
 }
 
 .call-page__tile-wrap--spotlight-main {
@@ -3463,8 +3489,9 @@ watch(joining, (j) => {
 
   .call-page__bottom-cluster__center--speak-dock {
     flex-direction: column;
-    align-items: stretch;
+    align-items: center;
     max-width: min(100%, 100vw - 0.5rem);
+    width: 100%;
   }
 
   .call-page__bottom-cluster__center--speak-dock :deep(.mafia-host-hud) {
