@@ -68,6 +68,7 @@ const isMafiaRoute = computed(() => route.name === 'mafia')
 const isCoinHubRoute = computed(() => route.name === 'coin-hub')
 const isNadrawRoute = computed(() => route.name === 'nadraw-show')
 const isAdminRoute = computed(() => String(route.name ?? '').startsWith('admin-'))
+const isHeavyVisualRoute = computed(() => isHomeRoute.value)
 const isNewAppHeaderRoute = computed(
   () =>
     isNadleAppHeaderRoute.value ||
@@ -328,7 +329,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
 
 <template>
   <div class="app-shell-layout eat-first-root page-stack" :data-theme="theme">
-    <LandingCloudBackdrop class="app-shell-layout__backdrop" />
+    <LandingCloudBackdrop class="app-shell-layout__backdrop" :active="isHeavyVisualRoute" />
     <div class="app-shell-layout__body app-layout">
       <AppHeader
         v-if="showLegacyShellHeader"

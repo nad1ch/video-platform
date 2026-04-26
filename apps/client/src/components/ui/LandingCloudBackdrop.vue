@@ -1,10 +1,19 @@
 <script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import cloudRoundedWideOne from '@/assets/landing/clouds/cloud-rounded-wide-1.png'
 import cloudRoundedWideTwo from '@/assets/landing/clouds/cloud-rounded-wide-2.png'
 import cloudTransparentOne from '@/assets/landing/clouds/cloud-transparent-1.png'
 import cloudTransparentTwo from '@/assets/landing/clouds/cloud-transparent-2.png'
 import cloudWideVolumetric from '@/assets/landing/clouds/cloud-wide-volumetric.png'
 import { landingDesignPx as px } from '@/utils/landingDesignPx'
+
+const props = withDefaults(
+  defineProps<{
+    /** Full animation/blend mode for routes where the backdrop is a primary visual element. */
+    active?: boolean
+  }>(),
+  { active: true },
+)
 
 type CloudLayer = {
   id: string
@@ -242,10 +251,34 @@ const starDots = Object.freeze(
     })
   }),
 ) as readonly StarDot[]
+
+const pageVisible = ref(true)
+const backdropActive = computed(() => props.active && pageVisible.value)
+
+function syncPageVisible(): void {
+  pageVisible.value = typeof document === 'undefined' || document.visibilityState !== 'hidden'
+}
+
+onMounted(() => {
+  syncPageVisible()
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', syncPageVisible)
+  }
+})
+
+onUnmounted(() => {
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', syncPageVisible)
+  }
+})
 </script>
 
 <template>
-  <div class="landing-cloud-backdrop" aria-hidden="true">
+  <div
+    class="landing-cloud-backdrop"
+    :class="{ 'landing-cloud-backdrop--inactive': !backdropActive }"
+    aria-hidden="true"
+  >
     <div class="landing-cloud-backdrop__gradient" />
     <div class="landing-cloud-backdrop__stars">
       <span
@@ -281,6 +314,10 @@ const starDots = Object.freeze(
   user-select: none;
 }
 
+.landing-cloud-backdrop--inactive {
+  opacity: 0.82;
+}
+
 .landing-cloud-backdrop__gradient,
 .landing-cloud-backdrop__stars,
 .landing-cloud-backdrop__veil,
@@ -306,6 +343,11 @@ const starDots = Object.freeze(
   filter: contrast(1.03) saturate(1.02);
 }
 
+.landing-cloud-backdrop--inactive .landing-cloud-backdrop__cloud {
+  filter: none;
+  transform: none !important;
+}
+
 .landing-cloud-backdrop__cloud--wide {
   mix-blend-mode: screen;
 }
@@ -316,6 +358,12 @@ const starDots = Object.freeze(
 
 .landing-cloud-backdrop__cloud--rounded {
   mix-blend-mode: screen;
+}
+
+.landing-cloud-backdrop--inactive .landing-cloud-backdrop__cloud--wide,
+.landing-cloud-backdrop--inactive .landing-cloud-backdrop__cloud--transparent,
+.landing-cloud-backdrop--inactive .landing-cloud-backdrop__cloud--rounded {
+  mix-blend-mode: normal;
 }
 
 .landing-cloud-backdrop__stars {
@@ -349,6 +397,12 @@ const starDots = Object.freeze(
 
 .landing-cloud-backdrop__star--ph3 {
   animation-name: landingCloudStarBlink;
+}
+
+.landing-cloud-backdrop--inactive .landing-cloud-backdrop__star {
+  animation: none !important;
+  box-shadow: none;
+  opacity: 0.28;
 }
 
 .landing-cloud-backdrop__veil {
