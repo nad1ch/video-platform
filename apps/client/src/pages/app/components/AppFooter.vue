@@ -165,23 +165,23 @@ onUnmounted(() => {
 .app-landing-footer__brand {
   display: inline-flex;
   align-items: center;
-  min-height: 1.5rem;
-  padding: 0 0.8rem;
+  min-height: 1.75rem;
+  padding: 0.08rem 0.8rem 0.12rem;
   border-radius: inherit;
   background: rgba(81, 48, 116, 0.2);
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: 0.72rem;
   font-weight: 400;
   font-variation-settings: 'YEAR' 1979;
-  line-height: 1;
+  line-height: 1.15;
   color: #fff;
   text-decoration: none;
   white-space: nowrap;
-  transition: background 0.18s ease;
+  transition: background 0.3s ease;
 }
 
 .app-landing-footer__brand:hover {
-  background: rgba(102, 56, 143, 0.78);
+  background: rgba(102, 56, 143, 0.32);
 }
 
 .app-landing-footer__copy {
@@ -193,7 +193,7 @@ onUnmounted(() => {
   padding: 0 0.85rem;
   color: rgba(255, 255, 255, 0.82);
   font-size: 0.66rem;
-  line-height: 1;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

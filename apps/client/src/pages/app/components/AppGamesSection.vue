@@ -128,6 +128,7 @@ function toneClass(tone: AppGameCard['tone']) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  column-gap: 0.75rem;
   min-height: 6.8rem;
   padding: 0.72rem 0.85rem;
   overflow: hidden;
@@ -231,6 +232,13 @@ function toneClass(tone: AppGameCard['tone']) {
   width: 4rem;
   height: 4rem;
   flex-shrink: 0;
+  transform-origin: center;
+  transition: transform 0.25s ease;
+  will-change: transform;
+}
+
+.app-game-card:hover .app-game-card__visual {
+  transform: rotate(-5deg) scale(1.1);
 }
 
 .app-game-card__image {
@@ -251,6 +259,17 @@ function toneClass(tone: AppGameCard['tone']) {
 
 .app-game-card--slate .app-game-card__visual {
   filter: drop-shadow(0 0 14px rgba(148, 163, 184, 0.2));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-game-card__visual {
+    transition: none;
+    will-change: auto;
+  }
+
+  .app-game-card:hover .app-game-card__visual {
+    transform: none;
+  }
 }
 
 .app-games__empty {

@@ -56,9 +56,11 @@ const displayName = computed(() => props.userName.trim())
 
         <div class="app-landing-header__auth sa-glass-button" :aria-busy="authLoading">
           <span v-if="authLoading" class="app-landing-header__auth-loading">Loading</span>
-          <span
+          <button
             v-else-if="isAuthenticated"
+            type="button"
             class="app-landing-header__user"
+            :aria-label="displayName ? `Open profile menu for ${displayName}` : 'Open profile menu'"
             :title="displayName || undefined"
           >
             <span class="app-landing-header__avatar" aria-hidden="true">
@@ -73,7 +75,7 @@ const displayName = computed(() => props.userName.trim())
               <span v-else>{{ userInitial }}</span>
             </span>
             <span class="app-landing-header__user-name">{{ displayName || userInitial }}</span>
-          </span>
+          </button>
           <span v-else class="app-landing-header__auth-buttons">
             <button type="button" class="app-landing-header__auth-link" @click="$emit('login')">
               Log In
@@ -265,6 +267,7 @@ const displayName = computed(() => props.userName.trim())
 }
 
 .app-landing-header__auth-link:focus-visible,
+.app-landing-header__user:focus-visible,
 .app-landing-header__coin:focus-visible,
 .app-landing-header__brand:focus-visible,
 .app-landing-header__title:focus-visible {
@@ -281,7 +284,13 @@ const displayName = computed(() => props.userName.trim())
   justify-content: flex-start;
   width: 100%;
   max-width: 12.5rem;
+  min-height: 2.35rem;
   padding: 0 1rem 0 0.85rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
   gap: 0.5rem;
 }
 

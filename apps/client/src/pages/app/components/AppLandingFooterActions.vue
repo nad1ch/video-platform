@@ -137,8 +137,9 @@ onUnmounted(() => {
   font-weight: 400;
   text-decoration: none;
   transition:
-    background 0.18s ease,
-    transform 0.18s ease;
+    background 0.3s ease,
+    box-shadow 0.3s ease,
+    transform 0.3s ease;
 }
 
 .app-landing-footer-actions__locale {
@@ -176,9 +177,9 @@ onUnmounted(() => {
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
+    background 0.3s ease,
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
 }
 
 .app-landing-footer-actions__locale-trigger::-webkit-details-marker {
@@ -245,11 +246,11 @@ onUnmounted(() => {
 
 .app-landing-footer-actions__locale-trigger:hover,
 .app-landing-footer-actions__locale[open] .app-landing-footer-actions__locale-trigger {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(102, 56, 143, 0.68);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(102, 56, 143, 0.26);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 14px 30px rgba(10, 3, 24, 0.28);
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 12px 28px rgba(10, 3, 24, 0.24);
 }
 
 .app-landing-footer-actions__locale-option:hover,
@@ -265,8 +266,8 @@ onUnmounted(() => {
 }
 
 .app-landing-footer-actions__feedback:hover {
-  background: var(--app-landing-footer-feedback-hover-bg, rgba(102, 56, 143, 0.76));
-  transform: translateY(-1px);
+  background: var(--app-landing-footer-feedback-hover-bg, rgba(102, 56, 143, 0.28));
+  transform: translateY(-0.5px);
 }
 
 .app-landing-footer-actions--light {

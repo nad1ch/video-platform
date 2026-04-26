@@ -9,23 +9,21 @@ const jackpotLetters = ['T', 'W', 'I', 'T', 'C', 'H'] as const
 </script>
 
 <template>
-  <section class="app-economy" aria-labelledby="app-economy-title">
-    <RouterLink class="app-economy__panel" :to="to" aria-label="Open Coin Hub">
-      <h2 id="app-economy-title" class="app-economy__title">Economy</h2>
+  <section class="app-economy app-economy__panel" aria-labelledby="app-economy-title">
+    <h2 id="app-economy-title" class="app-economy__title">Economy</h2>
 
-      <div class="app-economy__machine">
-        <span class="app-economy__copy">Start earning</span>
-        <span class="app-economy__jackpot" aria-hidden="true">Jackpot</span>
-        <span class="app-economy__reel" aria-hidden="true">
-          <span v-for="letter in jackpotLetters" :key="letter" class="app-economy__letter">
-            {{ letter }}
-          </span>
+    <RouterLink class="app-economy__machine" :to="to" aria-label="Open Coin Hub">
+      <span class="app-economy__copy">Start earning</span>
+      <span class="app-economy__jackpot" aria-hidden="true">Jackpot</span>
+      <span class="app-economy__reel" aria-hidden="true">
+        <span v-for="letter in jackpotLetters" :key="letter" class="app-economy__letter">
+          {{ letter }}
         </span>
-        <span class="app-economy__lever" aria-hidden="true">
-          <span class="app-economy__lever-stick" />
-          <span class="app-economy__lever-knob" />
-        </span>
-      </div>
+      </span>
+      <span class="app-economy__lever" aria-hidden="true">
+        <span class="app-economy__lever-stick" />
+        <span class="app-economy__lever-knob" />
+      </span>
     </RouterLink>
   </section>
 </template>
@@ -45,30 +43,12 @@ const jackpotLetters = ['T', 'W', 'I', 'T', 'C', 'H'] as const
     linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 34%),
     rgba(18, 8, 34, 0.015);
   color: #fff;
-  text-decoration: none;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.24),
     inset 0 -1px 0 rgba(255, 255, 255, 0.08),
     0 18px 58px rgba(11, 3, 23, 0.42);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-.app-economy__panel:hover {
-  transform: translateY(-3px);
-  border-color: rgba(255, 255, 255, 0.18);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 30px 90px rgba(9, 2, 20, 0.36);
-}
-
-.app-economy__panel:focus-visible {
-  outline: 3px solid rgba(255, 218, 68, 0.86);
-  outline-offset: 4px;
 }
 
 .app-economy__title {
@@ -110,6 +90,25 @@ const jackpotLetters = ['T', 'W', 'I', 'T', 'C', 'H'] as const
     0 18px 38px rgba(0, 0, 0, 0.16);
   -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.app-economy__machine:hover {
+  transform: translateY(-3px);
+  border-color: #fff;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 18px 46px rgba(6, 2, 18, 0.34);
+}
+
+.app-economy__machine:focus-visible {
+  outline: 3px solid rgba(255, 218, 68, 0.86);
+  outline-offset: 4px;
 }
 
 .app-economy__copy {
