@@ -471,7 +471,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
 
 .app-shell-call-room-anchor {
   position: relative;
-  z-index: 70;
+  z-index: 120;
   display: inline-flex;
   align-items: center;
   max-width: 100%;

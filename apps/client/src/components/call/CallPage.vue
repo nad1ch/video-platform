@@ -2799,13 +2799,15 @@ watch(joining, (j) => {
   /* overflow visible: device picker popups extend above the bar */
   box-sizing: border-box;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 76%, #000);
-  border: 1px solid var(--sa-color-border);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.1), transparent 46%),
+    rgb(72 42 98 / 0.34);
+  border: 1px solid rgb(255 255 255 / 0.16);
   box-shadow:
-    0 10px 36px rgb(0 0 0 / 0.48),
-    0 0 0 1px rgb(255 255 255 / 0.05);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 10px 24px rgb(10 3 24 / 0.22);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
 }
 
 /* Під час join overlay: та сама панель і відступ, без кліків (без стрибка сітки). */
@@ -2819,8 +2821,8 @@ watch(joining, (j) => {
   height: 3.25rem;
   padding: 0;
   border-radius: 50%;
-  border: 1px solid rgb(255 255 255 / 0.14);
-  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(15 9 28 / 0.34);
   color: #f3f4f6;
   cursor: pointer;
   display: flex;
@@ -2835,6 +2837,7 @@ watch(joining, (j) => {
 
 /* Без translateY і без великого «ореолу» — інакше hover виглядає як виступ над верхом пілюлі. */
 .call-page__dock-btn:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.08);
   box-shadow:
     inset 0 0 0 1px rgb(255 255 255 / 0.07),
     0 3px 12px rgb(167 139 250 / 0.28);
@@ -2850,8 +2853,8 @@ watch(joining, (j) => {
   display: inline-flex;
   align-items: stretch;
   border-radius: 999px;
-  border: 1px solid rgb(255 255 255 / 0.14);
-  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(15 9 28 / 0.34);
   overflow: visible;
 }
 
@@ -2864,8 +2867,8 @@ watch(joining, (j) => {
   width: 3.25rem;
   height: 3.25rem;
   border-radius: 50%;
-  border: 1px solid rgb(255 255 255 / 0.14);
-  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(15 9 28 / 0.34);
 }
 
 .call-page__dock-split--open {
