@@ -61,31 +61,6 @@ const previewTiles = [
   backdrop-filter: blur(3px);
 }
 
-.app-call__panel::before,
-.app-call__panel::after {
-  position: absolute;
-  border-radius: 999px;
-  content: '';
-  filter: blur(14px);
-  pointer-events: none;
-}
-
-.app-call__panel::before {
-  left: 24%;
-  top: 30%;
-  width: 4.2rem;
-  height: 4.2rem;
-  background: rgba(139, 92, 246, 0.16);
-}
-
-.app-call__panel::after {
-  right: 14%;
-  bottom: 14%;
-  width: 5rem;
-  height: 5rem;
-  background: rgba(124, 77, 219, 0.14);
-}
-
 .app-call__title {
   position: relative;
   z-index: 1;
