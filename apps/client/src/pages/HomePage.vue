@@ -15,6 +15,7 @@ import nadrawImage from '@/assets/landing/nadraw-phone.png'
 import nadrawImageWebp from '@/assets/landing/nadraw-phone.webp'
 import spyImage from '@/assets/landing/spy.png'
 import spyImageWebp from '@/assets/landing/spy.webp'
+import whoTakeShitImage from '@/assets/landing/who-take-shit.png'
 import { useAuth } from '@/composables/useAuth'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import { loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
@@ -114,8 +115,7 @@ const gameCards = computed<AppGameCard[]>(() => [
     id: 'hot-seat',
     title: t('home.gameMic'),
     to: eatRoute,
-    image: eatFirstImage,
-    imageWebp: eatFirstImageWebp,
+    image: whoTakeShitImage,
     ariaLabel: t('home.openHotSeat'),
     tone: 'amber',
     prefetch: prefetchEat,
@@ -199,6 +199,8 @@ watch(
   --app-home-display: "Climate Crisis", "Arial Black", Impact, var(--sa-font-display, system-ui), sans-serif;
   --app-home-ui: "Marmelad", var(--sa-font-main, system-ui), sans-serif;
   --app-home-jackpot: "Arbutus", Georgia, serif;
+  --app-home-counter: "Coda Caption", var(--sa-font-display, system-ui), sans-serif;
+  --app-home-card-border: 5px;
   --app-home-glass-blur: 6px;
   --app-home-glass-panel-bg: rgba(28, 12, 52, 0.14);
   --app-home-glass-inner-bg: rgba(60, 36, 99, 0.16);
@@ -246,7 +248,7 @@ watch(
   display: grid;
   grid-template-columns: minmax(0, 671fr) minmax(0, 503fr);
   align-items: stretch;
-  gap: 1.25rem;
+  gap: clamp(0.78rem, 1.37vw, 1.24rem);
   width: min(86vw, 74.25rem);
   max-width: 100%;
   margin: 0 auto;
@@ -254,9 +256,10 @@ watch(
 
 .app-home__feature-stack {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 0.92fr);
-  gap: clamp(1rem, 3vh, 1.8rem);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: clamp(0.45rem, 1.47vw, 0.72rem);
   min-width: 0;
+  height: 100%;
   align-self: stretch;
 }
 
@@ -267,6 +270,7 @@ watch(
 @media (max-width: 1200px) {
   .app-home {
     overflow-x: hidden;
+    --app-home-card-border: 3px;
   }
 
   .app-home__main {
@@ -280,13 +284,14 @@ watch(
   }
 
   .app-home__feature-stack {
-    gap: clamp(1.1rem, 3.4vh, 2rem);
+    gap: clamp(0.75rem, 2vh, 1.1rem);
   }
 }
 
 @media (max-width: 900px) {
   .app-home {
     overflow-y: auto;
+    --app-home-card-border: 4px;
   }
 
   .app-home__main {

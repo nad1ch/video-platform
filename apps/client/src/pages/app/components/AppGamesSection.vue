@@ -68,10 +68,14 @@ function prefetchItem(item: AppGameCard): void {
 <style scoped>
 .app-games {
   min-width: 0;
+  height: 100%;
 }
 
 .app-games__panel {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   min-height: clamp(23rem, 30.6vw, 27.6rem);
   padding: 1.15rem 1rem 1.2rem;
   overflow: hidden;
@@ -129,6 +133,8 @@ function prefetchItem(item: AppGameCard): void {
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(6.95rem, 1fr));
+  flex: 1 1 auto;
   gap: 0.95rem 1rem;
 }
 
@@ -138,10 +144,10 @@ function prefetchItem(item: AppGameCard): void {
   grid-template-columns: minmax(0, 1fr) clamp(3.25rem, 4.5vw, 4.2rem);
   align-items: center;
   column-gap: 0.45rem;
-  min-height: 6.8rem;
+  min-height: 0;
   padding: 0.72rem 0.7rem 0.72rem 0.85rem;
   overflow: hidden;
-  border: 5px solid rgba(255, 255, 255, 0.96);
+  border: var(--app-home-card-border, 5px) solid rgba(255, 255, 255, 0.96);
   border-radius: 1.77rem;
   background: rgba(36, 17, 58, 0.34);
   color: #fff;
@@ -302,12 +308,13 @@ function prefetchItem(item: AppGameCard): void {
   }
 
   .app-games__grid {
+    grid-template-rows: repeat(3, minmax(5.9rem, 1fr));
     gap: 0.75rem;
   }
 
   .app-game-card {
-    min-height: 5.7rem;
-    border-width: 3px;
+    min-height: 0;
+    border-width: var(--app-home-card-border, 3px);
     border-radius: 1.1rem;
     padding: 0.65rem 0.75rem;
     grid-template-columns: minmax(0, 1fr) 3rem;
@@ -334,7 +341,7 @@ function prefetchItem(item: AppGameCard): void {
 
   .app-game-card {
     min-height: 6.4rem;
-    border-width: 4px;
+    border-width: var(--app-home-card-border, 4px);
     border-radius: 1.25rem;
     padding: 0.8rem 1rem;
     grid-template-columns: minmax(0, 1fr) 4rem;
@@ -365,6 +372,7 @@ function prefetchItem(item: AppGameCard): void {
 
   .app-games__grid {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
   }
 }
 </style>

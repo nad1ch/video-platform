@@ -22,7 +22,7 @@ const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
       <span class="economy-slot-banner__title">{{ t('landing.economyCta') }}</span>
 
       <span class="economy-slot-banner__slot" aria-hidden="true">
-        <span class="economy-slot-banner__jackpot">{{ t('landing.economyJackpot') }}</span>
+        <span class="economy-slot-banner__jackpot">JACKPOT</span>
 
         <span class="economy-slot-banner__cells">
           <span v-for="letter in slotLetters" :key="letter" class="economy-slot-banner__cell">{{ letter }}</span>
@@ -64,7 +64,7 @@ const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
   inset: 0;
   display: block;
   overflow: hidden;
-  border: calc(var(--economy-slot-u) * 7.5) solid #fff;
+  border: var(--app-home-card-border, 5px) solid #fff;
   border-radius: calc(var(--economy-slot-u) * 41.25);
   box-sizing: border-box;
   background: linear-gradient(166.6115811995453deg, rgba(124, 77, 219, 0.096) 0%, rgba(60, 36, 99, 0.094) 73.206%);
@@ -103,7 +103,7 @@ const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
   font-size: calc(var(--economy-slot-u) * 36);
   font-variation-settings: 'YEAR' 1979;
   font-weight: 400;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   line-height: calc(var(--economy-slot-u) * 58.5);
   text-align: left;
   text-rendering: geometricPrecision;
@@ -114,7 +114,7 @@ const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
 .economy-slot-banner__slot {
   position: absolute;
   left: calc(var(--economy-slot-u) * 654);
-  top: calc(var(--economy-slot-u) * 19.87);
+  top: calc(var(--economy-slot-u) * 9);
   display: block;
   width: calc(var(--economy-slot-u) * 429.19);
   height: calc(var(--economy-slot-u) * 97.03);
