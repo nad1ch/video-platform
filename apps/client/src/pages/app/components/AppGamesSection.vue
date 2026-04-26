@@ -12,6 +12,7 @@ type AppGameCard = {
   imageWebp?: string
   ariaLabel: string
   tone?: 'violet' | 'amber' | 'green' | 'slate'
+  prefetch?: () => void
 }
 
 const props = defineProps<{
@@ -23,6 +24,10 @@ const hasItems = computed(() => props.items.length > 0)
 
 function toneClass(tone: AppGameCard['tone']) {
   return `app-game-card--${tone ?? 'violet'}`
+}
+
+function prefetchItem(item: AppGameCard): void {
+  item.prefetch?.()
 }
 </script>
 
@@ -39,6 +44,8 @@ function toneClass(tone: AppGameCard['tone']) {
           :class="toneClass(item.tone)"
           :to="item.to"
           :aria-label="item.ariaLabel"
+          @mouseenter="prefetchItem(item)"
+          @focus="prefetchItem(item)"
         >
           <span class="app-game-card__copy">
             <span class="app-game-card__title">{{ item.title }}</span>

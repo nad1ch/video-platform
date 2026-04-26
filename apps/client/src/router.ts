@@ -10,6 +10,7 @@ import { useAuth } from '@/composables/useAuth'
 import { registerEatFirstRouterGuards } from '@/eat-first/router.js'
 import { installRouteNavLoadingGuards, releaseRouteNavLoading } from '@/routeNavLoading'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
+import { loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
 
 /** Twitch login slug for `/nadle` → `/nadle/:streamer` redirect and default home link. */
 const DEFAULT_NADLE_STREAMER =
@@ -77,14 +78,14 @@ export const router = createRouter({
         {
           path: 'call',
           name: 'call',
-          meta: { appTitleKey: 'routes.call', footerContext: 'call', requiresAuth: true },
+          meta: { appTitleKey: 'routes.call', footerContext: 'call', footer: false, requiresAuth: true },
           component: () => import('./components/call/CallPage.vue'),
         },
         {
           path: 'mafia',
           name: 'mafia',
-          meta: { appTitleKey: 'routes.mafia', footerContext: 'call', requiresAuth: true },
-          component: () => import('./pages/MafiaPage.vue'),
+          meta: { appTitleKey: 'routes.mafia', footerContext: 'call', footer: false, requiresAuth: true },
+          component: loadMafiaPage,
         },
         {
           path: 'nadle',
@@ -95,19 +96,19 @@ export const router = createRouter({
           path: 'nadle/:streamer',
           name: 'nadle-streamer',
           meta: { appTitleKey: 'routes.nadle', footerContext: 'nadle' },
-          component: () => import('./pages/NadleStreamPage.vue'),
+          component: loadNadleStreamPage,
         },
         {
           path: 'nadraw-show/:streamer',
           name: 'nadraw-show',
-          meta: { appTitleKey: 'routes.nadrawShow', footerContext: 'home' },
+          meta: { appTitleKey: 'routes.nadrawShow', footerContext: 'home', footer: false },
           component: () => import('./pages/NadrawShowPage.vue'),
         },
         {
           path: 'eat',
           name: 'eat',
           meta: { footerContext: 'eat' },
-          component: () => import('./pages/EatFirstPage.vue'),
+          component: loadEatFirstPage,
         },
         {
           path: 'coin-hub',
@@ -160,7 +161,7 @@ export const router = createRouter({
           path: ':streamer',
           name: 'app-streamer',
           meta: { appTitleKey: 'routes.nadle', footerContext: 'nadle' },
-          component: () => import('./pages/NadleStreamPage.vue'),
+          component: loadNadleStreamPage,
         },
       ],
     },

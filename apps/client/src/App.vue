@@ -4,14 +4,14 @@ import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import { useAuth } from '@/composables/useAuth'
-import { routeNavLoadingDepth } from '@/routeNavLoading'
+import { routeNavLoadingVisible } from '@/routeNavLoading'
 import mainCloudSrc from '@/assets/landing/clouds/cloud-wide-volumetric.webp'
 import '@/eat-first/styles/motion.css'
 
 const { t } = useI18n()
 const route = useRoute()
 const initialAppLoading = ref(true)
-const routeLoading = computed(() => routeNavLoadingDepth.value > 0)
+const routeLoading = computed(() => routeNavLoadingVisible.value)
 const pageLoading = computed(() => initialAppLoading.value || routeLoading.value)
 
 function isVisualCloudRoute(): boolean {

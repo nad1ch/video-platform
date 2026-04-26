@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
-import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
-import { useCoinHubStore } from '@/stores/coinHub'
 import AppEconomySection from '@/pages/app/components/AppEconomySection.vue'
-import AppFooter from '@/pages/app/components/AppFooter.vue'
 import AppGamesSection from '@/pages/app/components/AppGamesSection.vue'
-import AppHeader from '@/pages/app/components/AppHeader.vue'
 import AppVideoCallSection from '@/pages/app/components/AppVideoCallSection.vue'
 import eatFirstImage from '@/assets/landing/eat-first.png'
 import eatFirstImageWebp from '@/assets/landing/eat-first.webp'
@@ -20,10 +16,9 @@ import nadrawImageWebp from '@/assets/landing/nadraw-phone.webp'
 import spyImage from '@/assets/landing/spy.png'
 import spyImageWebp from '@/assets/landing/spy.webp'
 import { useAuth } from '@/composables/useAuth'
-import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
-import { BRAND_LOGO_LIGHT_SVG, STREAMER_NICK } from '@/eat-first/constants/brand.js'
-import { LOCALE_OPTIONS, persistLocale } from '@/eat-first/i18n'
-import type { AuthMode } from '@/types/authMode'
+import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
+import { loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
+import { prefetchRoute } from '@/utils/routePrefetch'
 
 type AppGameCard = {
   id: string
@@ -34,13 +29,13 @@ type AppGameCard = {
   imageWebp?: string
   ariaLabel: string
   tone?: 'violet' | 'amber' | 'green' | 'slate'
+  prefetch?: () => void
 }
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuth()
-const { openStreamAuthModal } = useStreamAuthModal()
 
 const defaultNadleStreamer =
   (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
@@ -50,8 +45,6 @@ const callRoute = { name: 'call' } satisfies RouteLocationRaw
 const mafiaRoute = { name: 'mafia' } satisfies RouteLocationRaw
 const eatRoute = { name: 'eat', query: { view: 'join' } } satisfies RouteLocationRaw
 const coinHubRoute = { name: 'coin-hub' } satisfies RouteLocationRaw
-const feedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
-const appHeaderBrand = 'Stream Assist'
 
 const nadleRoute = computed<RouteLocationRaw>(() => ({
   name: 'nadle-streamer',
@@ -63,6 +56,10 @@ const nadrawRoute = computed<RouteLocationRaw>(() => ({
   params: { streamer: defaultNadleStreamer },
 }))
 
+const prefetchEat = () => prefetchRoute(loadEatFirstPage)
+const prefetchMafia = () => prefetchRoute(loadMafiaPage)
+const prefetchNadle = () => prefetchRoute(loadNadleStreamPage)
+
 const gameCards = computed<AppGameCard[]>(() => [
   {
     id: 'eat-first',
@@ -72,6 +69,7 @@ const gameCards = computed<AppGameCard[]>(() => [
     imageWebp: eatFirstImageWebp,
     ariaLabel: t('home.openEatFirst'),
     tone: 'amber',
+    prefetch: prefetchEat,
   },
   {
     id: 'mafia',
@@ -81,6 +79,7 @@ const gameCards = computed<AppGameCard[]>(() => [
     imageWebp: mafiaImageWebp,
     ariaLabel: t('home.openMafia'),
     tone: 'slate',
+    prefetch: prefetchMafia,
   },
   {
     id: 'nadle',
@@ -90,6 +89,7 @@ const gameCards = computed<AppGameCard[]>(() => [
     imageWebp: nadleImageWebp,
     ariaLabel: t('home.openNadle'),
     tone: 'green',
+    prefetch: prefetchNadle,
   },
   {
     id: 'nadraw',
@@ -108,6 +108,7 @@ const gameCards = computed<AppGameCard[]>(() => [
     imageWebp: spyImageWebp,
     ariaLabel: t('home.openSpy'),
     tone: 'slate',
+    prefetch: prefetchMafia,
   },
   {
     id: 'hot-seat',
@@ -117,26 +118,10 @@ const gameCards = computed<AppGameCard[]>(() => [
     imageWebp: eatFirstImageWebp,
     ariaLabel: t('home.openHotSeat'),
     tone: 'amber',
+    prefetch: prefetchEat,
   },
 ])
 
-const localeLabelByCode: Record<string, string> = {
-  en: 'English',
-  de: 'Deutsch',
-  uk: 'Українська',
-  pl: 'Polski',
-}
-
-const localeMenuOrder = ['en', 'de', 'uk', 'pl']
-const localeMenuOptions = computed(() =>
-  localeMenuOrder
-    .map((code) => LOCALE_OPTIONS.find((o) => o.code === code))
-    .filter((o): o is (typeof LOCALE_OPTIONS)[number] => Boolean(o))
-    .map((o) => ({
-      value: o.code,
-      label: localeLabelByCode[o.code] ?? o.label,
-    })),
-)
 const needLoginBanner = computed(() => route.query.needLogin === '1')
 const authRedirectTarget = computed(() => {
   const r = route.query.authRedirect
@@ -144,44 +129,10 @@ const authRedirectTarget = computed(() => {
 })
 
 const authLoading = computed(() => !auth.loaded.value)
-const userName = computed(() => auth.user.value?.displayName ?? '')
-const userAvatar = computed(() => auth.user.value?.avatar ?? '')
-const profileTo = computed<RouteLocationRaw | undefined>(() =>
-  auth.user.value?.role === 'admin' ? { name: 'admin-users' } : undefined,
-)
-const footerYear = new Date().getFullYear()
-
-const coinHub = useCoinHubStore()
-const { balance: coinHubBalance } = storeToRefs(coinHub)
-
-const headerCoinBalanceLabel = computed(() => {
-  if (!auth.isAuthenticated.value) {
-    return '—'
-  }
-  return new Intl.NumberFormat(locale.value, { maximumFractionDigits: 0 }).format(coinHubBalance.value)
-})
 
 onMounted(() => {
   void auth.refresh()
 })
-
-watch(
-  () => auth.isAuthenticated.value,
-  (authed) => {
-    if (authed) {
-      void coinHub.loadSnapshot({ background: true })
-    }
-  },
-  { immediate: true },
-)
-
-function openAuth(mode: AuthMode) {
-  openStreamAuthModal(route.fullPath || '/app', mode)
-}
-
-function onLocaleUpdate(nextLocale: string) {
-  void persistLocale(nextLocale)
-}
 
 watch(
   () => route.query.needLogin,
@@ -213,19 +164,6 @@ watch(
 <template>
   <div class="app-home" :aria-busy="authLoading">
     <div class="app-home__shell">
-      <AppHeader
-        :auth-loading="authLoading"
-        :brand-name="appHeaderBrand"
-        :coin-balance-label="headerCoinBalanceLabel"
-        :coin-hub-to="coinHubRoute"
-        :is-authenticated="auth.isAuthenticated.value"
-        :logo-src="BRAND_LOGO_LIGHT_SVG"
-        :profile-to="profileTo"
-        :user-avatar="userAvatar"
-        :user-name="userName"
-        @login="openAuth('login')"
-      />
-
       <main class="app-home__main">
         <p v-if="needLoginBanner" class="app-home__auth-banner" role="status">
           {{ t('app.authNeedLogin') }}
@@ -241,15 +179,6 @@ watch(
           <AppGamesSection :items="gameCards" />
         </div>
       </main>
-
-      <AppFooter
-        brand-name="Nad1ch"
-        :feedback-href="feedbackHref"
-        :locale="locale"
-        :locale-options="localeMenuOptions"
-        :year="footerYear"
-        @update:locale="onLocaleUpdate"
-      />
     </div>
   </div>
 </template>
@@ -257,10 +186,11 @@ watch(
 <style scoped>
 .app-home {
   position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   width: 100%;
-  height: 100vh;
-  height: 100dvh;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   overflow-x: hidden;
@@ -284,8 +214,8 @@ watch(
   position: relative;
   z-index: 1;
   display: flex;
-  height: 100vh;
-  height: 100dvh;
+  flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
   flex-direction: column;
 }
@@ -356,16 +286,7 @@ watch(
 
 @media (max-width: 900px) {
   .app-home {
-    height: auto;
-    min-height: 100vh;
-    min-height: 100dvh;
     overflow-y: auto;
-  }
-
-  .app-home__shell {
-    height: auto;
-    min-height: 100vh;
-    min-height: 100dvh;
   }
 
   .app-home__main {

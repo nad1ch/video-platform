@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, type RouteLocationRaw } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import coinIcon from '@/assets/landing/coin-streamassist.png'
@@ -19,6 +19,7 @@ const props = withDefaults(
     profileTo?: RouteLocationRaw
     showHelpButton?: boolean
     helpLabel?: string
+    compact?: boolean
   }>(),
   {
     title: '',
@@ -29,6 +30,7 @@ const props = withDefaults(
     profileTo: undefined,
     showHelpButton: false,
     helpLabel: '',
+    compact: false,
   },
 )
 
@@ -51,6 +53,50 @@ const profileMenuLabel = computed(() =>
   displayName.value ? t('app.openProfileMenuFor', { name: displayName.value }) : t('app.openProfileMenu'),
 )
 const profileActionLabel = computed(() => (props.profileTo ? t('app.openAdminPanel') : profileMenuLabel.value))
+const headerWrapper = ref<HTMLElement | null>(null)
+const headerInner = ref<HTMLElement | null>(null)
+
+let headerResizeObserver: ResizeObserver | undefined
+let headerResizeFrame = 0
+
+function syncHeaderHeight(): void {
+  if (!headerWrapper.value || !headerInner.value) {
+    return
+  }
+  headerWrapper.value.style.height = `${headerInner.value.offsetHeight}px`
+}
+
+function scheduleHeaderHeightSync(): void {
+  if (typeof window === 'undefined') {
+    syncHeaderHeight()
+    return
+  }
+  if (headerResizeFrame) {
+    window.cancelAnimationFrame(headerResizeFrame)
+  }
+  headerResizeFrame = window.requestAnimationFrame(() => {
+    headerResizeFrame = 0
+    syncHeaderHeight()
+  })
+}
+
+onMounted(() => {
+  void nextTick(() => {
+    syncHeaderHeight()
+    if (typeof ResizeObserver === 'undefined' || !headerInner.value) {
+      return
+    }
+    headerResizeObserver = new ResizeObserver(scheduleHeaderHeightSync)
+    headerResizeObserver.observe(headerInner.value)
+  })
+})
+
+onUnmounted(() => {
+  headerResizeObserver?.disconnect()
+  if (headerResizeFrame && typeof window !== 'undefined') {
+    window.cancelAnimationFrame(headerResizeFrame)
+  }
+})
 
 function avatarSizedUrl(rawUrl: string, size: number): string {
   const trimmed = rawUrl.trim()
@@ -71,71 +117,82 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 </script>
 
 <template>
-  <header class="app-landing-header" :aria-label="t('app.headerAria')">
-    <div class="app-landing-header__bar">
-      <RouterLink class="app-landing-header__brand" :to="{ name: 'home' }" :aria-label="brandName">
-        <img class="app-landing-header__logo" :src="logoSrc" alt="" width="42" height="42" />
-      </RouterLink>
-
-      <div class="app-landing-header__center">
-        <RouterLink class="app-landing-header__title" :to="{ name: 'home' }">
-          {{ displayTitle }}
-        </RouterLink>
-        <span v-if="$slots.center" class="app-landing-header__center-extra">
-          <slot name="center" />
-        </span>
-      </div>
-
-      <div class="app-landing-header__actions">
-        <button
-          v-if="showHelpButton"
-          type="button"
-          class="app-landing-header__help"
-          :title="resolvedHelpLabel"
-          :aria-label="resolvedHelpLabel"
-          @click="$emit('openHelp')"
-        >
-          ?
-        </button>
-
-        <RouterLink class="app-landing-header__coin" :to="coinHubTo" :aria-label="t('app.openCoinHub')">
-          <span class="app-landing-header__coin-label">{{ coinBalanceLabel }}</span>
-          <span class="app-landing-header__coin-icon" aria-hidden="true">
-            <img class="app-landing-header__coin-img" :src="coinIcon" alt="" width="44" height="44" />
-          </span>
+  <header
+    ref="headerWrapper"
+    class="app-landing-header"
+    :class="{ 'app-landing-header--compact': compact }"
+    :aria-label="t('app.headerAria')"
+  >
+    <div ref="headerInner" class="app-landing-header__inner">
+      <div class="app-landing-header__bar">
+        <RouterLink class="app-landing-header__brand" :to="{ name: 'home' }" :aria-label="brandName">
+          <img class="app-landing-header__logo" :src="logoSrc" alt="" width="42" height="42" />
         </RouterLink>
 
-        <div class="app-landing-header__auth sa-glass-button" :aria-busy="authLoading">
-          <span v-if="authLoading" class="app-landing-header__auth-loading">{{ t('app.loading') }}</span>
-          <component
-            :is="profileTo ? RouterLink : 'button'"
-            v-else-if="isAuthenticated"
-            v-bind="profileTo ? { to: profileTo } : { type: 'button' }"
-            class="app-landing-header__user"
-            :aria-label="profileActionLabel"
-            :title="displayName || undefined"
-          >
-            <span class="app-landing-header__avatar" aria-hidden="true">
-              <img
-                v-if="hasUserAvatar"
-                class="app-landing-header__avatar-img"
-                :src="userAvatarSrc"
-                alt=""
-                width="28"
-                height="28"
-                loading="lazy"
-                decoding="async"
-                fetchpriority="low"
-              />
-              <span v-else>{{ userInitial }}</span>
+        <div class="app-landing-header__center">
+          <RouterLink class="app-landing-header__title" :to="{ name: 'home' }">
+            <span class="app-landing-header__title-frame">
+              <Transition name="app-landing-header-title" mode="out-in">
+                <span :key="displayTitle" class="app-landing-header__title-text">{{ displayTitle }}</span>
+              </Transition>
             </span>
-            <span class="app-landing-header__user-name">{{ displayName || userInitial }}</span>
-          </component>
-          <span v-else class="app-landing-header__auth-buttons">
-            <button type="button" class="app-landing-header__auth-link" @click="$emit('login')">
-              {{ t('app.logIn') }}
-            </button>
+          </RouterLink>
+          <span v-if="$slots.center" class="app-landing-header__center-extra">
+            <slot name="center" />
           </span>
+        </div>
+
+        <div class="app-landing-header__actions">
+          <button
+            v-if="showHelpButton"
+            type="button"
+            class="app-landing-header__help"
+            :title="resolvedHelpLabel"
+            :aria-label="resolvedHelpLabel"
+            @click="$emit('openHelp')"
+          >
+            ?
+          </button>
+
+          <RouterLink class="app-landing-header__coin" :to="coinHubTo" :aria-label="t('app.openCoinHub')">
+            <span class="app-landing-header__coin-label">{{ coinBalanceLabel }}</span>
+            <span class="app-landing-header__coin-icon" aria-hidden="true">
+              <img class="app-landing-header__coin-img" :src="coinIcon" alt="" width="44" height="44" />
+            </span>
+          </RouterLink>
+
+          <div class="app-landing-header__auth sa-glass-button" :aria-busy="authLoading">
+            <span v-if="authLoading" class="app-landing-header__auth-loading">{{ t('app.loading') }}</span>
+            <component
+              :is="profileTo ? RouterLink : 'button'"
+              v-else-if="isAuthenticated"
+              v-bind="profileTo ? { to: profileTo } : { type: 'button' }"
+              class="app-landing-header__user"
+              :aria-label="profileActionLabel"
+              :title="displayName || undefined"
+            >
+              <span class="app-landing-header__avatar" aria-hidden="true">
+                <img
+                  v-if="hasUserAvatar"
+                  class="app-landing-header__avatar-img"
+                  :src="userAvatarSrc"
+                  alt=""
+                  width="28"
+                  height="28"
+                  loading="lazy"
+                  decoding="async"
+                  fetchpriority="low"
+                />
+                <span v-else>{{ userInitial }}</span>
+              </span>
+              <span class="app-landing-header__user-name">{{ displayName || userInitial }}</span>
+            </component>
+            <span v-else class="app-landing-header__auth-buttons">
+              <button type="button" class="app-landing-header__auth-link" @click="$emit('login')">
+                {{ t('app.logIn') }}
+              </button>
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -146,11 +203,21 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 .app-landing-header {
   position: relative;
   z-index: 3;
+  overflow: visible;
+  transition: height 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: height;
+}
+
+.app-landing-header__inner {
+  width: 100%;
   padding: 0.6rem clamp(1.35rem, 1.6vw, 1.55rem) 0;
+  box-sizing: border-box;
+  transition: padding 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .app-landing-header__bar {
   position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -160,6 +227,21 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   padding: 0 1.6rem;
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 999px;
+  background: rgba(18, 8, 34, 0.015);
+  transform: translateZ(0);
+  transition:
+    min-height 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-landing-header__bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 34%),
     rgba(18, 8, 34, 0.015);
@@ -169,6 +251,11 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
     0 14px 36px rgba(11, 3, 23, 0.34);
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
+  transform: translateZ(0);
+}
+
+.app-landing-header--compact .app-landing-header__bar {
+  min-height: calc(4.5rem - 20px);
 }
 
 .app-landing-header__brand,
@@ -179,6 +266,8 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 }
 
 .app-landing-header__brand {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -210,7 +299,11 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 }
 
 .app-landing-header__title {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
+  min-height: 2.1rem;
   overflow: hidden;
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
@@ -225,6 +318,37 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   white-space: nowrap;
 }
 
+.app-landing-header__title-frame {
+  position: relative;
+  display: grid;
+  align-items: center;
+  min-height: 2.1rem;
+  min-width: 0;
+}
+
+.app-landing-header__title-text {
+  grid-area: 1 / 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-landing-header-title-enter-active,
+.app-landing-header-title-leave-active {
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.app-landing-header-title-enter-from,
+.app-landing-header-title-leave-to {
+  opacity: 0;
+  transform: translateY(0.15rem);
+}
+
+.app-landing-header-title-leave-active {
+  position: absolute;
+}
+
 .app-landing-header__center-extra {
   display: inline-flex;
   align-items: center;
@@ -233,6 +357,8 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 }
 
 .app-landing-header__actions {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -446,7 +572,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 }
 
 @media (max-width: 1200px) {
-  .app-landing-header {
+  .app-landing-header__inner {
     padding: 0.45rem clamp(0.8rem, 2vw, 1.25rem) 0;
   }
 
@@ -454,6 +580,10 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
     gap: 0.85rem;
     min-height: 4.4rem;
     padding: 0 1rem;
+  }
+
+  .app-landing-header--compact .app-landing-header__bar {
+    min-height: calc(4.4rem - 20px);
   }
 
   .app-landing-header__brand {
@@ -515,7 +645,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 }
 
 @media (max-width: 640px) {
-  .app-landing-header {
+  .app-landing-header__inner {
     padding-inline: 0.65rem;
   }
 
@@ -544,6 +674,18 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-landing-header {
+    transition: none;
+    will-change: auto;
+  }
+
+  .app-landing-header__inner,
+  .app-landing-header__bar {
+    transition: none;
   }
 }
 </style>

@@ -8,6 +8,8 @@ declare module 'vue-router' {
     appTitle?: string
     /** Який текст показувати у футері (`app.footerLine*` у i18n). */
     footerContext?: 'home' | 'nadle' | 'call' | 'eat'
+    /** Whether the app shell footer should render for this route. */
+    footer?: boolean
     /** Потрібна сесія StreamAssist OAuth (cookie JWT). */
     requiresAuth?: boolean
     /** Лише `user.role === 'admin'` (інше — редірект на `/app`). */

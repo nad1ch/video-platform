@@ -3,12 +3,8 @@ import '@/eat-first/style.css'
 import '@/eat-first/styles/theme.css'
 import { storeToRefs } from 'pinia'
 import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
-import { RouterLink, RouterView, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
+import { RouterView, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import AppHeader from '@/components/ui/AppHeader.vue'
-import LegacyAppFooter from '@/components/ui/AppFooter.vue'
-import AppShellStreamNav from '@/components/ui/AppShellStreamNav.vue'
-import AppShellChromeToolbar from '@/components/ui/AppShellChromeToolbar.vue'
 import AppLandingHeader from '@/pages/app/components/AppHeader.vue'
 import AppLandingFooter from '@/pages/app/components/AppFooter.vue'
 import { eatViewFromRoute, useSeoApp, useTheme } from '@/eat-first'
@@ -28,7 +24,6 @@ import {
 } from '@/stores/callRoomHeaderJoin'
 import { redirectAdminToControlIfAuthed } from '@/eat-first/router.js'
 import {
-  BRAND_LOGO_DARK_SVG,
   BRAND_LOGO_LIGHT_SVG,
   STREAM_APP_BRAND_NAME,
 } from '@/eat-first/constants/brand.js'
@@ -41,9 +36,11 @@ import type { AuthMode } from '@/types/authMode'
 
 useSeoApp()
 
-const AppHeaderToolbar = defineAsyncComponent(() => import('@/eat-first/ui/organisms/AppHeaderToolbar.vue'))
-const HostControlChromeBar = defineAsyncComponent(() => import('@/eat-first/components/showdesk/HostControlChromeBar.vue'))
-const OnboardingTourModal = defineAsyncComponent(() => import('@/eat-first/ui/organisms/OnboardingTourModal.vue'))
+const OnboardingTourModal = defineAsyncComponent({
+  loader: () => import('@/eat-first/ui/organisms/OnboardingTourModal.vue'),
+  delay: 100,
+  timeout: 10000,
+})
 
 const route = useRoute()
 const router = useRouter()
@@ -57,33 +54,17 @@ const canEatFirstHost = computed(() => {
   const r = auth.user.value?.role
   return r === 'admin' || r === 'host'
 })
-const { theme, setTheme, toggleTheme } = useTheme()
+const { theme, setTheme } = useTheme()
 
 const isEatRoute = computed(() => route.path.startsWith('/app/eat'))
 const isHomeRoute = computed(() => route.name === 'home')
-const isNadleAppHeaderRoute = computed(
-  () => route.name === 'nadle-streamer' || route.name === 'app-streamer',
-)
 const isCallRoute = computed(() => route.name === 'call')
 const isMafiaRoute = computed(() => route.name === 'mafia')
 const isCoinHubRoute = computed(() => route.name === 'coin-hub')
 const isNadrawRoute = computed(() => route.name === 'nadraw-show')
 const isAdminRoute = computed(() => String(route.name ?? '').startsWith('admin-'))
 const isHeavyVisualRoute = computed(() => isHomeRoute.value)
-const isNewAppHeaderRoute = computed(
-  () =>
-    isNadleAppHeaderRoute.value ||
-    isAdminRoute.value ||
-    isCallRoute.value ||
-    isMafiaRoute.value ||
-    isCoinHubRoute.value ||
-    isNadrawRoute.value ||
-    isEatRoute.value,
-)
-const isNewAppFooterRoute = computed(
-  () => isNadleAppHeaderRoute.value || isAdminRoute.value || isCoinHubRoute.value || isEatRoute.value,
-)
-const shellShowsCoinBalance = computed(() => showChrome.value && isNewAppHeaderRoute.value)
+const shellShowsCoinBalance = computed(() => showChrome.value)
 
 /** Nadle stream + Nadraw: дати viewport `min-height: 0`, щоб сторінка могла займати залишок висоти без нескінченного росту. */
 const isNadleStreamRoute = computed(
@@ -95,30 +76,11 @@ const isNadleStreamRoute = computed(
 
 const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route) : 'join'))
 
-const showChrome = computed(
-  () => !isHomeRoute.value && (!isEatRoute.value || currentEatView.value !== 'overlay'),
-)
+const showChrome = computed(() => !isEatRoute.value || currentEatView.value !== 'overlay')
+const showFooter = computed(() => showChrome.value && route.meta.footer !== false)
 
-const showLegacyShellHeader = computed(() => showChrome.value && !isNewAppHeaderRoute.value)
-
-const showSiteFooter = computed(
-  () => showChrome.value && route.name !== 'call' && route.name !== 'mafia' && route.name !== 'nadraw-show',
-)
-
-/** Стабільний ключ для Transition: без зайвих анімацій на дрібні зміни query (наприклад ?channel=). */
-const routeTransitionKey = computed(() => {
-  if (route.path.startsWith('/app/eat')) {
-    const raw = route.query.view
-    const view =
-      typeof raw === 'string'
-        ? raw
-        : Array.isArray(raw) && typeof raw[0] === 'string'
-          ? raw[0]
-          : 'join'
-    return `eat:${view}`
-  }
-  return String(route.name ?? route.path)
-})
+/** Stable page key: query changes should not create an empty transition gap. */
+const routeTransitionKey = computed(() => String(route.name ?? route.path))
 
 const streamTitle = computed(() => {
   void locale.value
@@ -138,24 +100,11 @@ const streamTitle = computed(() => {
 
 const hostChromeOn = computed(() => hostControlChromeStore.active === true)
 
-const votingGlow = computed(() =>
-  Boolean(
-    (hostControlChromeStore.gameRoom as { voting?: { active?: boolean } } | null | undefined)?.voting
-      ?.active,
-  ),
-)
-
 const eatBrand = computed(() => (hostChromeOn.value ? t('app.brandHost') : t('game.title')))
 
 const headerTitle = computed(() => (isEatRoute.value ? eatBrand.value : streamTitle.value))
-
-const eatHeaderClass = computed(() => ({
-  'app-shell-header--host': hostChromeOn.value,
-  'app-shell-header--vote-on': votingGlow.value,
-}))
-
-const localeMenuOptions = LOCALE_OPTIONS.map((o) => ({ value: o.code, label: o.label }))
 const appLandingHeaderBrand = computed(() =>
+  isHomeRoute.value ||
   isAdminRoute.value ||
   isCallRoute.value ||
   isMafiaRoute.value ||
@@ -168,6 +117,7 @@ const appLandingHeaderBrand = computed(() =>
 const appLandingFooterBrand = 'Nad1ch'
 const appLandingFeedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
 const appLandingCoinHubRoute = { name: 'coin-hub' } satisfies RouteLocationRaw
+const appLandingHeaderCompact = computed(() => !isHomeRoute.value)
 const appLandingLocaleLabelByCode: Record<string, string> = {
   en: 'English',
   de: 'Deutsch',
@@ -195,31 +145,7 @@ const appLandingHeaderUserAvatar = computed(() => auth.user.value?.avatar ?? '')
 const appLandingProfileTo = computed<RouteLocationRaw | undefined>(() =>
   auth.user.value?.role === 'admin' ? { name: 'admin-users' } : undefined,
 )
-const themeIcon = computed(() => (theme.value === 'dark' ? '☀️' : '🌙'))
-const themeLabel = computed(() => (theme.value === 'dark' ? t('app.themeLight') : t('app.themeDark')))
 const footerYear = new Date().getFullYear()
-
-const streamShellPrimaryLogo = computed(() => (theme.value === 'dark' ? BRAND_LOGO_LIGHT_SVG : BRAND_LOGO_DARK_SVG))
-const streamShellFallbackLogo = computed(() => (theme.value === 'dark' ? BRAND_LOGO_DARK_SVG : BRAND_LOGO_LIGHT_SVG))
-
-const streamShellBrandImg = ref(streamShellPrimaryLogo.value)
-
-watch(streamShellPrimaryLogo, (next) => {
-  streamShellBrandImg.value = next
-})
-
-function onStreamShellBrandImgError() {
-  if (streamShellBrandImg.value === streamShellPrimaryLogo.value) {
-    streamShellBrandImg.value = streamShellFallbackLogo.value
-    return
-  }
-  streamShellBrandImg.value = ''
-}
-
-const streamBrandFallbackLetter = computed(() => {
-  const s = String(headerTitle.value ?? '').trim()
-  return (s[0] ?? 'S').toUpperCase()
-})
 
 const onboardingOpen = ref(false)
 const onboardingTourKey = ref('')
@@ -333,112 +259,12 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   <div class="app-shell-layout eat-first-root page-stack" :data-theme="theme">
     <LandingCloudBackdrop class="app-shell-layout__backdrop" :active="isHeavyVisualRoute" />
     <div class="app-shell-layout__body app-layout">
-      <AppHeader
-        v-if="showLegacyShellHeader"
-        :header-class="isEatRoute ? eatHeaderClass : undefined"
-        :title="headerTitle"
-      >
-        <template v-if="isEatRoute" #brand>
-          <RouterLink
-            class="app-shell-brand app-shell-brand--with-mark app-shell-stream-brand"
-            :to="{ name: 'home' }"
-            :title="headerTitle"
-            :aria-label="`${t('app.navHome')} · ${headerTitle}`"
-          >
-            <span v-if="streamShellBrandImg" class="app-shell-stream-brand__mark-wrap">
-              <img
-                class="app-shell-stream-brand__mark"
-                :src="streamShellBrandImg"
-                width="22"
-                height="22"
-                alt=""
-                decoding="async"
-                fetchpriority="low"
-                @error="onStreamShellBrandImgError"
-              />
-            </span>
-            <span v-else class="app-shell-stream-brand__mark-fallback" aria-hidden="true">{{
-              streamBrandFallbackLetter
-            }}</span>
-            <span class="app-shell-brand__title app-shell-stream-brand__title">{{ headerTitle }}</span>
-          </RouterLink>
-        </template>
-        <template #start>
-          <AppShellStreamNav />
-        </template>
-        <template v-if="!isEatRoute" #center>
-          <div class="app-shell-header__stream-center">
-            <RouterLink
-              class="app-shell-stream-centered-title"
-              :to="{ name: 'home' }"
-              :title="headerTitle"
-              :aria-label="`${t('app.navHome')} · ${headerTitle}`"
-            >
-              {{ headerTitle }}
-            </RouterLink>
-            <div
-              v-if="route.name === 'call' || route.name === 'mafia'"
-              :id="CALL_ROOM_DROPDOWN_HOST_ID"
-              class="app-shell-call-room-anchor"
-            >
-              <button
-                type="button"
-                class="app-shell-call-join-room"
-                :aria-expanded="callRoomHeaderJoin.roomPopoverOpen"
-                aria-haspopup="dialog"
-                :aria-controls="CALL_ROOM_POPOVER_PANEL_ID"
-                @click.stop="callRoomHeaderJoin.toggleRoomPopover()"
-              >
-                {{ t('callPage.headerJoinRoom') }}
-              </button>
-            </div>
-            <button
-              v-if="isMafiaRoute && mafiaHeaderHasRoom"
-              type="button"
-              class="stream-nav__link stream-nav__link--btn"
-              :class="{ 'stream-nav__link--active': isMafiaViewMode }"
-              :title="mafiaHeaderObsCopyLabel"
-              :aria-label="mafiaHeaderObsCopyLabel"
-              @click="copyMafiaObsViewUrl"
-            >
-              {{ mafiaHeaderObsCopyLabel }}
-            </button>
-          </div>
-        </template>
-        <template #end>
-          <AppHeaderToolbar
-            v-if="isEatRoute"
-            :locale-menu-options="localeMenuOptions"
-            :model-locale="locale"
-            :theme-icon="themeIcon"
-            :theme-label="themeLabel"
-            :show-onboarding-guide="Boolean(onboardingForRoute)"
-            @update:locale="persistLocale"
-            @toggle-theme="toggleTheme"
-            @open-onboarding="openOnboardingForCurrentRoute"
-          />
-          <AppShellChromeToolbar v-else />
-        </template>
-        <template v-if="isEatRoute && hostChromeOn" #below>
-          <div class="app-shell-header__host-stack">
-            <p
-              v-if="hostControlChromeStore.summaryLine"
-              class="app-shell-host-summary"
-              role="status"
-              :title="hostControlChromeStore.summaryLine"
-            >
-              <span class="app-shell-host-summary__inner">{{ hostControlChromeStore.summaryLine }}</span>
-            </p>
-            <HostControlChromeBar />
-          </div>
-        </template>
-      </AppHeader>
-
       <AppLandingHeader
-        v-else-if="showChrome && isNewAppHeaderRoute"
+        v-if="showChrome"
         :auth-loading="!auth.loaded.value"
         :brand-name="appLandingHeaderBrand"
         :coin-balance-label="appLandingHeaderCoinBalanceLabel"
+        :compact="appLandingHeaderCompact"
         :coin-hub-to="appLandingCoinHubRoute"
         :help-label="t('onboarding.openGuide')"
         :is-authenticated="auth.isAuthenticated.value"
@@ -450,7 +276,6 @@ async function copyMafiaObsViewUrl(): Promise<void> {
         :user-name="appLandingHeaderUserName"
         @open-help="openOnboardingForCurrentRoute"
         @login="openAppLandingAuth('login')"
-        @signup="openAppLandingAuth('login')"
       >
         <template v-if="isCallRoute || isMafiaRoute" #center>
           <div :id="CALL_ROOM_DROPDOWN_HOST_ID" class="app-shell-call-room-anchor">
@@ -498,7 +323,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
       </main>
 
       <AppLandingFooter
-        v-if="showChrome && isNewAppFooterRoute"
+        v-if="showFooter"
         :brand-name="appLandingFooterBrand"
         :feedback-href="appLandingFeedbackHref"
         :locale="locale"
@@ -506,7 +331,6 @@ async function copyMafiaObsViewUrl(): Promise<void> {
         :year="footerYear"
         @update:locale="persistLocale"
       />
-      <LegacyAppFooter v-else-if="showSiteFooter" :year="footerYear" />
 
       <OnboardingTourModal
         v-if="isEatRoute"
@@ -553,7 +377,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   min-height: 100vh;
 }
 
-/* Crossfade між маршрутами: без `out-in` (там видно «миготіння» фону). Стара сторінка — поверх, уходить у opacity. */
+/* Route content crossfades; leaving page overlays the new one to avoid blank gaps. */
 .app-shell-route-stack {
   position: relative;
   flex: 1 1 auto;
@@ -564,6 +388,17 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   flex-direction: column;
 }
 
+.app-shell-route-stack :deep(> *) {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.app-shell-route-stack :deep(.route-soft-enter-active),
+.app-shell-route-stack :deep(.route-soft-leave-active) {
+  transition: opacity 0.2s ease;
+}
+
 .app-shell-route-stack :deep(.route-soft-enter-active) {
   position: relative;
   z-index: 0;
@@ -572,9 +407,18 @@ async function copyMafiaObsViewUrl(): Promise<void> {
 .app-shell-route-stack :deep(.route-soft-leave-active) {
   position: absolute;
   inset: 0;
-  width: 100%;
   z-index: 2;
   pointer-events: none;
+}
+
+.app-shell-route-stack :deep(.route-soft-enter-from),
+.app-shell-route-stack :deep(.route-soft-leave-to) {
+  opacity: 0;
+}
+
+.app-shell-route-stack :deep(.route-soft-enter-to),
+.app-shell-route-stack :deep(.route-soft-leave-from) {
+  opacity: 1;
 }
 
 .app-shell-stream-brand__mark-wrap {
