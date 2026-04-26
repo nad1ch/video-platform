@@ -96,9 +96,9 @@ const landingFooterLocaleOptions = Object.freeze(
 const landingCriticalImageSources = Object.freeze([
   BRAND_LOGO_LIGHT_SVG,
   twitchBrowseIllustration,
-  callCardOne,
-  callCardTwo,
-  callCardThree,
+  callBannerCardOne,
+  callBannerCardTwo,
+  callBannerCardThree,
   eatFirstIcon,
   mafiaIcon,
   spyIcon,
