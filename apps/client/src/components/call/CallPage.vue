@@ -670,6 +670,14 @@ const inboundDebugRows = ref<InboundVideoDebugRow[]>([])
 const inboundDebugBusy = ref(false)
 
 type CallToast = { id: string; text: string; kind: 'join' | 'leave' }
+type ChatPanelRect = { left: number; top: number; width: number; height: number }
+type ChatPanelGesture = {
+  kind: 'move' | 'resize'
+  startX: number
+  startY: number
+  startRect: ChatPanelRect
+}
+
 const callToasts = ref<CallToast[]>([])
 let lastPresenceToastSourceId = ''
 
@@ -717,7 +725,11 @@ function onMafiaObsUrlCopiedToast(): void {
 
 const chatOpen = ref(false)
 const chatDraft = ref('')
+const chatPanelRef = ref<HTMLElement | null>(null)
+const chatPanelRect = ref<ChatPanelRect | null>(null)
+const chatPanelCustomized = ref(false)
 const chatScrollRef = ref<HTMLElement | null>(null)
+let chatPanelGesture: ChatPanelGesture | null = null
 
 const micPickerOpen = ref(false)
 const camPickerOpen = ref(false)
@@ -832,7 +844,7 @@ watch(roomPopoverOpen, (open) => {
 })
 
 async function copyRoomToClipboard(): Promise<void> {
-  const text = displayCallOrMafiaRoomCode()
+  const text = normalizeDisplayName(roomJoinDraft.value) || displayCallOrMafiaRoomCode()
   try {
     await navigator.clipboard.writeText(text)
   } catch {
@@ -860,7 +872,9 @@ async function copyRoomToClipboard(): Promise<void> {
 }
 
 async function onGenerateNewRoom(): Promise<void> {
-  await switchToRoom(generateCallRoomCode())
+  const nextRoom = generateCallRoomCode()
+  roomJoinDraft.value = nextRoom
+  await switchToRoom(nextRoom)
 }
 
 function submitRoomDraft(): void {
@@ -890,7 +904,8 @@ function onDocumentPointerForDevicePickers(ev: PointerEvent): void {
     return
   }
   const roomHost = typeof document !== 'undefined' ? document.getElementById(CALL_ROOM_DROPDOWN_HOST_ID) : null
-  if (roomHost?.contains(t)) {
+  const roomPanel = typeof document !== 'undefined' ? document.getElementById(CALL_ROOM_POPOVER_PANEL_ID) : null
+  if (roomHost?.contains(t) || roomPanel?.contains(t)) {
     return
   }
   if (callRoomHeaderJoin.roomPopoverOpen) {
@@ -928,9 +943,139 @@ function chatOpenPrefKey(): string {
   return `streamassist_call_chat_open:${r || 'demo'}`
 }
 
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+function defaultChatPanelRect(): ChatPanelRect {
+  if (typeof window === 'undefined') {
+    return { left: 0, top: 0, width: 320, height: 520 }
+  }
+  const margin = 12
+  const width = Math.min(340, Math.max(280, window.innerWidth - margin * 2))
+  const top = 72
+  const height = Math.min(Math.max(360, window.innerHeight - top - 100), window.innerHeight - margin * 2)
+  return clampChatPanelRect({
+    left: window.innerWidth - width - margin,
+    top,
+    width,
+    height,
+  })
+}
+
+function clampChatPanelRect(rect: ChatPanelRect): ChatPanelRect {
+  if (typeof window === 'undefined') {
+    return rect
+  }
+  const margin = 8
+  const minWidth = Math.min(260, Math.max(180, window.innerWidth - margin * 2))
+  const minHeight = Math.min(300, Math.max(220, window.innerHeight - margin * 2))
+  const maxWidth = Math.max(minWidth, window.innerWidth - margin * 2)
+  const maxHeight = Math.max(minHeight, window.innerHeight - margin * 2)
+  const width = clampNumber(rect.width, minWidth, maxWidth)
+  const height = clampNumber(rect.height, minHeight, maxHeight)
+  return {
+    left: clampNumber(rect.left, margin, window.innerWidth - width - margin),
+    top: clampNumber(rect.top, margin, window.innerHeight - height - margin),
+    width,
+    height,
+  }
+}
+
+function ensureChatPanelRect(): ChatPanelRect {
+  const rect = clampChatPanelRect(chatPanelRect.value ?? defaultChatPanelRect())
+  chatPanelRect.value = rect
+  return rect
+}
+
+const chatPanelStyle = computed(() => {
+  const rect = chatPanelRect.value
+  if (!rect) {
+    return undefined
+  }
+  return {
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
+  }
+})
+
+const chatPanelClass = computed(() => ({
+  'call-page__chat--open': chatOpen.value,
+  'call-page__chat--customized': chatPanelCustomized.value,
+}))
+
+function onChatPanelPointerMove(ev: PointerEvent): void {
+  if (!chatPanelGesture) {
+    return
+  }
+  const dx = ev.clientX - chatPanelGesture.startX
+  const dy = ev.clientY - chatPanelGesture.startY
+  const start = chatPanelGesture.startRect
+  const next =
+    chatPanelGesture.kind === 'move'
+      ? { ...start, left: start.left + dx, top: start.top + dy }
+      : { ...start, left: start.left + dx, width: start.width - dx, height: start.height + dy }
+  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+    chatPanelCustomized.value = true
+  }
+  chatPanelRect.value = clampChatPanelRect(next)
+}
+
+function stopChatPanelGesture(): void {
+  chatPanelGesture = null
+  if (typeof window === 'undefined') {
+    return
+  }
+  window.removeEventListener('pointermove', onChatPanelPointerMove)
+  window.removeEventListener('pointerup', stopChatPanelGesture)
+  window.removeEventListener('pointercancel', stopChatPanelGesture)
+}
+
+function startChatPanelGesture(ev: PointerEvent, kind: ChatPanelGesture['kind']): void {
+  if (ev.button !== 0) {
+    return
+  }
+  const target = ev.target
+  if (kind === 'move' && target instanceof Element && target.closest('button, input, textarea, select, a')) {
+    return
+  }
+  ev.preventDefault()
+  stopChatPanelGesture()
+  chatPanelGesture = {
+    kind,
+    startX: ev.clientX,
+    startY: ev.clientY,
+    startRect: ensureChatPanelRect(),
+  }
+  window.addEventListener('pointermove', onChatPanelPointerMove)
+  window.addEventListener('pointerup', stopChatPanelGesture)
+  window.addEventListener('pointercancel', stopChatPanelGesture)
+}
+
+function onChatPanelDragPointerDown(ev: PointerEvent): void {
+  startChatPanelGesture(ev, 'move')
+}
+
+function onChatPanelResizePointerDown(ev: PointerEvent): void {
+  startChatPanelGesture(ev, 'resize')
+}
+
+function syncChatPanelToViewport(): void {
+  if (chatPanelRect.value) {
+    chatPanelRect.value = clampChatPanelRect(chatPanelRect.value)
+  }
+}
+
 watch(chatOpen, (open) => {
   if (!session.inCall) {
     return
+  }
+  if (open) {
+    void nextTick(() => {
+      ensureChatPanelRect()
+    })
   }
   try {
     sessionStorage.setItem(chatOpenPrefKey(), open ? '1' : '0')
@@ -1474,6 +1619,7 @@ onBeforeUnmount(() => {
 
 onMounted(() => {
   document.addEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
+  window.addEventListener('resize', syncChatPanelToViewport)
   void (async () => {
     await ensureAuthLoaded()
     const authName = normalizeDisplayName(user.value?.displayName)
@@ -1502,6 +1648,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
+  window.removeEventListener('resize', syncChatPanelToViewport)
+  stopChatPanelGesture()
   window.removeEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
   document.documentElement.classList.remove(CALL_ROUTE_HTML_CLASS)
   if (import.meta.env.DEV) {
@@ -1530,8 +1678,10 @@ watch(joining, (j) => {
 <template>
   <div class="page-route">
     <AppFullPageLoader :visible="joining" :aria-label="t('callPage.joining')" label="" />
-    <Teleport v-if="callRoomHeaderJoin.roomPopoverOpen" :to="`#${CALL_ROOM_DROPDOWN_HOST_ID}`">
+    <Teleport to="body">
+      <Transition name="call-page-room-pop">
       <div
+        v-if="callRoomHeaderJoin.roomPopoverOpen"
         :id="CALL_ROOM_POPOVER_PANEL_ID"
         class="call-page__room-pop sa-scrollbar"
         role="dialog"
@@ -1550,7 +1700,15 @@ watch(joining, (j) => {
         <div class="call-page__room-pop-code">
           <span class="call-page__room-pop-label">{{ t('callPage.roomCodeLabel') }}</span>
           <div class="call-page__room-pop-code-row">
-            <code class="call-page__room-pop-value call-page__room-pop-value--row">{{ displayCallOrMafiaRoomCode() }}</code>
+            <input
+              v-model="roomJoinDraft"
+              class="call-page__room-pop-code-input"
+              type="text"
+              name="call-room-code"
+              autocomplete="off"
+              :placeholder="t('callPage.roomJoinPlaceholder')"
+              @keydown.enter.prevent="submitRoomDraft"
+            />
             <div class="call-page__room-pop-code-tools">
               <div class="call-page__room-pop-copy-wrap">
                 <button
@@ -1617,17 +1775,6 @@ watch(joining, (j) => {
           </div>
         </div>
         <div class="call-page__room-pop-join">
-          <label class="call-page__room-pop-field">
-            <span>{{ t('callPage.roomJoinFieldLabel') }}</span>
-            <input
-              v-model="roomJoinDraft"
-              type="text"
-              name="call-room-code"
-              autocomplete="off"
-              :placeholder="t('callPage.roomJoinPlaceholder')"
-              @keydown.enter.prevent="submitRoomDraft"
-            />
-          </label>
           <AppButton variant="primary" :disabled="joining" @click="submitRoomDraft">
             {{ t('callPage.roomSwitch') }}
           </AppButton>
@@ -1654,6 +1801,7 @@ watch(joining, (j) => {
           {{ t('callPage.wsStatus', { status: wsStatus }) }}
         </p>
       </div>
+      </Transition>
     </Teleport>
     <AppContainer class="call-page" :class="{ 'call-page--stage-full': stageFullBleed }" :flush="true">
     <div class="call-page__shell">
@@ -2060,12 +2208,14 @@ watch(joining, (j) => {
 
         <aside
           v-if="session.inCall && !mafiaViewUi"
+          ref="chatPanelRef"
           class="call-page__chat"
-          :class="{ 'call-page__chat--open': chatOpen }"
+          :class="chatPanelClass"
+          :style="chatPanelStyle"
           :aria-label="t('callPage.chatTitle')"
           :aria-hidden="chatOpen ? 'false' : 'true'"
         >
-          <div class="call-page__chat-head">
+          <div class="call-page__chat-head" @pointerdown="onChatPanelDragPointerDown">
             <span class="call-page__chat-title">{{ t('callPage.chatTitle') }}</span>
             <button type="button" class="call-page__chat-close" @click="chatOpen = false">
               {{ t('callPage.chatClose') }}
@@ -2107,6 +2257,7 @@ watch(joining, (j) => {
               t('callPage.chatSend')
             }}</AppButton>
           </form>
+          <span class="call-page__chat-resize" aria-hidden="true" @pointerdown="onChatPanelResizePointerDown" />
         </aside>
 
         <aside
@@ -2208,8 +2359,9 @@ watch(joining, (j) => {
 .call-page__fieldset {
   margin: 0;
   padding: 0.65rem 0.75rem;
-  border: 1px solid var(--sa-color-border);
+  border: 1px solid rgb(255 255 255 / 0.12);
   border-radius: var(--sa-radius-sm);
+  background: rgb(15 9 28 / 0.18);
 }
 
 .call-page__fieldset--in-pop {
@@ -2285,21 +2437,88 @@ watch(joining, (j) => {
   }
 }
 
-/* Room popover: Teleport target is `#call-room-dropdown-host` in AppShellLayout (positioned below header button). */
+/* Room popover is teleported to body so it is not trapped under header stacking contexts. */
 .call-page__room-pop {
-  position: absolute;
-  left: 0;
-  top: 100%;
-  margin-top: 0.35rem;
-  z-index: 100;
+  position: fixed;
+  left: 50%;
+  top: calc(4.3rem + env(safe-area-inset-top, 0px));
+  margin-top: 0;
+  z-index: 1000;
   width: min(22rem, calc(100vw - 2rem));
   max-height: min(70vh, 28rem);
   overflow: auto;
   padding: 0.75rem 0.85rem;
-  border-radius: var(--sa-radius-sm);
-  border: 1px solid var(--sa-color-border);
-  background: color-mix(in srgb, var(--sa-color-surface) 94%, rgb(8 10 14 / 0.92));
-  box-shadow: 0 16px 40px rgb(0 0 0 / 0.4);
+  border-radius: 0.9rem;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.1), transparent 40%),
+    rgb(31 17 52 / 0.74);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 16px 36px rgb(10 3 24 / 0.3);
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  scrollbar-color: rgb(167 139 250 / 0.36) transparent;
+  scrollbar-width: thin;
+  transform: translateX(-50%);
+  transform-origin: top center;
+}
+
+.call-page-room-pop-enter-active,
+.call-page-room-pop-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.call-page-room-pop-enter-from,
+.call-page-room-pop-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-0.45rem) scale(0.98);
+}
+
+.call-page__room-pop::-webkit-scrollbar {
+  width: 0.35rem;
+}
+
+.call-page__room-pop::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.call-page__room-pop::-webkit-scrollbar-track-piece {
+  background: transparent;
+}
+
+.call-page__room-pop::-webkit-scrollbar-button,
+.call-page__room-pop::-webkit-scrollbar-button:single-button,
+.call-page__room-pop::-webkit-scrollbar-button:vertical:start:decrement,
+.call-page__room-pop::-webkit-scrollbar-button:vertical:end:increment {
+  display: none;
+  width: 0;
+  height: 0;
+  background: transparent;
+  border: 0;
+}
+
+.call-page__room-pop::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.call-page__room-pop::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(167 139 250 / 0.34);
+}
+
+.call-page__room-pop::-webkit-scrollbar-thumb:hover {
+  background: rgb(167 139 250 / 0.5);
+}
+
+@media (max-width: 640px) {
+  .call-page__room-pop {
+    top: calc(5.25rem + env(safe-area-inset-top, 0px));
+    width: min(22rem, calc(100vw - 1rem));
+    max-height: calc(100vh - 6rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
 }
 
 .call-page__room-pop-field--top {
@@ -2318,7 +2537,7 @@ watch(joining, (j) => {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   opacity: 0.75;
-  color: var(--sa-color-text-muted);
+  color: rgb(255 255 255 / 0.66);
 }
 
 .call-page__room-pop-value {
@@ -2332,9 +2551,9 @@ watch(joining, (j) => {
   display: flex;
   align-items: stretch;
   min-height: 2.25rem;
-  border: 1px solid var(--sa-color-border);
+  border: 1px solid rgb(255 255 255 / 0.12);
   border-radius: var(--sa-radius-sm);
-  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  background: rgb(15 9 28 / 0.32);
   /* Visible so the copy feedback tooltip can sit above the icon without clipping. */
   overflow: visible;
 }
@@ -2349,13 +2568,31 @@ watch(joining, (j) => {
   border-radius: calc(var(--sa-radius-sm) - 1px) 0 0 calc(var(--sa-radius-sm) - 1px);
 }
 
+.call-page__room-pop-code-input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  border-radius: calc(var(--sa-radius-sm) - 1px) 0 0 calc(var(--sa-radius-sm) - 1px);
+  background: transparent;
+  color: var(--sa-color-text-main);
+  font: inherit;
+  font-family: var(--sa-font-mono, monospace);
+  font-size: 0.95rem;
+}
+
+.call-page__room-pop-code-input:focus {
+  outline: none;
+}
+
 .call-page__room-pop-code-tools {
   display: flex;
   align-items: stretch;
   flex-shrink: 0;
-  border-inline-start: 1px solid var(--sa-color-border);
+  border-inline-start: 1px solid rgb(255 255 255 / 0.1);
   padding: 0 0.1rem;
-  background: color-mix(in srgb, var(--sa-color-surface) 92%, transparent);
+  background: rgb(255 255 255 / 0.04);
   border-radius: 0 var(--sa-radius-sm) var(--sa-radius-sm) 0;
   overflow: visible;
 }
@@ -2377,8 +2614,8 @@ watch(joining, (j) => {
   line-height: 1.2;
   white-space: nowrap;
   color: var(--sa-color-text-main);
-  background: color-mix(in srgb, var(--sa-color-surface) 8%, rgb(18 20 26));
-  border: 1px solid var(--sa-color-border);
+  background: rgb(31 17 52 / 0.92);
+  border: 1px solid rgb(255 255 255 / 0.16);
   box-shadow: 0 6px 16px rgb(0 0 0 / 0.35);
   z-index: 3;
   pointer-events: none;
@@ -2395,13 +2632,13 @@ watch(joining, (j) => {
   border: none;
   border-radius: calc(var(--sa-radius-sm) - 1px);
   background: transparent;
-  color: var(--sa-color-text-muted);
+  color: rgb(255 255 255 / 0.68);
   cursor: pointer;
 }
 
 .call-page__room-pop-ico-btn:hover:not(:disabled) {
   color: var(--sa-color-text-main);
-  background: color-mix(in srgb, var(--sa-color-text-main) 10%, transparent);
+  background: rgb(255 255 255 / 0.08);
 }
 
 .call-page__room-pop-ico-btn:disabled {
@@ -2425,11 +2662,16 @@ watch(joining, (j) => {
 
 .call-page__room-pop-field input {
   padding: 0.45rem 0.55rem;
-  border: 1px solid var(--sa-color-border);
+  border: 1px solid rgb(255 255 255 / 0.12);
   border-radius: var(--sa-radius-sm);
-  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  background: rgb(15 9 28 / 0.32);
   color: var(--sa-color-text-main);
   font: inherit;
+}
+
+.call-page__room-pop-field input:focus {
+  outline: 2px solid color-mix(in srgb, var(--sa-color-primary) 45%, transparent);
+  outline-offset: 1px;
 }
 
 .call-page__join-error {
@@ -2799,13 +3041,15 @@ watch(joining, (j) => {
   /* overflow visible: device picker popups extend above the bar */
   box-sizing: border-box;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 76%, #000);
-  border: 1px solid var(--sa-color-border);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.1), transparent 46%),
+    rgb(72 42 98 / 0.34);
+  border: 1px solid rgb(255 255 255 / 0.16);
   box-shadow:
-    0 10px 36px rgb(0 0 0 / 0.48),
-    0 0 0 1px rgb(255 255 255 / 0.05);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 10px 24px rgb(10 3 24 / 0.22);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
 }
 
 /* Під час join overlay: та сама панель і відступ, без кліків (без стрибка сітки). */
@@ -2819,8 +3063,8 @@ watch(joining, (j) => {
   height: 3.25rem;
   padding: 0;
   border-radius: 50%;
-  border: 1px solid rgb(255 255 255 / 0.14);
-  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(15 9 28 / 0.34);
   color: #f3f4f6;
   cursor: pointer;
   display: flex;
@@ -2835,6 +3079,7 @@ watch(joining, (j) => {
 
 /* Без translateY і без великого «ореолу» — інакше hover виглядає як виступ над верхом пілюлі. */
 .call-page__dock-btn:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.08);
   box-shadow:
     inset 0 0 0 1px rgb(255 255 255 / 0.07),
     0 3px 12px rgb(167 139 250 / 0.28);
@@ -2850,8 +3095,8 @@ watch(joining, (j) => {
   display: inline-flex;
   align-items: stretch;
   border-radius: 999px;
-  border: 1px solid rgb(255 255 255 / 0.14);
-  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(15 9 28 / 0.34);
   overflow: visible;
 }
 
@@ -2864,8 +3109,8 @@ watch(joining, (j) => {
   width: 3.25rem;
   height: 3.25rem;
   border-radius: 50%;
-  border: 1px solid rgb(255 255 255 / 0.14);
-  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(15 9 28 / 0.34);
 }
 
 .call-page__dock-split--open {
@@ -3072,17 +3317,23 @@ watch(joining, (j) => {
 .call-page__chat {
   position: fixed;
   top: 4.5rem;
-  right: 0.75rem;
-  bottom: 6.25rem;
+  left: calc(100vw - min(20rem, calc(100vw - 1.5rem)) - 0.75rem);
   z-index: 38;
   width: min(20rem, calc(100vw - 1.5rem));
+  height: calc(100vh - 10.75rem);
+  min-width: min(16.25rem, calc(100vw - 1rem));
+  min-height: min(18.75rem, calc(100vh - 1rem));
   display: flex;
   flex-direction: column;
   border-radius: var(--sa-radius-lg);
-  border: 1px solid var(--sa-color-border);
-  background: color-mix(in srgb, var(--sa-color-bg-card) 94%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.1), transparent 40%),
+    rgb(31 17 52 / 0.58);
   color: var(--sa-color-text-body);
-  box-shadow: var(--sa-shadow-card);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 16px 36px rgb(10 3 24 / 0.28);
   overflow: hidden;
   contain: layout paint;
   transform: translate3d(calc(100% + 1.25rem), 0, 0);
@@ -3093,6 +3344,8 @@ watch(joining, (j) => {
     transform 0.28s cubic-bezier(0.32, 0.72, 0, 1),
     opacity 0.22s ease,
     visibility 0.22s ease;
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
 }
 
 .call-page__chat--open {
@@ -3100,6 +3353,14 @@ watch(joining, (j) => {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
+}
+
+.call-page__chat--customized {
+  transform: scale(0.98);
+}
+
+.call-page__chat--customized.call-page__chat--open {
+  transform: scale(1);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3114,9 +3375,13 @@ watch(joining, (j) => {
   justify-content: space-between;
   gap: var(--sa-space-2);
   padding: var(--sa-space-3) var(--sa-space-4);
-  border-bottom: 1px solid var(--sa-color-border);
+  border-bottom: 1px solid rgb(255 255 255 / 0.12);
   flex-shrink: 0;
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 40%, transparent);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.08), transparent 44%),
+    rgb(72 42 98 / 0.24);
+  cursor: move;
+  user-select: none;
 }
 
 .call-page__chat-title {
@@ -3128,8 +3393,8 @@ watch(joining, (j) => {
 }
 
 .call-page__chat-close {
-  border: 1px solid transparent;
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 70%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(15 9 28 / 0.28);
   color: var(--sa-color-text-main);
   font-size: 0.78rem;
   font-weight: 600;
@@ -3139,8 +3404,8 @@ watch(joining, (j) => {
 }
 
 .call-page__chat-close:hover {
-  border-color: var(--sa-color-primary-border);
-  background: color-mix(in srgb, var(--sa-color-primary) 14%, var(--sa-color-surface-raised));
+  border-color: color-mix(in srgb, var(--sa-color-primary) 52%, rgb(255 255 255 / 0.16));
+  background: rgb(255 255 255 / 0.08);
   color: var(--sa-color-text-strong);
 }
 
@@ -3221,10 +3486,10 @@ watch(joining, (j) => {
   display: flex;
   gap: var(--sa-space-2);
   padding: var(--sa-space-3) var(--sa-space-4);
-  border-top: 1px solid var(--sa-color-border);
+  border-top: 1px solid rgb(255 255 255 / 0.12);
   flex-shrink: 0;
   align-items: center;
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 35%, transparent);
+  background: rgb(15 9 28 / 0.2);
 }
 
 .call-page__chat-input {
@@ -3232,8 +3497,8 @@ watch(joining, (j) => {
   min-width: 0;
   padding: 0.5rem 0.65rem;
   border-radius: var(--sa-radius-sm);
-  border: 1px solid var(--sa-color-border);
-  background: color-mix(in srgb, var(--sa-color-surface) 92%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(15 9 28 / 0.32);
   color: var(--sa-color-text-main);
   font: inherit;
   font-size: 0.84rem;
@@ -3246,6 +3511,47 @@ watch(joining, (j) => {
 
 .call-page__chat-send {
   flex-shrink: 0;
+}
+
+.call-page__chat-resize {
+  position: absolute;
+  left: 0.46rem;
+  bottom: 0.28rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 0.35rem;
+  cursor: nesw-resize;
+  opacity: 0.82;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.call-page__chat-resize:hover {
+  background: rgb(255 255 255 / 0.08);
+  opacity: 1;
+}
+
+.call-page__chat-resize::before,
+.call-page__chat-resize::after {
+  position: absolute;
+  left: 0.04rem;
+  bottom: 0.04rem;
+  content: '';
+  border-left: 1px solid rgb(255 255 255 / 0.42);
+  border-bottom: 1px solid rgb(255 255 255 / 0.36);
+  border-radius: 0 0 0 0.2rem;
+  filter: drop-shadow(0 0 5px rgb(167 139 250 / 0.22));
+}
+
+.call-page__chat-resize::before {
+  width: 0.62rem;
+  height: 0.62rem;
+}
+
+.call-page__chat-resize::after {
+  width: 0.36rem;
+  height: 0.36rem;
 }
 
 .call-page__debug {

@@ -1376,6 +1376,7 @@ if (import.meta.env.DEV) {
   clip-path: inset(0 round 14px);
   background: #000;
   color: var(--text-h, #f3f4f6);
+  border: 2px solid rgba(102, 56, 143, 0.65);
 }
 
 .tile-placeholder__main {

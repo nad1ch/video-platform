@@ -268,6 +268,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 .app-landing-header__brand {
   position: relative;
   z-index: 1;
+  grid-column: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -295,6 +296,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   justify-self: center;
   min-width: 0;
   max-width: min(42rem, calc(100vw - 25rem));
+  pointer-events: none;
   transform: translate(-50%, -50%);
 }
 
@@ -315,6 +317,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   text-transform: uppercase;
   text-shadow: 0 5px 16px rgba(0, 0, 0, 0.24);
   text-overflow: ellipsis;
+  pointer-events: none;
   white-space: nowrap;
 }
 
@@ -350,15 +353,36 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 }
 
 .app-landing-header__center-extra {
+  position: relative;
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  pointer-events: auto;
+}
+
+.app-landing-header__center-extra :deep(*) {
+  pointer-events: auto;
+}
+
+.app-landing-header__center-extra :deep(.app-shell-call-room-anchor) {
+  position: relative;
+  z-index: 10;
+  display: inline-flex;
+}
+
+.app-landing-header__center-extra :deep(.app-shell-call-join-room) {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
 }
 
 .app-landing-header__actions {
   position: relative;
   z-index: 1;
+  grid-column: 3;
+  justify-self: end;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -599,7 +623,6 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
   .app-landing-header__title {
     font-size: 2rem;
-    transform: translate(-50%, -50%) scaleX(1.08);
   }
 
   .app-landing-header__actions {
@@ -643,6 +666,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   .app-landing-header__title {
     font-size: 1.35rem;
     transform: none;
+    pointer-events: auto;
   }
 }
 

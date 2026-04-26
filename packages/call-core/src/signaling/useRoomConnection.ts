@@ -20,6 +20,7 @@ export type RoomPeerInfo = {
   peerId: string
   displayName: string
   avatarUrl?: string
+  audioMuted?: boolean
 }
 
 export type RoomStatePayload = {
@@ -120,6 +121,9 @@ function parseRoomPeerList(raw: unknown): RoomPeerInfo[] | null {
         const row: RoomPeerInfo = { peerId: o.peerId, displayName: dn }
         if (typeof o.avatarUrl === 'string' && o.avatarUrl.trim().length > 0) {
           row.avatarUrl = o.avatarUrl.trim().slice(0, 2048)
+        }
+        if ((p as { audioMuted?: unknown }).audioMuted === true) {
+          row.audioMuted = true
         }
         out.push(row)
       }

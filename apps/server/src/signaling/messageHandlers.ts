@@ -92,6 +92,13 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       paused: z.boolean(),
     }),
   }),
+  /** UI metadata only: announce whether this peer muted their local microphone. */
+  z.object({
+    type: z.literal('set-audio-muted'),
+    payload: z.object({
+      muted: z.boolean(),
+    }),
+  }),
   z.object({
     type: z.literal('consume'),
     payload: z.object({
@@ -231,6 +238,8 @@ export type RoomPeerInfo = {
   displayName: string
   /** Omitted when empty (no avatar at join). */
   avatarUrl?: string
+  /** UI metadata: true when this peer has locally muted their outbound mic. */
+  audioMuted?: boolean
 }
 
 export type ServerMessage =
@@ -245,6 +254,7 @@ export type ServerMessage =
   | { type: 'peer-joined'; payload: { peerId: string; displayName: string; avatarUrl?: string } }
   | { type: 'peer-display-name'; payload: { peerId: string; displayName: string } }
   | { type: 'peer-left'; payload: { peerId: string } }
+  | { type: 'peer-audio-muted'; payload: { peerId: string; muted: boolean } }
   | {
       type: 'transport-created'
       payload: { direction: 'send' | 'recv'; transportOptions: TransportOptionsPayload }
@@ -591,6 +601,9 @@ function roomPeerRow(p: Peer): RoomPeerInfo {
   if (p.avatarUrl.length > 0) {
     row.avatarUrl = p.avatarUrl
   }
+  if (p.audioMuted) {
+    row.audioMuted = true
+  }
   return row
 }
 
@@ -719,6 +732,22 @@ export function handleRaiseHand(socket: WsSocket, raised: boolean, deps: Signali
     return
   }
   const msg = { type: 'raise-hand' as const, payload: { peerId: peer.id, raised } }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
+export function handleSetAudioMuted(socket: WsSocket, muted: boolean, deps: SignalingDeps): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  peer.audioMuted = muted
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  const msg: ServerMessage = { type: 'peer-audio-muted', payload: { peerId: peer.id, muted } }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
