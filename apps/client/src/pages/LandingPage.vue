@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import callBannerCardOne from '@/assets/landing/call-banner/card-1.png'
@@ -8,6 +8,7 @@ import callBannerCardThree from '@/assets/landing/call-banner/card-3.png'
 import callBannerCardFour from '@/assets/landing/call-banner/card-4.png'
 import twitchBrowseIllustration from '@/assets/landing/twitch-browse-illustration.svg'
 import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
+import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import AppLandingFooterActions from '@/pages/app/components/AppLandingFooterActions.vue'
 import landingCameraIcon from '@/assets/landing/decor/landing-camera.png'
 import landingMegaphoneIcon from '@/assets/landing/decor/landing-megaphone.png'
@@ -67,6 +68,9 @@ type GameCard = {
 const authRouteLogin = { path: '/auth', query: { redirect: '/app', mode: 'login' as const } } as const
 const callRoute = { name: 'call' } as const
 const landingFeedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
+const landingPageLoading = ref(true)
+
+let landingReadyTimer: number | undefined
 
 const navItems = Object.freeze([
   Object.freeze({ label: 'VideoCall', href: '#videocall' }),
@@ -88,6 +92,19 @@ const localeButtons = Object.freeze([
 const landingFooterLocaleOptions = Object.freeze(
   localeButtons.map((item) => Object.freeze({ value: item.code, label: item.label })),
 )
+
+const landingCriticalImageSources = Object.freeze([
+  BRAND_LOGO_LIGHT_SVG,
+  twitchBrowseIllustration,
+  callCardOne,
+  callCardTwo,
+  callCardThree,
+  eatFirstIcon,
+  mafiaIcon,
+  spyIcon,
+  nadleGameIcon,
+  nadrawPhoneIcon,
+] as const)
 
 const callBannerCards = Object.freeze([
   Object.freeze({ asset: callBannerCardOne, style: Object.freeze({ left: px(24.5), width: px(159) }) }),
@@ -284,7 +301,7 @@ const socialLinks = Object.freeze([
   Object.freeze({
     alt: 'Instagram',
     icon: instagramIcon,
-    href: 'https://www.instagram.com/',
+    href: 'https://www.instagram.com/nad1ch_/',
     style: Object.freeze({
       left: px(884.25),
       top: px(2227.5),
@@ -295,7 +312,7 @@ const socialLinks = Object.freeze([
   Object.freeze({
     alt: 'TikTok',
     icon: tiktokIcon,
-    href: 'https://www.tiktok.com/',
+    href: 'https://www.tiktok.com/@nad1ch',
     style: Object.freeze({
       left: px(993.94),
       top: px(2230.31),
@@ -306,7 +323,7 @@ const socialLinks = Object.freeze([
   Object.freeze({
     alt: 'Telegram',
     icon: telegramIcon,
-    href: 'https://telegram.org/',
+    href: 'https://t.me/nad1ch_tgh',
     style: Object.freeze({
       left: px(1100.81),
       top: px(2227.5),
@@ -365,6 +382,53 @@ function goLandingNav(href: string) {
   void router.push({ path: '/', query: route.query, hash })
 }
 
+function waitForLandingImage(src: string): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.decoding = 'async'
+    img.onload = () => resolve()
+    img.onerror = () => resolve()
+    img.src = src
+  })
+}
+
+function waitForLandingFonts(): Promise<void> {
+  if (typeof document === 'undefined' || document.fonts == null) {
+    return Promise.resolve()
+  }
+  return document.fonts.ready.then(() => undefined, () => undefined)
+}
+
+function waitForLandingTimeout(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    landingReadyTimer = window.setTimeout(resolve, ms)
+  })
+}
+
+onMounted(() => {
+  void Promise.race([
+    Promise.allSettled([
+      waitForLandingFonts(),
+      ...landingCriticalImageSources.map((src) => waitForLandingImage(src)),
+    ]).then(() => undefined),
+    waitForLandingTimeout(1400),
+  ]).then(() => {
+    void nextTick(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          landingPageLoading.value = false
+        })
+      })
+    })
+  })
+})
+
+onUnmounted(() => {
+  if (landingReadyTimer !== undefined) {
+    window.clearTimeout(landingReadyTimer)
+  }
+})
+
 watch(
   () => route.hash,
   (hash) => {
@@ -380,6 +444,8 @@ watch(
 
 <template>
   <div class="landing page-stack">
+    <AppFullPageLoader :visible="landingPageLoading" aria-label="Loading landing page" label="" />
+
     <div class="landing__canvas">
       <LandingCloudBackdrop class="landing__background" />
 
@@ -495,7 +561,7 @@ watch(
               :alt="game.title"
               width="128"
               height="128"
-              loading="lazy"
+              loading="eager"
               :style="game.iconStyle"
             />
           </RouterLink>
@@ -660,8 +726,11 @@ watch(
 
 .landing__background {
   position: absolute;
-  inset: 0;
-  transform: translate3d(var(--landing-parallax-bg-x, 0px), var(--landing-parallax-bg-y, 0px), 0);
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 100vw;
+  transform: translate3d(calc(-50% + var(--landing-parallax-bg-x, 0px)), var(--landing-parallax-bg-y, 0px), 0);
   will-change: transform;
 }
 
@@ -1045,7 +1114,7 @@ watch(
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: calc(var(--u) * 160.59);
+  width: calc(var(--u) * 142);
   height: calc(var(--u) * 39.38);
   border-radius: calc(var(--u) * 19.5);
   border-color: rgba(255, 255, 255, 0.45);
@@ -1055,6 +1124,10 @@ watch(
   overflow: hidden;
   z-index: 2;
   align-self: center;
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    filter 0.22s ease;
 }
 
 .landing-auth::before {
@@ -1062,14 +1135,35 @@ watch(
 }
 
 .landing-auth__link {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #111827;
   font-family: 'Marmelad', sans-serif;
   font-size: calc(var(--u) * 13.5);
   line-height: 1;
   text-decoration: none;
   white-space: nowrap;
+  transition:
+    background 0.28s ease,
+    color 0.28s ease;
+}
+
+.landing-auth:hover,
+.landing-auth:focus-within {
+  transform: translateY(-1px);
+  box-shadow:
+    0 10px 24px rgba(10, 3, 24, 0.2),
+    0 0 0 1px rgba(255, 255, 255, 0.26);
+  filter: brightness(0.94);
+}
+
+.landing-auth:hover .landing-auth__link,
+.landing-auth:focus-within .landing-auth__link {
+  color: #090313;
 }
 
 .landing-hero__screen {
@@ -1885,19 +1979,22 @@ watch(
 }
 
 /*
- * Desktop artboard (>= 960px): canvas wider than the viewport so side “empty” bands of the 2560 layout are cropped.
- * Tuned to Figma at ~1024px (aggressive side crop); `1024 * 1.48 / vw` → approaches 1 as the screen widens.
- * Placed before the `max-width: 960` block so at exactly 960px the stacked layout still wins.
+ * Desktop artboard: keep side gutters visually stable while the central designed blocks scale up.
+ * The source frame has wide empty edges, so the rendered canvas grows faster than the viewport.
  */
-@media (min-width: 960px) {
+@media (min-width: 961px) {
   .landing__canvas {
-    width: min(2560px, calc(100vw * clamp(1, calc(1024px * 1.48 / 100vw), 1.63)));
+    width: max(1515px, calc((100vw - 300px) * 2));
     max-width: none;
   }
 }
 
 /* Narrow desktop / large tablet landscape: header mark reads oversized vs nav; scale whole lockup. */
 @media (min-width: 961px) and (max-width: 1280px) {
+  .landing__canvas {
+    width: max(1580px, calc((100vw - 280px) * 2.05));
+  }
+
   .landing-header__brand {
     transform: scale(0.86);
     transform-origin: left center;
@@ -2038,9 +2135,9 @@ watch(
   }
 
   .landing-auth::before {
-    width: 100%;
-    height: 100%;
-    border-radius: 19.5px;
+    width: auto;
+    height: auto;
+    border-radius: inherit;
   }
 
   .landing-auth__link {
@@ -2552,9 +2649,9 @@ watch(
   .landing-auth {
     top: auto;
     right: auto;
-    width: clamp(58px, 17vw, 82px);
-    height: clamp(18px, 5.6vw, 30px);
-    border-radius: 10px;
+    width: clamp(64px, 17vw, 88px);
+    height: clamp(24px, 5.6vw, 32px);
+    border-radius: 999px;
   }
 
   .landing-auth__link {
@@ -2771,8 +2868,8 @@ watch(
   }
 
   .landing-auth {
-    width: 54px;
-    height: 17px;
+    width: 58px;
+    height: 22px;
   }
 
   .landing-auth__link {

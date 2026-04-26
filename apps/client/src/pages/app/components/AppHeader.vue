@@ -56,9 +56,11 @@ const displayName = computed(() => props.userName.trim())
 
         <div class="app-landing-header__auth sa-glass-button" :aria-busy="authLoading">
           <span v-if="authLoading" class="app-landing-header__auth-loading">Loading</span>
-          <span
+          <button
             v-else-if="isAuthenticated"
+            type="button"
             class="app-landing-header__user"
+            :aria-label="displayName ? `Open profile menu for ${displayName}` : 'Open profile menu'"
             :title="displayName || undefined"
           >
             <span class="app-landing-header__avatar" aria-hidden="true">
@@ -73,7 +75,7 @@ const displayName = computed(() => props.userName.trim())
               <span v-else>{{ userInitial }}</span>
             </span>
             <span class="app-landing-header__user-name">{{ displayName || userInitial }}</span>
-          </span>
+          </button>
           <span v-else class="app-landing-header__auth-buttons">
             <button type="button" class="app-landing-header__auth-link" @click="$emit('login')">
               Log In
@@ -101,18 +103,17 @@ const displayName = computed(() => props.userName.trim())
   min-height: 5rem;
   overflow: visible;
   padding: 0 1.6rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 999px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent 34%),
-    linear-gradient(120deg, rgba(102, 56, 143, 0.24), rgba(59, 34, 96, 0.2)),
-    rgba(18, 8, 34, 0.48);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 34%),
+    rgba(18, 8, 34, 0.015);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
-    0 16px 56px rgba(11, 3, 23, 0.35);
-  -webkit-backdrop-filter: blur(24px) saturate(1.18);
-  backdrop-filter: blur(24px) saturate(1.18);
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 58px rgba(11, 3, 23, 0.42);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
 .app-landing-header__brand,
@@ -175,17 +176,17 @@ const displayName = computed(() => props.userName.trim())
   padding: 0 0 0 1rem;
   margin-right: 0.25rem;
   transform: translateX(-0.2rem);
-  border: 1px solid rgba(255, 218, 68, 0.22);
+  border: 1px solid rgba(255, 218, 68, 0.28);
   border-radius: 999px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 42%),
-    rgba(255, 163, 108, 0.2);
+    rgba(255, 163, 108, 0.18);
   color: #ffda44;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
     0 12px 28px rgba(11, 3, 23, 0.22);
-  -webkit-backdrop-filter: blur(18px) saturate(1.24);
-  backdrop-filter: blur(18px) saturate(1.24);
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.24);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.24);
   font-family: var(--app-home-ui, var(--sa-font-main, system-ui, sans-serif));
   font-size: 0.82rem;
   font-weight: 400;
@@ -218,11 +219,13 @@ const displayName = computed(() => props.userName.trim())
   border-radius: 999px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 46%),
-    rgba(102, 56, 143, 0.52);
+    rgba(81, 48, 116, 0.2);
   color: #fff;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     0 12px 28px rgba(10, 3, 24, 0.24);
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   font-family: var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);
 }
 
@@ -264,6 +267,7 @@ const displayName = computed(() => props.userName.trim())
 }
 
 .app-landing-header__auth-link:focus-visible,
+.app-landing-header__user:focus-visible,
 .app-landing-header__coin:focus-visible,
 .app-landing-header__brand:focus-visible,
 .app-landing-header__title:focus-visible {
@@ -280,7 +284,13 @@ const displayName = computed(() => props.userName.trim())
   justify-content: flex-start;
   width: 100%;
   max-width: 12.5rem;
+  min-height: 2.35rem;
   padding: 0 1rem 0 0.85rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
   gap: 0.5rem;
 }
 

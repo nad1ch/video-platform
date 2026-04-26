@@ -254,6 +254,13 @@ watch(
   --app-home-display: "Climate Crisis", "Arial Black", Impact, var(--sa-font-display, system-ui), sans-serif;
   --app-home-ui: "Marmelad", var(--sa-font-main, system-ui), sans-serif;
   --app-home-jackpot: "Arbutus", Georgia, serif;
+  --app-home-glass-blur: 10px;
+  --app-home-glass-panel-bg: rgba(28, 12, 52, 0.1);
+  --app-home-glass-inner-bg: rgba(60, 36, 99, 0.1);
+  --app-home-glass-chrome-bg: rgba(18, 8, 34, 0.1);
+  --app-home-glass-footer-bg: rgba(32, 20, 52, 0.1);
+  --app-home-glass-footer-chip-bg: rgba(81, 48, 116, 0.1);
+  --app-home-glass-action-bg: rgba(81, 48, 116, 0.1);
   background: #0b0317;
   isolation: isolate;
 }

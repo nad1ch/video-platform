@@ -134,12 +134,17 @@ onUnmounted(() => {
   gap: 1rem;
   min-height: 4.6rem;
   padding: 1rem clamp(1.4rem, 2.2vw, 2.8rem);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(32, 20, 52, 0.68);
+  border-top: 1px solid rgba(255, 255, 255, 0.11);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 34%),
+    rgba(18, 8, 34, 0.015);
   color: #fff;
   font-family: var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 -18px 58px rgba(11, 3, 23, 0.42);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
 .app-landing-footer__rights {
@@ -147,34 +152,36 @@ onUnmounted(() => {
   align-items: center;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 999px;
-  background: rgba(81, 48, 116, 0.22);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 42%),
+    rgba(18, 8, 34, 0.015);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
 .app-landing-footer__brand {
   display: inline-flex;
   align-items: center;
-  min-height: 1.5rem;
-  padding: 0 0.8rem;
+  min-height: 1.75rem;
+  padding: 0.08rem 0.8rem 0.12rem;
   border-radius: inherit;
-  background: rgba(81, 48, 116, 0.6);
+  background: rgba(81, 48, 116, 0.2);
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: 0.72rem;
   font-weight: 400;
   font-variation-settings: 'YEAR' 1979;
-  line-height: 1;
+  line-height: 1.15;
   color: #fff;
   text-decoration: none;
   white-space: nowrap;
-  transition: background 0.18s ease;
+  transition: background 0.3s ease;
 }
 
 .app-landing-footer__brand:hover {
-  background: rgba(102, 56, 143, 0.78);
+  background: rgba(102, 56, 143, 0.32);
 }
 
 .app-landing-footer__copy {
@@ -186,7 +193,7 @@ onUnmounted(() => {
   padding: 0 0.85rem;
   color: rgba(255, 255, 255, 0.82);
   font-size: 0.66rem;
-  line-height: 1;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

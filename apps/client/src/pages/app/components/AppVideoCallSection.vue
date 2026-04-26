@@ -15,23 +15,21 @@ const previewTiles = [
 </script>
 
 <template>
-  <section class="app-call" aria-labelledby="app-call-title">
-    <RouterLink class="app-call__panel" :to="to" :aria-label="authHint">
-      <h2 id="app-call-title" class="app-call__title">Videocall</h2>
+  <section class="app-call app-call__panel" aria-labelledby="app-call-title">
+    <h2 id="app-call-title" class="app-call__title">Videocall</h2>
 
-      <div class="app-call__screen" aria-hidden="true">
-        <div class="app-call__tile-grid">
-          <span
-            v-for="tile in previewTiles"
-            :key="tile.id"
-            class="app-call__tile"
-            :class="`app-call__tile--${tile.color}`"
-          >
-            <span class="app-call__camera-dot" />
-            <span class="app-call__person" />
-            <span class="app-call__name-line" />
-          </span>
-        </div>
+    <RouterLink class="app-call__screen" :to="to" :aria-label="authHint">
+      <div class="app-call__tile-grid" aria-hidden="true">
+        <span
+          v-for="tile in previewTiles"
+          :key="tile.id"
+          class="app-call__tile"
+          :class="`app-call__tile--${tile.color}`"
+        >
+          <span class="app-call__camera-dot" />
+          <span class="app-call__person" />
+          <span class="app-call__name-line" />
+        </span>
       </div>
     </RouterLink>
   </section>
@@ -46,26 +44,18 @@ const previewTiles = [
   padding: clamp(1.05rem, 1.8vw, 1.55rem);
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 1.8rem;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 38%),
-    radial-gradient(circle at 22% 22%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.6px),
-    radial-gradient(circle at 36% 46%, rgba(255, 255, 255, 0.13) 0 1px, transparent 1.6px),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.2), rgba(60, 36, 99, 0.18)),
-    rgba(28, 12, 52, 0.24);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 34%),
+    rgba(18, 8, 34, 0.015);
   color: #fff;
-  text-decoration: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.13),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
-    0 24px 80px rgba(9, 2, 20, 0.24);
-  -webkit-backdrop-filter: blur(24px) saturate(1.18);
-  backdrop-filter: blur(24px) saturate(1.18);
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 58px rgba(11, 3, 23, 0.42);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
 .app-call__panel::before,
@@ -93,19 +83,6 @@ const previewTiles = [
   background: rgba(124, 77, 219, 0.14);
 }
 
-.app-call__panel:hover {
-  transform: translateY(-3px);
-  border-color: rgba(255, 255, 255, 0.18);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 30px 90px rgba(9, 2, 20, 0.36);
-}
-
-.app-call__panel:focus-visible {
-  outline: 3px solid rgba(255, 218, 68, 0.86);
-  outline-offset: 4px;
-}
-
 .app-call__title {
   position: relative;
   z-index: 1;
@@ -124,18 +101,38 @@ const previewTiles = [
 .app-call__screen {
   position: relative;
   z-index: 1;
+  display: block;
   padding: 0.55rem;
   border: 5px solid rgba(255, 255, 255, 0.96);
   border-radius: 1.8rem;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 46%),
     linear-gradient(120deg, rgba(124, 77, 219, 0.096), rgba(60, 36, 99, 0.094)),
-    rgba(60, 36, 99, 0.46);
+    var(--app-home-glass-inner-bg, rgba(60, 36, 99, 0.1));
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.12),
     0 18px 38px rgba(0, 0, 0, 0.16);
-  -webkit-backdrop-filter: blur(18px) saturate(1.18);
-  backdrop-filter: blur(18px) saturate(1.18);
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.app-call__screen:hover {
+  transform: translateY(-3px);
+  border-color: #fff;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 18px 46px rgba(6, 2, 18, 0.34);
+}
+
+.app-call__screen:focus-visible {
+  outline: 3px solid rgba(255, 218, 68, 0.86);
+  outline-offset: 4px;
 }
 
 .app-call__tile-grid {
@@ -144,7 +141,7 @@ const previewTiles = [
   gap: clamp(0.55rem, 1.4vw, 0.95rem);
   padding: 0.45rem;
   border-radius: 1rem;
-  background: rgba(60, 36, 99, 0.62);
+  background: transparent;
 }
 
 .app-call__tile {
