@@ -870,6 +870,7 @@ if (import.meta.env.DEV) {
   display: flex;
   flex-direction: column;
   width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   border-radius: 14px;
@@ -961,7 +962,9 @@ if (import.meta.env.DEV) {
   position: relative;
   flex: 0 0 auto;
   width: 100%;
+  height: 100%;
   min-height: 0;
+  display: flex;
   aspect-ratio: 16 / 9;
   /* Matting behind `object-fit: contain` video (camera or screen); portrait phone feeds letterbox inside. */
   background: #050508;
@@ -1039,6 +1042,9 @@ if (import.meta.env.DEV) {
   left: 0;
   right: 0;
   bottom: 0;
+  width: 100%;
+  min-height: 0;
+  box-sizing: border-box;
   z-index: 2;
   display: flex;
   align-items: center;

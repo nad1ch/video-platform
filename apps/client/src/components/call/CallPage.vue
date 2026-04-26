@@ -10,6 +10,7 @@ import {
   shallowRef,
   watch,
 } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import type { CallChatLine, CallEngineRole } from 'call-core'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -725,7 +726,6 @@ function onMafiaObsUrlCopiedToast(): void {
 
 const chatOpen = ref(false)
 const chatDraft = ref('')
-const chatPanelRef = ref<HTMLElement | null>(null)
 const chatPanelRect = ref<ChatPanelRect | null>(null)
 const chatPanelCustomized = ref(false)
 const chatScrollRef = ref<HTMLElement | null>(null)
@@ -1149,6 +1149,16 @@ const tileOrder = ref<string[]>([])
 const dragPeerId = ref<string | null>(null)
 const dragOverPeerId = ref<string | null>(null)
 const tileDragStartedFromControls = ref(false)
+const pinnedPeerId = ref<string | null>(null)
+const SPOTLIGHT_DESKTOP_MEDIA = '(min-width: 1024px)'
+const spotlightDesktop = ref(
+  typeof window !== 'undefined' ? window.matchMedia(SPOTLIGHT_DESKTOP_MEDIA).matches : true,
+)
+let spotlightDesktopMediaQuery: MediaQueryList | null = null
+
+function syncSpotlightDesktop(ev?: MediaQueryListEvent): void {
+  spotlightDesktop.value = ev?.matches ?? spotlightDesktopMediaQuery?.matches ?? true
+}
 
 watch(
   tiles,
@@ -1169,6 +1179,16 @@ watch(
     tileOrder.value = next
   },
   { immediate: true, flush: 'post' },
+)
+
+watch(
+  () => tiles.value.map((t) => t.peerId),
+  (ids) => {
+    if (pinnedPeerId.value != null && !ids.includes(pinnedPeerId.value)) {
+      pinnedPeerId.value = null
+    }
+  },
+  { flush: 'pre' },
 )
 
 /** 1-based seat for each `peerId` (numbering from game store, or join order before reshuffle). */
@@ -1213,6 +1233,58 @@ const orderedTiles = computed(() => {
   return order.map((id) => map.get(id)!).filter(Boolean)
 })
 
+const layoutMode = computed<'grid' | 'spotlight'>(() =>
+  spotlightDesktop.value && (pinnedPeerId.value != null || orderedTiles.value.length === 1) ? 'spotlight' : 'grid',
+)
+
+const SPOTLIGHT_STRIP_VISIBLE_LIMIT = 6
+
+const spotlightPeerId = computed(() => {
+  if (pinnedPeerId.value != null) {
+    return pinnedPeerId.value
+  }
+  return orderedTiles.value.length === 1 ? orderedTiles.value[0]?.peerId ?? null : null
+})
+
+const spotlightStripPeerIds = computed(() => {
+  const main = spotlightPeerId.value
+  return main == null ? [] : orderedTiles.value.filter((tile) => tile.peerId !== main).map((tile) => tile.peerId)
+})
+
+const spotlightVisibleStripPeerIds = computed(() => {
+  const ids = spotlightStripPeerIds.value
+  if (ids.length > SPOTLIGHT_STRIP_VISIBLE_LIMIT) {
+    return ids.slice(0, SPOTLIGHT_STRIP_VISIBLE_LIMIT - 1)
+  }
+  return ids.slice(0, SPOTLIGHT_STRIP_VISIBLE_LIMIT)
+})
+
+const spotlightVisibleStripPeerIdSet = computed(() => new Set(spotlightVisibleStripPeerIds.value))
+
+const spotlightOverflowCount = computed(() =>
+  Math.max(0, spotlightStripPeerIds.value.length - spotlightVisibleStripPeerIds.value.length),
+)
+
+const spotlightOverflowTileStyle = computed(() => ({
+  '--call-page-spotlight-slot': String(SPOTLIGHT_STRIP_VISIBLE_LIMIT),
+}))
+
+function spotlightStripSlotForPeer(peerId: string): number {
+  const index = spotlightVisibleStripPeerIds.value.indexOf(peerId)
+  return index >= 0 ? index + 1 : 1
+}
+
+function isSpotlightStripPeerHidden(peerId: string): boolean {
+  return layoutMode.value === 'spotlight' && peerId !== spotlightPeerId.value && !spotlightVisibleStripPeerIdSet.value.has(peerId)
+}
+
+function togglePin(peerId: string): void {
+  if (!orderedTiles.value.some((tile) => tile.peerId === peerId)) {
+    return
+  }
+  pinnedPeerId.value = pinnedPeerId.value === peerId ? null : peerId
+}
+
 /** Pixels; must match `gap` in `gridStyle`. */
 const GAP = 12
 const MIN_TILE_WIDTH = 180
@@ -1242,8 +1314,24 @@ function getGrid(n: number, width: number, height: number) {
 }
 
 /** Call stage (not the inner grid) — ResizeObserver + content-box size matches real tile area. */
+type TileRectMap = Map<string, DOMRectReadOnly>
+
+const TILE_LAYOUT_FLIP_MS = 220
+const TILE_LAYOUT_FLIP_EPSILON_PX = 0.5
 const stageRef = ref<HTMLElement | null>(null)
 const stageSize = shallowRef({ width: 0, height: 0 })
+const gridRef = ref<HTMLElement | null>(null)
+const tileWrapEls = new Map<string, HTMLElement>()
+let tileLayoutFlipTimer: ReturnType<typeof window.setTimeout> | null = null
+let tileLayoutFlipRaf = 0
+
+function setTileWrapRef(peerId: string, el: Element | ComponentPublicInstance | null): void {
+  if (el instanceof HTMLElement) {
+    tileWrapEls.set(peerId, el)
+    return
+  }
+  tileWrapEls.delete(peerId)
+}
 
 watch(
   stageRef,
@@ -1278,6 +1366,112 @@ watch(
     })
   },
   { immediate: true, flush: 'post' },
+)
+
+const tileLayoutAnimationKey = computed(() =>
+  [
+    layoutMode.value,
+    spotlightPeerId.value ?? '',
+    orderedTiles.value.map((tile) => tile.peerId).join(','),
+    Math.round(stageSize.value.width),
+    Math.round(stageSize.value.height),
+  ].join('|'),
+)
+
+function readTileRects(): TileRectMap {
+  const rects: TileRectMap = new Map()
+  for (const [peerId, el] of tileWrapEls) {
+    rects.set(peerId, el.getBoundingClientRect())
+  }
+  return rects
+}
+
+function clearTileFlip(el: HTMLElement): void {
+  el.classList.remove('call-page__tile-wrap--flip-prepare', 'call-page__tile-wrap--flipping')
+  el.style.removeProperty('--tile-flip-x')
+  el.style.removeProperty('--tile-flip-y')
+  el.style.removeProperty('--tile-flip-scale-x')
+  el.style.removeProperty('--tile-flip-scale-y')
+}
+
+function playTileLayoutFlip(firstRects: TileRectMap): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+  window.cancelAnimationFrame(tileLayoutFlipRaf)
+  if (tileLayoutFlipTimer != null) {
+    window.clearTimeout(tileLayoutFlipTimer)
+    tileLayoutFlipTimer = null
+  }
+
+  void nextTick(() => {
+    const animated: HTMLElement[] = []
+    for (const [peerId, lastEl] of tileWrapEls) {
+      const first = firstRects.get(peerId)
+      if (!first) {
+        continue
+      }
+      const last = lastEl.getBoundingClientRect()
+      if (first.width <= 0 || first.height <= 0 || last.width <= 0 || last.height <= 0) {
+        continue
+      }
+
+      const dx = first.left - last.left
+      const dy = first.top - last.top
+      const sx = first.width / last.width
+      const sy = first.height / last.height
+      const moved = Math.abs(dx) > TILE_LAYOUT_FLIP_EPSILON_PX || Math.abs(dy) > TILE_LAYOUT_FLIP_EPSILON_PX
+      const resized = Math.abs(1 - sx) > 0.01 || Math.abs(1 - sy) > 0.01
+      if (!moved && !resized) {
+        continue
+      }
+
+      lastEl.classList.add('call-page__tile-wrap--flip-prepare')
+      lastEl.style.setProperty('--tile-flip-x', `${dx}px`)
+      lastEl.style.setProperty('--tile-flip-y', `${dy}px`)
+      lastEl.style.setProperty('--tile-flip-scale-x', String(sx))
+      lastEl.style.setProperty('--tile-flip-scale-y', String(sy))
+      animated.push(lastEl)
+    }
+
+    if (animated.length === 0) {
+      return
+    }
+
+    void gridRef.value?.offsetWidth
+
+    tileLayoutFlipRaf = window.requestAnimationFrame(() => {
+      for (const el of animated) {
+        el.classList.remove('call-page__tile-wrap--flip-prepare')
+        el.classList.add('call-page__tile-wrap--flipping')
+        el.style.setProperty('--tile-flip-x', '0px')
+        el.style.setProperty('--tile-flip-y', '0px')
+        el.style.setProperty('--tile-flip-scale-x', '1')
+        el.style.setProperty('--tile-flip-scale-y', '1')
+      }
+
+      tileLayoutFlipTimer = window.setTimeout(() => {
+        for (const el of animated) {
+          clearTileFlip(el)
+        }
+        tileLayoutFlipTimer = null
+      }, TILE_LAYOUT_FLIP_MS + 60)
+    })
+  })
+}
+
+watch(
+  tileLayoutAnimationKey,
+  () => {
+    if (dragPeerId.value != null) {
+      return
+    }
+    const firstRects = readTileRects()
+    if (firstRects.size > 0) {
+      playTileLayoutFlip(firstRects)
+    }
+  },
+  { flush: 'pre' },
 )
 
 if (import.meta.env.DEV) {
@@ -1512,6 +1706,18 @@ const gridStyle = computed(() => {
     return {}
   }
 
+  if (layoutMode.value === 'spotlight') {
+    const hasStrip = spotlightStripPeerIds.value.length > 0
+    return {
+      display: 'grid',
+      gridTemplateColumns: hasStrip ? 'minmax(0, 1fr) clamp(8.5rem, 18vw, 13rem)' : 'minmax(0, 1fr)',
+      gridTemplateRows: hasStrip ? `repeat(${SPOTLIGHT_STRIP_VISIBLE_LIMIT}, minmax(0, 1fr))` : 'minmax(0, 1fr)',
+      gap: `${GAP}px`,
+      justifyContent: 'stretch',
+      alignContent: 'stretch',
+    }
+  }
+
   const { cols, rows, tileWidth, tileHeight } = getGrid(n, stageSize.value.width, stageSize.value.height)
 
   return {
@@ -1523,6 +1729,19 @@ const gridStyle = computed(() => {
     alignContent: 'center',
   }
 })
+
+function tileLayoutStyle(row: (typeof orderedGridRows.value)[number]) {
+  if (layoutMode.value !== 'spotlight') {
+    return {}
+  }
+  const main = spotlightPeerId.value
+  if (main == null || row.tile.peerId === main) {
+    return {}
+  }
+  return {
+    '--call-page-spotlight-slot': String(spotlightStripSlotForPeer(row.tile.peerId)),
+  }
+}
 
 /** Повна ширина вьюпорта для сітки тільки коли хоча б один учасник з увімкненим відео. */
 const stageFullBleed = computed(() => session.inCall && tiles.value.some((t) => t.videoEnabled))
@@ -1595,6 +1814,17 @@ function onTileDragEnd(): void {
 }
 
 onBeforeUnmount(() => {
+  if (spotlightDesktopMediaQuery) {
+    spotlightDesktopMediaQuery.removeEventListener('change', syncSpotlightDesktop)
+    spotlightDesktopMediaQuery = null
+  }
+  if (typeof window !== 'undefined') {
+    window.cancelAnimationFrame(tileLayoutFlipRaf)
+    if (tileLayoutFlipTimer != null) {
+      window.clearTimeout(tileLayoutFlipTimer)
+      tileLayoutFlipTimer = null
+    }
+  }
   clearFullPowerEnterTimer()
   isFullPowerMode.value = false
   remotePlaybackWaitingPeerIds.value = new Set()
@@ -1618,6 +1848,11 @@ onBeforeUnmount(() => {
 })
 
 onMounted(() => {
+  if (typeof window !== 'undefined') {
+    spotlightDesktopMediaQuery = window.matchMedia(SPOTLIGHT_DESKTOP_MEDIA)
+    syncSpotlightDesktop()
+    spotlightDesktopMediaQuery.addEventListener('change', syncSpotlightDesktop)
+  }
   document.addEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
   window.addEventListener('resize', syncChatPanelToViewport)
   void (async () => {
@@ -1849,15 +2084,28 @@ watch(joining, (j) => {
           class="call-page__stage"
           @pointerdown.capture="resumeCallAudioAnalysisFromGesture"
         >
-          <div class="call-page__grid" :style="gridStyle">
+          <div
+            ref="gridRef"
+            class="call-page__grid"
+            :class="{ 'call-page__grid--spotlight': layoutMode === 'spotlight' }"
+            :style="gridStyle"
+          >
             <div
               v-for="row in orderedGridRows"
               :key="row.tile.peerId"
+              :ref="(el) => setTileWrapRef(row.tile.peerId, el)"
               class="call-page__tile-wrap"
+              :style="tileLayoutStyle(row)"
               :draggable="!mafiaViewUi && !isMafiaRoute"
               :title="t('callPage.dragReorder')"
               :aria-label="t('callPage.dragReorder')"
               :class="{
+                'call-page__tile-wrap--spotlight-main':
+                  layoutMode === 'spotlight' && row.tile.peerId === spotlightPeerId,
+                'call-page__tile-wrap--spotlight-strip':
+                  layoutMode === 'spotlight' && row.tile.peerId !== spotlightPeerId,
+                'call-page__tile-wrap--spotlight-hidden': isSpotlightStripPeerHidden(row.tile.peerId),
+                'call-page__tile-wrap--pinned': pinnedPeerId === row.tile.peerId,
                 'call-page__tile-wrap--over': dragOverPeerId === row.tile.peerId,
                 'call-page__tile-wrap--dragging': dragPeerId === row.tile.peerId,
                 'call-page__tile-wrap--mafia-host-target':
@@ -1942,6 +2190,28 @@ watch(joining, (j) => {
                 @mafia-viewport-layers="(v) => onCallTileViewportForLayers(row.tile.peerId, v)"
                 @remote-playback-stall="onRemotePlaybackStall"
               />
+              <button
+                v-if="!mafiaViewUi"
+                type="button"
+                class="call-page__pin-btn"
+                :class="{ 'call-page__pin-btn--active': pinnedPeerId === row.tile.peerId }"
+                :title="pinnedPeerId === row.tile.peerId ? t('callPage.unpinTile') : t('callPage.pinTile')"
+                :aria-label="pinnedPeerId === row.tile.peerId ? t('callPage.unpinTile') : t('callPage.pinTile')"
+                :aria-pressed="pinnedPeerId === row.tile.peerId"
+                @click.stop="togglePin(row.tile.peerId)"
+              >
+                {{ pinnedPeerId === row.tile.peerId ? t('callPage.unpinTileShort') : t('callPage.pinTileShort') }}
+              </button>
+            </div>
+            <div
+              v-if="layoutMode === 'spotlight' && spotlightOverflowCount > 0"
+              class="call-page__tile-wrap call-page__tile-wrap--spotlight-strip call-page__tile-wrap--spotlight-overflow"
+              :style="spotlightOverflowTileStyle"
+              aria-hidden="true"
+            >
+              <div class="call-page__spotlight-overflow-tile">
+                +{{ spotlightOverflowCount }}
+              </div>
             </div>
           </div>
         </div>
@@ -2208,7 +2478,6 @@ watch(joining, (j) => {
 
         <aside
           v-if="session.inCall && !mafiaViewUi"
-          ref="chatPanelRef"
           class="call-page__chat"
           :class="chatPanelClass"
           :style="chatPanelStyle"
@@ -2790,7 +3059,43 @@ watch(joining, (j) => {
   box-sizing: border-box;
 }
 
+.call-page__grid--spotlight {
+  align-items: stretch;
+  align-content: stretch;
+  justify-content: stretch;
+  overflow: hidden;
+}
+
+.call-page__tile-wrap--spotlight-main {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.call-page__tile-wrap--spotlight-main .call-page__tile-inner {
+  height: 100%;
+  min-height: 0;
+}
+
+.call-page__tile-wrap--spotlight-main .call-page__tile-inner :deep(.tile) {
+  height: 100%;
+  min-height: 0;
+}
+
+.call-page__tile-wrap--spotlight-main .call-page__tile-inner :deep(.tile-media) {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
 .call-page__tile-wrap {
+  --tile-flip-scale-x: 1;
+  --tile-flip-scale-y: 1;
+  --tile-flip-x: 0px;
+  --tile-flip-y: 0px;
+  --tile-speaking-scale: 1;
   width: 100%;
   height: 100%;
   position: relative;
@@ -2803,9 +3108,26 @@ watch(joining, (j) => {
    * Asymmetric fade: base = LEAVE (slower, softer exit), `--speaking` rule overrides to a
    * quicker ENTER. When `--speaking` is removed the style falls back here → leave animation.
    */
+  transform:
+    translate(var(--tile-flip-x), var(--tile-flip-y))
+    scale(var(--tile-flip-scale-x), var(--tile-flip-scale-y))
+    scale(var(--tile-speaking-scale));
+  transform-origin: center center;
   transition:
     box-shadow 0.32s ease-out,
     transform 0.32s ease-out;
+}
+
+.call-page__tile-wrap--flip-prepare {
+  transition: none !important;
+  will-change: transform;
+}
+
+.call-page__tile-wrap--flipping {
+  transition:
+    transform 220ms cubic-bezier(0.2, 0, 0.2, 1),
+    box-shadow 0.2s ease;
+  will-change: transform;
 }
 
 .call-page__tile-wrap--dragging {
@@ -2840,9 +3162,8 @@ watch(joining, (j) => {
  * does not clip the glow. `call-page__tile-wrap--speaking` from `isTileRowSpeaking(row)` (no `:has()`).
  */
 .call-page__tile-wrap--speaking:not(.call-page__tile-wrap--dragging) {
+  --tile-speaking-scale: 1.01;
   box-shadow: 0 0 24px rgba(140, 90, 255, 0.6);
-  transform: scale(1.01);
-  transform-origin: center center;
   /* ENTER is snappier than LEAVE; see base rule for the LEAVE duration. */
   transition:
     box-shadow 0.2s ease,
@@ -2851,8 +3172,77 @@ watch(joining, (j) => {
 
 @media (prefers-reduced-motion: reduce) {
   .call-page__tile-wrap--speaking:not(.call-page__tile-wrap--dragging) {
-    transform: none;
+    --tile-speaking-scale: 1;
     box-shadow: 0 0 0 1px rgba(140, 90, 255, 0.5);
+  }
+}
+
+.call-page__tile-wrap--spotlight-strip {
+  grid-column: 2;
+  grid-row: var(--call-page-spotlight-slot);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.call-page__tile-wrap--spotlight-hidden {
+  display: none;
+}
+
+.call-page__tile-wrap--spotlight-strip:not(.call-page__tile-wrap--dragging) {
+  --tile-speaking-scale: 1;
+}
+
+.call-page__tile-wrap--spotlight-overflow {
+  cursor: default;
+}
+
+.call-page__spotlight-overflow-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--call-tile-border, #2e303a);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at center, rgba(124, 77, 219, 0.24), transparent 58%),
+    #050508;
+  color: #f9fafb;
+  font-size: clamp(1rem, 3vw, 1.65rem);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 1024px) {
+  .call-page__grid--spotlight {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(8.5rem, 10rem);
+    grid-template-columns: repeat(6, minmax(8.5rem, 10rem)) !important;
+    grid-template-rows: minmax(0, 1fr) minmax(5.5rem, 18vh) !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .call-page__tile-wrap--spotlight-main {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .call-page__tile-wrap--spotlight-strip {
+    grid-column: var(--call-page-spotlight-slot);
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 640px) {
+  .call-page__grid--spotlight {
+    grid-auto-columns: minmax(7rem, 8.5rem);
+    grid-template-columns: repeat(6, minmax(7rem, 8.5rem)) !important;
+    grid-template-rows: minmax(0, 1fr) minmax(5rem, 16vh) !important;
   }
 }
 
@@ -2908,6 +3298,69 @@ watch(joining, (j) => {
 .call-page__tile-inner :deep(.tile) {
   width: 100%;
   min-height: 0;
+}
+
+.call-page__pin-btn {
+  position: absolute;
+  top: 0.55rem;
+  left: 0.55rem;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.35rem;
+  height: 1.85rem;
+  padding: 0 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.48);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.call-page__pin-btn:hover,
+.call-page__pin-btn:focus-visible,
+.call-page__pin-btn--active {
+  border-color: color-mix(in srgb, var(--sa-color-primary, #a78bfa) 58%, #fff 12%);
+  background: color-mix(in srgb, var(--sa-color-primary, #a78bfa) 34%, #000 66%);
+}
+
+.call-page__pin-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.84);
+  outline-offset: 2px;
+}
+
+.call-page__tile-wrap:hover .call-page__pin-btn,
+.call-page__tile-wrap:focus-within .call-page__pin-btn,
+.call-page__pin-btn--active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.call-page__tile-wrap--spotlight-strip .call-page__pin-btn {
+  top: 0.45rem;
+  left: 0.45rem;
+  min-width: 2rem;
+  height: 1.6rem;
+  padding: 0 0.5rem;
+  font-size: 0.66rem;
+}
+
+@media (max-width: 768px), (hover: none) {
+  .call-page__pin-btn {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 /**
