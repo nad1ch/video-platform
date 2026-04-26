@@ -670,6 +670,14 @@ const inboundDebugRows = ref<InboundVideoDebugRow[]>([])
 const inboundDebugBusy = ref(false)
 
 type CallToast = { id: string; text: string; kind: 'join' | 'leave' }
+type ChatPanelRect = { left: number; top: number; width: number; height: number }
+type ChatPanelGesture = {
+  kind: 'move' | 'resize'
+  startX: number
+  startY: number
+  startRect: ChatPanelRect
+}
+
 const callToasts = ref<CallToast[]>([])
 let lastPresenceToastSourceId = ''
 
@@ -717,7 +725,11 @@ function onMafiaObsUrlCopiedToast(): void {
 
 const chatOpen = ref(false)
 const chatDraft = ref('')
+const chatPanelRef = ref<HTMLElement | null>(null)
+const chatPanelRect = ref<ChatPanelRect | null>(null)
+const chatPanelCustomized = ref(false)
 const chatScrollRef = ref<HTMLElement | null>(null)
+let chatPanelGesture: ChatPanelGesture | null = null
 
 const micPickerOpen = ref(false)
 const camPickerOpen = ref(false)
@@ -928,9 +940,139 @@ function chatOpenPrefKey(): string {
   return `streamassist_call_chat_open:${r || 'demo'}`
 }
 
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+function defaultChatPanelRect(): ChatPanelRect {
+  if (typeof window === 'undefined') {
+    return { left: 0, top: 0, width: 320, height: 520 }
+  }
+  const margin = 12
+  const width = Math.min(340, Math.max(280, window.innerWidth - margin * 2))
+  const top = 72
+  const height = Math.min(Math.max(360, window.innerHeight - top - 100), window.innerHeight - margin * 2)
+  return clampChatPanelRect({
+    left: window.innerWidth - width - margin,
+    top,
+    width,
+    height,
+  })
+}
+
+function clampChatPanelRect(rect: ChatPanelRect): ChatPanelRect {
+  if (typeof window === 'undefined') {
+    return rect
+  }
+  const margin = 8
+  const minWidth = Math.min(260, Math.max(180, window.innerWidth - margin * 2))
+  const minHeight = Math.min(300, Math.max(220, window.innerHeight - margin * 2))
+  const maxWidth = Math.max(minWidth, window.innerWidth - margin * 2)
+  const maxHeight = Math.max(minHeight, window.innerHeight - margin * 2)
+  const width = clampNumber(rect.width, minWidth, maxWidth)
+  const height = clampNumber(rect.height, minHeight, maxHeight)
+  return {
+    left: clampNumber(rect.left, margin, window.innerWidth - width - margin),
+    top: clampNumber(rect.top, margin, window.innerHeight - height - margin),
+    width,
+    height,
+  }
+}
+
+function ensureChatPanelRect(): ChatPanelRect {
+  const rect = clampChatPanelRect(chatPanelRect.value ?? defaultChatPanelRect())
+  chatPanelRect.value = rect
+  return rect
+}
+
+const chatPanelStyle = computed(() => {
+  const rect = chatPanelRect.value
+  if (!rect) {
+    return undefined
+  }
+  return {
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
+  }
+})
+
+const chatPanelClass = computed(() => ({
+  'call-page__chat--open': chatOpen.value,
+  'call-page__chat--customized': chatPanelCustomized.value,
+}))
+
+function onChatPanelPointerMove(ev: PointerEvent): void {
+  if (!chatPanelGesture) {
+    return
+  }
+  const dx = ev.clientX - chatPanelGesture.startX
+  const dy = ev.clientY - chatPanelGesture.startY
+  const start = chatPanelGesture.startRect
+  const next =
+    chatPanelGesture.kind === 'move'
+      ? { ...start, left: start.left + dx, top: start.top + dy }
+      : { ...start, left: start.left + dx, width: start.width - dx, height: start.height + dy }
+  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+    chatPanelCustomized.value = true
+  }
+  chatPanelRect.value = clampChatPanelRect(next)
+}
+
+function stopChatPanelGesture(): void {
+  chatPanelGesture = null
+  if (typeof window === 'undefined') {
+    return
+  }
+  window.removeEventListener('pointermove', onChatPanelPointerMove)
+  window.removeEventListener('pointerup', stopChatPanelGesture)
+  window.removeEventListener('pointercancel', stopChatPanelGesture)
+}
+
+function startChatPanelGesture(ev: PointerEvent, kind: ChatPanelGesture['kind']): void {
+  if (ev.button !== 0) {
+    return
+  }
+  const target = ev.target
+  if (kind === 'move' && target instanceof Element && target.closest('button, input, textarea, select, a')) {
+    return
+  }
+  ev.preventDefault()
+  stopChatPanelGesture()
+  chatPanelGesture = {
+    kind,
+    startX: ev.clientX,
+    startY: ev.clientY,
+    startRect: ensureChatPanelRect(),
+  }
+  window.addEventListener('pointermove', onChatPanelPointerMove)
+  window.addEventListener('pointerup', stopChatPanelGesture)
+  window.addEventListener('pointercancel', stopChatPanelGesture)
+}
+
+function onChatPanelDragPointerDown(ev: PointerEvent): void {
+  startChatPanelGesture(ev, 'move')
+}
+
+function onChatPanelResizePointerDown(ev: PointerEvent): void {
+  startChatPanelGesture(ev, 'resize')
+}
+
+function syncChatPanelToViewport(): void {
+  if (chatPanelRect.value) {
+    chatPanelRect.value = clampChatPanelRect(chatPanelRect.value)
+  }
+}
+
 watch(chatOpen, (open) => {
   if (!session.inCall) {
     return
+  }
+  if (open) {
+    void nextTick(() => {
+      ensureChatPanelRect()
+    })
   }
   try {
     sessionStorage.setItem(chatOpenPrefKey(), open ? '1' : '0')
@@ -1474,6 +1616,7 @@ onBeforeUnmount(() => {
 
 onMounted(() => {
   document.addEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
+  window.addEventListener('resize', syncChatPanelToViewport)
   void (async () => {
     await ensureAuthLoaded()
     const authName = normalizeDisplayName(user.value?.displayName)
@@ -1502,6 +1645,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
+  window.removeEventListener('resize', syncChatPanelToViewport)
+  stopChatPanelGesture()
   window.removeEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
   document.documentElement.classList.remove(CALL_ROUTE_HTML_CLASS)
   if (import.meta.env.DEV) {
@@ -2060,12 +2205,14 @@ watch(joining, (j) => {
 
         <aside
           v-if="session.inCall && !mafiaViewUi"
+          ref="chatPanelRef"
           class="call-page__chat"
-          :class="{ 'call-page__chat--open': chatOpen }"
+          :class="chatPanelClass"
+          :style="chatPanelStyle"
           :aria-label="t('callPage.chatTitle')"
           :aria-hidden="chatOpen ? 'false' : 'true'"
         >
-          <div class="call-page__chat-head">
+          <div class="call-page__chat-head" @pointerdown="onChatPanelDragPointerDown">
             <span class="call-page__chat-title">{{ t('callPage.chatTitle') }}</span>
             <button type="button" class="call-page__chat-close" @click="chatOpen = false">
               {{ t('callPage.chatClose') }}
@@ -2107,6 +2254,7 @@ watch(joining, (j) => {
               t('callPage.chatSend')
             }}</AppButton>
           </form>
+          <span class="call-page__chat-resize" aria-hidden="true" @pointerdown="onChatPanelResizePointerDown" />
         </aside>
 
         <aside
@@ -3075,17 +3223,23 @@ watch(joining, (j) => {
 .call-page__chat {
   position: fixed;
   top: 4.5rem;
-  right: 0.75rem;
-  bottom: 6.25rem;
+  left: calc(100vw - min(20rem, calc(100vw - 1.5rem)) - 0.75rem);
   z-index: 38;
   width: min(20rem, calc(100vw - 1.5rem));
+  height: calc(100vh - 10.75rem);
+  min-width: min(16.25rem, calc(100vw - 1rem));
+  min-height: min(18.75rem, calc(100vh - 1rem));
   display: flex;
   flex-direction: column;
   border-radius: var(--sa-radius-lg);
-  border: 1px solid var(--sa-color-border);
-  background: color-mix(in srgb, var(--sa-color-bg-card) 94%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.1), transparent 40%),
+    rgb(31 17 52 / 0.58);
   color: var(--sa-color-text-body);
-  box-shadow: var(--sa-shadow-card);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 16px 36px rgb(10 3 24 / 0.28);
   overflow: hidden;
   contain: layout paint;
   transform: translate3d(calc(100% + 1.25rem), 0, 0);
@@ -3096,6 +3250,8 @@ watch(joining, (j) => {
     transform 0.28s cubic-bezier(0.32, 0.72, 0, 1),
     opacity 0.22s ease,
     visibility 0.22s ease;
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
 }
 
 .call-page__chat--open {
@@ -3103,6 +3259,14 @@ watch(joining, (j) => {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
+}
+
+.call-page__chat--customized {
+  transform: scale(0.98);
+}
+
+.call-page__chat--customized.call-page__chat--open {
+  transform: scale(1);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3117,9 +3281,13 @@ watch(joining, (j) => {
   justify-content: space-between;
   gap: var(--sa-space-2);
   padding: var(--sa-space-3) var(--sa-space-4);
-  border-bottom: 1px solid var(--sa-color-border);
+  border-bottom: 1px solid rgb(255 255 255 / 0.12);
   flex-shrink: 0;
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 40%, transparent);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.08), transparent 44%),
+    rgb(72 42 98 / 0.24);
+  cursor: move;
+  user-select: none;
 }
 
 .call-page__chat-title {
@@ -3131,8 +3299,8 @@ watch(joining, (j) => {
 }
 
 .call-page__chat-close {
-  border: 1px solid transparent;
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 70%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(15 9 28 / 0.28);
   color: var(--sa-color-text-main);
   font-size: 0.78rem;
   font-weight: 600;
@@ -3142,8 +3310,8 @@ watch(joining, (j) => {
 }
 
 .call-page__chat-close:hover {
-  border-color: var(--sa-color-primary-border);
-  background: color-mix(in srgb, var(--sa-color-primary) 14%, var(--sa-color-surface-raised));
+  border-color: color-mix(in srgb, var(--sa-color-primary) 52%, rgb(255 255 255 / 0.16));
+  background: rgb(255 255 255 / 0.08);
   color: var(--sa-color-text-strong);
 }
 
@@ -3224,10 +3392,10 @@ watch(joining, (j) => {
   display: flex;
   gap: var(--sa-space-2);
   padding: var(--sa-space-3) var(--sa-space-4);
-  border-top: 1px solid var(--sa-color-border);
+  border-top: 1px solid rgb(255 255 255 / 0.12);
   flex-shrink: 0;
   align-items: center;
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 35%, transparent);
+  background: rgb(15 9 28 / 0.2);
 }
 
 .call-page__chat-input {
@@ -3235,8 +3403,8 @@ watch(joining, (j) => {
   min-width: 0;
   padding: 0.5rem 0.65rem;
   border-radius: var(--sa-radius-sm);
-  border: 1px solid var(--sa-color-border);
-  background: color-mix(in srgb, var(--sa-color-surface) 92%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(15 9 28 / 0.32);
   color: var(--sa-color-text-main);
   font: inherit;
   font-size: 0.84rem;
@@ -3249,6 +3417,47 @@ watch(joining, (j) => {
 
 .call-page__chat-send {
   flex-shrink: 0;
+}
+
+.call-page__chat-resize {
+  position: absolute;
+  left: 0.46rem;
+  bottom: 0.28rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 0.35rem;
+  cursor: nesw-resize;
+  opacity: 0.82;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.call-page__chat-resize:hover {
+  background: rgb(255 255 255 / 0.08);
+  opacity: 1;
+}
+
+.call-page__chat-resize::before,
+.call-page__chat-resize::after {
+  position: absolute;
+  left: 0.04rem;
+  bottom: 0.04rem;
+  content: '';
+  border-left: 1px solid rgb(255 255 255 / 0.42);
+  border-bottom: 1px solid rgb(255 255 255 / 0.36);
+  border-radius: 0 0 0 0.2rem;
+  filter: drop-shadow(0 0 5px rgb(167 139 250 / 0.22));
+}
+
+.call-page__chat-resize::before {
+  width: 0.62rem;
+  height: 0.62rem;
+}
+
+.call-page__chat-resize::after {
+  width: 0.36rem;
+  height: 0.36rem;
 }
 
 .call-page__debug {

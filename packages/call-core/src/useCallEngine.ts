@@ -289,6 +289,7 @@ export function useCallEngine(options?: CallEngineOptions) {
 
   const callChatMessages = ref<CallChatLine[]>([])
   const peerHandRaised = ref<Record<string, boolean>>({})
+  const remoteAudioMutedByPeerId = ref<Record<string, boolean>>({})
   /** Local user's raised-hand flag (also echoed from server). */
   const handRaised = ref(false)
 
@@ -499,6 +500,11 @@ export function useCallEngine(options?: CallEngineOptions) {
         delete next[peerId]
         peerHandRaised.value = next
       }
+      if (remoteAudioMutedByPeerId.value[peerId]) {
+        const nextMuted = { ...remoteAudioMutedByPeerId.value }
+        delete nextMuted[peerId]
+        remoteAudioMutedByPeerId.value = nextMuted
+      }
     }
   })
 
@@ -507,6 +513,23 @@ export function useCallEngine(options?: CallEngineOptions) {
       return
     }
     const m = data as { type?: string; payload?: unknown }
+    if (m.type === 'room-state' && m.payload && typeof m.payload === 'object') {
+      const peers = (m.payload as { peers?: unknown }).peers
+      if (Array.isArray(peers)) {
+        const next: Record<string, boolean> = {}
+        for (const p of peers) {
+          if (!p || typeof p !== 'object') {
+            continue
+          }
+          const peerId = (p as { peerId?: unknown }).peerId
+          if (typeof peerId === 'string' && (p as { audioMuted?: unknown }).audioMuted === true) {
+            next[peerId] = true
+          }
+        }
+        remoteAudioMutedByPeerId.value = next
+      }
+      return
+    }
     if (m.type === 'call-chat' && m.payload && typeof m.payload === 'object') {
       const p = m.payload as Record<string, unknown>
       const peerId = typeof p.peerId === 'string' ? p.peerId : ''
@@ -539,6 +562,20 @@ export function useCallEngine(options?: CallEngineOptions) {
       if (peerId === selfPeerId.value) {
         handRaised.value = raised
       }
+    }
+    if (m.type === 'peer-audio-muted' && m.payload && typeof m.payload === 'object') {
+      const p = m.payload as Record<string, unknown>
+      const peerId = typeof p.peerId === 'string' ? p.peerId : ''
+      if (!peerId) {
+        return
+      }
+      const next = { ...remoteAudioMutedByPeerId.value }
+      if (p.muted === true) {
+        next[peerId] = true
+      } else {
+        delete next[peerId]
+      }
+      remoteAudioMutedByPeerId.value = next
     }
   })
 
@@ -790,6 +827,7 @@ export function useCallEngine(options?: CallEngineOptions) {
       const v = stream.getVideoTracks()[0]
       const remoteSource = remoteVideoSourceByPeerId.value.get(peerId) ?? 'camera'
       const outboundPaused = remoteOutboundVideoPausedByPeerId.value.get(peerId) === true
+      const remoteAudioMuted = remoteAudioMutedByPeerId.value[peerId] === true
       const remoteVideoOn =
         remoteSource === 'screen'
           ? isRemoteVideoActive(v, 'screen')
@@ -801,7 +839,7 @@ export function useCallEngine(options?: CallEngineOptions) {
         avatarUrl: remoteAvatarUrls.value[peerId] ?? '',
         isLocal: false,
         videoEnabled: remoteVideoOn,
-        audioEnabled: a ? a.enabled : true,
+        audioEnabled: Boolean(a && a.readyState === 'live' && !remoteAudioMuted),
         /** Camera: cover in grid. Screen share (`replaceTrack`): contain so the whole desktop is visible. */
         videoFillCover: remoteSource === 'camera',
         videoPresentation: remoteSource,
@@ -1015,6 +1053,21 @@ export function useCallEngine(options?: CallEngineOptions) {
     { flush: 'post' },
   )
 
+  watch(
+    () => [inCall.value, readEngineRole(options), micEnabled.value] as const,
+    ([inC, role, mic]) => {
+      if (!inC || role !== 'participant') {
+        return
+      }
+      try {
+        sendJson({ type: 'set-audio-muted', payload: { muted: !mic } })
+      } catch {
+        /* ws closed */
+      }
+    },
+    { flush: 'post' },
+  )
+
   function sendChatMessage(text: string): void {
     const t = normalizeDisplayName(text)
     if (!t || !inCall.value) {
@@ -1049,6 +1102,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     teardownScreenShare()
     callChatMessages.value = []
     peerHandRaised.value = {}
+    remoteAudioMutedByPeerId.value = {}
     handRaised.value = false
     lastWirePeerCount.value = 0
     lastWireVideoSimulcast.value = false

@@ -9,6 +9,8 @@ export class Peer {
   displayName: string
   /** HTTPS profile URL from join-room (opaque to SFU). */
   avatarUrl: string
+  /** UI metadata: true when this peer has locally muted their outbound mic. */
+  audioMuted = false
 
   private readonly transports = new Map<string, WebRtcTransport>()
   private readonly producers = new Map<string, Producer>()

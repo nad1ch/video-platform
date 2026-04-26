@@ -23,6 +23,7 @@ import {
   handleProduce,
   handleProducerVideoSource,
   handleSetOutboundVideoPaused,
+  handleSetAudioMuted,
   handleRaiseHand,
   handleRequestProducerSync,
   handleSetConsumerPreferredLayers,
@@ -161,6 +162,11 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             case 'set-outbound-video-paused': {
               const { paused } = parsed.data.payload
               await handleSetOutboundVideoPaused(socket, paused, deps)
+              break
+            }
+            case 'set-audio-muted': {
+              const { muted } = parsed.data.payload
+              handleSetAudioMuted(socket, muted, deps)
               break
             }
             case 'consume': {
