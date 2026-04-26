@@ -224,7 +224,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   gap: 1rem;
   min-height: 4.5rem;
   overflow: visible;
-  padding: 0 1.6rem;
+  padding: 0 1.1rem;
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 999px;
   background: rgba(18, 8, 34, 0.015);

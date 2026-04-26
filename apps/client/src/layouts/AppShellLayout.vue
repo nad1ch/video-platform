@@ -257,7 +257,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
 
 <template>
   <div class="app-shell-layout eat-first-root page-stack" :data-theme="theme">
-    <LandingCloudBackdrop class="app-shell-layout__backdrop" :active="isHeavyVisualRoute" />
+    <LandingCloudBackdrop class="app-shell-layout__backdrop" variant="app" :active="isHeavyVisualRoute" />
     <div class="app-shell-layout__body app-layout">
       <AppLandingHeader
         v-if="showChrome"

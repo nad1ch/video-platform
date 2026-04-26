@@ -17,8 +17,9 @@ const props = withDefaults(
   defineProps<{
     /** Full animation/blend mode for routes where the backdrop is a primary visual element. */
     active?: boolean
+    variant?: 'landing' | 'app'
   }>(),
-  { active: true },
+  { active: true, variant: 'landing' },
 )
 
 type CloudLayer = {
@@ -37,6 +38,8 @@ type StarDot = {
   phase: number
   style: Readonly<Record<string, string>>
 }
+
+type AppStarDotRaw = readonly [xVw: number, yVh: number, size: number, alpha: number]
 
 const cloudLayers = Object.freeze([
   Object.freeze({
@@ -224,6 +227,69 @@ const cloudLayers = Object.freeze([
   }),
 ] as readonly CloudLayer[])
 
+function appPx(value: number): string {
+  return `calc(var(--app-backdrop-u) * ${value})`
+}
+
+function appBottomAnchoredTopPx(top: number, height: number): string {
+  return `max(${appPx(top)}, calc(100vh - ${appPx(height)}))`
+}
+
+const appCloudLayers = Object.freeze([
+  Object.freeze({
+    id: 'app-left-rounded',
+    src: cloudRoundedWideOne,
+    webpSrc: cloudRoundedWideOneWebp,
+    className: 'landing-cloud-backdrop__cloud--app-rounded',
+    width: 1024,
+    height: 512,
+    priority: 'critical',
+    style: Object.freeze({
+      left: appPx(-697),
+      top: appPx(-10),
+      width: appPx(1384),
+      height: appPx(692),
+      opacity: '0.32',
+    }),
+  }),
+  Object.freeze({
+    id: 'app-bottom-wide',
+    src: cloudWideVolumetric,
+    webpSrc: cloudWideVolumetricWebp,
+    className: 'landing-cloud-backdrop__cloud--app-wide',
+    width: 1024,
+    height: 512,
+    priority: 'critical',
+    style: Object.freeze({
+      left: appPx(133),
+      top: appBottomAnchoredTopPx(536, 416),
+      width: appPx(832),
+      height: appPx(416),
+      opacity: '0.48',
+      transform: 'rotate(2.35deg)',
+    }),
+  }),
+  Object.freeze({
+    id: 'app-upper-right-wide',
+    src: cloudWideVolumetric,
+    webpSrc: cloudWideVolumetricWebp,
+    className: 'landing-cloud-backdrop__cloud--app-wide',
+    width: 1024,
+    height: 512,
+    priority: 'critical',
+    style: Object.freeze({
+      left: appPx(916),
+      top: appPx(44),
+      width: appPx(832),
+      height: appPx(416),
+      opacity: '0.48',
+      transform: 'rotate(173.31deg) scaleY(-1)',
+    }),
+  }),
+] as readonly CloudLayer[])
+
+const visibleCloudLayers = computed(() => (props.variant === 'app' ? appCloudLayers : cloudLayers))
+const isAppBackdrop = computed(() => props.variant === 'app')
 const starDotsRaw = [
   [2059, 142, 5, 0.36],
   [1862, 98, 5, 0.36],
@@ -285,26 +351,130 @@ const starDotsRaw = [
   [445, 2337, 5, 0.47],
 ] as const
 
-const starDots = Object.freeze(
-  starDotsRaw.map(([x, y, size, alpha], index) => {
-    const duration = 2.8 + ((index * 37) % 240) / 100
-    const delay = -(((index * 611) % 9200) / 1000)
-    return Object.freeze({
-      id: `star-${index}`,
-      phase: index % 5,
-      style: Object.freeze({
-        left: px(x),
-        top: px(y),
-        width: px(size),
-        height: px(size),
-        borderRadius: px(14),
-        '--star-alpha': String(alpha),
-        '--star-dur': `${duration.toFixed(2)}s`,
-        '--star-delay': `${delay.toFixed(2)}s`,
-      } as Record<string, string>),
-    })
-  }),
-) as readonly StarDot[]
+function appStarJitter(seed: number): number {
+  return (((seed * 9301 + 49297) % 233280) / 233280) * 2 - 1
+}
+
+function buildAppStarDotsRaw(): readonly AppStarDotRaw[] {
+  const columns = 11
+  const rows = 6
+  return Object.freeze(
+    Array.from({ length: columns * rows }, (_, index): AppStarDotRaw => {
+      const column = index % columns
+      const row = Math.floor(index / columns)
+      const xJitter = appStarJitter(index * 11 + 3) * 0.34
+      const yJitter = appStarJitter(index * 17 + 7) * 0.3
+      const x = ((column + 0.5 + xJitter) / columns) * 100
+      const y = ((row + 0.5 + yJitter) / rows) * 100
+      const size = index % 3 === 0 ? 5 : 4
+      const alpha = 0.34 + ((index * 19) % 28) / 100
+      return [Number(x.toFixed(2)), Number(y.toFixed(2)), size, Number(alpha.toFixed(2))]
+    }),
+  )
+}
+
+const appStarDotsRaw = buildAppStarDotsRaw()
+
+function starDotsFromRaw(
+  raw: readonly (readonly [number, number, number, number])[],
+  toPx: (value: number) => string,
+  idPrefix: string,
+): readonly StarDot[] {
+  return Object.freeze(
+    raw.map(([x, y, size, alpha], index) => {
+      const duration = 2.8 + ((index * 37) % 240) / 100
+      const delay = -(((index * 611) % 9200) / 1000)
+      return Object.freeze({
+        id: `${idPrefix}-star-${index}`,
+        phase: index % 5,
+        style: Object.freeze({
+          left: toPx(x),
+          top: toPx(y),
+          width: toPx(size),
+          height: toPx(size),
+          borderRadius: toPx(14),
+          '--star-alpha': String(alpha),
+          '--star-dur': `${duration.toFixed(2)}s`,
+          '--star-delay': `${delay.toFixed(2)}s`,
+        } as Record<string, string>),
+      })
+    }),
+  ) as readonly StarDot[]
+}
+
+const starDots = starDotsFromRaw(starDotsRaw, px, 'landing')
+const appBackdropViewport = ref({ width: 0, height: 0 })
+
+function syncAppBackdropViewport(): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+  appBackdropViewport.value = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }
+}
+
+function appStarClearsClouds(xVw: number, yVh: number, size: number): boolean {
+  const { width, height } = appBackdropViewport.value
+  if (width <= 0 || height <= 0) {
+    return true
+  }
+
+  const unit = Math.min(width / 1440, height / 748)
+  const x = (width * xVw) / 100
+  const y = (height * yVh) / 100
+  const pad = size * unit * 0.5 + Math.max(14, unit * 34)
+  const bottomCloudTop = Math.max(unit * 536, height - unit * 416)
+  const cloudZones = [
+    { left: unit * -697, top: unit * -10, width: unit * 1384, height: unit * 692, cx: 0.24, cy: 0.3, rx: 0.3, ry: 0.34 },
+    { left: unit * -697, top: unit * -10, width: unit * 1384, height: unit * 692, cx: 0.46, cy: 0.48, rx: 0.46, ry: 0.42 },
+    { left: unit * -697, top: unit * -10, width: unit * 1384, height: unit * 692, cx: 0.66, cy: 0.7, rx: 0.26, ry: 0.22 },
+    { left: unit * 133, top: bottomCloudTop, width: unit * 832, height: unit * 416, cx: 0.32, cy: 0.46, rx: 0.38, ry: 0.3 },
+    { left: unit * 133, top: bottomCloudTop, width: unit * 832, height: unit * 416, cx: 0.56, cy: 0.66, rx: 0.48, ry: 0.36 },
+    { left: unit * 916, top: unit * 44, width: unit * 832, height: unit * 416, cx: 0.36, cy: 0.5, rx: 0.44, ry: 0.42 },
+    { left: unit * 916, top: unit * 44, width: unit * 832, height: unit * 416, cx: 0.64, cy: 0.34, rx: 0.34, ry: 0.3 },
+  ] as const
+
+  return cloudZones.every((zone) => {
+    const centerX = zone.left + zone.width * zone.cx
+    const centerY = zone.top + zone.height * zone.cy
+    const radiusX = zone.width * zone.rx + pad
+    const radiusY = zone.height * zone.ry + pad
+    const normalizedX = (x - centerX) / radiusX
+    const normalizedY = (y - centerY) / radiusY
+    return normalizedX * normalizedX + normalizedY * normalizedY > 1
+  })
+}
+
+const appStarDots = computed(() =>
+  Object.freeze(
+    appStarDotsRaw.flatMap(([x, y, size, alpha], index) => {
+      if (!appStarClearsClouds(x, y, size)) {
+        return []
+      }
+      const duration = 2.8 + ((index * 37) % 240) / 100
+      const delay = -(((index * 611) % 9200) / 1000)
+      return [
+        Object.freeze({
+          id: `app-star-${index}`,
+          phase: index % 5,
+          style: Object.freeze({
+            left: `${x}vw`,
+            top: `${y}vh`,
+            width: appPx(size),
+            height: appPx(size),
+            borderRadius: appPx(14),
+            '--star-alpha': String(alpha),
+            '--star-dur': `${duration.toFixed(2)}s`,
+            '--star-delay': `${delay.toFixed(2)}s`,
+          } as Record<string, string>),
+        }),
+      ]
+    }),
+  ) as readonly StarDot[],
+)
+const visibleStarDots = computed(() => (isAppBackdrop.value ? appStarDots.value : starDots))
 
 const pageVisible = ref(true)
 const secondaryCloudsReady = ref(false)
@@ -366,8 +536,12 @@ function markCloudLayerLoaded(id: string): void {
 
 onMounted(() => {
   syncPageVisible()
+  syncAppBackdropViewport()
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', syncPageVisible)
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', syncAppBackdropViewport)
   }
   window.setTimeout(() => {
     secondaryCloudsReady.value = true
@@ -378,19 +552,25 @@ onUnmounted(() => {
   if (typeof document !== 'undefined') {
     document.removeEventListener('visibilitychange', syncPageVisible)
   }
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', syncAppBackdropViewport)
+  }
 })
 </script>
 
 <template>
   <div
     class="landing-cloud-backdrop"
-    :class="{ 'landing-cloud-backdrop--inactive': !backdropActive }"
+    :class="[
+      `landing-cloud-backdrop--${variant}`,
+      { 'landing-cloud-backdrop--inactive': !backdropActive },
+    ]"
     aria-hidden="true"
   >
     <div class="landing-cloud-backdrop__gradient" />
     <div class="landing-cloud-backdrop__stars">
       <span
-        v-for="star in starDots"
+        v-for="star in visibleStarDots"
         :key="star.id"
         class="landing-cloud-backdrop__star"
         :class="`landing-cloud-backdrop__star--ph${star.phase}`"
@@ -398,7 +578,7 @@ onUnmounted(() => {
       />
     </div>
     <picture
-      v-for="layer in cloudLayers"
+      v-for="layer in visibleCloudLayers"
       :key="layer.id"
       class="landing-cloud-backdrop__cloud"
       :class="[
@@ -423,7 +603,7 @@ onUnmounted(() => {
         @load="markCloudLayerLoaded(layer.id)"
       />
     </picture>
-    <div class="landing-cloud-backdrop__veil" />
+    <div v-if="!isAppBackdrop" class="landing-cloud-backdrop__veil" />
   </div>
 </template>
 
@@ -455,6 +635,20 @@ onUnmounted(() => {
     radial-gradient(circle at 76% 48%, rgba(84, 56, 132, 0.38), transparent calc(var(--u) * 1180)),
     radial-gradient(circle at 60% 6%, rgba(62, 35, 103, 0.42), transparent calc(var(--u) * 620)),
     linear-gradient(119.10504159217813deg, #0b0317 0%, rgba(74, 50, 116, 0.69) 73.206%);
+}
+
+.landing-cloud-backdrop--app {
+  --app-backdrop-u: min(calc(100vw / 1440), calc(100vh / 748));
+  --u: var(--app-backdrop-u);
+  background: #0c041b;
+}
+
+.landing-cloud-backdrop--app.landing-cloud-backdrop--inactive {
+  opacity: 1;
+}
+
+.landing-cloud-backdrop--app .landing-cloud-backdrop__gradient {
+  background: linear-gradient(138.02298923369693deg, rgb(12, 4, 27) 17.598%, rgba(11, 5, 23, 0.69) 73.206%);
 }
 
 .landing-cloud-backdrop__cloud {
@@ -502,7 +696,7 @@ onUnmounted(() => {
   opacity: 1;
 }
 
-.landing-cloud-backdrop--inactive .landing-cloud-backdrop__cloud {
+.landing-cloud-backdrop--inactive:not(.landing-cloud-backdrop--app) .landing-cloud-backdrop__cloud {
   filter: none;
   transform: none !important;
 }
@@ -519,6 +713,17 @@ onUnmounted(() => {
   mix-blend-mode: screen;
 }
 
+.landing-cloud-backdrop__cloud--app-wide,
+.landing-cloud-backdrop__cloud--app-rounded {
+  filter: contrast(1.22) saturate(1.38) brightness(1.12) hue-rotate(8deg)
+    drop-shadow(0 0 calc(var(--app-backdrop-u) * 18) rgba(93, 55, 180, 0.16));
+  mix-blend-mode: normal;
+}
+
+.landing-cloud-backdrop--app .landing-cloud-backdrop__cloud::before {
+  display: none;
+}
+
 .landing-cloud-backdrop--inactive .landing-cloud-backdrop__cloud--wide,
 .landing-cloud-backdrop--inactive .landing-cloud-backdrop__cloud--transparent,
 .landing-cloud-backdrop--inactive .landing-cloud-backdrop__cloud--rounded {
@@ -528,6 +733,10 @@ onUnmounted(() => {
 .landing-cloud-backdrop__stars {
   inset: 0;
   z-index: 1;
+}
+
+.landing-cloud-backdrop--app .landing-cloud-backdrop__stars {
+  z-index: 0;
 }
 
 .landing-cloud-backdrop__star {
@@ -556,6 +765,34 @@ onUnmounted(() => {
 
 .landing-cloud-backdrop__star--ph3 {
   animation-name: landingCloudStarBlink;
+}
+
+.landing-cloud-backdrop--app .landing-cloud-backdrop__star {
+  animation-duration: var(--star-dur);
+  animation-delay: var(--star-delay);
+  animation-fill-mode: both;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+.landing-cloud-backdrop--app .landing-cloud-backdrop__star--ph0 {
+  animation-name: landingCloudStarTwinkleSoft;
+}
+
+.landing-cloud-backdrop--app .landing-cloud-backdrop__star--ph1 {
+  animation-name: landingCloudStarTwinkle;
+}
+
+.landing-cloud-backdrop--app .landing-cloud-backdrop__star--ph2 {
+  animation-name: landingCloudStarTwinkleBright;
+}
+
+.landing-cloud-backdrop--app .landing-cloud-backdrop__star--ph3 {
+  animation-name: landingCloudStarBlink;
+}
+
+.landing-cloud-backdrop--app .landing-cloud-backdrop__star--ph4 {
+  animation-name: landingCloudStarTwinkleSlow;
 }
 
 .landing-cloud-backdrop--inactive .landing-cloud-backdrop__star {
