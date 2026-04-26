@@ -444,9 +444,9 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
     0 10px 22px rgba(11, 3, 23, 0.18);
   -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.24);
   backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.24);
-  font-family: var(--app-home-ui, var(--sa-font-main, system-ui, sans-serif));
-  font-size: 0.82rem;
-  font-weight: 400;
+  font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .app-landing-header__coin-icon {
@@ -473,17 +473,18 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   justify-content: center;
   min-width: 8.8rem;
   min-height: 2.35rem;
+  border-color: rgba(255, 255, 255, 0.16);
   border-radius: 999px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 46%),
-    rgba(81, 48, 116, 0.2);
+  background: rgba(81, 48, 116, 0.24);
   color: #fff;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 10px 22px rgba(10, 3, 24, 0.2);
+  box-shadow: 0 10px 22px rgba(10, 3, 24, 0.2);
   -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
   font-family: var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);
+}
+
+.app-landing-header__auth::before {
+  display: none;
 }
 
 .app-landing-header__auth-loading {
@@ -664,6 +665,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
   .app-landing-header__title {
     font-size: 1.35rem;
+    transform: none;
     pointer-events: auto;
   }
 }

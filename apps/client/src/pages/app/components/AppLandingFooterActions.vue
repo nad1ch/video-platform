@@ -126,13 +126,9 @@ onUnmounted(() => {
   box-sizing: border-box;
   border: 1px solid var(--app-landing-footer-action-border, rgba(255, 255, 255, 0.18));
   border-radius: 999px;
-  background:
-    linear-gradient(135deg, var(--app-landing-footer-action-shine, rgba(255, 255, 255, 0.14)), transparent 46%),
-    var(--app-landing-footer-feedback-bg, var(--app-home-glass-action-bg, rgba(81, 48, 116, 0.1)));
+  background: var(--app-landing-footer-feedback-bg, var(--app-home-glass-action-bg, rgba(81, 48, 116, 0.18)));
   color: var(--app-landing-footer-action-color, #fff);
-  box-shadow:
-    inset 0 1px 0 var(--app-landing-footer-action-inset-shadow, rgba(255, 255, 255, 0.2)),
-    0 10px 22px var(--app-landing-footer-action-drop-shadow, rgba(10, 3, 24, 0.2));
+  box-shadow: 0 10px 22px var(--app-landing-footer-action-drop-shadow, rgba(10, 3, 24, 0.2));
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
   font-size: var(--app-landing-footer-action-font-size, 0.82rem);
@@ -164,13 +160,8 @@ onUnmounted(() => {
   min-height: var(--app-landing-footer-action-height, 2.35rem);
   border: 1px solid var(--app-landing-footer-locale-border, rgba(255, 255, 255, 0.16));
   border-radius: 1.25rem;
-  background:
-    linear-gradient(135deg, var(--app-landing-footer-action-shine, rgba(255, 255, 255, 0.14)), transparent 46%),
-    var(--app-landing-footer-locale-bg, var(--app-home-glass-action-bg, rgba(81, 48, 116, 0.1)));
-  box-shadow:
-    inset 0 1px 0 var(--app-landing-footer-action-inset-shadow, rgba(255, 255, 255, 0.22)),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
-    0 10px 22px var(--app-landing-footer-action-drop-shadow, rgba(10, 3, 24, 0.2));
+  background: var(--app-landing-footer-locale-bg, var(--app-home-glass-action-bg, rgba(81, 48, 116, 0.18)));
+  box-shadow: 0 10px 22px var(--app-landing-footer-action-drop-shadow, rgba(10, 3, 24, 0.2));
   color: var(--app-landing-footer-action-color, #fff);
   cursor: pointer;
   font-size: var(--app-landing-footer-action-font-size, 0.82rem);
@@ -188,6 +179,11 @@ onUnmounted(() => {
   display: none;
 }
 
+.app-landing-footer-actions__feedback::before,
+.app-landing-footer-actions__locale-trigger::before {
+  display: none;
+}
+
 .app-landing-footer-actions__locale-list {
   position: absolute;
   left: 0;
@@ -198,11 +194,8 @@ onUnmounted(() => {
   overflow: hidden;
   border: 1px solid var(--app-landing-footer-locale-list-border, rgba(255, 255, 255, 0.16));
   border-radius: 1.25rem;
-  background:
-    linear-gradient(135deg, var(--app-landing-footer-list-shine, rgba(255, 255, 255, 0.1)), transparent 40%),
-    var(--app-landing-footer-locale-list-bg, rgba(65, 43, 91, 0.72));
+  background: var(--app-landing-footer-locale-list-bg, rgba(65, 43, 91, 0.72));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 -12px 24px rgba(10, 3, 24, 0.26);
   -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.22);
   backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.22);
@@ -239,7 +232,6 @@ onUnmounted(() => {
   border-color: rgba(255, 255, 255, 0.22);
   background: rgba(102, 56, 143, 0.26);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
     0 12px 28px rgba(10, 3, 24, 0.24);
 }
 

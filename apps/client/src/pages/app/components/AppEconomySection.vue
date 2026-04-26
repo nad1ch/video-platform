@@ -21,10 +21,12 @@ const { t } = useI18n()
 <style scoped>
 .app-economy__panel {
   position: relative;
-  display: block;
+  display: flex;
+  flex-direction: column;
   max-width: 100%;
-  min-height: clamp(10.4rem, 14.1vw, 12.7rem);
-  padding: clamp(1.05rem, 1.8vw, 1.55rem);
+  height: 100%;
+  min-height: clamp(8.2rem, 10.6vw, 9.45rem);
+  padding: clamp(0.58rem, 1vw, 0.78rem) clamp(0.75rem, 1.25vw, 1rem) clamp(0.68rem, 1.15vw, 0.88rem);
   overflow: hidden;
   box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.11);
@@ -44,13 +46,13 @@ const { t } = useI18n()
 .app-economy__title {
   position: relative;
   z-index: 1;
-  margin: 0 0 1.1rem;
+  margin: -0.05rem 0 0.4rem;
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
-  font-size: 1.28rem;
+  font-size: clamp(1.12rem, 1.62vw, 1.46rem);
   font-weight: 400;
   font-variation-settings: 'YEAR' 1979;
-  line-height: 1;
+  line-height: 1.16;
   text-align: center;
   text-transform: uppercase;
   text-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
@@ -60,6 +62,8 @@ const { t } = useI18n()
   position: relative;
   z-index: 1;
   width: 100%;
+  margin-top: auto;
+  margin-bottom: clamp(0.35rem, 0.45vw, 0.55rem);
 }
 
 @media (max-width: 620px) {
@@ -70,8 +74,12 @@ const { t } = useI18n()
 
 @media (min-width: 621px) and (max-width: 1200px) {
   .app-economy__panel {
-    min-height: clamp(8.8rem, 20vh, 10.4rem);
+    min-height: clamp(7rem, 16vh, 8.6rem);
     padding: 0.9rem;
+  }
+
+  .app-economy__banner {
+    margin-bottom: 0.45rem;
   }
 
   .app-economy__title {
@@ -82,8 +90,13 @@ const { t } = useI18n()
 
 @media (min-width: 621px) and (max-width: 900px) {
   .app-economy__panel {
+    height: auto;
     min-height: auto;
     padding: 1.25rem;
+  }
+
+  .app-economy__banner {
+    margin-bottom: 0;
   }
 
   .app-economy__title {
