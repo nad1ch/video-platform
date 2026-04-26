@@ -47,8 +47,6 @@ const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Arbutus&family=Climate+Crisis&display=swap');
-
 .economy-slot-banner {
   position: relative;
   display: block;

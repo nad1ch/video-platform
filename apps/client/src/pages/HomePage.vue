@@ -10,10 +10,15 @@ import AppGamesSection from '@/pages/app/components/AppGamesSection.vue'
 import AppHeader from '@/pages/app/components/AppHeader.vue'
 import AppVideoCallSection from '@/pages/app/components/AppVideoCallSection.vue'
 import eatFirstImage from '@/assets/landing/eat-first.png'
+import eatFirstImageWebp from '@/assets/landing/eat-first.webp'
 import mafiaImage from '@/assets/landing/mafia.png'
+import mafiaImageWebp from '@/assets/landing/mafia.webp'
 import nadleImage from '@/assets/landing/nadle.png'
+import nadleImageWebp from '@/assets/landing/nadle.webp'
 import nadrawImage from '@/assets/landing/nadraw-phone.png'
+import nadrawImageWebp from '@/assets/landing/nadraw-phone.webp'
 import spyImage from '@/assets/landing/spy.png'
+import spyImageWebp from '@/assets/landing/spy.webp'
 import { useAuth } from '@/composables/useAuth'
 import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
 import { BRAND_LOGO_LIGHT_SVG, STREAMER_NICK } from '@/eat-first/constants/brand.js'
@@ -26,6 +31,7 @@ type AppGameCard = {
   subtitle?: string
   to: RouteLocationRaw
   image: string
+  imageWebp?: string
   ariaLabel: string
   tone?: 'violet' | 'amber' | 'green' | 'slate'
 }
@@ -63,6 +69,7 @@ const gameCards = computed<AppGameCard[]>(() => [
     title: t('home.gameEatFirst'),
     to: eatRoute,
     image: eatFirstImage,
+    imageWebp: eatFirstImageWebp,
     ariaLabel: t('home.openEatFirst'),
     tone: 'amber',
   },
@@ -71,6 +78,7 @@ const gameCards = computed<AppGameCard[]>(() => [
     title: t('home.gameMafia'),
     to: mafiaRoute,
     image: mafiaImage,
+    imageWebp: mafiaImageWebp,
     ariaLabel: t('home.openMafia'),
     tone: 'slate',
   },
@@ -79,6 +87,7 @@ const gameCards = computed<AppGameCard[]>(() => [
     title: t('home.gameNadle'),
     to: nadleRoute.value,
     image: nadleImage,
+    imageWebp: nadleImageWebp,
     ariaLabel: t('home.openNadle'),
     tone: 'green',
   },
@@ -87,6 +96,7 @@ const gameCards = computed<AppGameCard[]>(() => [
     title: t('home.gameNadraw'),
     to: nadrawRoute.value,
     image: nadrawImage,
+    imageWebp: nadrawImageWebp,
     ariaLabel: t('home.openNadraw'),
     tone: 'violet',
   },
@@ -95,6 +105,7 @@ const gameCards = computed<AppGameCard[]>(() => [
     title: t('home.gameSpy'),
     to: mafiaRoute,
     image: spyImage,
+    imageWebp: spyImageWebp,
     ariaLabel: t('home.openSpy'),
     tone: 'slate',
   },
@@ -103,6 +114,7 @@ const gameCards = computed<AppGameCard[]>(() => [
     title: t('home.gameMic'),
     to: eatRoute,
     image: eatFirstImage,
+    imageWebp: eatFirstImageWebp,
     ariaLabel: t('home.openHotSeat'),
     tone: 'amber',
   },

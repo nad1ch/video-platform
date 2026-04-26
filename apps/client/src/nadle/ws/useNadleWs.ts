@@ -11,7 +11,7 @@ import {
   type NadleStreamSessionUser,
   type NadleWsConnectionState,
 } from './nadleWsTypes'
-import { replyJsonPingIfNeeded } from 'call-core'
+import { replyJsonPingIfNeeded } from 'call-core/utils'
 
 type NadleWsClientLogger = ReturnType<(typeof import('@/utils/logger'))['createLogger']>
 

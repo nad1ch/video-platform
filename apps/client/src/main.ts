@@ -4,7 +4,6 @@ import 'ui-theme'
 import './style.css'
 import './tailwind.css'
 import App from './App.vue'
-import TwitchRelayChatPanel from '@/components/twitch/TwitchRelayChatPanel.vue'
 import { router } from './router'
 import { initAudioPlaybackUnlock } from 'call-core/audio-unlock'
 import { i18n, preloadInitialLocales } from '@/eat-first/i18n'
@@ -22,7 +21,6 @@ async function bootstrap() {
   app.use(pinia)
   app.use(i18n)
   app.use(router)
-  app.component('TwitchRelayChatPanel', TwitchRelayChatPanel)
   app.mount('#app')
 }
 

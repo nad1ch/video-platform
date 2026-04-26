@@ -1,4 +1,5 @@
 export { normalizeDisplayName } from './normalizeDisplayName'
+export { replyJsonPingIfNeeded } from './jsonWsPing'
 export { waitForCondition } from './waitForCondition'
 export { tryConsumeProducerOnce, type ConsumeOnceResult } from './consumerDedup'
 export {

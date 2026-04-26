@@ -45,11 +45,29 @@ const userInitial = computed(() => {
 })
 const displayName = computed(() => props.userName.trim())
 const displayTitle = computed(() => props.title.trim() || props.brandName)
+const userAvatarSrc = computed(() => avatarSizedUrl(props.userAvatar, 96))
 const resolvedHelpLabel = computed(() => props.helpLabel.trim() || t('onboarding.openGuide'))
 const profileMenuLabel = computed(() =>
   displayName.value ? t('app.openProfileMenuFor', { name: displayName.value }) : t('app.openProfileMenu'),
 )
 const profileActionLabel = computed(() => (props.profileTo ? t('app.openAdminPanel') : profileMenuLabel.value))
+
+function avatarSizedUrl(rawUrl: string, size: number): string {
+  const trimmed = rawUrl.trim()
+  if (!trimmed) {
+    return ''
+  }
+  if (trimmed.includes('googleusercontent.com')) {
+    if (/=s\d+(?:-[a-z]+)?$/i.test(trimmed)) {
+      return trimmed.replace(/=s\d+(?:-[a-z]+)?$/i, `=s${size}-c`)
+    }
+    return `${trimmed}${trimmed.includes('?') ? '&' : '?'}sz=${size}`
+  }
+  if (trimmed.includes('static-cdn.jtvnw.net')) {
+    return trimmed.replace(/-\d+x\d+(\.[a-z0-9]+(?:\?.*)?)$/i, `-${size}x${size}$1`)
+  }
+  return trimmed
+}
 </script>
 
 <template>
@@ -101,10 +119,13 @@ const profileActionLabel = computed(() => (props.profileTo ? t('app.openAdminPan
               <img
                 v-if="hasUserAvatar"
                 class="app-landing-header__avatar-img"
-                :src="userAvatar"
+                :src="userAvatarSrc"
                 alt=""
                 width="28"
                 height="28"
+                loading="lazy"
+                decoding="async"
+                fetchpriority="low"
               />
               <span v-else>{{ userInitial }}</span>
             </span>

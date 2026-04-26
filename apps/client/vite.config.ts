@@ -15,6 +15,17 @@ const devWsProxyTarget = devApiProxyTarget.startsWith('https://')
   ? devApiProxyTarget.replace(/^https:\/\//, 'wss://')
   : devApiProxyTarget.replace(/^http:\/\//, 'ws://')
 
+function manualAppChunks(id: string): string | undefined {
+  const normalizedId = id.replace(/\\/g, '/')
+  if (normalizedId.endsWith('/apps/client/src/nadle/words-uk-dictionary.generated.ts')) {
+    return 'nadle-dictionary'
+  }
+  if (normalizedId.endsWith('/apps/client/src/routeNavLoading.ts')) {
+    return 'route-nav-loading'
+  }
+  return undefined
+}
+
 /** Map `/slug` and `/slug/` → `/slug/index.html` so `public/` marketing pages load instead of SPA `index.html`. */
 function seoPublicMarketingIndexPlugin(): Plugin {
   const slugs = ['video-calls-for-streamers', 'twitch-nadle-game', 'stream-overlay-tools'] as const
@@ -96,6 +107,11 @@ export default defineConfig({
     cssMinify: 'esbuild',
     /** Map prod stack traces to sources (disable later if you want smaller uploads). */
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: manualAppChunks,
+      },
+    },
   },
   resolve: {
     // One physical copy of Vue/Pinia for the app + aliased call-core sources (avoids getActivePinia() === undefined / reading '_s').

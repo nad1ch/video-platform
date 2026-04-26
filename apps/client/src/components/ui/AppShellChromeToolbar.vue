@@ -9,7 +9,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import { useTheme } from '@/eat-first'
 import { persistLocale, LOCALE_OPTIONS } from '@/eat-first/i18n'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
-import { normalizeDisplayName } from 'call-core'
+import { normalizeDisplayName } from 'call-core/utils'
 import { useAuth } from '@/composables/useAuth'
 import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
 

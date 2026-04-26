@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import cloudRoundedWideOne from '@/assets/landing/clouds/cloud-rounded-wide-1.png'
+import cloudRoundedWideOneWebp from '@/assets/landing/clouds/cloud-rounded-wide-1.webp'
 import cloudRoundedWideTwo from '@/assets/landing/clouds/cloud-rounded-wide-2.png'
+import cloudRoundedWideTwoWebp from '@/assets/landing/clouds/cloud-rounded-wide-2.webp'
 import cloudTransparentOne from '@/assets/landing/clouds/cloud-transparent-1.png'
+import cloudTransparentOneWebp from '@/assets/landing/clouds/cloud-transparent-1.webp'
 import cloudTransparentTwo from '@/assets/landing/clouds/cloud-transparent-2.png'
+import cloudTransparentTwoWebp from '@/assets/landing/clouds/cloud-transparent-2.webp'
 import cloudWideVolumetric from '@/assets/landing/clouds/cloud-wide-volumetric.png'
+import cloudWideVolumetric768Webp from '@/assets/landing/clouds/cloud-wide-volumetric-768.webp'
+import cloudWideVolumetricWebp from '@/assets/landing/clouds/cloud-wide-volumetric.webp'
 import { landingDesignPx as px } from '@/utils/landingDesignPx'
 
 const props = withDefaults(
@@ -18,7 +24,11 @@ const props = withDefaults(
 type CloudLayer = {
   id: string
   src: string
+  webpSrc: string
   className: string
+  width: number
+  height: number
+  priority: 'critical' | 'secondary'
   style: Readonly<Record<string, string>>
 }
 
@@ -32,7 +42,11 @@ const cloudLayers = Object.freeze([
   Object.freeze({
     id: 'top-left-wide',
     src: cloudWideVolumetric,
+    webpSrc: cloudWideVolumetricWebp,
     className: 'landing-cloud-backdrop__cloud--wide',
+    width: 1024,
+    height: 512,
+    priority: 'secondary',
     style: Object.freeze({
       left: px(-177),
       top: px(-33),
@@ -45,7 +59,11 @@ const cloudLayers = Object.freeze([
   Object.freeze({
     id: 'top-left-transparent',
     src: cloudTransparentOne,
+    webpSrc: cloudTransparentOneWebp,
     className: 'landing-cloud-backdrop__cloud--transparent',
+    width: 1024,
+    height: 471,
+    priority: 'secondary',
     style: Object.freeze({
       left: px(260),
       top: px(-472),
@@ -58,7 +76,11 @@ const cloudLayers = Object.freeze([
   Object.freeze({
     id: 'top-right-wide',
     src: cloudWideVolumetric,
+    webpSrc: cloudWideVolumetricWebp,
     className: 'landing-cloud-backdrop__cloud--wide',
+    width: 1024,
+    height: 512,
+    priority: 'secondary',
     style: Object.freeze({
       left: px(1747),
       top: px(-104),
@@ -70,7 +92,11 @@ const cloudLayers = Object.freeze([
   Object.freeze({
     id: 'top-right-transparent',
     src: cloudTransparentTwo,
+    webpSrc: cloudTransparentTwoWebp,
     className: 'landing-cloud-backdrop__cloud--transparent',
+    width: 1024,
+    height: 471,
+    priority: 'secondary',
     style: Object.freeze({
       left: px(2202),
       top: px(-771),
@@ -83,7 +109,11 @@ const cloudLayers = Object.freeze([
   Object.freeze({
     id: 'upper-right-band',
     src: cloudWideVolumetric,
+    webpSrc: cloudWideVolumetricWebp,
     className: 'landing-cloud-backdrop__cloud--wide',
+    width: 1024,
+    height: 512,
+    priority: 'secondary',
     style: Object.freeze({
       left: px(1191),
       top: px(355),
@@ -96,7 +126,11 @@ const cloudLayers = Object.freeze([
   Object.freeze({
     id: 'middle-band',
     src: cloudWideVolumetric,
+    webpSrc: cloudWideVolumetricWebp,
     className: 'landing-cloud-backdrop__cloud--wide',
+    width: 1024,
+    height: 512,
+    priority: 'critical',
     style: Object.freeze({
       left: px(356),
       top: px(500),
@@ -108,7 +142,11 @@ const cloudLayers = Object.freeze([
   Object.freeze({
     id: 'lower-left-band',
     src: cloudWideVolumetric,
+    webpSrc: cloudWideVolumetricWebp,
     className: 'landing-cloud-backdrop__cloud--wide',
+    width: 1024,
+    height: 512,
+    priority: 'secondary',
     style: Object.freeze({
       left: px(-235),
       top: px(908),
@@ -121,7 +159,11 @@ const cloudLayers = Object.freeze([
   Object.freeze({
     id: 'lower-left-deep',
     src: cloudWideVolumetric,
+    webpSrc: cloudWideVolumetricWebp,
     className: 'landing-cloud-backdrop__cloud--wide',
+    width: 1024,
+    height: 512,
+    priority: 'secondary',
     style: Object.freeze({
       left: px(-508),
       top: px(1277),
@@ -134,7 +176,11 @@ const cloudLayers = Object.freeze([
   Object.freeze({
     id: 'lower-right-rounded',
     src: cloudRoundedWideOne,
+    webpSrc: cloudRoundedWideOneWebp,
     className: 'landing-cloud-backdrop__cloud--rounded',
+    width: 1024,
+    height: 512,
+    priority: 'secondary',
     style: Object.freeze({
       left: px(1500),
       top: px(929),
@@ -146,7 +192,11 @@ const cloudLayers = Object.freeze([
   Object.freeze({
     id: 'bottom-left-rounded',
     src: cloudRoundedWideTwo,
+    webpSrc: cloudRoundedWideTwoWebp,
     className: 'landing-cloud-backdrop__cloud--rounded',
+    width: 1024,
+    height: 512,
+    priority: 'secondary',
     style: Object.freeze({
       left: px(-261),
       top: px(1980),
@@ -158,7 +208,11 @@ const cloudLayers = Object.freeze([
   Object.freeze({
     id: 'bottom-right-band',
     src: cloudWideVolumetric,
+    webpSrc: cloudWideVolumetricWebp,
     className: 'landing-cloud-backdrop__cloud--wide',
+    width: 1024,
+    height: 512,
+    priority: 'secondary',
     style: Object.freeze({
       left: px(1184),
       top: px(2000),
@@ -253,10 +307,61 @@ const starDots = Object.freeze(
 ) as readonly StarDot[]
 
 const pageVisible = ref(true)
+const secondaryCloudsReady = ref(false)
+const loadedCloudIds = ref<ReadonlySet<string>>(new Set())
 const backdropActive = computed(() => props.active && pageVisible.value)
 
 function syncPageVisible(): void {
   pageVisible.value = typeof document === 'undefined' || document.visibilityState !== 'hidden'
+}
+
+function ensureMainCloudPreload(): void {
+  if (typeof document === 'undefined') {
+    return
+  }
+  if (document.querySelector(`link[rel="preload"][href="${cloudWideVolumetricWebp}"]`)) {
+    return
+  }
+  const link = document.createElement('link')
+  link.rel = 'preload'
+  link.as = 'image'
+  link.href = cloudWideVolumetricWebp
+  link.type = 'image/webp'
+  ;(link as HTMLLinkElement & { fetchPriority?: string }).fetchPriority = 'high'
+  document.head.append(link)
+}
+
+function shouldLoadCloudLayer(layer: CloudLayer): boolean {
+  return layer.priority === 'critical' || secondaryCloudsReady.value
+}
+
+ensureMainCloudPreload()
+
+function webpSrcsetForCloudLayer(layer: CloudLayer): string {
+  if (layer.id === 'middle-band') {
+    return `${cloudWideVolumetric768Webp} 768w, ${cloudWideVolumetricWebp} 1024w`
+  }
+  return layer.webpSrc
+}
+
+function sizesForCloudLayer(layer: CloudLayer): string | undefined {
+  if (layer.id === 'middle-band') {
+    return '(max-width: 900px) 100vw, 824px'
+  }
+  return undefined
+}
+
+function isCloudLayerLoaded(id: string): boolean {
+  return loadedCloudIds.value.has(id)
+}
+
+function markCloudLayerLoaded(id: string): void {
+  if (loadedCloudIds.value.has(id)) {
+    return
+  }
+  const next = new Set(loadedCloudIds.value)
+  next.add(id)
+  loadedCloudIds.value = next
 }
 
 onMounted(() => {
@@ -264,6 +369,9 @@ onMounted(() => {
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', syncPageVisible)
   }
+  window.setTimeout(() => {
+    secondaryCloudsReady.value = true
+  }, 350)
 })
 
 onUnmounted(() => {
@@ -289,17 +397,32 @@ onUnmounted(() => {
         :style="star.style"
       />
     </div>
-    <img
+    <picture
       v-for="layer in cloudLayers"
       :key="layer.id"
       class="landing-cloud-backdrop__cloud"
-      :class="layer.className"
-      :src="layer.src"
-      alt=""
-      draggable="false"
-      decoding="async"
+      :class="[
+        layer.className,
+        {
+          'landing-cloud-backdrop__cloud--loaded': isCloudLayerLoaded(layer.id),
+          'landing-cloud-backdrop__cloud--visible': shouldLoadCloudLayer(layer),
+        },
+      ]"
       :style="layer.style"
-    />
+    >
+      <source :srcset="webpSrcsetForCloudLayer(layer)" :sizes="sizesForCloudLayer(layer)" type="image/webp" />
+      <img
+        :src="layer.src"
+        alt=""
+        :width="layer.width"
+        :height="layer.height"
+        :loading="layer.priority === 'critical' ? 'eager' : 'lazy'"
+        :fetchpriority="layer.priority === 'critical' ? 'high' : 'low'"
+        draggable="false"
+        decoding="async"
+        @load="markCloudLayerLoaded(layer.id)"
+      />
+    </picture>
     <div class="landing-cloud-backdrop__veil" />
   </div>
 </template>
@@ -336,11 +459,47 @@ onUnmounted(() => {
 
 .landing-cloud-backdrop__cloud {
   z-index: 2;
-  height: auto;
-  object-fit: cover;
-  object-position: bottom center;
   image-rendering: auto;
   filter: contrast(1.03) saturate(1.02);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.landing-cloud-backdrop__cloud--visible {
+  opacity: 1;
+}
+
+.landing-cloud-backdrop__cloud::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  content: '';
+  background:
+    radial-gradient(ellipse at 50% 58%, rgba(120, 80, 200, 0.24) 0%, rgba(120, 80, 200, 0.12) 34%, transparent 72%),
+    radial-gradient(ellipse at 38% 42%, rgba(255, 255, 255, 0.08) 0%, transparent 52%);
+  filter: blur(calc(var(--u) * 12));
+  opacity: 0.4;
+  transition: opacity 0.3s ease;
+}
+
+.landing-cloud-backdrop__cloud--loaded::before {
+  opacity: 0.1;
+}
+
+.landing-cloud-backdrop__cloud img {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: bottom center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.landing-cloud-backdrop__cloud--loaded img {
+  opacity: 1;
 }
 
 .landing-cloud-backdrop--inactive .landing-cloud-backdrop__cloud {

@@ -11,7 +11,7 @@ import {
   type Ref,
   type ShallowRef,
 } from 'vue'
-import { replyJsonPingIfNeeded } from 'call-core'
+import { replyJsonPingIfNeeded } from 'call-core/utils'
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import { buildNadrawShowWsUrl } from '../url/nadrawWsUrl'
 import type {

@@ -2,7 +2,7 @@
 import '@/eat-first/style.css'
 import '@/eat-first/styles/theme.css'
 import { storeToRefs } from 'pinia'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppHeader from '@/components/ui/AppHeader.vue'
@@ -11,9 +11,6 @@ import AppShellStreamNav from '@/components/ui/AppShellStreamNav.vue'
 import AppShellChromeToolbar from '@/components/ui/AppShellChromeToolbar.vue'
 import AppLandingHeader from '@/pages/app/components/AppHeader.vue'
 import AppLandingFooter from '@/pages/app/components/AppFooter.vue'
-import AppHeaderToolbar from '@/eat-first/ui/organisms/AppHeaderToolbar.vue'
-import HostControlChromeBar from '@/eat-first/components/showdesk/HostControlChromeBar.vue'
-import OnboardingTourModal from '@/eat-first/ui/organisms/OnboardingTourModal.vue'
 import { eatViewFromRoute, useSeoApp, useTheme } from '@/eat-first'
 import { hostControlChromeStore } from '@/eat-first/composables/hostControlChrome.js'
 import { persistLocale, LOCALE_OPTIONS } from '@/eat-first/i18n'
@@ -43,6 +40,10 @@ import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
 import type { AuthMode } from '@/types/authMode'
 
 useSeoApp()
+
+const AppHeaderToolbar = defineAsyncComponent(() => import('@/eat-first/ui/organisms/AppHeaderToolbar.vue'))
+const HostControlChromeBar = defineAsyncComponent(() => import('@/eat-first/components/showdesk/HostControlChromeBar.vue'))
+const OnboardingTourModal = defineAsyncComponent(() => import('@/eat-first/ui/organisms/OnboardingTourModal.vue'))
 
 const route = useRoute()
 const router = useRouter()
@@ -82,6 +83,7 @@ const isNewAppHeaderRoute = computed(
 const isNewAppFooterRoute = computed(
   () => isNadleAppHeaderRoute.value || isAdminRoute.value || isCoinHubRoute.value || isEatRoute.value,
 )
+const shellShowsCoinBalance = computed(() => showChrome.value && isNewAppHeaderRoute.value)
 
 /** Nadle stream + Nadraw: дати viewport `min-height: 0`, щоб сторінка могла займати залишок висоти без нескінченного росту. */
 const isNadleStreamRoute = computed(
@@ -269,9 +271,9 @@ watch(
 watch(() => route.fullPath, tryAutoOnboarding, { immediate: true })
 
 watch(
-  () => auth.isAuthenticated.value,
-  (authed) => {
-    if (authed) {
+  [() => auth.isAuthenticated.value, () => shellShowsCoinBalance.value],
+  ([authed, showsBalance]) => {
+    if (authed && showsBalance) {
       void coinHub.loadSnapshot({ background: true })
     }
   },

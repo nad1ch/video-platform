@@ -9,6 +9,7 @@ type AppGameCard = {
   subtitle?: string
   to: RouteLocationRaw
   image: string
+  imageWebp?: string
   ariaLabel: string
   tone?: 'violet' | 'amber' | 'green' | 'slate'
 }
@@ -44,7 +45,10 @@ function toneClass(tone: AppGameCard['tone']) {
             <span v-if="item.subtitle" class="app-game-card__subtitle">{{ item.subtitle }}</span>
           </span>
           <span class="app-game-card__visual" aria-hidden="true">
-            <img class="app-game-card__image" :src="item.image" alt="" loading="lazy" decoding="async" />
+            <picture class="app-game-card__picture">
+              <source v-if="item.imageWebp" :srcset="item.imageWebp" type="image/webp" />
+              <img class="app-game-card__image" :src="item.image" alt="" loading="lazy" decoding="async" />
+            </picture>
           </span>
         </RouterLink>
       </div>
@@ -239,6 +243,12 @@ function toneClass(tone: AppGameCard['tone']) {
   height: 100%;
   object-fit: contain;
   filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.24));
+}
+
+.app-game-card__picture {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .app-game-card--amber .app-game-card__visual {
