@@ -1224,6 +1224,7 @@ const orderedTiles = computed(() => {
     })
   }
 
+  const orderIndex = new Map(tileOrder.value.map((peerId, index) => [peerId, index]))
   return list.sort((a, b) => {
     if (spotlightDesktop.value && pinnedPeerId.value != null) {
       if (a.peerId === pinnedPeerId.value) {
@@ -1234,6 +1235,17 @@ const orderedTiles = computed(() => {
       }
     }
 
+    const ai = orderIndex.get(a.peerId)
+    const bi = orderIndex.get(b.peerId)
+    if (ai != null && bi != null && ai !== bi) {
+      return ai - bi
+    }
+    if (ai != null && bi == null) {
+      return -1
+    }
+    if (ai == null && bi != null) {
+      return 1
+    }
     return a.peerId.localeCompare(b.peerId)
   })
 })
