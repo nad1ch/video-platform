@@ -4,11 +4,18 @@ import cloudRoundedWideTwo from '@/assets/landing/clouds/cloud-rounded-wide-2.pn
 import cloudTransparentOne from '@/assets/landing/clouds/cloud-transparent-1.png'
 import cloudTransparentTwo from '@/assets/landing/clouds/cloud-transparent-2.png'
 import cloudWideVolumetric from '@/assets/landing/clouds/cloud-wide-volumetric.png'
+import { landingDesignPx as px } from '@/utils/landingDesignPx'
 
 type CloudLayer = {
   id: string
   src: string
   className: string
+  style: Readonly<Record<string, string>>
+}
+
+type StarDot = {
+  id: string
+  phase: number
   style: Readonly<Record<string, string>>
 }
 
@@ -18,10 +25,37 @@ const cloudLayers = Object.freeze([
     src: cloudWideVolumetric,
     className: 'landing-cloud-backdrop__cloud--wide',
     style: Object.freeze({
-      left: '-8rem',
-      top: '-4.5rem',
-      width: 'clamp(34rem, 48vw, 58rem)',
-      opacity: '0.52',
+      left: px(-177),
+      top: px(-33),
+      width: px(1584),
+      height: px(792),
+      opacity: '0.41',
+      transform: 'scaleX(-1)',
+    }),
+  }),
+  Object.freeze({
+    id: 'top-left-transparent',
+    src: cloudTransparentOne,
+    className: 'landing-cloud-backdrop__cloud--transparent',
+    style: Object.freeze({
+      left: px(260),
+      top: px(-472),
+      width: px(928),
+      height: px(427),
+      opacity: '0.8',
+      transform: 'rotate(0.21deg)',
+    }),
+  }),
+  Object.freeze({
+    id: 'top-right-wide',
+    src: cloudWideVolumetric,
+    className: 'landing-cloud-backdrop__cloud--wide',
+    style: Object.freeze({
+      left: px(1747),
+      top: px(-104),
+      width: px(1584),
+      height: px(792),
+      opacity: '0.41',
     }),
   }),
   Object.freeze({
@@ -29,62 +63,199 @@ const cloudLayers = Object.freeze([
     src: cloudTransparentTwo,
     className: 'landing-cloud-backdrop__cloud--transparent',
     style: Object.freeze({
-      right: '-10rem',
-      top: '-3rem',
-      width: 'clamp(34rem, 48vw, 58rem)',
-      opacity: '0.44',
+      left: px(2202),
+      top: px(-771),
+      width: px(898),
+      height: px(412),
+      opacity: '0.67',
+      transform: 'rotate(173.32deg) scaleY(-1)',
     }),
   }),
   Object.freeze({
-    id: 'mid-band',
+    id: 'upper-right-band',
     src: cloudWideVolumetric,
     className: 'landing-cloud-backdrop__cloud--wide',
     style: Object.freeze({
-      left: '8vw',
-      top: '24%',
-      width: 'clamp(36rem, 50vw, 60rem)',
-      opacity: '0.26',
+      left: px(1191),
+      top: px(355),
+      width: px(1584),
+      height: px(792),
+      opacity: '0.41',
+      transform: 'scaleX(-1)',
     }),
   }),
   Object.freeze({
-    id: 'right-band',
+    id: 'middle-band',
+    src: cloudWideVolumetric,
+    className: 'landing-cloud-backdrop__cloud--wide',
+    style: Object.freeze({
+      left: px(356),
+      top: px(500),
+      width: px(1584),
+      height: px(792),
+      opacity: '0.41',
+    }),
+  }),
+  Object.freeze({
+    id: 'lower-left-band',
+    src: cloudWideVolumetric,
+    className: 'landing-cloud-backdrop__cloud--wide',
+    style: Object.freeze({
+      left: px(-235),
+      top: px(908),
+      width: px(1709),
+      height: px(855),
+      opacity: '0.41',
+      transform: 'rotate(179.76deg) scaleY(-1)',
+    }),
+  }),
+  Object.freeze({
+    id: 'lower-left-deep',
+    src: cloudWideVolumetric,
+    className: 'landing-cloud-backdrop__cloud--wide',
+    style: Object.freeze({
+      left: px(-508),
+      top: px(1277),
+      width: px(1709),
+      height: px(855),
+      opacity: '0.41',
+      transform: 'rotate(173.28deg) scaleY(-1)',
+    }),
+  }),
+  Object.freeze({
+    id: 'lower-right-rounded',
     src: cloudRoundedWideOne,
     className: 'landing-cloud-backdrop__cloud--rounded',
     style: Object.freeze({
-      right: '-7rem',
-      top: '32%',
-      width: 'clamp(32rem, 44vw, 54rem)',
-      opacity: '0.36',
+      left: px(1500),
+      top: px(929),
+      width: px(1620),
+      height: px(810),
+      opacity: '0.27',
     }),
   }),
   Object.freeze({
-    id: 'lower-left',
-    src: cloudTransparentOne,
-    className: 'landing-cloud-backdrop__cloud--transparent',
-    style: Object.freeze({
-      left: '-12rem',
-      bottom: '-9rem',
-      width: 'clamp(38rem, 52vw, 62rem)',
-      opacity: '0.38',
-    }),
-  }),
-  Object.freeze({
-    id: 'lower-right',
+    id: 'bottom-left-rounded',
     src: cloudRoundedWideTwo,
     className: 'landing-cloud-backdrop__cloud--rounded',
     style: Object.freeze({
-      right: '-12rem',
-      bottom: '-8rem',
-      width: 'clamp(38rem, 52vw, 62rem)',
-      opacity: '0.42',
+      left: px(-261),
+      top: px(1980),
+      width: px(1774),
+      height: px(887),
+      opacity: '0.25',
+    }),
+  }),
+  Object.freeze({
+    id: 'bottom-right-band',
+    src: cloudWideVolumetric,
+    className: 'landing-cloud-backdrop__cloud--wide',
+    style: Object.freeze({
+      left: px(1184),
+      top: px(2000),
+      width: px(1584),
+      height: px(792),
+      opacity: '0.41',
+      transform: 'scaleX(-1)',
     }),
   }),
 ] as readonly CloudLayer[])
+
+const starDotsRaw = [
+  [2059, 142, 5, 0.36],
+  [1862, 98, 5, 0.36],
+  [1658, 157, 5, 0.84],
+  [1583, 118, 4, 0.36],
+  [1602, 179, 5, 0.36],
+  [1083, 164, 4, 0.47],
+  [1235, 186, 4, 0.47],
+  [1413, 177, 4, 0.88],
+  [1477, 104, 4, 0.47],
+  [1634, 8, 5, 0.71],
+  [1215, 99, 5, 0.47],
+  [1188, 625, 5, 0.36],
+  [1236, 680, 5, 0.36],
+  [1210, 663, 5, 0.36],
+  [1437, 640, 5, 0.36],
+  [620, 652, 5, 0.47],
+  [291, 620, 5, 0.47],
+  [353, 711, 5, 0.47],
+  [399, 860, 5, 0.47],
+  [238, 811, 5, 1],
+  [286, 914, 5, 0.47],
+  [402, 1006, 5, 1],
+  [516, 889, 5, 1],
+  [533, 946, 5, 0.47],
+  [55, 668, 5, 0.47],
+  [121, 595, 5, 1],
+  [60, 883, 5, 0.47],
+  [159, 947, 5, 0.47],
+  [2147, 1095, 5, 0.47],
+  [2116, 1192, 5, 1],
+  [1603, 1100, 5, 0.47],
+  [1497, 1147, 5, 0.47],
+  [1404, 1118, 5, 1],
+  [1489, 1187, 5, 1],
+  [1953, 1011, 5, 1],
+  [1350, 1692, 5, 0.47],
+  [1088, 1706, 5, 1],
+  [1618, 1662, 5, 1],
+  [1534, 1761, 5, 1],
+  [1840, 1824, 5, 0.47],
+  [1896, 1734, 5, 0.47],
+  [1965, 1860, 5, 1],
+  [1821, 1662, 5, 0.47],
+  [2325, 2000, 5, 0.47],
+  [2514, 1938, 5, 0.47],
+  [2495, 2064, 5, 0.47],
+  [2480, 2257, 5, 0.47],
+  [1952, 2111, 5, 1],
+  [1794, 2122, 5, 0.47],
+  [1490, 2058, 5, 0.47],
+  [1445, 2151, 5, 0.47],
+  [1006, 2091, 5, 0.47],
+  [1276, 2127, 5, 1],
+  [548, 2120, 5, 0.47],
+  [445, 2220, 5, 1],
+  [211, 2070, 5, 1],
+  [358, 2146, 5, 0.47],
+  [445, 2337, 5, 0.47],
+] as const
+
+const starDots = Object.freeze(
+  starDotsRaw.map(([x, y, size, alpha], index) => {
+    const duration = 2.8 + ((index * 37) % 240) / 100
+    const delay = -(((index * 611) % 9200) / 1000)
+    return Object.freeze({
+      id: `star-${index}`,
+      phase: index % 5,
+      style: Object.freeze({
+        left: px(x),
+        top: px(y),
+        width: px(size),
+        height: px(size),
+        borderRadius: px(14),
+        '--star-alpha': String(alpha),
+        '--star-dur': `${duration.toFixed(2)}s`,
+        '--star-delay': `${delay.toFixed(2)}s`,
+      } as Record<string, string>),
+    })
+  }),
+) as readonly StarDot[]
 </script>
 
 <template>
   <div class="landing-cloud-backdrop" aria-hidden="true">
     <div class="landing-cloud-backdrop__gradient" />
+    <div class="landing-cloud-backdrop__stars">
+      <span
+        v-for="star in starDots"
+        :key="star.id"
+        class="landing-cloud-backdrop__star"
+        :class="`landing-cloud-backdrop__star--ph${star.phase}`"
+        :style="star.style"
+      />
+    </div>
     <img
       v-for="layer in cloudLayers"
       :key="layer.id"
@@ -96,7 +267,6 @@ const cloudLayers = Object.freeze([
       decoding="async"
       :style="layer.style"
     />
-    <div class="landing-cloud-backdrop__stars" />
     <div class="landing-cloud-backdrop__veil" />
   </div>
 </template>
@@ -122,19 +292,18 @@ const cloudLayers = Object.freeze([
 .landing-cloud-backdrop__gradient {
   inset: 0;
   background:
-    radial-gradient(circle at 69% 4%, rgba(255, 153, 92, 0.12), transparent 24rem),
-    radial-gradient(circle at 78% 62%, rgba(121, 69, 184, 0.52), transparent 42rem),
-    radial-gradient(circle at 30% 49%, rgba(70, 35, 116, 0.42), transparent 36rem),
-    linear-gradient(120deg, #0b0317 0%, rgba(74, 50, 116, 0.76) 100%);
+    radial-gradient(circle at 76% 48%, rgba(84, 56, 132, 0.38), transparent calc(var(--u) * 1180)),
+    radial-gradient(circle at 60% 6%, rgba(62, 35, 103, 0.42), transparent calc(var(--u) * 620)),
+    linear-gradient(119.10504159217813deg, #0b0317 0%, rgba(74, 50, 116, 0.69) 73.206%);
 }
 
 .landing-cloud-backdrop__cloud {
-  z-index: 1;
+  z-index: 2;
   height: auto;
-  object-fit: contain;
-  object-position: center;
+  object-fit: cover;
+  object-position: bottom center;
   image-rendering: auto;
-  filter: contrast(1.12) saturate(1.08);
+  filter: contrast(1.06) saturate(1.04);
   transform: translateZ(0);
   will-change: transform;
 }
@@ -153,19 +322,38 @@ const cloudLayers = Object.freeze([
 
 .landing-cloud-backdrop__stars {
   inset: 0;
-  z-index: 2;
-  opacity: 0.72;
-  background-image:
-    radial-gradient(circle at 3.5% 15%, rgba(255, 255, 255, 0.42) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 8.5% 72%, rgba(255, 255, 255, 0.22) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 18% 28%, rgba(255, 255, 255, 0.28) 0 1.2px, transparent 2px),
-    radial-gradient(circle at 24% 66%, rgba(255, 255, 255, 0.2) 0 1px, transparent 1.7px),
-    radial-gradient(circle at 38% 42%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 52% 82%, rgba(255, 255, 255, 0.24) 0 1.2px, transparent 2px),
-    radial-gradient(circle at 64% 18%, rgba(255, 255, 255, 0.3) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 78% 45%, rgba(255, 255, 255, 0.2) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 88% 76%, rgba(255, 255, 255, 0.24) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 94% 22%, rgba(255, 255, 255, 0.3) 0 1px, transparent 1.8px);
+  z-index: 1;
+}
+
+.landing-cloud-backdrop__star {
+  --star-alpha: 0.47;
+  --star-dur: 3.4s;
+  --star-delay: 0s;
+  position: absolute;
+  background: rgba(255, 255, 255, var(--star-alpha));
+  box-shadow: 0 0 calc(var(--u) * 5) rgba(255, 255, 255, 0.18);
+  animation-duration: var(--star-dur);
+  animation-delay: var(--star-delay);
+  animation-fill-mode: both;
+  animation-iteration-count: infinite;
+  animation-name: landingCloudStarTwinkle;
+  animation-timing-function: ease-in-out;
+}
+
+.landing-cloud-backdrop__star--ph1 {
+  animation-name: landingCloudStarTwinkleSoft;
+}
+
+.landing-cloud-backdrop__star--ph2 {
+  animation-name: landingCloudStarTwinkleBright;
+}
+
+.landing-cloud-backdrop__star--ph3 {
+  animation-name: landingCloudStarBlink;
+}
+
+.landing-cloud-backdrop__star--ph4 {
+  animation-name: landingCloudStarTwinkleSlow;
 }
 
 .landing-cloud-backdrop__veil {
@@ -176,9 +364,82 @@ const cloudLayers = Object.freeze([
     radial-gradient(circle at center, transparent 0%, rgba(11, 3, 23, 0.2) 100%);
 }
 
+@keyframes landingCloudStarTwinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  40% {
+    opacity: 1;
+  }
+
+  70% {
+    opacity: 0.2;
+  }
+}
+
+@keyframes landingCloudStarTwinkleSoft {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+
+  48% {
+    opacity: 0.74;
+  }
+}
+
+@keyframes landingCloudStarTwinkleBright {
+  0%,
+  100% {
+    opacity: 0.48;
+  }
+
+  38% {
+    opacity: 1;
+  }
+
+  78% {
+    opacity: 0.28;
+  }
+}
+
+@keyframes landingCloudStarBlink {
+  0%,
+  18%,
+  100% {
+    opacity: 0;
+  }
+
+  42%,
+  68% {
+    opacity: 0.86;
+  }
+}
+
+@keyframes landingCloudStarTwinkleSlow {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  55% {
+    opacity: 0.82;
+  }
+}
+
 @media (max-width: 900px) {
-  .landing-cloud-backdrop__cloud {
-    width: min(78rem, 96vw) !important;
+  .landing-cloud-backdrop__veil {
+    background:
+      linear-gradient(180deg, rgba(11, 3, 23, 0.06) 0%, transparent 26%, transparent 72%, rgba(11, 3, 23, 0.12) 100%),
+      radial-gradient(circle at center, transparent 0%, rgba(11, 3, 23, 0.16) 100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-cloud-backdrop__star {
+    animation: none;
   }
 }
 </style>

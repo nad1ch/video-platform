@@ -2,12 +2,17 @@
 import { nextTick, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import callCardOne from '@/assets/landing-dev/call-card-1.svg'
-import callCardTwo from '@/assets/landing-dev/call-card-2.svg'
-import callCardThree from '@/assets/landing-dev/call-card-3.svg'
+import callBannerCardOne from '@/assets/landing/call-banner/card-1.png'
+import callBannerCardTwo from '@/assets/landing/call-banner/card-2.png'
+import callBannerCardThree from '@/assets/landing/call-banner/card-3.png'
+import callBannerCardFour from '@/assets/landing/call-banner/card-4.png'
 import twitchBrowseIllustration from '@/assets/landing/twitch-browse-illustration.svg'
 import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
 import AppLandingFooterActions from '@/pages/app/components/AppLandingFooterActions.vue'
+import landingCameraIcon from '@/assets/landing/decor/landing-camera.png'
+import landingMegaphoneIcon from '@/assets/landing/decor/landing-megaphone.png'
+import landingMicrophoneIcon from '@/assets/landing/decor/landing-microphone.png'
+import landingMonitorIcon from '@/assets/landing/decor/landing-monitor.png'
 import eatFirstIcon from '@/assets/landing/eat-first.png'
 import nadrawPhoneIcon from '@/assets/landing/nadraw-phone.png'
 import instagramIcon from '@/assets/landing/instagram.png'
@@ -40,6 +45,12 @@ type NavItem = {
 }
 
 type CallBannerCard = {
+  asset: string
+  style: Readonly<Record<string, string>>
+}
+
+type LandingDecorIcon = {
+  alt: string
   asset: string
   style: Readonly<Record<string, string>>
 }
@@ -79,11 +90,54 @@ const landingFooterLocaleOptions = Object.freeze(
 )
 
 const callBannerCards = Object.freeze([
-  Object.freeze({ asset: callCardOne, style: Object.freeze({ left: px(14.35) }) }),
-  Object.freeze({ asset: callCardTwo, style: Object.freeze({ left: px(156.29) }) }),
-  Object.freeze({ asset: callCardThree, style: Object.freeze({ left: px(298.22) }) }),
-  Object.freeze({ asset: callCardOne, style: Object.freeze({ left: px(440.16) }) }),
+  Object.freeze({ asset: callBannerCardOne, style: Object.freeze({ left: px(24.5), width: px(159) }) }),
+  Object.freeze({ asset: callBannerCardTwo, style: Object.freeze({ left: px(193.5), width: px(160) }) }),
+  Object.freeze({ asset: callBannerCardThree, style: Object.freeze({ left: px(363.5), width: px(160) }) }),
+  Object.freeze({ asset: callBannerCardFour, style: Object.freeze({ left: px(533.5), width: px(159) }) }),
 ] as readonly CallBannerCard[])
+
+const landingDecorIcons = Object.freeze([
+  Object.freeze({
+    alt: 'Camera',
+    asset: landingCameraIcon,
+    style: Object.freeze({
+      left: px(557),
+      top: px(694),
+      width: px(127),
+      transform: 'rotate(20deg)',
+    }),
+  }),
+  Object.freeze({
+    alt: 'Megaphone',
+    asset: landingMegaphoneIcon,
+    style: Object.freeze({
+      left: px(1699),
+      top: px(1091),
+      width: px(137),
+      transform: 'rotate(-12deg)',
+    }),
+  }),
+  Object.freeze({
+    alt: 'Microphone',
+    asset: landingMicrophoneIcon,
+    style: Object.freeze({
+      left: px(618),
+      top: px(1752),
+      width: px(101),
+      transform: 'rotate(4deg)',
+    }),
+  }),
+  Object.freeze({
+    alt: 'Monitor',
+    asset: landingMonitorIcon,
+    style: Object.freeze({
+      left: px(1958),
+      top: px(1921),
+      width: px(132),
+      transform: 'rotate(8deg)',
+    }),
+  }),
+] as readonly LandingDecorIcon[])
 
 const games = Object.freeze([
   Object.freeze({
@@ -276,8 +330,7 @@ const socialLinks = Object.freeze([
 const footerProduct = Object.freeze(['Product', 'Nitro', 'Status', 'Policies', 'Terms', 'Privacy', 'Cookie Settings'])
 const footerAbout = Object.freeze(['About', 'Jobs', 'Brand', 'Newsroom', 'Developers'])
 
-/** Economy slot strip: **Nadle** (five cells) + wildcard; keeps the six-column jackpot layout. */
-const slotLetters = Object.freeze(['N', 'A', 'D', 'L', 'E', '?'] as const)
+const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
 
 async function selectLocale(code: string) {
   await persistLocale(code)
@@ -329,6 +382,19 @@ watch(
   <div class="landing page-stack">
     <div class="landing__canvas">
       <LandingCloudBackdrop class="landing__background" />
+
+      <div class="landing-decor-icons" aria-hidden="true">
+        <img
+          v-for="icon in landingDecorIcons"
+          :key="icon.alt"
+          class="landing-decor-icons__item"
+          :src="icon.asset"
+          alt=""
+          draggable="false"
+          decoding="async"
+          :style="icon.style"
+        />
+      </div>
 
       <header class="landing-topbar" aria-label="Site header">
         <div class="landing-topbar__start">
@@ -391,7 +457,7 @@ watch(
         </p>
 
         <RouterLink class="call-banner" :to="callRoute">
-          <span class="call-banner__title landing-u-text-outline-cta">RUN THE SHOW</span>
+          <span class="call-banner__title landing-u-text-outline-cta">Run the show</span>
 
           <span class="call-banner__cards">
             <img
@@ -444,7 +510,7 @@ watch(
         </p>
 
         <div class="economy-banner">
-          <span class="economy-banner__title landing-u-text-outline-cta">START EARNING</span>
+          <span class="economy-banner__title landing-u-text-outline-cta">Start earning</span>
 
           <div class="economy-banner__slot">
             <span class="economy-banner__jackpot">JACKPOT</span>
@@ -453,7 +519,16 @@ watch(
               <span v-for="letter in slotLetters" :key="letter" class="economy-banner__cell">{{ letter }}</span>
             </span>
 
+            <span class="economy-banner__underbar economy-banner__underbar--left" />
+            <span class="economy-banner__underbar economy-banner__underbar--right" />
             <span class="economy-banner__slot-bar" />
+            <span class="economy-banner__sparkle economy-banner__sparkle--1" />
+            <span class="economy-banner__sparkle economy-banner__sparkle--2" />
+            <span class="economy-banner__sparkle economy-banner__sparkle--3" />
+            <span class="economy-banner__sparkle economy-banner__sparkle--4" />
+            <span class="economy-banner__sparkle economy-banner__sparkle--5" />
+            <span class="economy-banner__sparkle economy-banner__sparkle--6" />
+            <span class="economy-banner__sparkle economy-banner__sparkle--7" />
             <span class="economy-banner__handle">
               <span class="economy-banner__handle-stick" />
             </span>
@@ -517,8 +592,8 @@ watch(
 </template>
 
 <style scoped>
-/* Display + body sans: `index.html` + ui-theme. Landing-only: Abril/Arbutus/Marmelad. */
-@import url('https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Arbutus&family=Marmelad&display=swap');
+/* Display + body sans: `index.html` + ui-theme. Landing-only: Abril/Arbutus/Climate/Marmelad. */
+@import url('https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Arbutus&family=Climate+Crisis&family=Marmelad&display=swap');
 
 /* Optional: add `<link rel="preload" as="style">` for this font URL in `index.html` to shorten critical path (keep @import until then). */
 
@@ -588,6 +663,23 @@ watch(
   inset: 0;
   transform: translate3d(var(--landing-parallax-bg-x, 0px), var(--landing-parallax-bg-y, 0px), 0);
   will-change: transform;
+}
+
+.landing-decor-icons {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.landing-decor-icons__item {
+  position: absolute;
+  display: block;
+  height: auto;
+  object-fit: contain;
+  opacity: 0.92;
+  filter: drop-shadow(0 calc(var(--u) * 12) calc(var(--u) * 18) rgba(8, 2, 20, 0.22));
+  transform-origin: center;
 }
 
 /*
@@ -1309,77 +1401,56 @@ watch(
   top: calc(var(--u) * 856.31);
   width: calc(var(--u) * 1124.25);
   height: calc(var(--u) * 154.5);
-  display: flex;
-  align-items: center;
+  display: block;
   border-radius: calc(var(--u) * 41.25);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.006) 34%, transparent 70%),
-    radial-gradient(circle at calc(var(--u) * 190) calc(var(--u) * 12), rgba(176, 123, 255, 0.04) 0, rgba(176, 123, 255, 0.02) calc(var(--u) * 70), transparent calc(var(--u) * 140)),
-    radial-gradient(circle at calc(var(--u) * 772) calc(var(--u) * 80), rgba(124, 77, 219, 0.035) 0, rgba(124, 77, 219, 0.018) calc(var(--u) * 100), transparent calc(var(--u) * 190)),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.016) 0%, rgba(60, 36, 99, 0.026) 100%),
-    rgba(41, 19, 73, 0.025);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
-    0 calc(var(--u) * 13.5) calc(var(--u) * 34) rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(calc(var(--u) * 1.2)) saturate(1.02);
-  -webkit-backdrop-filter: blur(calc(var(--u) * 1.2)) saturate(1.02);
-  outline: calc(var(--u) * 7.5) solid #fff;
-  outline-offset: calc(var(--u) * -7.5);
+  border: calc(var(--u) * 7.5) solid #fff;
+  box-sizing: border-box;
+  background: linear-gradient(166.6115811995453deg, rgba(124, 77, 219, 0.096) 0%, rgba(60, 36, 99, 0.094) 73.206%);
   overflow: hidden;
   text-decoration: none;
   color: inherit;
   cursor: pointer;
-  animation: landingBannerIdle 11s ease-in-out infinite;
-  transition:
-    box-shadow 0.3s ease,
-    filter 0.3s ease;
+  transition: filter 0.2s ease;
 }
 
 .call-banner:hover {
-  box-shadow:
-    0 calc(var(--u) * 13.5) calc(var(--u) * 36) rgba(0, 0, 0, 0.26),
-    0 0 calc(var(--u) * 22) rgba(255, 255, 255, 0.14);
+  filter: brightness(1.04);
 }
 
 .call-banner__title {
-  position: relative;
-  flex-shrink: 0;
+  position: absolute;
+  left: calc(var(--u) * 39.5);
+  top: calc(var(--u) * 36.5);
+  width: calc(var(--u) * 378);
+  height: calc(var(--u) * 60);
   margin: 0;
-  margin-left: calc(var(--u) * 32.34);
-  font-size: calc(var(--u) * 40.5);
+  font-family: 'Climate Crisis', var(--sa-font-display);
+  font-size: calc(var(--u) * 36);
+  font-variation-settings: 'YEAR' 1979;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: calc(var(--u) * 58.5);
+  text-align: left;
+  text-transform: none;
+  white-space: nowrap;
 }
 
 .call-banner__cards {
   position: absolute;
-  left: calc(var(--u) * 523.13);
-  top: calc(var(--u) * 26.81);
-  width: calc(var(--u) * 570.94);
-  height: calc(var(--u) * 97.28);
-  border-radius: calc(var(--u) * 12.76);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.032), transparent 48%),
-    rgba(60, 36, 99, 0.065);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(calc(var(--u) * 0.8)) saturate(1.02);
-  -webkit-backdrop-filter: blur(calc(var(--u) * 0.8)) saturate(1.02);
+  left: calc(var(--u) * 400.5);
+  top: calc(var(--u) * 6.5);
+  width: calc(var(--u) * 703);
+  height: calc(var(--u) * 128);
+  border-radius: calc(var(--u) * 30);
+  background: rgba(79, 57, 116, 0.37);
   z-index: 1;
 }
 
 .call-banner__card {
   position: absolute;
-  top: calc(var(--u) * 14.36);
-  width: calc(var(--u) * 118.02);
-  height: calc(var(--u) * 70.17);
-  object-fit: contain;
-  transition:
-    transform 0.2s ease,
-    filter 0.2s ease;
-}
-
-.call-banner__card:hover {
-  transform: translateY(calc(var(--u) * -4));
-  filter: drop-shadow(0 calc(var(--u) * 10) calc(var(--u) * 14) rgba(0, 0, 0, 0.35));
+  top: calc(var(--u) * 23.5);
+  height: calc(var(--u) * 96);
+  object-fit: fill;
 }
 
 .landing-section--games .landing-section__title {
@@ -1471,49 +1542,43 @@ watch(
   top: calc(var(--u) * 1860.47);
   width: calc(var(--u) * 1129.22);
   height: calc(var(--u) * 154.5);
-  display: flex;
-  align-items: center;
+  display: block;
   border-radius: calc(var(--u) * 41.25);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.006) 34%, transparent 70%),
-    radial-gradient(circle at calc(var(--u) * 200) calc(var(--u) * 18), rgba(176, 123, 255, 0.04), transparent calc(var(--u) * 140)),
-    linear-gradient(120deg, rgba(124, 77, 219, 0.016) 0%, rgba(60, 36, 99, 0.026) 100%),
-    rgba(41, 19, 73, 0.025);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
-    0 calc(var(--u) * 13.5) calc(var(--u) * 30) rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(calc(var(--u) * 1.2)) saturate(1.02);
-  -webkit-backdrop-filter: blur(calc(var(--u) * 1.2)) saturate(1.02);
-  outline: calc(var(--u) * 7.5) solid #fff;
-  outline-offset: calc(var(--u) * -7.5);
+  border: calc(var(--u) * 7.5) solid #fff;
+  box-sizing: border-box;
+  background: linear-gradient(166.6115811995453deg, rgba(124, 77, 219, 0.096) 0%, rgba(60, 36, 99, 0.094) 73.206%);
   overflow: hidden;
-  animation: landingBannerIdle 12.5s ease-in-out infinite;
-  animation-delay: 1.2s;
-  transition: box-shadow 0.3s ease;
+  transition: filter 0.2s ease;
 }
 
 .economy-banner:hover {
-  box-shadow:
-    0 calc(var(--u) * 13.5) calc(var(--u) * 30) rgba(0, 0, 0, 0.18),
-    0 0 calc(var(--u) * 40) rgba(160, 120, 255, 0.28);
+  filter: brightness(1.04);
 }
 
 .economy-banner__title {
-  position: relative;
-  flex-shrink: 0;
+  position: absolute;
+  left: calc(var(--u) * 42.5);
+  top: calc(var(--u) * 36.5);
+  width: calc(var(--u) * 402);
+  height: calc(var(--u) * 61);
   margin: 0;
-  margin-left: calc(var(--u) * 49.22);
-  font-size: calc(var(--u) * 40.5);
+  font-family: 'Climate Crisis', var(--sa-font-display);
+  font-size: calc(var(--u) * 36);
+  font-variation-settings: 'YEAR' 1979;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: calc(var(--u) * 58.5);
+  text-align: left;
+  text-transform: none;
+  white-space: nowrap;
 }
 
 .economy-banner__slot {
   position: absolute;
-  left: calc(var(--u) * 662.35);
-  top: calc(var(--u) * 18.28);
+  left: calc(var(--u) * 654);
+  top: calc(var(--u) * 19.87);
   width: calc(var(--u) * 429.19);
   height: calc(var(--u) * 97.03);
-  transform: translateY(calc(var(--u) * 2));
 }
 
 .economy-banner__jackpot {
@@ -1574,6 +1639,23 @@ watch(
   border-right: 0;
 }
 
+.economy-banner__underbar {
+  position: absolute;
+  top: calc(var(--u) * 112.5);
+  width: calc(var(--u) * 33);
+  height: calc(var(--u) * 6);
+  border-radius: calc(var(--u) * 3);
+  background: rgba(255, 59, 48, 0.51);
+}
+
+.economy-banner__underbar--left {
+  left: calc(var(--u) * 87.19);
+}
+
+.economy-banner__underbar--right {
+  left: calc(var(--u) * 277.69);
+}
+
 .economy-banner__slot-bar {
   position: absolute;
   left: calc(var(--u) * 143.25);
@@ -1584,6 +1666,55 @@ watch(
   box-sizing: border-box;
   border-radius: calc(var(--u) * 10.5);
   background: rgba(60, 36, 99, 0.62);
+}
+
+.economy-banner__sparkle {
+  position: absolute;
+  width: calc(var(--u) * 2.249);
+  height: calc(var(--u) * 2.249);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  transform: rotate(-5deg);
+}
+
+.economy-banner__sparkle--1 {
+  left: calc(var(--u) * 128.14);
+  top: calc(var(--u) * -16.87);
+}
+
+.economy-banner__sparkle--2 {
+  left: calc(var(--u) * 157.68);
+  top: calc(var(--u) * 2.38);
+  opacity: 0.56;
+}
+
+.economy-banner__sparkle--3 {
+  left: calc(var(--u) * 187.25);
+  top: calc(var(--u) * 75.51);
+  opacity: 0.5;
+}
+
+.economy-banner__sparkle--4 {
+  left: calc(var(--u) * 216.79);
+  top: calc(var(--u) * 94.76);
+}
+
+.economy-banner__sparkle--5 {
+  left: calc(var(--u) * 246.33);
+  top: calc(var(--u) * 113.94);
+  width: calc(var(--u) * 3.001);
+  height: calc(var(--u) * 3.001);
+}
+
+.economy-banner__sparkle--6 {
+  left: calc(var(--u) * 350.11);
+  top: calc(var(--u) * 26.62);
+  opacity: 0.56;
+}
+
+.economy-banner__sparkle--7 {
+  left: calc(var(--u) * 379.65);
+  top: calc(var(--u) * 45.87);
 }
 
 .economy-banner__handle {
@@ -1787,6 +1918,10 @@ watch(
     display: none;
   }
 
+  .landing-decor-icons__item {
+    opacity: 0.88;
+  }
+
   .landing__wordmark {
     left: 50%;
     width: min(calc(100% - (var(--landing-section-gutter) * 2)), 761px);
@@ -1892,8 +2027,14 @@ watch(
     width: 83px;
     height: 39px;
     border-radius: 19.5px;
-    background: transparent;
+    border-color: rgba(255, 255, 255, 0.48);
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.035) 52%, transparent),
+      rgba(42, 20, 73, 0.46);
     flex-shrink: 0;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 10px 24px rgba(8, 2, 20, 0.2);
   }
 
   .landing-auth::before {
@@ -1903,13 +2044,19 @@ watch(
   }
 
   .landing-auth__link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #fff;
     font-size: 13.5px;
   }
 
   .landing-auth__link:first-child {
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
+    left: auto;
+    top: auto;
+    transform: none;
   }
 
   .landing-hero {
@@ -2027,64 +2174,51 @@ watch(
   }
 
   .call-banner {
+    --u: calc(100cqw / 1124.25);
     position: relative;
     left: auto;
     top: auto;
     width: min(100%, var(--landing-panel-width));
     height: auto;
+    aspect-ratio: 1124.25 / 154.5;
     margin-top: 0;
-    padding: 12px 16px 16px;
-    display: grid;
-    gap: 12px;
-    justify-items: center;
+    padding: 0;
+    display: block;
     box-sizing: border-box;
-    border-radius: 36px;
-    border: 6.5px solid #fff;
-    background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.006) 34%, transparent 70%),
-      radial-gradient(circle at 30% 16%, rgba(176, 123, 255, 0.04), transparent 150px),
-      linear-gradient(120deg, rgba(124, 77, 219, 0.016) 0%, rgba(60, 36, 99, 0.026) 100%),
-      rgba(41, 19, 73, 0.025);
-    backdrop-filter: blur(1px) saturate(1.02);
-    -webkit-backdrop-filter: blur(1px) saturate(1.02);
+    border-radius: calc(var(--u) * 41.25);
+    border-width: calc(var(--u) * 7.5);
   }
 
   .call-banner__title {
-    position: static;
+    position: absolute;
+    left: calc(var(--u) * 39.5);
+    top: calc(var(--u) * 36.5);
+    width: calc(var(--u) * 378);
+    height: calc(var(--u) * 60);
     margin: 0;
-    font-size: 31px;
-    line-height: 1;
-    text-align: center;
+    font-size: calc(var(--u) * 36);
+    line-height: calc(var(--u) * 58.5);
+    text-align: left;
   }
 
   .call-banner__cards {
-    position: static;
-    width: 100%;
-    height: auto;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-    padding: 10px 12px;
-    margin-inline: auto;
-    overflow: hidden;
-    box-sizing: border-box;
-    border-radius: 20px;
-    background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent 48%),
-      rgba(60, 36, 99, 0.06);
-    backdrop-filter: blur(0.8px) saturate(1.02);
-    -webkit-backdrop-filter: blur(0.8px) saturate(1.02);
-    order: -1;
+    position: absolute;
+    left: calc(var(--u) * 400.5);
+    top: calc(var(--u) * 6.5);
+    width: calc(var(--u) * 703);
+    height: calc(var(--u) * 128);
+    display: block;
+    padding: 0;
+    margin: 0;
+    border-radius: calc(var(--u) * 30);
   }
 
   .call-banner__card {
-    position: relative;
-    top: auto;
-    left: auto !important;
+    position: absolute;
+    top: calc(var(--u) * 23.5);
     display: block;
-    width: 100%;
-    height: auto;
-    aspect-ratio: 118.02 / 70.17;
+    height: calc(var(--u) * 96);
+    aspect-ratio: auto;
   }
 
   .games-grid {
@@ -2152,47 +2286,40 @@ watch(
   }
 
   .economy-banner {
+    --u: calc(100cqw / 1129.22);
     position: relative;
     left: auto;
     top: auto;
     width: min(100%, var(--landing-panel-width));
     height: auto;
+    aspect-ratio: 1129.22 / 154.5;
     margin-top: 0;
-    padding: 14px 16px 18px;
-    display: grid;
-    gap: 14px;
-    justify-items: center;
+    padding: 0;
+    display: block;
     box-sizing: border-box;
-    border-radius: 36.53px;
-    border: 6.642px solid #fff;
-    background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.006) 34%, transparent 70%),
-      radial-gradient(circle at 32% 18%, rgba(176, 123, 255, 0.04), transparent 150px),
-      linear-gradient(120deg, rgba(124, 77, 219, 0.016) 0%, rgba(60, 36, 99, 0.026) 100%),
-      rgba(41, 19, 73, 0.025);
-    backdrop-filter: blur(1px) saturate(1.02);
-    -webkit-backdrop-filter: blur(1px) saturate(1.02);
+    border-radius: calc(var(--u) * 41.25);
+    border-width: calc(var(--u) * 7.5);
   }
 
   .economy-banner__title {
-    position: static;
+    position: absolute;
+    left: calc(var(--u) * 42.5);
+    top: calc(var(--u) * 36.5);
+    width: calc(var(--u) * 402);
+    height: calc(var(--u) * 61);
     margin: 0;
-    font-size: 27px;
-    line-height: 1;
-    text-align: center;
+    font-size: calc(var(--u) * 36);
+    line-height: calc(var(--u) * 58.5);
+    text-align: left;
   }
 
   .economy-banner__slot {
-    position: relative;
-    left: auto;
-    top: auto;
-    width: min(100%, 347px);
-    height: auto;
-    aspect-ratio: 429.19 / 97.03;
+    position: absolute;
+    left: calc(var(--u) * 654);
+    top: calc(var(--u) * 19.87);
+    width: calc(var(--u) * 429.19);
+    height: calc(var(--u) * 97.03);
     transform: none;
-    container-type: inline-size;
-    --u: calc(100cqw / 429.19);
-    order: -1;
   }
 
   .landing-footer {
@@ -2485,22 +2612,22 @@ watch(
 
   .call-banner {
     width: min(100%, var(--landing-panel-width));
-    padding: 10px 12px 14px;
-    border-radius: 28px;
-    border-width: 3.5px;
-    gap: 10px;
+    padding: 0;
+    border-radius: calc(var(--u) * 41.25);
+    border-width: calc(var(--u) * 7.5);
+    gap: 0;
   }
 
   .call-banner__cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    width: 100%;
-    padding: 8px;
-    border-radius: 16px;
+    display: block;
+    gap: 0;
+    width: calc(var(--u) * 703);
+    padding: 0;
+    border-radius: calc(var(--u) * 30);
   }
 
   .call-banner__title {
-    font-size: clamp(20px, 6.6vw, 24px);
+    font-size: calc(var(--u) * 36);
   }
 
   .games-grid {
@@ -2538,18 +2665,18 @@ watch(
 
   .economy-banner {
     width: min(100%, var(--landing-panel-width));
-    padding: 12px 12px 14px;
-    border-radius: 28px;
-    border-width: 3.5px;
-    gap: 10px;
+    padding: 0;
+    border-radius: calc(var(--u) * 41.25);
+    border-width: calc(var(--u) * 7.5);
+    gap: 0;
   }
 
   .economy-banner__slot {
-    width: min(100%, 348px);
+    width: calc(var(--u) * 429.19);
   }
 
   .economy-banner__title {
-    font-size: clamp(20px, 6.6vw, 24px);
+    font-size: calc(var(--u) * 36);
   }
 
   .landing-footer {
@@ -2683,20 +2810,20 @@ watch(
   }
 
   .call-banner {
-    padding: 8px 8px 10px;
-    gap: 8px;
-    border-radius: 22px;
-    border-width: 3px;
+    padding: 0;
+    gap: 0;
+    border-radius: calc(var(--u) * 41.25);
+    border-width: calc(var(--u) * 7.5);
   }
 
   .call-banner__cards {
-    gap: 6px;
-    padding: 6px;
-    border-radius: 12px;
+    gap: 0;
+    padding: 0;
+    border-radius: calc(var(--u) * 30);
   }
 
   .call-banner__title {
-    font-size: 15px;
+    font-size: calc(var(--u) * 36);
   }
 
   .games-grid {
@@ -2723,18 +2850,18 @@ watch(
   }
 
   .economy-banner {
-    padding: 8px 8px 10px;
-    gap: 8px;
-    border-radius: 22px;
-    border-width: 3px;
+    padding: 0;
+    gap: 0;
+    border-radius: calc(var(--u) * 41.25);
+    border-width: calc(var(--u) * 7.5);
   }
 
   .economy-banner__slot {
-    width: 100%;
+    width: calc(var(--u) * 429.19);
   }
 
   .economy-banner__title {
-    font-size: 15px;
+    font-size: calc(var(--u) * 36);
   }
 
   .landing-footer {
