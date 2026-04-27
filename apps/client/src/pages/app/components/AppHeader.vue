@@ -221,35 +221,13 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
           <div
             class="app-landing-header__auth sa-glass-button"
-            :class="{ 'app-landing-header__auth--mafia-host': mafiaMode && userPrefix.trim().length > 0 }"
+            :class="{
+              'app-landing-header__auth--profile': isAuthenticated,
+              'app-landing-header__auth--mafia-host': mafiaMode && userPrefix.trim().length > 0,
+            }"
             :aria-busy="authLoading"
           >
             <span v-if="authLoading" class="app-landing-header__auth-loading">{{ t('app.loading') }}</span>
-            <component
-              :is="profileTo ? RouterLink : 'button'"
-              v-else-if="isAuthenticated"
-              v-bind="profileTo ? { to: profileTo } : { type: 'button' }"
-              class="app-landing-header__user"
-              :aria-label="profileActionLabel"
-              :title="displayName || undefined"
-            >
-              <span v-if="userPrefix.trim()" class="app-landing-header__user-prefix">{{ userPrefix.trim() }}</span>
-              <span class="app-landing-header__avatar" aria-hidden="true">
-                <img
-                  v-if="hasUserAvatar"
-                  class="app-landing-header__avatar-img"
-                  :src="userAvatarSrc"
-                  alt=""
-                  width="28"
-                  height="28"
-                  loading="lazy"
-                  decoding="async"
-                  fetchpriority="low"
-                />
-                <span v-else>{{ userInitial }}</span>
-              </span>
-              <span class="app-landing-header__user-name">{{ displayName || userInitial }}</span>
-            </component>
             <div v-else-if="isAuthenticated" ref="profileMenuRoot" class="app-landing-header__profile">
               <button
                 type="button"
@@ -261,6 +239,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
                 :title="displayName || undefined"
                 @click.stop="toggleProfileMenu"
               >
+                <span v-if="userPrefix.trim()" class="app-landing-header__user-prefix">{{ userPrefix.trim() }}</span>
                 <span class="app-landing-header__avatar" aria-hidden="true">
                   <img
                     v-if="hasUserAvatar"
@@ -628,6 +607,16 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   display: none;
 }
 
+.app-landing-header__auth--profile {
+  width: auto;
+  min-width: 0;
+}
+
+.app-landing-header__auth--profile .app-landing-header__user {
+  gap: 0.38rem;
+  padding: 0 0.65rem 0 0.55rem;
+}
+
 .app-landing-header__auth-loading {
   color: rgba(255, 255, 255, 0.72);
   font-size: 0.76rem;
@@ -649,7 +638,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 .app-landing-header__profile {
   position: relative;
   z-index: 2;
-  width: 100%;
+  width: max-content;
   min-width: 0;
 }
 
@@ -689,7 +678,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
 .app-landing-header__user {
   justify-content: flex-start;
-  width: 100%;
+  width: auto;
   max-width: 12.5rem;
   min-height: 2.35rem;
   padding: 0 1rem 0 0.85rem;
@@ -825,6 +814,10 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   background: rgb(73 143 56 / 0.65);
 }
 
+.app-landing-header--mafia .app-landing-header__auth--profile:not(.app-landing-header__auth--mafia-host) {
+  background: transparent;
+}
+
 .app-landing-header--mafia .app-landing-header__user {
   width: auto;
   max-width: min(13rem, 28vw);
@@ -857,6 +850,12 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   margin-left: 15px;
   background: transparent;
   font-size: 0.62rem;
+}
+
+.app-landing-header--mafia
+  .app-landing-header__auth--profile:not(.app-landing-header__auth--mafia-host)
+  .app-landing-header__avatar {
+  margin-left: 0;
 }
 
 .app-landing-header--mafia .app-landing-header__user-name {
@@ -953,6 +952,10 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
     min-height: 2.4rem;
   }
 
+  .app-landing-header__auth--profile {
+    min-width: 0;
+  }
+
   .app-landing-header__user-name {
     font-size: 0.82rem;
   }
@@ -1001,6 +1004,10 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
   .app-landing-header__auth {
     min-width: min(12rem, 56vw);
+  }
+
+  .app-landing-header__auth--profile {
+    min-width: 0;
   }
 
   .app-landing-header__coin-label {

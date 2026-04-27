@@ -61,9 +61,8 @@ const { t } = useI18n()
 .app-economy__banner {
   position: relative;
   z-index: 1;
-  width: 100%;
-  margin-top: auto;
-  margin-bottom: clamp(0.35rem, 0.45vw, 0.55rem);
+  width: calc(100% + var(--app-economy-banner-bleed, 0px));
+  margin: auto calc(var(--app-economy-banner-bleed, 0px) * -0.5);
 }
 
 @media (max-width: 620px) {
@@ -79,7 +78,7 @@ const { t } = useI18n()
   }
 
   .app-economy__banner {
-    margin-bottom: 0.45rem;
+    --app-economy-banner-bleed: clamp(0.4rem, 1.3vw, 0.9rem);
   }
 
   .app-economy__title {
@@ -88,7 +87,7 @@ const { t } = useI18n()
   }
 }
 
-@media (min-width: 621px) and (max-width: 900px) {
+@media (min-width: 621px) and (max-width: 1024px) {
   .app-economy__panel {
     height: auto;
     min-height: auto;
@@ -96,7 +95,8 @@ const { t } = useI18n()
   }
 
   .app-economy__banner {
-    margin-bottom: 0;
+    width: 100%;
+    margin: 0;
   }
 
   .app-economy__title {

@@ -288,7 +288,7 @@ watch(
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .app-home {
     overflow-y: auto;
     --app-home-card-border: 4px;

@@ -143,6 +143,7 @@ const wordStripLabel = computed(() => {
 })
 
 const showBetweenRoundOverlay = computed(() => nadrawState.value?.phase === 'between_rounds')
+const showCanvasInitVeil = computed(() => nadrawState.value === null)
 
 const breakOverlayHeadline = computed(() => {
   const st = nadrawState.value
@@ -577,7 +578,12 @@ watch(
           </div>
 
           <div
-            v-if="showRoundSetupOverlay"
+            v-if="showCanvasInitVeil"
+            class="pointer-events-none absolute inset-0 z-30 rounded-2xl bg-slate-950/90"
+            aria-hidden="true"
+          />
+          <div
+            v-else-if="showRoundSetupOverlay"
             class="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-2xl bg-slate-950/85 px-3 py-4 backdrop-blur-sm"
           >
             <NadrawRoundSetupPanel

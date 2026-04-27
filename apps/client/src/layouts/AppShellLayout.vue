@@ -296,7 +296,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
         @login="openAppLandingAuth('login')"
         @logout="logoutAppLanding"
       >
-        <template v-if="mafiaHeaderShowHostControls" #brand-extra>
+        <template v-if="isMafiaRoute" #brand-extra>
           <button
             type="button"
             class="app-shell-mafia-settings"
@@ -564,6 +564,12 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   letter-spacing: 0;
 }
 
+@keyframes app-shell-mafia-settings-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .app-shell-mafia-settings,
 .app-shell-mafia-toggle,
 .app-shell-mafia-copy {
@@ -613,6 +619,12 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   width: 31px;
   height: 31px;
   object-fit: contain;
+  transform-origin: center;
+}
+
+.app-shell-mafia-settings:hover .app-shell-mafia-settings__icon,
+.app-shell-mafia-settings:focus-visible .app-shell-mafia-settings__icon {
+  animation: app-shell-mafia-settings-spin 0.85s linear infinite;
 }
 
 .app-shell-mafia-toggle {
@@ -752,6 +764,13 @@ async function copyMafiaObsViewUrl(): Promise<void> {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell-mafia-settings:hover .app-shell-mafia-settings__icon,
+  .app-shell-mafia-settings:focus-visible .app-shell-mafia-settings__icon {
+    animation: none;
   }
 }
 </style>

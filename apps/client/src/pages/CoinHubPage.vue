@@ -343,7 +343,7 @@ function luckCaseTitle(index: number): string {
         </section>
 
         <section
-          class="coinhub-daily-cases-block w-full min-w-0 px-4"
+          class="coinhub-daily-cases-block hidden w-full min-w-0 px-4"
           :aria-label="t('coinHub.dailyCasesTitle')"
         >
           <div
@@ -391,7 +391,7 @@ function luckCaseTitle(index: number): string {
         </section>
 
         <div
-          class="coinhub-lower-grid grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-6 lg:items-start"
+          class="coinhub-lower-grid hidden grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-6 lg:items-start"
         >
           <section
             class="coinhub-panel coinhub-panel--secondary coinhub-lower__luck ch-ds-card ch-ds-card--interactive p-8 lg:col-span-5"
