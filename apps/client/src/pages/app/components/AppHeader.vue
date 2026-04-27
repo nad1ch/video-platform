@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, type RouteLocationRaw } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import coinIcon from '@/assets/landing/coin-streamassist.png'
@@ -34,8 +34,9 @@ const props = withDefaults(
   },
 )
 
-defineEmits<{
+const emit = defineEmits<{
   login: []
+  logout: []
   openHelp: []
 }>()
 
@@ -52,9 +53,12 @@ const resolvedHelpLabel = computed(() => props.helpLabel.trim() || t('onboarding
 const profileMenuLabel = computed(() =>
   displayName.value ? t('app.openProfileMenuFor', { name: displayName.value }) : t('app.openProfileMenu'),
 )
-const profileActionLabel = computed(() => (props.profileTo ? t('app.openAdminPanel') : profileMenuLabel.value))
+const profileActionLabel = computed(() => profileMenuLabel.value)
 const headerWrapper = ref<HTMLElement | null>(null)
 const headerInner = ref<HTMLElement | null>(null)
+const profileMenuRoot = ref<HTMLElement | null>(null)
+const profileMenuOpen = ref(false)
+const profileMenuId = 'app-landing-profile-menu'
 
 let headerResizeObserver: ResizeObserver | undefined
 let headerResizeFrame = 0
@@ -89,6 +93,8 @@ onMounted(() => {
     headerResizeObserver = new ResizeObserver(scheduleHeaderHeightSync)
     headerResizeObserver.observe(headerInner.value)
   })
+  document.addEventListener('click', onDocumentClick)
+  document.addEventListener('keydown', onDocumentKeydown, true)
 })
 
 onUnmounted(() => {
@@ -96,7 +102,48 @@ onUnmounted(() => {
   if (headerResizeFrame && typeof window !== 'undefined') {
     window.cancelAnimationFrame(headerResizeFrame)
   }
+  document.removeEventListener('click', onDocumentClick)
+  document.removeEventListener('keydown', onDocumentKeydown, true)
 })
+
+watch(
+  () => props.isAuthenticated,
+  (authenticated) => {
+    if (!authenticated) {
+      closeProfileMenu()
+    }
+  },
+)
+
+function closeProfileMenu(): void {
+  profileMenuOpen.value = false
+}
+
+function toggleProfileMenu(): void {
+  profileMenuOpen.value = !profileMenuOpen.value
+}
+
+function onDocumentClick(event: MouseEvent): void {
+  if (!profileMenuOpen.value) {
+    return
+  }
+  const target = event.target
+  if (target instanceof Node && profileMenuRoot.value?.contains(target)) {
+    return
+  }
+  closeProfileMenu()
+}
+
+function onDocumentKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    closeProfileMenu()
+  }
+}
+
+function onProfileLogout(): void {
+  closeProfileMenu()
+  emit('logout')
+}
 
 function avatarSizedUrl(rawUrl: string, size: number): string {
   const trimmed = rawUrl.trim()
@@ -163,30 +210,58 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
           <div class="app-landing-header__auth sa-glass-button" :aria-busy="authLoading">
             <span v-if="authLoading" class="app-landing-header__auth-loading">{{ t('app.loading') }}</span>
-            <component
-              :is="profileTo ? RouterLink : 'button'"
-              v-else-if="isAuthenticated"
-              v-bind="profileTo ? { to: profileTo } : { type: 'button' }"
-              class="app-landing-header__user"
-              :aria-label="profileActionLabel"
-              :title="displayName || undefined"
-            >
-              <span class="app-landing-header__avatar" aria-hidden="true">
-                <img
-                  v-if="hasUserAvatar"
-                  class="app-landing-header__avatar-img"
-                  :src="userAvatarSrc"
-                  alt=""
-                  width="28"
-                  height="28"
-                  loading="lazy"
-                  decoding="async"
-                  fetchpriority="low"
-                />
-                <span v-else>{{ userInitial }}</span>
-              </span>
-              <span class="app-landing-header__user-name">{{ displayName || userInitial }}</span>
-            </component>
+            <div v-else-if="isAuthenticated" ref="profileMenuRoot" class="app-landing-header__profile">
+              <button
+                type="button"
+                class="app-landing-header__user"
+                :aria-controls="profileMenuId"
+                :aria-expanded="profileMenuOpen"
+                aria-haspopup="menu"
+                :aria-label="profileActionLabel"
+                :title="displayName || undefined"
+                @click.stop="toggleProfileMenu"
+              >
+                <span class="app-landing-header__avatar" aria-hidden="true">
+                  <img
+                    v-if="hasUserAvatar"
+                    class="app-landing-header__avatar-img"
+                    :src="userAvatarSrc"
+                    alt=""
+                    width="28"
+                    height="28"
+                    loading="lazy"
+                    decoding="async"
+                    fetchpriority="low"
+                  />
+                  <span v-else>{{ userInitial }}</span>
+                </span>
+                <span class="app-landing-header__user-name">{{ displayName || userInitial }}</span>
+              </button>
+              <div
+                v-if="profileMenuOpen"
+                :id="profileMenuId"
+                class="app-landing-header__profile-menu"
+                role="menu"
+              >
+                <RouterLink
+                  v-if="profileTo"
+                  class="app-landing-header__profile-menu-item"
+                  :to="profileTo"
+                  role="menuitem"
+                  @click="closeProfileMenu"
+                >
+                  {{ t('app.openAdminPanel') }}
+                </RouterLink>
+                <button
+                  type="button"
+                  class="app-landing-header__profile-menu-item"
+                  role="menuitem"
+                  @click="onProfileLogout"
+                >
+                  {{ t('app.authLogout') }}
+                </button>
+              </div>
+            </div>
             <span v-else class="app-landing-header__auth-buttons">
               <button type="button" class="app-landing-header__auth-link" @click="$emit('login')">
                 {{ t('app.logIn') }}
@@ -468,11 +543,14 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 }
 
 .app-landing-header__auth {
+  position: relative;
+  z-index: 30;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 8.8rem;
   min-height: 2.35rem;
+  overflow: visible;
   border-color: rgba(255, 255, 255, 0.16);
   border-radius: 999px;
   background: rgba(81, 48, 116, 0.24);
@@ -503,6 +581,13 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   justify-content: center;
   width: 100%;
   padding: 0.18rem 0.4rem;
+}
+
+.app-landing-header__profile {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  min-width: 0;
 }
 
 .app-landing-header__auth-link {
@@ -552,6 +637,57 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   font: inherit;
   gap: 0.5rem;
   text-decoration: none;
+}
+
+.app-landing-header__profile-menu {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  right: 0;
+  z-index: 1000;
+  display: grid;
+  min-width: 10.5rem;
+  overflow: hidden;
+  padding: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 1rem;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.13), transparent 42%),
+    rgba(28, 15, 48, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 18px 38px rgba(8, 3, 20, 0.34);
+  -webkit-backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+  backdrop-filter: blur(var(--app-home-glass-blur, 10px)) saturate(1.18);
+}
+
+.app-landing-header__profile-menu-item {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  width: 100%;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 0.7rem;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.app-landing-header__profile-menu-item:hover,
+.app-landing-header__profile-menu-item:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.app-landing-header__profile-menu-item:focus-visible {
+  outline: 2px solid rgba(255, 218, 68, 0.78);
+  outline-offset: 2px;
 }
 
 .app-landing-header__avatar {

@@ -70,8 +70,8 @@ async function getUserMediaWithDeviceIdExactThenIdeal(
 export function useLocalMedia(options?: UseLocalMediaOptions) {
   const resolveTier = (): VideoPublishTier => options?.getVideoPublishTier?.() ?? 'auto_large_room'
   const localStream = shallowRef<MediaStream | null>(null)
-  const micEnabled = ref(true)
-  /** Camera off until the user turns it on (typical in video calls). */
+  /** Microphone and camera start off until the user turns them on. */
+  const micEnabled = ref(false)
   const camEnabled = ref(false)
   /** Bumps when local stream or tracks change so <video> re-runs play(). */
   const localPlayRev = ref(0)
@@ -110,7 +110,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
   function syncFlagsFromStream(): void {
     const stream = localStream.value
     if (!stream) {
-      micEnabled.value = true
+      micEnabled.value = false
       camEnabled.value = false
       return
     }
@@ -159,10 +159,13 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     }
     localStream.value = stream
     persistVideoInputDeviceIdFromTrack(stream.getVideoTracks()[0])
+    for (const t of stream.getAudioTracks()) {
+      t.enabled = false
+    }
     for (const t of stream.getVideoTracks()) {
       t.enabled = false
     }
-    micEnabled.value = true
+    micEnabled.value = false
     camEnabled.value = false
     localPlayRev.value += 1
     await refreshMediaDevices()
@@ -178,7 +181,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
       track.stop()
     }
     localStream.value = null
-    micEnabled.value = true
+    micEnabled.value = false
     camEnabled.value = false
     audioInputDevices.value = []
     videoInputDevices.value = []
@@ -217,7 +220,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
       throw new Error('Local stream not started')
     }
     const old = stream.getAudioTracks()[0]
-    const prevEnabled = old ? old.enabled : true
+    const prevEnabled = old ? old.enabled : false
     const tmp = await getUserMediaWithDeviceIdExactThenIdeal(
       {
         audio: { ...DEFAULT_CALL_AUDIO_CONSTRAINTS, deviceId: { ideal: deviceId } },

@@ -168,6 +168,10 @@ function openAppLandingAuth(mode: AuthMode) {
   openStreamAuthModal(route.fullPath || '/app', mode)
 }
 
+function logoutAppLanding(): void {
+  void auth.logout()
+}
+
 function tryAutoOnboarding() {
   if (!isEatRoute.value) return
   const k = onboardingForRoute.value
@@ -276,6 +280,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
         :user-name="appLandingHeaderUserName"
         @open-help="openOnboardingForCurrentRoute"
         @login="openAppLandingAuth('login')"
+        @logout="logoutAppLanding"
       >
         <template v-if="isCallRoute || isMafiaRoute" #center>
           <div :id="CALL_ROOM_DROPDOWN_HOST_ID" class="app-shell-call-room-anchor">
