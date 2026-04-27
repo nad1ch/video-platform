@@ -234,6 +234,15 @@ const previewTiles = [
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 0.88rem;
   box-sizing: border-box;
+  transform-origin: center;
+  transition:
+    box-shadow 0.22s ease,
+    transform 0.22s ease;
+}
+
+.app-call__tile:hover {
+  transform: scale(1.018);
+  box-shadow: 0 calc(var(--app-call-u) * 6) calc(var(--app-call-u) * 16) rgba(4, 1, 12, 0.2);
 }
 
 .app-call__tile::before,

@@ -55,7 +55,7 @@ const { openStreamAuthModal } = useStreamAuthModal()
 const coinHub = useCoinHubStore()
 const { balance: coinHubBalance } = storeToRefs(coinHub)
 const mafiaGame = useMafiaGameStore()
-const { isMafiaHost: isCurrentMafiaHost } = storeToRefs(mafiaGame)
+const { isMafiaHost: isCurrentMafiaHost, oldMafiaMode: mafiaHeaderOldMode } = storeToRefs(mafiaGame)
 const canEatFirstHost = computed(() => {
   const r = auth.user.value?.role
   return r === 'admin' || r === 'host'
@@ -246,7 +246,10 @@ const mafiaHeaderHasRoom = computed(() => {
 
 const mafiaHeaderShowHostControls = computed(() => isMafiaRoute.value && isCurrentMafiaHost.value)
 const mafiaHeaderObsCopyLabel = computed(() => 'copy')
-const mafiaHeaderOldMode = ref(true)
+
+function toggleMafiaMode(): void {
+  mafiaGame.setOldMafiaMode(!mafiaHeaderOldMode.value)
+}
 
 async function copyMafiaObsViewUrl(): Promise<void> {
   if (route.name !== 'mafia') {
@@ -326,7 +329,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
             :aria-pressed="!mafiaHeaderOldMode"
             aria-label="old / new"
             title="old / new"
-            @click="mafiaHeaderOldMode = !mafiaHeaderOldMode"
+            @click="toggleMafiaMode"
           >
             <span>{{ mafiaHeaderOldMode ? 'old' : 'new' }}</span>
           </button>
@@ -618,6 +621,19 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   height: 31px;
   overflow: hidden;
   background: rgb(139 92 246 / 0.14);
+  transform: scale(1);
+  transform-origin: center;
+  transition:
+    background 0.28s ease,
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-shell-mafia-toggle:hover {
+  transform: scale(1.025);
+}
+
+.app-shell-mafia-toggle:active {
+  transform: scale(0.985);
 }
 
 .app-shell-mafia-toggle::before {
@@ -629,6 +645,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   height: 27px;
   border-radius: 15.535px;
   background: rgb(221 35 35 / 0.09);
+  transition: background 0.28s ease;
 }
 
 .app-shell-mafia-toggle::after {
@@ -640,7 +657,13 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   height: 27px;
   border-radius: 15.535px;
   background: rgb(255 13 13 / 0.22);
-  transition: transform 0.16s ease;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 4px 10px rgb(0 0 0 / 0.16);
+  transition:
+    background 0.28s ease,
+    box-shadow 0.28s ease,
+    transform 0.34s cubic-bezier(0.22, 1.28, 0.36, 1);
 }
 
 .app-shell-mafia-toggle--new::before {
@@ -648,7 +671,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
 }
 
 .app-shell-mafia-toggle--new::after {
-  background: rgb(100 246 92 / 0.14);
+  background: rgb(100 246 92 / 0.22);
   transform: translateX(36px);
 }
 
@@ -656,6 +679,9 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   position: relative;
   z-index: 1;
   transform: translateX(12px);
+  transition:
+    color 0.24s ease,
+    transform 0.34s cubic-bezier(0.22, 1.28, 0.36, 1);
 }
 
 .app-shell-mafia-toggle--new span {

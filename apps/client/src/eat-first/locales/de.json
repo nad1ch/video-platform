@@ -468,6 +468,7 @@
     "speakingQueueEmpty": "Warteschlange leer",
     "speakingQueueClearAllTitle": "Ganze Sprechreihenfolge leeren",
     "clearAllHostSelectionsTitle": "Alles leeren: Sprechreihenfolge und Nachtziele an Kacheln",
+    "clearNightActionsTitle": "Nachtziele leeren",
     "speakingQueueRemoveTitle": "Sitz {n} aus Sprechreihenfolge entfernen",
     "speakingQueueChipViewOnly": "Sitz {n} in der Sprechreihenfolge (nur der Moderator bearbeitet die Reihenfolge)",
     "activeRoleLabel": "Aktive Rolle (Klickziel)",

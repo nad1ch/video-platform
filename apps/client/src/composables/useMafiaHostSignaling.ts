@@ -7,6 +7,7 @@ import type {
   MafiaPlayerKickPayload,
   MafiaPlayerRevivePayload,
   MafiaPlayersUpdatePayload,
+  MafiaModeUpdatePayload,
   MafiaReshufflePayload,
   MafiaTimerStartPayload,
   MafiaTimerStopPayload,
@@ -143,7 +144,31 @@ function parseMafiaPlayersUpdate(data: unknown): MafiaPlayersUpdatePayload | nul
       }
     }
   }
-  return { order: outOrder, nightActions, speakingQueue: outQ }
+  const clearRoles = (p as { clearRoles?: unknown }).clearRoles
+  const oldMode = (p as { oldMafiaMode?: unknown }).oldMafiaMode
+  return {
+    order: outOrder,
+    nightActions,
+    speakingQueue: outQ,
+    ...(clearRoles === true ? { clearRoles: true } : {}),
+    ...(typeof oldMode === 'boolean' ? { oldMafiaMode: oldMode } : {}),
+  }
+}
+
+function parseMafiaModeUpdate(data: unknown): MafiaModeUpdatePayload | null {
+  if (!data || typeof data !== 'object') {
+    return null
+  }
+  const o = data as { type?: unknown; payload?: unknown }
+  if (o.type !== 'mafia:mode-update') {
+    return null
+  }
+  const p = o.payload
+  if (!p || typeof p !== 'object') {
+    return null
+  }
+  const mode = (p as { mode?: unknown }).mode
+  return mode === 'old' || mode === 'new' ? { mode } : null
 }
 
 function parseMafiaTimerStart(data: unknown): MafiaTimerStartPayload | null {
@@ -247,6 +272,7 @@ export function useMafiaHostSignaling(
     timerStopBroadcastPayload,
     kickBroadcastPayload,
     reviveBroadcastPayload,
+    modeUpdateBroadcastPayload,
   } = storeToRefs(mafia)
   const session = useCallSessionStore()
   const { inCall, selfPeerId } = storeToRefs(session)
@@ -278,6 +304,10 @@ export function useMafiaHostSignaling(
       void nextTick(() => {
         applyingPlayersUpdateFromSignaling.value = false
       })
+    }
+    const modeParsed = parseMafiaModeUpdate(data)
+    if (modeParsed) {
+      mafia.applyMafiaModeFromSignaling(modeParsed)
     }
     const timerParsed = parseMafiaTimerStart(data)
     if (timerParsed) {
@@ -383,6 +413,30 @@ export function useMafiaHostSignaling(
       }
       sendSignalingMessage({ type: 'mafia:players-update', payload: p })
       mafia.clearPlayersUpdateBroadcastPayload()
+    },
+    { flush: 'post' },
+  )
+
+  watch(
+    modeUpdateBroadcastPayload,
+    (p) => {
+      if (p == null) {
+        return
+      }
+      if (!inCall.value) {
+        mafia.clearModeUpdateBroadcastPayload()
+        return
+      }
+      if (wsStatus.value !== 'open') {
+        mafia.clearModeUpdateBroadcastPayload()
+        return
+      }
+      if (!isMafiaHost.value) {
+        mafia.clearModeUpdateBroadcastPayload()
+        return
+      }
+      sendSignalingMessage({ type: 'mafia:mode-update', payload: p })
+      mafia.clearModeUpdateBroadcastPayload()
     },
     { flush: 'post' },
   )

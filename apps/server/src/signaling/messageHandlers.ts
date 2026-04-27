@@ -179,6 +179,8 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('mafia:players-update'),
     payload: z.object({
       order: z.array(z.string().min(1)).min(1).max(12),
+      clearRoles: z.boolean().optional(),
+      oldMafiaMode: z.boolean().optional(),
       nightActions: z
         .object({
           mafia: z.number().int().min(1).max(12).optional(),
@@ -189,6 +191,12 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
         .strict()
         .optional(),
       speakingQueue: z.array(z.number().int().min(1).max(12)).max(16),
+    }),
+  }),
+  z.object({
+    type: z.literal('mafia:mode-update'),
+    payload: z.object({
+      mode: z.union([z.literal('old'), z.literal('new')]),
     }),
   }),
   z.object({
@@ -208,6 +216,18 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     payload: z.object({
       peerId: z.string().min(1),
     }),
+  }),
+  z.object({
+    type: z.literal('mafia:force-camera-off'),
+    payload: z.object({
+      peerId: z.string().min(1),
+    }),
+  }),
+  z.object({
+    type: z.literal('mafia:force-mute-all'),
+    payload: z.object({
+      muted: z.boolean().optional(),
+    }).strict(),
   }),
 ])
 
@@ -299,6 +319,7 @@ export type ServerMessage =
   | { type: 'server-pong'; payload: Record<string, never> }
   | { type: 'mafia:host-updated'; payload: { hostPeerId: string | null } }
   | { type: 'mafia:queue-update'; payload: { speakingQueue: number[] } }
+  | { type: 'mafia:mode-update'; payload: { mode: 'old' | 'new' } }
   | {
       type: 'mafia:reshuffle'
       payload: {
@@ -313,6 +334,8 @@ export type ServerMessage =
       type: 'mafia:players-update'
       payload: {
         order: string[]
+        clearRoles?: boolean
+        oldMafiaMode?: boolean
         nightActions?: Partial<{
           mafia: number
           doctor: number
@@ -325,6 +348,8 @@ export type ServerMessage =
   | { type: 'mafia:timer-start'; payload: { startedAt: number; duration: number; isRunning: boolean } }
   | { type: 'mafia:timer-stop'; payload: Record<string, never> }
   | { type: 'mafia:player-kick'; payload: { peerId: string } }
+  | { type: 'mafia:force-camera-off'; payload: { peerId: string } }
+  | { type: 'mafia:force-mute-all'; payload: { muted?: boolean } }
 
 export type SignalingDeps = {
   roomManager: RoomManager
@@ -682,6 +707,10 @@ export async function handleJoinRoom(
     type: 'mafia:queue-update',
     payload: { speakingQueue: room.getMafiaSpeakingQueue() },
   })
+  sendServerMessage(socket, {
+    type: 'mafia:mode-update',
+    payload: { mode: room.getMafiaMode() },
+  })
   {
     const mt = room.getMafiaTimer()
     if (mt != null) {
@@ -861,6 +890,20 @@ function broadcastMafiaPlayerKick(room: Room, payload: { peerId: string }): void
   }
 }
 
+function broadcastMafiaForceCameraOff(room: Room, payload: { peerId: string }): void {
+  const msg: ServerMessage = { type: 'mafia:force-camera-off', payload }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
+function broadcastMafiaForceMuteAll(room: Room, payload: { muted?: boolean }): void {
+  const msg: ServerMessage = { type: 'mafia:force-mute-all', payload }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
 /**
  * Only the Mafia host may mark a player eliminated; server republishes to the room.
  */
@@ -895,10 +938,58 @@ export function handleMafiaPlayerKick(
   broadcastMafiaPlayerKick(room, { peerId: targetId })
 }
 
+export function handleMafiaForceCameraOff(
+  socket: WsSocket,
+  payload: { peerId: string },
+  deps: SignalingDeps,
+): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  if (room.getMafiaHostPeerId() !== peer.id) {
+    return
+  }
+  const targetId = payload.peerId
+  if (typeof targetId !== 'string' || targetId.length < 1 || targetId === peer.id) {
+    return
+  }
+  const roomIds = new Set(room.getPeers().map((p) => p.id))
+  if (!roomIds.has(targetId)) {
+    return
+  }
+  broadcastMafiaForceCameraOff(room, { peerId: targetId })
+}
+
+export function handleMafiaForceMuteAll(
+  socket: WsSocket,
+  payload: { muted?: boolean },
+  deps: SignalingDeps,
+): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  if (room.getMafiaHostPeerId() !== peer.id) {
+    return
+  }
+  broadcastMafiaForceMuteAll(room, { muted: payload.muted !== false })
+}
+
 function broadcastMafiaPlayersUpdate(
   room: Room,
   payload: {
     order: string[]
+    clearRoles?: boolean
+    oldMafiaMode?: boolean
     nightActions?: {
       mafia?: number
       doctor?: number
@@ -914,6 +1005,14 @@ function broadcastMafiaPlayersUpdate(
   }
 }
 
+function broadcastMafiaModeUpdate(room: Room, payload: { mode: 'old' | 'new' }): void {
+  room.setMafiaMode(payload.mode)
+  const msg: ServerMessage = { type: 'mafia:mode-update', payload }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
 /**
  * Only the Mafia host may push numbering / night + speaking state; server republishes to the room.
  */
@@ -921,6 +1020,8 @@ export function handleMafiaPlayersUpdate(
   socket: WsSocket,
   payload: {
     order: string[]
+    clearRoles?: boolean
+    oldMafiaMode?: boolean
     nightActions?: {
       mafia?: number
       doctor?: number
@@ -975,7 +1076,29 @@ export function handleMafiaPlayersUpdate(
       }
     }
   }
+  if (typeof payload.oldMafiaMode === 'boolean') {
+    room.setMafiaMode(payload.oldMafiaMode ? 'old' : 'new')
+  }
   broadcastMafiaPlayersUpdate(room, payload)
+}
+
+export function handleMafiaModeUpdate(
+  socket: WsSocket,
+  payload: { mode: 'old' | 'new' },
+  deps: SignalingDeps,
+): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  if (room.getMafiaHostPeerId() !== peer.id) {
+    return
+  }
+  broadcastMafiaModeUpdate(room, payload)
 }
 
 function broadcastMafiaTimerStart(

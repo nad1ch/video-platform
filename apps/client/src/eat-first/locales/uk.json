@@ -468,6 +468,7 @@
     "speakingQueueEmpty": "Черга порожня",
     "speakingQueueClearAllTitle": "Скинути всіх з черги виступів",
     "clearAllHostSelectionsTitle": "Скинути все: чергу виступів і нічні цілі на плитках",
+    "clearNightActionsTitle": "Скинути нічні цілі",
     "speakingQueueRemoveTitle": "Прибрати місце {n} з черги виступів",
     "speakingQueueChipViewOnly": "Місце {n} у черзі виступів (чергу змінює лише ведучий)",
     "activeRoleLabel": "Активна роль (ціль кліку по плитці)",

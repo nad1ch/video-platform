@@ -30,6 +30,7 @@ export class Room {
   private mafiaSpeakingQueue: number[] = []
   /** Shared Mafia round timer; host `mafia:timer-start`, clients derive remaining from wall clock. */
   private mafiaTimer: { startedAt: number; duration: number } | null = null
+  private mafiaMode: 'old' | 'new' = 'old'
 
   private constructor(id: string, router: Router, pooledWorker: PooledWorker) {
     this.id = id
@@ -211,5 +212,16 @@ export class Room {
 
   setMafiaTimer(t: { startedAt: number; duration: number } | null): void {
     this.mafiaTimer = t
+  }
+
+  getMafiaMode(): 'old' | 'new' {
+    return this.mafiaMode
+  }
+
+  setMafiaMode(mode: 'old' | 'new'): void {
+    this.mafiaMode = mode
+    if (mode === 'old') {
+      this.mafiaTimer = null
+    }
   }
 }

@@ -198,6 +198,7 @@ function confettiStyle(i: number): Record<string, string> {
 }
 
 const guessFieldId = 'nadle-guess-sr'
+const guessInputEl = ref<HTMLInputElement | null>(null)
 
 /** Довжина слова для підказки в чаті: з WS-стану раунду (як на сервері для Twitch), інакше локальна сітка. */
 const chatTargetWordLength = computed(() => {
@@ -324,6 +325,13 @@ function scrollNadleChatIntoView(): void {
   document.getElementById(NADLE_STREAM_CHAT_ANCHOR_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
+function focusNadleGuessInput(): void {
+  if (localBoardLocked.value) {
+    return
+  }
+  guessInputEl.value?.focus({ preventScroll: true })
+}
+
 onMounted(() => {
   prepareNadleWsMount()
   document.documentElement.classList.add(NADLE_ROUTE_HTML_CLASS)
@@ -402,6 +410,7 @@ onUnmounted(() => {
               :word-length="wordLength"
               :max-attempts="NADLE_MAX_ATTEMPTS"
               :rows="nadleGridRows"
+              @focus-input="focusNadleGuessInput"
             />
 
             <div
@@ -459,6 +468,7 @@ onUnmounted(() => {
               <label class="nadle-page__sr-only" :for="guessFieldId">{{ t('nadleUi.guessLabel') }}</label>
               <input
                 :id="guessFieldId"
+                ref="guessInputEl"
                 v-model="guessInput"
                 class="nadle-page__sr-only"
                 type="text"

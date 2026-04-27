@@ -17,6 +17,10 @@ defineProps<{
   maxAttempts: number
   rows: NadleLocalBoardCell[][]
 }>()
+
+const emit = defineEmits<{
+  focusInput: []
+}>()
 </script>
 
 <template>
@@ -26,6 +30,8 @@ defineProps<{
     role="grid"
     :aria-rowcount="maxAttempts"
     :aria-colcount="wordLength"
+    @pointerdown="emit('focusInput')"
+    @click="emit('focusInput')"
   >
     <div
       v-for="(row, ri) in rows"
@@ -63,6 +69,8 @@ defineProps<{
   );
   margin-inline: auto;
   filter: drop-shadow(0 10px 22px rgba(4, 1, 12, 0.18));
+  cursor: text;
+  touch-action: manipulation;
 }
 
 .nadle-page__row {

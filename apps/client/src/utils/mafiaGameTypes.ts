@@ -2,6 +2,8 @@ export type MafiaRole = 'mafia' | 'don' | 'sheriff' | 'doctor' | 'civilian'
 
 export type MafiaPhase = 'night'
 
+export type MafiaMode = 'old' | 'new'
+
 /** Host night bookkeeping: which seat (1..N) each role’s night action points at. */
 export type MafiaNightActionKey = 'mafia' | 'doctor' | 'sheriff' | 'don'
 
@@ -21,6 +23,8 @@ export type MafiaPlayersUpdatePayload = {
   order: string[]
   nightActions: MafiaNightActions
   speakingQueue: number[]
+  clearRoles?: boolean
+  oldMafiaMode?: boolean
 }
 
 /** Wire payload for `mafia:reshuffle` — one entry per player; `seat` is 1-based and must match index + 1. */
@@ -51,3 +55,5 @@ export type MafiaPlayerKickPayload = { peerId: string }
 
 /** Signaling: host revives a player (`aliveByPeerId[peerId] = true`); all clients apply. */
 export type MafiaPlayerRevivePayload = { peerId: string }
+
+export type MafiaModeUpdatePayload = { mode: MafiaMode }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
@@ -9,40 +9,31 @@ import mafiaHostMuteAll from '@/assets/mafia/ui/host-mute-all.svg'
 import mafiaHostRoles from '@/assets/mafia/ui/host-roles.svg'
 
 const emit = defineEmits<{
-  'force-mute-all': []
+  'force-mute-all': [muted: boolean]
 }>()
 
 const { t } = useI18n()
 const mafia = useMafiaGameStore()
 const mafiaPlayers = useMafiaPlayersStore()
-const { isMafiaHost } = storeToRefs(mafia)
+const { isMafiaHost, oldMafiaMode } = storeToRefs(mafia)
 const muteAllActive = ref(false)
-let muteAllActiveTimer: ReturnType<typeof setTimeout> | undefined
 
 const canReshuffle = computed(() => {
   const n = mafiaPlayers.joinOrder.length
+  if (oldMafiaMode.value) {
+    return n >= 2
+  }
   return n >= 5 && n <= 12
 })
 
 const muteAllIcon = computed(() => (muteAllActive.value ? mafiaHostMuteAllActive : mafiaHostMuteAll))
 
-function flashMuteAllActive(): void {
-  muteAllActive.value = true
-  if (muteAllActiveTimer != null) {
-    clearTimeout(muteAllActiveTimer)
-  }
-  muteAllActiveTimer = setTimeout(() => {
-    muteAllActive.value = false
-    muteAllActiveTimer = undefined
-  }, 850)
-}
-
 function onMuteAll(): void {
   if (!isMafiaHost.value) {
     return
   }
-  flashMuteAllActive()
-  emit('force-mute-all')
+  muteAllActive.value = !muteAllActive.value
+  emit('force-mute-all', muteAllActive.value)
 }
 
 function onReshuffle(): void {
@@ -52,11 +43,6 @@ function onReshuffle(): void {
   mafia.reshuffleGame()
 }
 
-onBeforeUnmount(() => {
-  if (muteAllActiveTimer != null) {
-    clearTimeout(muteAllActiveTimer)
-  }
-})
 </script>
 
 <template>
@@ -120,15 +106,12 @@ onBeforeUnmount(() => {
   background: transparent;
   cursor: pointer;
   transition:
-    filter 0.16s ease,
-    transform 0.16s ease,
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
     opacity 0.16s ease;
 }
 
-.mafia-host-actions__btn:hover:not(:disabled),
-.mafia-host-actions__btn:focus-visible:not(:disabled) {
-  filter: brightness(1.08);
-  transform: scale(1.03);
+.mafia-host-actions__btn:hover:not(:disabled) {
+  transform: scale(1.025);
 }
 
 .mafia-host-actions__btn--mute-active {
@@ -146,10 +129,29 @@ onBeforeUnmount(() => {
 }
 
 .mafia-host-actions__full-art {
+  --mafia-host-action-hover: 0;
+  --mafia-host-action-x: 0px;
+  --mafia-host-action-y: 0px;
+  --mafia-host-action-scale: 0;
+  --mafia-host-action-rotate: 0deg;
   display: block;
   width: 41px;
   height: 41px;
   object-fit: contain;
+  transform:
+    translate(
+      calc(var(--mafia-host-action-x) * var(--mafia-host-action-hover)),
+      calc(var(--mafia-host-action-y) * var(--mafia-host-action-hover))
+    )
+    scale(calc(1 + var(--mafia-host-action-scale) * var(--mafia-host-action-hover)))
+    rotate(calc(var(--mafia-host-action-rotate) * var(--mafia-host-action-hover)));
+  transform-origin: center;
+  animation: mafia-host-action-mics 1.18s ease-in-out infinite;
+  transition: --mafia-host-action-hover 0.24s ease;
+}
+
+.mafia-host-actions__btn:hover:not(:disabled) .mafia-host-actions__full-art {
+  --mafia-host-action-hover: 1;
 }
 
 .mafia-host-actions__btn--roles {
@@ -157,9 +159,102 @@ onBeforeUnmount(() => {
 }
 
 .mafia-host-actions__roles-art {
+  --mafia-host-action-hover: 0;
+  --mafia-host-action-x: 0px;
+  --mafia-host-action-y: 0px;
+  --mafia-host-action-scale: 0;
+  --mafia-host-action-rotate: 0deg;
   display: block;
   width: 24px;
   height: 24px;
   object-fit: contain;
+  transform:
+    translate(
+      calc(var(--mafia-host-action-x) * var(--mafia-host-action-hover)),
+      calc(var(--mafia-host-action-y) * var(--mafia-host-action-hover))
+    )
+    scale(calc(1 + var(--mafia-host-action-scale) * var(--mafia-host-action-hover)))
+    rotate(calc(var(--mafia-host-action-rotate) * var(--mafia-host-action-hover)));
+  transform-origin: center;
+  animation: mafia-host-action-dice 1.18s ease-in-out infinite;
+  transition: --mafia-host-action-hover 0.24s ease;
+}
+
+.mafia-host-actions__btn:hover:not(:disabled) .mafia-host-actions__roles-art {
+  --mafia-host-action-hover: 1;
+}
+
+@property --mafia-host-action-hover {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --mafia-host-action-x {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --mafia-host-action-y {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --mafia-host-action-scale {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --mafia-host-action-rotate {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes mafia-host-action-mics {
+  0%,
+  100% {
+    --mafia-host-action-x: 0px;
+    --mafia-host-action-y: 0px;
+    --mafia-host-action-scale: 0;
+    --mafia-host-action-rotate: 0deg;
+  }
+
+  42% {
+    --mafia-host-action-y: -1.2px;
+    --mafia-host-action-scale: 0.035;
+    --mafia-host-action-rotate: -1.5deg;
+  }
+
+  74% {
+    --mafia-host-action-y: -0.5px;
+    --mafia-host-action-scale: 0.016;
+    --mafia-host-action-rotate: 1deg;
+  }
+}
+
+@keyframes mafia-host-action-dice {
+  0%,
+  100% {
+    --mafia-host-action-x: 0px;
+    --mafia-host-action-y: 0px;
+    --mafia-host-action-scale: 0;
+    --mafia-host-action-rotate: 0deg;
+  }
+
+  38% {
+    --mafia-host-action-y: -1px;
+    --mafia-host-action-scale: 0.055;
+    --mafia-host-action-rotate: -5deg;
+  }
+
+  70% {
+    --mafia-host-action-y: -0.4px;
+    --mafia-host-action-scale: 0.024;
+    --mafia-host-action-rotate: 2.5deg;
+  }
 }
 </style>

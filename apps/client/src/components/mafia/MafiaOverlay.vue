@@ -19,7 +19,7 @@ const isViewLayout = computed(() => Boolean(props.viewMode ?? props.streamView))
 
 const { t } = useI18n()
 const mafiaGame = useMafiaGameStore()
-const { isMafiaHost, mafiaTimer } = storeToRefs(mafiaGame)
+const { isMafiaHost, mafiaTimer, oldMafiaMode } = storeToRefs(mafiaGame)
 
 const nowMs = ref(Date.now())
 let nowTick: ReturnType<typeof setInterval> | undefined
@@ -45,6 +45,7 @@ const timerDisplay = computed(() => {
 })
 
 const showTimerControls = computed(() => isMafiaHost.value && !isViewLayout.value)
+const showTimerPanel = computed(() => !oldMafiaMode.value || isMafiaHost.value)
 
 const timerIdleDisplay = computed(() => {
   const totalSec = Math.floor(selectedDurationMs.value / 1000)
@@ -85,6 +86,7 @@ function onToggleTimer(): void {
 <template>
   <div class="mafia-overlay" role="presentation">
     <div
+      v-if="showTimerPanel"
       class="mafia-overlay__header call-floating-surface"
       :class="{ 'mafia-overlay__header--compact': useCompactTimer }"
     >
@@ -154,7 +156,7 @@ function onToggleTimer(): void {
 /* Layout + spacing: matches `.call-page__dock` flex / padding / max-width. */
 .mafia-overlay__header {
   position: absolute;
-  top: max(0px, env(safe-area-inset-top, 0px));
+  top: calc(max(0px, env(safe-area-inset-top, 0px)) + 6px);
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;
@@ -166,7 +168,7 @@ function onToggleTimer(): void {
   padding: 0;
   border: 0;
   border-radius: 25.268px;
-  background: rgb(80 57 119 / 0.43);
+  background: rgb(60 36 99 / 0.68);
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -199,6 +201,7 @@ function onToggleTimer(): void {
   align-items: center;
   gap: 5px;
   min-width: 0;
+  margin-left: 4px;
 }
 
 .mafia-overlay__timer-presets {
@@ -208,6 +211,9 @@ function onToggleTimer(): void {
 }
 
 .mafia-overlay__timer-preset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 35px;
   min-width: 35px;
   min-height: 23.896px;
@@ -215,14 +221,14 @@ function onToggleTimer(): void {
   padding: 0;
   border: 0;
   border-radius: 19.234px;
-  background: rgb(102 56 143 / 0.17);
+  background: rgb(102 56 143 / 0.34);
   color: rgb(255 255 255 / 0.94);
   font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
   font-size: 11.345px;
   font-weight: 800;
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: 'lnum' 1, 'tnum' 1;
-  line-height: 22.691px;
+  line-height: 1;
   letter-spacing: -0.6807px;
   text-align: center;
 }
@@ -232,6 +238,9 @@ function onToggleTimer(): void {
 }
 
 .mafia-overlay__timer-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 49px;
   min-width: 49px;
   min-height: 24px;
@@ -239,14 +248,14 @@ function onToggleTimer(): void {
   padding: 0;
   border: 0;
   border-radius: 19.234px;
-  background: rgb(102 56 143 / 0.17);
+  background: rgb(102 56 143 / 0.34);
   color: rgb(255 255 255 / 0.94);
   font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
   font-size: 11.345px;
   font-weight: 800;
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: 'lnum' 1, 'tnum' 1;
-  line-height: 22.691px;
+  line-height: 1;
   letter-spacing: -0.6807px;
   text-align: center;
 }
@@ -257,6 +266,7 @@ function onToggleTimer(): void {
   flex-shrink: 0;
   display: block;
   object-fit: contain;
+  align-self: center;
 }
 
 /* Typography aligned with `.call-page__toast` / call HUD. */
@@ -264,9 +274,9 @@ function onToggleTimer(): void {
   font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
   font-size: 20px;
   font-weight: 800;
-  line-height: 32px;
+  line-height: 1;
   color: rgb(255 255 255 / 0.94);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .mafia-overlay__timer-text--mono {

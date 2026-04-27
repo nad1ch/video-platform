@@ -468,6 +468,7 @@
     "speakingQueueEmpty": "Kolejka pusta",
     "speakingQueueClearAllTitle": "Wyczyść całą kolejkę wystąpień",
     "clearAllHostSelectionsTitle": "Wyczyść wszystko: kolejka wystąpień i cele nocne",
+    "clearNightActionsTitle": "Wyczyść cele nocne",
     "speakingQueueRemoveTitle": "Usuń miejsce {n} z kolejki wystąpień",
     "speakingQueueChipViewOnly": "Miejsce {n} w kolejce (kolejkę edytuje tylko prowadzący)",
     "activeRoleLabel": "Aktywna rola (cel kliku)",

@@ -45,6 +45,15 @@ import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import callControlChat from '@/assets/call-controls/chat.svg'
 import callControlHand from '@/assets/call-controls/hand.svg'
 import callControlHandActive from '@/assets/call-controls/hand-active.svg'
+import callControlIconCameraOff from '@/assets/call-controls/icon-camera-off.svg'
+import callControlIconCameraOn from '@/assets/call-controls/icon-camera-on.svg'
+import callControlIconHand from '@/assets/call-controls/icon-hand.svg'
+import callControlIconHandActive from '@/assets/call-controls/icon-hand-active.svg'
+import callControlIconLeave from '@/assets/call-controls/icon-leave.svg'
+import callControlIconMicOff from '@/assets/call-controls/icon-mic-off.svg'
+import callControlIconMicOn from '@/assets/call-controls/icon-mic-on.svg'
+import callControlIconScreen from '@/assets/call-controls/icon-screen.svg'
+import callControlIconScreenActive from '@/assets/call-controls/icon-screen-active.svg'
 import callControlLeave from '@/assets/call-controls/leave.svg'
 import callControlMicOff from '@/assets/call-controls/split-mic-off.svg'
 import callControlMicOn from '@/assets/call-controls/split-mic-on.svg'
@@ -71,6 +80,7 @@ import { useMafiaGameStore } from '@/stores/mafiaGame'
 import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
 import { mafiaEliminationAvatarKindForPeerId } from '@/utils/mafiaEliminationAvatarKind'
 import { MAFIA_OBS_URL_TOAST_EVENT } from '@/composables/mafiaStreamViewRoute'
+import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
 
 type VideoQualityUiChoice = 'auto' | VideoQualityPreset
 
@@ -90,6 +100,18 @@ const callControlArt = {
   micOn: callControlMicOn,
   screen: callControlScreen,
   screenActive: callControlScreenActive,
+} as const
+
+const callControlIconArt = {
+  cameraOff: callControlIconCameraOff,
+  cameraOn: callControlIconCameraOn,
+  hand: callControlIconHand,
+  handActive: callControlIconHandActive,
+  leave: callControlIconLeave,
+  micOff: callControlIconMicOff,
+  micOn: callControlIconMicOn,
+  screen: callControlIconScreen,
+  screenActive: callControlIconScreenActive,
 } as const
 
 const CALL_ROUTE_HTML_CLASS = 'sa-call-route'
@@ -306,8 +328,15 @@ const offMafiaForceControls = subscribeSignalingMessage((data) => {
   if (!isMafiaRoute.value) {
     return
   }
-  if (mafiaSignalPayload(data, MAFIA_FORCE_MUTE_ALL_SIGNAL) != null) {
-    if (micEnabled.value) {
+  const mutePayload = mafiaSignalPayload(data, MAFIA_FORCE_MUTE_ALL_SIGNAL)
+  if (mutePayload != null) {
+    if (mafiaGameStore.isMafiaHost) {
+      return
+    }
+    const muted = mutePayload.muted !== false
+    if (muted && micEnabled.value) {
+      void toggleMic()
+    } else if (!muted && !micEnabled.value) {
       void toggleMic()
     }
     return
@@ -781,11 +810,11 @@ function onMafiaForceCameraOffFromTile(peerId: string): void {
   sendSignalingMessage({ type: MAFIA_FORCE_CAMERA_OFF_SIGNAL, payload: { peerId } })
 }
 
-function onMafiaForceMuteAll(): void {
+function onMafiaForceMuteAll(muted: boolean): void {
   if (!isMafiaRoute.value || !mafiaGameStore.isMafiaHost) {
     return
   }
-  sendSignalingMessage({ type: MAFIA_FORCE_MUTE_ALL_SIGNAL, payload: {} })
+  sendSignalingMessage({ type: MAFIA_FORCE_MUTE_ALL_SIGNAL, payload: { muted } })
 }
 
 function onMafiaObsUrlCopiedToast(): void {
@@ -2316,7 +2345,7 @@ watch(joining, (j) => {
                 <img
                   v-if="isMafiaRoute"
                   class="call-page__pin-icon"
-                  :src="mafiaTilePinIcon"
+                  :src="pinnedPeerId === row.tile.peerId ? mafiaTilePinActiveIcon : mafiaTilePinIcon"
                   alt=""
                   aria-hidden="true"
                 />
@@ -2361,7 +2390,7 @@ watch(joining, (j) => {
             >
             <div
             ref="micSplitRef"
-            class="call-page__dock-split call-page__dock-split--figma"
+            class="call-page__dock-split call-page__dock-split--figma call-page__dock-split--mic"
             :class="{
               'call-page__dock-split--open': micPickerOpen,
               'call-page__dock-split--solo': !showMediaDevicePickers,
@@ -2370,6 +2399,13 @@ watch(joining, (j) => {
             <img
               class="call-page__dock-control-art"
               :src="micEnabled ? callControlArt.micOn : callControlArt.micOff"
+              alt=""
+              aria-hidden="true"
+            />
+            <img
+              :key="micEnabled ? 'mic-icon-on' : 'mic-icon-off'"
+              class="call-page__dock-control-icon call-page__dock-control-icon--split"
+              :src="micEnabled ? callControlIconArt.micOn : callControlIconArt.micOff"
               alt=""
               aria-hidden="true"
             />
@@ -2415,7 +2451,7 @@ watch(joining, (j) => {
           </div>
           <div
             ref="camSplitRef"
-            class="call-page__dock-split call-page__dock-split--figma"
+            class="call-page__dock-split call-page__dock-split--figma call-page__dock-split--camera"
             :class="{
               'call-page__dock-split--open': camPickerOpen,
               'call-page__dock-split--solo': !showMediaDevicePickers,
@@ -2424,6 +2460,13 @@ watch(joining, (j) => {
             <img
               class="call-page__dock-control-art"
               :src="camEnabled ? callControlArt.cameraOn : callControlArt.cameraOff"
+              alt=""
+              aria-hidden="true"
+            />
+            <img
+              :key="camEnabled ? 'camera-icon-on' : 'camera-icon-off'"
+              class="call-page__dock-control-icon call-page__dock-control-icon--split"
+              :src="camEnabled ? callControlIconArt.cameraOn : callControlIconArt.cameraOff"
               alt=""
               aria-hidden="true"
             />
@@ -2469,7 +2512,7 @@ watch(joining, (j) => {
           </div>
           <button
             type="button"
-            class="call-page__dock-btn call-page__dock-btn--figma call-page__dock-btn--compact-narrow-hide"
+            class="call-page__dock-btn call-page__dock-btn--figma call-page__dock-btn--hand call-page__dock-btn--compact-narrow-hide"
             :class="{ 'call-page__dock-btn--accent': handRaised }"
             :aria-label="handRaised ? t('callPage.raiseHandOff') : t('callPage.raiseHandOn')"
             :title="handRaised ? t('callPage.raiseHandOff') : t('callPage.raiseHandOn')"
@@ -2482,10 +2525,17 @@ watch(joining, (j) => {
               alt=""
               aria-hidden="true"
             />
+            <img
+              :key="handRaised ? 'hand-icon-active' : 'hand-icon'"
+              class="call-page__dock-control-icon"
+              :src="handRaised ? callControlIconArt.handActive : callControlIconArt.hand"
+              alt=""
+              aria-hidden="true"
+            />
           </button>
           <button
             type="button"
-            class="call-page__dock-btn call-page__dock-btn--figma call-page__dock-btn--compact-narrow-hide"
+            class="call-page__dock-btn call-page__dock-btn--figma call-page__dock-btn--screen call-page__dock-btn--compact-narrow-hide"
             :class="{ 'call-page__dock-btn--accent': screenSharing }"
             :aria-label="screenSharing ? t('callPage.screenShareStop') : t('callPage.screenShareStart')"
             :title="screenSharing ? t('callPage.screenShareStop') : t('callPage.screenShareStart')"
@@ -2498,10 +2548,17 @@ watch(joining, (j) => {
               alt=""
               aria-hidden="true"
             />
+            <img
+              :key="screenSharing ? 'screen-icon-active' : 'screen-icon'"
+              class="call-page__dock-control-icon"
+              :src="screenSharing ? callControlIconArt.screenActive : callControlIconArt.screen"
+              alt=""
+              aria-hidden="true"
+            />
           </button>
           <button
             type="button"
-            class="call-page__dock-btn call-page__dock-btn--compact-narrow-hide"
+            class="call-page__dock-btn call-page__dock-btn--chat call-page__dock-btn--compact-narrow-hide"
             :class="{ 'call-page__dock-btn--accent': chatOpen }"
             :aria-label="chatOpen ? t('callPage.chatHide') : t('callPage.chatShow')"
             :title="chatOpen ? t('callPage.chatHide') : t('callPage.chatShow')"
@@ -2520,9 +2577,10 @@ watch(joining, (j) => {
             @click="leaveCall"
           >
             <img class="call-page__dock-control-art" :src="callControlArt.leave" alt="" aria-hidden="true" />
+            <img class="call-page__dock-control-icon" :src="callControlIconArt.leave" alt="" aria-hidden="true" />
           </button>
         </div>
-            <MafiaSpeakingQueueBar v-if="isMafiaRoute && mafiaGameStore.isMafiaHost" />
+            <MafiaSpeakingQueueBar v-if="isMafiaRoute" :show-tools="mafiaGameStore.isMafiaHost" />
           </div>
         </div>
 
@@ -3204,7 +3262,7 @@ watch(joining, (j) => {
 .call-page__tile-wrap:focus-within,
 .call-page__tile-wrap--over,
 .call-page__tile-wrap--speaking {
-  z-index: 2;
+  z-index: 35;
 }
 
 /**
@@ -3391,8 +3449,7 @@ watch(joining, (j) => {
 }
 
 .call-page__tile-wrap:hover .call-page__pin-btn,
-.call-page__tile-wrap:focus-within .call-page__pin-btn,
-.call-page__pin-btn--active {
+.call-page__tile-wrap:focus-within .call-page__pin-btn {
   opacity: 1;
   pointer-events: auto;
 }
@@ -3417,8 +3474,6 @@ watch(joining, (j) => {
   border: 0;
   background: transparent;
   box-shadow: none;
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .call-page__tile-wrap--mafia-host-mode .call-page__pin-btn:hover,
@@ -3608,11 +3663,14 @@ watch(joining, (j) => {
   display: flex;
   align-items: center;
   justify-content: center;
+  transform: scale(1);
+  transform-origin: center;
   transition:
     box-shadow 0.2s ease,
     background 0.15s ease,
     border-color 0.15s ease,
-    color 0.15s ease;
+    color 0.15s ease,
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Без translateY і без великого «ореолу» — інакше hover виглядає як виступ над верхом пілюлі. */
@@ -3640,7 +3698,13 @@ watch(joining, (j) => {
 .call-page__dock-split--figma .call-page__dock-btn:hover:not(:disabled) {
   background: transparent;
   box-shadow: none;
-  filter: brightness(1.08);
+  filter: none;
+}
+
+.call-page__dock-btn--figma:hover:not(:disabled),
+.call-page__dock-btn--chat:hover:not(:disabled),
+.call-page__dock-btn--leave:hover:not(:disabled) {
+  transform: scale(1.025);
 }
 
 .call-page__dock-split {
@@ -3653,6 +3717,13 @@ watch(joining, (j) => {
   border: none;
   background: transparent;
   overflow: visible;
+  transform: scale(1);
+  transform-origin: center;
+  transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.call-page__dock-split:hover {
+  transform: scale(1.025);
 }
 
 .call-page__dock-split--solo {
@@ -3809,10 +3880,132 @@ watch(joining, (j) => {
   inset: 0;
 }
 
+@property --call-page-dock-hover {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --call-page-dock-icon-x {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --call-page-dock-icon-y {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --call-page-dock-icon-scale {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --call-page-dock-icon-rotate {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.call-page__dock-control-icon {
+  --call-page-dock-hover: 0;
+  --call-page-dock-icon-x: 0px;
+  --call-page-dock-icon-y: 0px;
+  --call-page-dock-icon-scale: 0;
+  --call-page-dock-icon-rotate: 0deg;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  transform:
+    translate(
+      calc(var(--call-page-dock-icon-x) * var(--call-page-dock-hover)),
+      calc(var(--call-page-dock-icon-y) * var(--call-page-dock-hover))
+    )
+    scale(calc(1 + var(--call-page-dock-icon-scale) * var(--call-page-dock-hover)))
+    rotate(calc(var(--call-page-dock-icon-rotate) * var(--call-page-dock-hover)));
+  transform-origin: center;
+  animation: call-page-dock-icon-swap 0.18s ease both;
+  transition: --call-page-dock-hover 0.24s ease;
+  will-change: transform;
+}
+
+.call-page__dock-btn:hover:not(:disabled) .call-page__dock-control-icon,
+.call-page__dock-split--figma:hover > .call-page__dock-control-icon {
+  --call-page-dock-hover: 1;
+}
+
+.call-page__dock-split--mic > .call-page__dock-control-icon {
+  animation:
+    call-page-dock-icon-swap 0.18s ease both,
+    call-page-dock-icon-mic-sway 1.28s ease-in-out infinite;
+}
+
+.call-page__dock-split--camera > .call-page__dock-control-icon {
+  animation:
+    call-page-dock-icon-swap 0.18s ease both,
+    call-page-dock-icon-camera-scan 1.32s ease-in-out infinite;
+}
+
+.call-page__dock-btn--hand .call-page__dock-control-icon {
+  animation:
+    call-page-dock-icon-swap 0.18s ease both,
+    call-page-dock-icon-hand-wave 1.16s ease-in-out infinite;
+}
+
+.call-page__dock-btn--screen .call-page__dock-control-icon {
+  animation:
+    call-page-dock-icon-swap 0.18s ease both,
+    call-page-dock-icon-screen-pop 1.18s ease-in-out infinite;
+}
+
+.call-page__dock-btn--leave .call-page__dock-control-icon {
+  animation:
+    call-page-dock-icon-swap 0.18s ease both,
+    call-page-dock-icon-leave-slide 1.1s ease-in-out infinite;
+}
+
 .call-page__dock-ico {
+  --call-page-dock-hover: 0;
+  --call-page-dock-icon-x: 0px;
+  --call-page-dock-icon-y: 0px;
+  --call-page-dock-icon-scale: 0;
+  --call-page-dock-icon-rotate: 0deg;
   display: flex;
   align-items: center;
   justify-content: center;
+  transform-origin: center;
+  transform:
+    translate(
+      calc(var(--call-page-dock-icon-x) * var(--call-page-dock-hover)),
+      calc(var(--call-page-dock-icon-y) * var(--call-page-dock-hover))
+    )
+    scale(calc(1 + var(--call-page-dock-icon-scale) * var(--call-page-dock-hover)))
+    rotate(calc(var(--call-page-dock-icon-rotate) * var(--call-page-dock-hover)));
+  animation: call-page-dock-icon-chat-bounce 1.18s ease-in-out infinite;
+  transition: --call-page-dock-hover 0.24s ease;
+  will-change: transform;
+}
+
+.call-page__dock-btn:hover:not(:disabled) .call-page__dock-ico {
+  --call-page-dock-hover: 1;
+}
+
+.call-page__dock-btn--chat {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.call-page__dock-btn--chat:hover:not(:disabled) {
+  background: rgb(102 56 143 / 0.47);
+  box-shadow: none;
 }
 
 .call-page__dock-icon-img {
@@ -3825,6 +4018,154 @@ watch(joining, (j) => {
 .call-page__dock-ico--emoji {
   font-size: 1.05rem;
   line-height: 1;
+}
+
+@keyframes call-page-dock-icon-swap {
+  0% {
+    opacity: 0.72;
+  }
+
+  58% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes call-page-dock-icon-float {
+  0%,
+  100% {
+    --call-page-dock-icon-x: 0px;
+    --call-page-dock-icon-y: 0px;
+    --call-page-dock-icon-scale: 0;
+    --call-page-dock-icon-rotate: 0deg;
+  }
+
+  45% {
+    --call-page-dock-icon-y: -1.2px;
+    --call-page-dock-icon-scale: 0.035;
+    --call-page-dock-icon-rotate: -1.4deg;
+  }
+}
+
+@keyframes call-page-dock-icon-mic-sway {
+  0%,
+  100% {
+    --call-page-dock-icon-x: 0px;
+    --call-page-dock-icon-y: 0px;
+    --call-page-dock-icon-scale: 0;
+    --call-page-dock-icon-rotate: 0deg;
+  }
+
+  32% {
+    --call-page-dock-icon-x: -0.9px;
+    --call-page-dock-icon-y: -0.5px;
+    --call-page-dock-icon-scale: 0.025;
+    --call-page-dock-icon-rotate: -1.1deg;
+  }
+
+  68% {
+    --call-page-dock-icon-x: 0.9px;
+    --call-page-dock-icon-y: -0.5px;
+    --call-page-dock-icon-scale: 0.025;
+    --call-page-dock-icon-rotate: 1.1deg;
+  }
+}
+
+@keyframes call-page-dock-icon-camera-scan {
+  0%,
+  100% {
+    --call-page-dock-icon-x: 0px;
+    --call-page-dock-icon-scale: 0;
+    --call-page-dock-icon-rotate: 0deg;
+  }
+
+  35% {
+    --call-page-dock-icon-x: 1px;
+    --call-page-dock-icon-scale: 0.024;
+    --call-page-dock-icon-rotate: 0.6deg;
+  }
+
+  70% {
+    --call-page-dock-icon-x: -0.8px;
+    --call-page-dock-icon-scale: 0.018;
+    --call-page-dock-icon-rotate: -0.5deg;
+  }
+}
+
+@keyframes call-page-dock-icon-hand-wave {
+  0%,
+  100% {
+    --call-page-dock-icon-y: 0px;
+    --call-page-dock-icon-scale: 0;
+    --call-page-dock-icon-rotate: 0deg;
+  }
+
+  28% {
+    --call-page-dock-icon-y: -1.2px;
+    --call-page-dock-icon-scale: 0.035;
+    --call-page-dock-icon-rotate: -3.2deg;
+  }
+
+  58% {
+    --call-page-dock-icon-y: -0.7px;
+    --call-page-dock-icon-scale: 0.03;
+    --call-page-dock-icon-rotate: 2.2deg;
+  }
+}
+
+@keyframes call-page-dock-icon-screen-pop {
+  0%,
+  100% {
+    --call-page-dock-icon-y: 0px;
+    --call-page-dock-icon-scale: 0;
+  }
+
+  42% {
+    --call-page-dock-icon-y: -1.2px;
+    --call-page-dock-icon-scale: 0.035;
+  }
+
+  68% {
+    --call-page-dock-icon-y: -0.6px;
+    --call-page-dock-icon-scale: 0.018;
+  }
+}
+
+@keyframes call-page-dock-icon-chat-bounce {
+  0%,
+  100% {
+    --call-page-dock-icon-y: 0px;
+    --call-page-dock-icon-scale: 0;
+    --call-page-dock-icon-rotate: 0deg;
+  }
+
+  40% {
+    --call-page-dock-icon-y: -1.2px;
+    --call-page-dock-icon-scale: 0.04;
+    --call-page-dock-icon-rotate: -0.9deg;
+  }
+
+  72% {
+    --call-page-dock-icon-y: -0.4px;
+    --call-page-dock-icon-scale: 0.016;
+    --call-page-dock-icon-rotate: 0.5deg;
+  }
+}
+
+@keyframes call-page-dock-icon-leave-slide {
+  0%,
+  100% {
+    --call-page-dock-icon-x: 0px;
+    --call-page-dock-icon-scale: 0;
+  }
+
+  46% {
+    --call-page-dock-icon-x: 1.2px;
+    --call-page-dock-icon-scale: 0.032;
+  }
 }
 
 @media (max-width: 768px) {
@@ -3951,6 +4292,12 @@ watch(joining, (j) => {
 
 @media (prefers-reduced-motion: reduce) {
   .call-page__chat {
+    transition: none;
+  }
+
+  .call-page__dock-control-icon,
+  .call-page__dock-ico {
+    animation: none;
     transition: none;
   }
 }

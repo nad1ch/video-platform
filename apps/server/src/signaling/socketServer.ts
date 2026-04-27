@@ -17,9 +17,12 @@ import {
   handleMafiaQueueUpdate,
   handleMafiaReshuffle,
   handleMafiaPlayersUpdate,
+  handleMafiaModeUpdate,
   handleMafiaTimerStart,
   handleMafiaTimerStop,
   handleMafiaPlayerKick,
+  handleMafiaForceCameraOff,
+  handleMafiaForceMuteAll,
   handleProduce,
   handleProducerVideoSource,
   handleSetOutboundVideoPaused,
@@ -205,6 +208,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               handleMafiaPlayersUpdate(socket, parsed.data.payload, deps)
               break
             }
+            case 'mafia:mode-update': {
+              handleMafiaModeUpdate(socket, parsed.data.payload, deps)
+              break
+            }
             case 'mafia:timer-start': {
               handleMafiaTimerStart(socket, parsed.data.payload, deps)
               break
@@ -215,6 +222,14 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'mafia:player-kick': {
               handleMafiaPlayerKick(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:force-camera-off': {
+              handleMafiaForceCameraOff(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:force-mute-all': {
+              handleMafiaForceMuteAll(socket, parsed.data.payload, deps)
               break
             }
             case 'request-producer-sync': {

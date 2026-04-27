@@ -6,6 +6,7 @@ import { buildMafiaRoleDeck, MafiaPlayerCountError } from '@/utils/mafiaGameRole
 import type {
   MafiaHostInteractionMode,
   MafiaLastNightResult,
+  MafiaModeUpdatePayload,
   MafiaNightActionKey,
   MafiaNightActions,
   MafiaPhase,
@@ -94,6 +95,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
   /** For host: after `swapSeatsByPeerId`; signaling sends `mafia:players-update` then clears. */
   const playersUpdateBroadcastPayload = ref<MafiaPlayersUpdatePayload | null>(null)
+  const modeUpdateBroadcastPayload = ref<MafiaModeUpdatePayload | null>(null)
 
   /** Shared round timer; `remaining = duration - (Date.now() - startedAt)` on each client. */
   const mafiaTimer = ref<MafiaTimerState | null>(null)
@@ -114,6 +116,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
   /** Host: night-action assignment vs building speaking-order queue (tile click). */
   const hostInteractionMode = ref<MafiaHostInteractionMode>('night')
+  const oldMafiaMode = ref(true)
 
   /** Shared speaking queue (1-based seat #s); order preserved; host edits, others receive via signaling. */
   const speakingQueue = ref<number[]>([])
@@ -281,6 +284,28 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     }
   }
 
+  function setOldMafiaMode(value: boolean): void {
+    if (oldMafiaMode.value === value) {
+      return
+    }
+    oldMafiaMode.value = value
+    if (value) {
+      mafiaTimer.value = null
+      timerStopBroadcastPayload.value = TIMER_STOP_SENTINEL
+    }
+    if (isMafiaHost.value) {
+      modeUpdateBroadcastPayload.value = { mode: value ? 'old' : 'new' }
+    }
+  }
+
+  function applyMafiaModeFromSignaling(payload: MafiaModeUpdatePayload): void {
+    const nextOld = payload.mode === 'old'
+    oldMafiaMode.value = nextOld
+    if (nextOld && !isMafiaHost.value) {
+      mafiaTimer.value = null
+    }
+  }
+
   function setSeatSwapSelectionPeerId(peerId: string | null): void {
     if (!isMafiaHost.value) {
       return
@@ -383,6 +408,20 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       o.add(id)
     }
     numberingOrder.value = [...payload.order]
+    if (payload.clearRoles === true) {
+      roleByPeerId.value = {}
+      const nextAlive: Record<string, boolean> = {}
+      for (const id of payload.order) {
+        nextAlive[id] = true
+      }
+      aliveByPeerId.value = nextAlive
+    }
+    if (typeof payload.oldMafiaMode === 'boolean') {
+      oldMafiaMode.value = payload.oldMafiaMode
+      if (payload.oldMafiaMode && !isMafiaHost.value) {
+        mafiaTimer.value = null
+      }
+    }
     const nextNight: MafiaNightActions = {}
     const src = payload.nightActions
     if (src && typeof src === 'object') {
@@ -399,6 +438,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
   function clearPlayersUpdateBroadcastPayload(): void {
     playersUpdateBroadcastPayload.value = null
+  }
+
+  function clearModeUpdateBroadcastPayload(): void {
+    modeUpdateBroadcastPayload.value = null
   }
 
   /**
@@ -435,6 +478,17 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     }
     speakingQueue.value = []
     mafiaGameLog.info('speaking queue cleared')
+  }
+
+  function clearNightActions(): void {
+    if (!isMafiaHost.value) {
+      return
+    }
+    if (Object.keys(nightActions.value).length === 0) {
+      return
+    }
+    nightActions.value = {}
+    mafiaGameLog.info('night actions cleared')
   }
 
   /**
@@ -558,6 +612,33 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     const ids = mafia.joinOrder
     if (ids.length < 2) {
       return { ok: false, error: 'empty' }
+    }
+    if (oldMafiaMode.value) {
+      beginMafiaReshuffleApply()
+      const shuffledIds = fisherYatesShuffle([...ids])
+      numberingOrder.value = shuffledIds
+      roleByPeerId.value = {}
+      const nextAlive: Record<string, boolean> = {}
+      for (const id of shuffledIds) {
+        nextAlive[id] = true
+      }
+      aliveByPeerId.value = nextAlive
+      phase.value = 'night'
+      nightActions.value = {}
+      activeNightActionRole.value = 'mafia'
+      speakingQueue.value = []
+      hostInteractionMode.value = 'night'
+      mafiaTimer.value = null
+      timerStopBroadcastPayload.value = TIMER_STOP_SENTINEL
+      mafiaGameLog.info('reshuffle: players shuffled, roles cleared (old mafia)', { n: ids.length, phase: phase.value })
+      playersUpdateBroadcastPayload.value = {
+        order: [...shuffledIds],
+        nightActions: {},
+        speakingQueue: [],
+        clearRoles: true,
+        oldMafiaMode: true,
+      }
+      return { ok: true }
     }
     if (ids.length < 5 || ids.length > 12) {
       return { ok: false, error: 'count' }
@@ -695,6 +776,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   }
 
   function applyMafiaTimerFromSignaling(payload: MafiaTimerStartPayload): void {
+    if (oldMafiaMode.value && !isMafiaHost.value) {
+      mafiaTimer.value = null
+      return
+    }
     if (
       typeof payload.startedAt !== 'number' ||
       !Number.isFinite(payload.startedAt) ||
@@ -849,6 +934,8 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
   return {
     phase,
+    oldMafiaMode,
+    modeUpdateBroadcastPayload,
     nightActions,
     lastNightResult,
     activeNightActionRole,
@@ -872,9 +959,12 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     assignOrClearNightActionForActiveRole,
     setNightAction,
     setHostInteractionMode,
+    setOldMafiaMode,
+    applyMafiaModeFromSignaling,
     addSpeakingSeatIfNew,
     removeSpeakingSeat,
     clearSpeakingQueue,
+    clearNightActions,
     clearHostToolbarSelections,
     reshuffleGame,
     clearWhenLeavingMafiaRoute,
@@ -891,6 +981,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     swapSeatsByPeerId,
     applyMafiaPlayersUpdateFromSignaling,
     clearPlayersUpdateBroadcastPayload,
+    clearModeUpdateBroadcastPayload,
     mafiaTimer,
     startTimer,
     stopTimer,

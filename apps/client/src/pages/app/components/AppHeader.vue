@@ -373,6 +373,16 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   min-height: calc(4.5rem - 20px);
 }
 
+.app-landing-header--compact .app-landing-header__title {
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.app-landing-header--compact .app-landing-header__logo {
+  width: 2.12rem;
+  height: 2.12rem;
+}
+
 .app-landing-header__brand,
 .app-landing-header__title,
 .app-landing-header__coin {
@@ -785,16 +795,6 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   gap: 0;
 }
 
-.app-landing-header--mafia .app-landing-header__title {
-  font-size: 1.55rem;
-  line-height: 1;
-}
-
-.app-landing-header--mafia .app-landing-header__logo {
-  width: 2.12rem;
-  height: 2.12rem;
-}
-
 .app-landing-header--mafia .app-landing-header__center-extra {
   position: absolute;
   left: calc(100% + 14px);
@@ -809,7 +809,8 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 }
 
 .app-landing-header--mafia .app-landing-header__auth {
-  min-width: 165px;
+  width: auto;
+  min-width: 0;
   min-height: 31px;
   border: 0;
   border-radius: 33px;
@@ -825,10 +826,11 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 }
 
 .app-landing-header--mafia .app-landing-header__user {
-  max-width: 165px;
+  width: auto;
+  max-width: min(13rem, 28vw);
   min-height: 31px;
   padding: 0 4px 0 10px;
-  gap: 6px;
+  gap: 0;
 }
 
 .app-landing-header--mafia .app-landing-header__user-prefix {
@@ -846,7 +848,15 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 }
 
 .app-landing-header--mafia .app-landing-header__avatar {
-  display: none;
+  display: inline-flex;
+  width: 23px;
+  height: 23px;
+  order: 1;
+  position: relative;
+  z-index: 2;
+  margin-left: 15px;
+  background: transparent;
+  font-size: 0.62rem;
 }
 
 .app-landing-header--mafia .app-landing-header__user-name {
@@ -855,8 +865,12 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   justify-content: center;
   min-width: 0;
   height: 27px;
-  flex: 1 1 auto;
-  padding: 0 10px;
+  max-width: 8.5rem;
+  flex: 0 1 auto;
+  order: 2;
+  position: relative;
+  z-index: 1;
+  padding: 0 12px 0 10px;
   border-radius: 33px;
   background: rgb(102 56 143 / 0.68);
   color: #fff;
@@ -864,6 +878,14 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   font-size: 12px;
   font-weight: 400;
   line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-landing-header--mafia .app-landing-header__avatar + .app-landing-header__user-name {
+  padding-left: 35px;
+  margin-left: -30px;
 }
 
 .app-landing-header--mafia .app-landing-header__auth-buttons {

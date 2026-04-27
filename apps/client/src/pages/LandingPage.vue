@@ -659,10 +659,7 @@ watch(
 </template>
 
 <style scoped>
-/* Display + body sans: `index.html` + ui-theme. Landing-only: Abril/Arbutus/Climate/Marmelad. */
-@import url('https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Arbutus&family=Climate+Crisis&family=Marmelad&display=swap');
-
-/* Optional: add `<link rel="preload" as="style">` for this font URL in `index.html` to shorten critical path (keep @import until then). */
+/* Display + body sans are loaded once in `index.html` to avoid route-level font races. */
 
 .landing-u-text-outline-heading {
   line-height: 1.12;

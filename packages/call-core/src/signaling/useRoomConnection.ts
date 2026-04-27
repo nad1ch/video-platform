@@ -82,7 +82,8 @@ function resolveWsUrl(explicit?: string): string {
     if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) {
       url = fromEnv.trim()
     } else if (import.meta.env.DEV) {
-      url = 'ws://localhost:3000'
+      // Match the Vite dev proxy target: Windows can resolve localhost to an address the WS upgrade path does not use.
+      url = 'ws://127.0.0.1:3000'
     } else {
       throw new Error(
         'VITE_SIGNALING_URL is not defined. Set it in Vercel or .env.production. Use wss:// for HTTPS.',

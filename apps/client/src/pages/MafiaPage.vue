@@ -13,8 +13,9 @@ import { useMafiaGameStore } from '@/stores/mafiaGame'
  */
 const { isViewMode } = useMafiaViewMode()
 const mafiaGame = useMafiaGameStore()
-const { isMafiaHost } = storeToRefs(mafiaGame)
+const { isMafiaHost, oldMafiaMode } = storeToRefs(mafiaGame)
 const showHostTools = computed(() => !isViewMode.value && isMafiaHost.value)
+const showMafiaOverlay = computed(() => !oldMafiaMode.value || isMafiaHost.value)
 </script>
 
 <template>
@@ -27,7 +28,7 @@ const showHostTools = computed(() => !isViewMode.value && isMafiaHost.value)
   >
     <CallPage :mafia-stream-view="isViewMode" />
     <MafiaHostPanel v-if="showHostTools" />
-    <MafiaOverlay :view-mode="isViewMode" />
+    <MafiaOverlay v-if="showMafiaOverlay" :view-mode="isViewMode" />
   </div>
 </template>
 

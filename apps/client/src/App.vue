@@ -4,6 +4,7 @@ import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import { useAuth } from '@/composables/useAuth'
+import { useSaTooltips } from '@/composables/useSaTooltips'
 import { routeNavLoadingVisible } from '@/routeNavLoading'
 import mainCloudSrc from '@/assets/landing/clouds/cloud-wide-volumetric.webp'
 import '@/eat-first/styles/motion.css'
@@ -67,6 +68,8 @@ function waitForMainCloud(): Promise<void> {
 if (isVisualCloudRoute()) {
   ensureMainCloudPreload()
 }
+
+useSaTooltips()
 
 onMounted(async () => {
   try {

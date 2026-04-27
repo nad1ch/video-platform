@@ -69,10 +69,19 @@ const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
   box-sizing: border-box;
   background: linear-gradient(166.6115811995453deg, rgba(124, 77, 219, 0.096) 0%, rgba(60, 36, 99, 0.094) 73.206%);
   transform-origin: center;
-  transition: transform 0.18s ease;
+  transition:
+    background 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 }
 
 .economy-slot-banner:hover .economy-slot-banner__frame {
+  background:
+    linear-gradient(166.6115811995453deg, rgba(124, 77, 219, 0.17) 0%, rgba(60, 36, 99, 0.16) 73.206%),
+    rgba(54, 27, 83, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 10px 24px rgba(6, 2, 18, 0.22);
   transform: translateY(-2px);
 }
 

@@ -468,6 +468,7 @@
     "speakingQueueEmpty": "No seats in queue",
     "speakingQueueClearAllTitle": "Clear entire speaking order",
     "clearAllHostSelectionsTitle": "Clear all: speaking order and night tile targets",
+    "clearNightActionsTitle": "Clear night targets",
     "speakingQueueRemoveTitle": "Remove seat {n} from speaking order",
     "speakingQueueChipViewOnly": "Seat {n} in the speaking order (host only: edit queue)",
     "activeRoleLabel": "Active role (tile click target)",

@@ -8,12 +8,20 @@ import type { MafiaHostInteractionMode } from '@/utils/mafiaGameTypes'
 import mafiaVoteClear from '@/assets/mafia/ui/vote-clear.svg'
 import mafiaVoteStart from '@/assets/mafia/ui/vote-start.svg'
 
+const props = withDefaults(
+  defineProps<{
+    showTools?: boolean
+  }>(),
+  {
+    showTools: false,
+  },
+)
+
 const { t } = useI18n()
 const mafia = useMafiaGameStore()
-const { isMafiaHost, speakingQueue, hostInteractionMode, nightActions, hostSeatSwapSelectionPeerId } =
-  storeToRefs(mafia)
+const { speakingQueue, hostInteractionMode } = storeToRefs(mafia)
 
-const readOnly = computed(() => !isMafiaHost.value)
+const readOnly = computed(() => !props.showTools)
 
 const segments = computed(() =>
   speakingQueue.value.map((targetSeat, i) => ({
@@ -26,21 +34,20 @@ const segments = computed(() =>
 
 const hudWidth = computed(() => {
   const n = segments.value.length
+  if (readOnly.value) {
+    return n === 0 ? 0 : Math.min(451, 14 + n * 22 + Math.max(0, n - 1) * 6)
+  }
   if (n === 0) {
     return 104
   }
   return Math.min(451, 104 + 8 + n * 22 + Math.max(0, n - 1) * 6)
 })
 
-const canClearAllSelections = computed(() => {
+const canClearSpeakingQueue = computed(() => {
   if (readOnly.value) {
     return false
   }
-  return (
-    speakingQueue.value.length > 0 ||
-    Object.keys(nightActions.value).length > 0 ||
-    hostSeatSwapSelectionPeerId.value != null
-  )
+  return speakingQueue.value.length > 0
 })
 
 function onModeToolClick(mode: MafiaHostInteractionMode, ev: MouseEvent): void {
@@ -63,24 +70,29 @@ function onRemove(targetSeat: number, ev: MouseEvent): void {
   mafia.removeSpeakingSeat(targetSeat)
 }
 
-function onClearAllSelections(ev: MouseEvent): void {
+function onClearSpeakingQueue(ev: MouseEvent): void {
   ev.stopPropagation()
-  if (readOnly.value || !canClearAllSelections.value) {
+  if (readOnly.value || !canClearSpeakingQueue.value) {
     return
   }
-  mafia.clearHostToolbarSelections()
+  mafia.clearSpeakingQueue()
 }
 </script>
 
 <template>
   <div
+    v-if="!readOnly || segments.length > 0"
     class="mafia-vote-hud"
-    :class="{ 'mafia-vote-hud--empty': segments.length === 0 }"
+    :class="{
+      'mafia-vote-hud--empty': segments.length === 0,
+      'mafia-vote-hud--readonly': readOnly,
+    }"
     :style="{ '--mafia-vote-hud-width': `${hudWidth}px` }"
     role="region"
     :aria-label="t('mafiaPage.speakingQueueAria')"
   >
     <div
+      v-if="!readOnly"
       class="mafia-vote-hud__tools"
       role="toolbar"
       :aria-label="t('mafiaPage.hostInteractionModeLabel')"
@@ -100,10 +112,10 @@ function onClearAllSelections(ev: MouseEvent): void {
       <button
         type="button"
         class="mafia-vote-hud__tool mafia-vote-hud__tool--clear"
-        :disabled="readOnly || !canClearAllSelections"
-        :title="t('mafiaPage.clearAllHostSelectionsTitle')"
-        :aria-label="t('mafiaPage.clearAllHostSelectionsTitle')"
-        @click="onClearAllSelections"
+        :disabled="readOnly || !canClearSpeakingQueue"
+        :title="t('mafiaPage.speakingQueueClearAllTitle')"
+        :aria-label="t('mafiaPage.speakingQueueClearAllTitle')"
+        @click="onClearSpeakingQueue"
       >
         <img class="mafia-vote-hud__tool-art" :src="mafiaVoteClear" alt="" aria-hidden="true" />
       </button>
@@ -134,6 +146,7 @@ function onClearAllSelections(ev: MouseEvent): void {
           @click="onRemove(seg.target, $event)"
         >
           <span class="mafia-vote-hud__chip-voter">{{ seg.voter }}</span>
+          <span class="mafia-vote-hud__chip-arrow" aria-hidden="true">↓</span>
           <span class="mafia-vote-hud__chip-target">{{ seg.targetLabel }}</span>
         </button>
       </TransitionGroup>
@@ -166,6 +179,10 @@ function onClearAllSelections(ev: MouseEvent): void {
   gap: 8px;
 }
 
+.mafia-vote-hud--readonly {
+  justify-content: center;
+}
+
 .mafia-vote-hud__tools {
   display: inline-flex;
   align-items: center;
@@ -191,13 +208,14 @@ function onClearAllSelections(ev: MouseEvent): void {
   border-radius: 999px;
   background: transparent;
   transition:
-    filter 0.16s ease,
-    transform 0.16s ease,
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
     opacity 0.16s ease;
 }
 
-.mafia-vote-hud__tool:hover:not(:disabled),
-.mafia-vote-hud__tool:focus-visible:not(:disabled),
+.mafia-vote-hud__tool:hover:not(:disabled) {
+  transform: scale(1.025);
+}
+
 .mafia-vote-hud__chip:hover:not(:disabled),
 .mafia-vote-hud__chip:focus-visible:not(:disabled) {
   filter: brightness(1.08);
@@ -224,10 +242,29 @@ function onClearAllSelections(ev: MouseEvent): void {
 }
 
 .mafia-vote-hud__tool-art {
+  --mafia-vote-tool-hover: 0;
+  --mafia-vote-tool-x: 0px;
+  --mafia-vote-tool-y: 0px;
+  --mafia-vote-tool-scale: 0;
+  --mafia-vote-tool-rotate: 0deg;
   display: block;
   width: 41px;
   height: 41px;
   object-fit: contain;
+  transform:
+    translate(
+      calc(var(--mafia-vote-tool-x) * var(--mafia-vote-tool-hover)),
+      calc(var(--mafia-vote-tool-y) * var(--mafia-vote-tool-hover))
+    )
+    scale(calc(1 + var(--mafia-vote-tool-scale) * var(--mafia-vote-tool-hover)))
+    rotate(calc(var(--mafia-vote-tool-rotate) * var(--mafia-vote-tool-hover)));
+  transform-origin: center;
+  animation: mafia-vote-tool-nudge 1.16s ease-in-out infinite;
+  transition: --mafia-vote-tool-hover 0.24s ease;
+}
+
+.mafia-vote-hud__tool:hover:not(:disabled) .mafia-vote-hud__tool-art {
+  --mafia-vote-tool-hover: 1;
 }
 
 .mafia-vote-hud__chips {
@@ -257,7 +294,7 @@ function onClearAllSelections(ev: MouseEvent): void {
   justify-content: center;
   width: 22px;
   height: 41px;
-  padding: 5px 0 4px;
+  padding: 4px 0 3px;
   border-radius: 33px;
   background: rgb(102 56 143 / 0.47);
   color: #fff;
@@ -285,6 +322,7 @@ function onClearAllSelections(ev: MouseEvent): void {
 }
 
 .mafia-vote-hud__chip-voter,
+.mafia-vote-hud__chip-arrow,
 .mafia-vote-hud__chip-target {
   display: block;
   width: 100%;
@@ -295,14 +333,72 @@ function onClearAllSelections(ev: MouseEvent): void {
   color: rgb(255 255 255 / 0.94);
 }
 
+.mafia-vote-hud__chip-arrow {
+  margin: 2px 0 1px;
+  color: rgb(255 255 255 / 0.72);
+  font-size: 8px;
+  line-height: 1;
+}
+
 .mafia-vote-hud__chip-target {
-  margin-top: 7px;
   color: #ffd455;
 }
 
 @media (max-width: 760px) {
   .mafia-vote-hud {
     width: min(var(--mafia-vote-hud-width, 104px), calc(100vw - 16px));
+  }
+}
+
+@property --mafia-vote-tool-hover {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --mafia-vote-tool-x {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --mafia-vote-tool-y {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --mafia-vote-tool-scale {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --mafia-vote-tool-rotate {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes mafia-vote-tool-nudge {
+  0%,
+  100% {
+    --mafia-vote-tool-x: 0px;
+    --mafia-vote-tool-y: 0px;
+    --mafia-vote-tool-scale: 0;
+    --mafia-vote-tool-rotate: 0deg;
+  }
+
+  40% {
+    --mafia-vote-tool-y: -1.2px;
+    --mafia-vote-tool-scale: 0.04;
+    --mafia-vote-tool-rotate: -2deg;
+  }
+
+  72% {
+    --mafia-vote-tool-y: -0.5px;
+    --mafia-vote-tool-scale: 0.018;
+    --mafia-vote-tool-rotate: 1.1deg;
   }
 }
 </style>
