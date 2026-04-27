@@ -29,6 +29,8 @@ const emit = defineEmits<{
   'commit-local-display-name': [payload: { peerId: string; name: string | null }]
   /** Mafia host: toggle eliminated / alive for this remote tile. */
   'mafia-toggle-life': [peerId: string]
+  /** Mafia host: ask a remote peer to turn camera off. */
+  'mafia-force-camera-off': [peerId: string]
   /** Mafia: tile intersects viewport (for `setPeerVisible` / simulcast layers). */
   'mafia-viewport-layers': [visible: boolean]
   /** Remote `<video>` `waiting`: fast playback stall signal for adaptive FPS (CallPage). */
@@ -412,7 +414,7 @@ function onMafiaHostLifeClick(): void {
   if (id.length < 1) {
     return
   }
-  emit('mafia-toggle-life', id)
+  emit('mafia-force-camera-off', id)
 }
 
 onBeforeUnmount(() => {
@@ -788,16 +790,8 @@ if (import.meta.env.DEV) {
           type="button"
           class="tile-menu__life"
           data-no-mafia-tile-host
-          :title="
-            mafiaEliminated
-              ? t('mafiaPage.hostTileReviveTitle')
-              : t('mafiaPage.hostTileEliminateTitle')
-          "
-          :aria-label="
-            mafiaEliminated
-              ? t('mafiaPage.hostTileReviveTitle')
-              : t('mafiaPage.hostTileEliminateTitle')
-          "
+          :title="t('mafiaPage.forceCameraOffTitle')"
+          :aria-label="t('mafiaPage.forceCameraOffTitle')"
           @click.stop="onMafiaHostLifeClick"
         >
           <span class="tile-menu__life-ico" aria-hidden="true">{{
@@ -1193,16 +1187,16 @@ if (import.meta.env.DEV) {
  */
 .tile-menu-cluster {
   position: absolute;
-  top: 0.4rem;
-  right: 0.4rem;
+  top: 7px;
+  right: 7px;
   z-index: 40;
   display: flex;
-  flex-direction: row-reverse;
+  flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.3rem;
-  max-width: calc(100% - 0.5rem);
+  gap: 7px;
+  max-width: calc(100% - 14px);
   pointer-events: auto;
   opacity: 1;
 }
@@ -1222,35 +1216,37 @@ if (import.meta.env.DEV) {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  width: 24px;
+  height: 24px;
   margin: 0;
   padding: 0;
   line-height: 0;
   font-size: 0;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, #f87171 50%, var(--sa-color-border, #2e303a));
-  background: rgb(0 0 0 / 0.58);
+  border: 0;
+  background: url('@/assets/mafia/ui/tile-skull.svg') center / 24px 24px no-repeat;
   color: #fecaca;
   cursor: pointer;
-  box-shadow: 0 0 0 1px color-mix(in srgb, #f87171 20%, transparent);
+  box-shadow: none;
   transition:
-    background 0.2s ease,
-    box-shadow 0.2s ease,
+    opacity 0.15s ease,
+    filter 0.16s ease,
     transform 0.16s ease;
   z-index: 2;
 }
 
 .tile-menu__life:hover {
-  background: color-mix(in srgb, #f87171 18%, #000 82%);
-  box-shadow: 0 0 12px color-mix(in srgb, #f87171 38%, transparent);
+  filter: brightness(1.08);
   transform: scale(1.05);
 }
 
 .tile-menu__life-ico {
   display: block;
-  font-size: 1.05rem;
+  width: 24px;
+  height: 24px;
+  font-size: 0;
   line-height: 1;
+  opacity: 0;
 }
 
 /** Wraps the ⋯ menu only; fade on desktop until tile hover. */
@@ -1260,6 +1256,7 @@ if (import.meta.env.DEV) {
 }
 
 @media (max-width: 768px), (hover: none) {
+  .tile-menu__life,
   .tile-menu-hoverable--remote {
     opacity: 1;
     pointer-events: auto;
@@ -1267,12 +1264,17 @@ if (import.meta.env.DEV) {
 }
 
 @media (min-width: 769px) and (hover: hover) {
+  .tile-menu__life,
   .tile-menu-hoverable--remote {
     opacity: 0;
     pointer-events: none;
   }
 
+  .tile:hover .tile-menu__life,
+  .tile:focus-within .tile-menu__life,
+  .tile--menu-open .tile-menu__life,
   .tile:hover .tile-menu-hoverable--remote,
+  .tile:focus-within .tile-menu-hoverable--remote,
   .tile--menu-open .tile-menu-hoverable--remote {
     opacity: 1;
     pointer-events: auto;
@@ -1280,13 +1282,14 @@ if (import.meta.env.DEV) {
 }
 
 .tile-menu__trigger {
-  width: 2rem;
-  height: 2rem;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border-radius: 999px;
-  border: 1px solid rgb(255 255 255 / 0.18);
-  background: rgb(0 0 0 / 0.55);
+  border: 0;
+  background: url('@/assets/mafia/ui/tile-menu.svg') center / 24px 24px no-repeat;
   color: #f3f4f6;
-  font-size: 1.1rem;
+  font-size: 0;
   line-height: 1;
   cursor: pointer;
   display: flex;
@@ -1299,8 +1302,8 @@ if (import.meta.env.DEV) {
 }
 
 .tile-menu__trigger:hover {
-  background: rgb(0 0 0 / 0.72);
-  box-shadow: 0 0 16px rgb(255 255 255 / 0.12);
+  box-shadow: none;
+  filter: brightness(1.08);
   transform: scale(1.04);
 }
 

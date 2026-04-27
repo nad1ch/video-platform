@@ -1,0 +1,10 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 60 41" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Frame">
+<rect width="60" height="41" rx="20.5" fill="var(--fill-0, #8F3838)" fill-opacity="0.47"/>
+<path id="secondary" d="M26.9167 14H16.0833C15.485 14 15 14.4477 15 15V25C15 25.5523 15.485 26 16.0833 26H26.9167C27.515 26 28 25.5523 28 25V15C28 14.4477 27.515 14 26.9167 14Z" fill="var(--fill-0, white)" fill-opacity="0.19"/>
+<path id="primary" d="M19.4444 18H21.6667M28.3333 23L33.4667 24.92C33.635 24.9822 33.8177 25.0063 33.9988 24.9901C34.1799 24.9739 34.3538 24.9179 34.5052 24.8271C34.6567 24.7362 34.781 24.6133 34.8672 24.4691C34.9535 24.3249 34.9991 24.1638 35 24V16C34.9991 15.8362 34.9535 15.6751 34.8672 15.5309C34.781 15.3867 34.6567 15.2638 34.5052 15.1729C34.3538 15.0821 34.1799 15.0261 33.9988 15.0099C33.8177 14.9937 33.635 15.0178 33.4667 15.08L28.3333 17V23ZM28.3333 25V15C28.3333 14.7348 28.2163 14.4804 28.0079 14.2929C27.7995 14.1054 27.5169 14 27.2222 14H16.1111C15.8164 14 15.5338 14.1054 15.3254 14.2929C15.1171 14.4804 15 14.7348 15 15V25C15 25.2652 15.1171 25.5196 15.3254 25.7071C15.5338 25.8946 15.8164 26 16.1111 26H27.2222C27.5169 26 27.7995 25.8946 28.0079 25.7071C28.2163 25.5196 28.3333 25.2652 28.3333 25Z" stroke="var(--stroke-0, white)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<line id="Line 6" x1="42.5" y1="5.5" x2="42.5" y2="34.5" stroke="var(--stroke-0, white)" stroke-opacity="0.2" stroke-linecap="round"/>
+<path id="Line 8" d="M54 21C50.5 17 50.5 17 47 21" stroke="var(--stroke-0, white)" stroke-opacity="0.65" stroke-linecap="round"/>
+<line id="Line 5" x1="11.7063" y1="10.9664" x2="32.9664" y2="30.2937" stroke="var(--stroke-0, white)" stroke-opacity="0.65" stroke-linecap="round"/>
+</g>
+</svg>

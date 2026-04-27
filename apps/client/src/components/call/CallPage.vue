@@ -42,6 +42,17 @@ import { computeCallVideoGridLayout } from './callVideoGridLayout'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
+import callControlChat from '@/assets/call-controls/chat.svg'
+import callControlHand from '@/assets/call-controls/hand.svg'
+import callControlHandActive from '@/assets/call-controls/hand-active.svg'
+import callControlLeave from '@/assets/call-controls/leave.svg'
+import callControlMicOff from '@/assets/call-controls/split-mic-off.svg'
+import callControlMicOn from '@/assets/call-controls/split-mic-on.svg'
+import callControlScreen from '@/assets/call-controls/screen.svg'
+import callControlScreenActive from '@/assets/call-controls/screen-active.svg'
+import callControlCameraOff from '@/assets/call-controls/split-camera-off.svg'
+import callControlCameraOn from '@/assets/call-controls/split-camera-on.svg'
+import mafiaTilePinIcon from '@/assets/mafia/ui/tile-pin.svg'
 import { generateCallRoomCode } from '@/utils/callRoomUi'
 import {
   CALL_ROOM_DROPDOWN_HOST_ID,
@@ -55,6 +66,7 @@ import {
   MAFIA_SIGNALING_ROOM_PREFIX,
 } from '@/composables/useMafiaMediaRoom'
 import MafiaSpeakingQueueBar from '@/components/mafia/MafiaSpeakingQueueBar.vue'
+import MafiaHostActionsBar from '@/components/mafia/MafiaHostActionsBar.vue'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
 import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
 import { mafiaEliminationAvatarKindForPeerId } from '@/utils/mafiaEliminationAvatarKind'
@@ -66,6 +78,19 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const { user, ensureAuthLoaded, isAdmin } = useAuth()
+
+const callControlArt = {
+  cameraOff: callControlCameraOff,
+  cameraOn: callControlCameraOn,
+  chat: callControlChat,
+  hand: callControlHand,
+  handActive: callControlHandActive,
+  leave: callControlLeave,
+  micOff: callControlMicOff,
+  micOn: callControlMicOn,
+  screen: callControlScreen,
+  screenActive: callControlScreenActive,
+} as const
 
 const CALL_ROUTE_HTML_CLASS = 'sa-call-route'
 
@@ -262,6 +287,39 @@ if (import.meta.env.DEV) {
 useMafiaHostSignaling(sendSignalingMessage, subscribeSignalingMessage, wsStatus)
 
 const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
+
+const MAFIA_FORCE_CAMERA_OFF_SIGNAL = 'mafia:force-camera-off'
+const MAFIA_FORCE_MUTE_ALL_SIGNAL = 'mafia:force-mute-all'
+
+function mafiaSignalPayload(data: unknown, type: string): Record<string, unknown> | null {
+  if (data == null || typeof data !== 'object') {
+    return null
+  }
+  const rec = data as { type?: unknown; payload?: unknown }
+  if (rec.type !== type || rec.payload == null || typeof rec.payload !== 'object') {
+    return null
+  }
+  return rec.payload as Record<string, unknown>
+}
+
+const offMafiaForceControls = subscribeSignalingMessage((data) => {
+  if (!isMafiaRoute.value) {
+    return
+  }
+  if (mafiaSignalPayload(data, MAFIA_FORCE_MUTE_ALL_SIGNAL) != null) {
+    if (micEnabled.value) {
+      void toggleMic()
+    }
+    return
+  }
+  const cameraPayload = mafiaSignalPayload(data, MAFIA_FORCE_CAMERA_OFF_SIGNAL)
+  const peerId = cameraPayload?.peerId
+  if (typeof peerId === 'string' && peerId === selfPeerId.value && camEnabled.value) {
+    void toggleCam()
+  }
+})
+
+onBeforeUnmount(offMafiaForceControls)
 
 /**
  * Toggling Mafia `?mode=view` (header / router) flips `callEngineRole` only after a new wire; re-join
@@ -711,6 +769,23 @@ function onMafiaToggleLifeFromTile(peerId: string): void {
     return
   }
   mafiaGameStore.hostToggleMafiaPlayerLife(peerId)
+}
+
+function onMafiaForceCameraOffFromTile(peerId: string): void {
+  if (!isMafiaRoute.value || !mafiaGameStore.isMafiaHost) {
+    return
+  }
+  if (typeof peerId !== 'string' || peerId.length < 1 || peerId === selfPeerId.value) {
+    return
+  }
+  sendSignalingMessage({ type: MAFIA_FORCE_CAMERA_OFF_SIGNAL, payload: { peerId } })
+}
+
+function onMafiaForceMuteAll(): void {
+  if (!isMafiaRoute.value || !mafiaGameStore.isMafiaHost) {
+    return
+  }
+  sendSignalingMessage({ type: MAFIA_FORCE_MUTE_ALL_SIGNAL, payload: {} })
 }
 
 function onMafiaObsUrlCopiedToast(): void {
@@ -2175,8 +2250,7 @@ watch(joining, (j) => {
                 :mafia-host-show-life-toggle="
                   isMafiaRoute &&
                   !mafiaViewUi &&
-                  mafiaGameStore.isMafiaHost &&
-                  mafiaGameStore.phase != null
+                  mafiaGameStore.isMafiaHost
                 "
                 :mafia-layer-viewport-observe="isCallAppRoute && !row.tile.isLocal"
                 :video-playback-suppressed="
@@ -2187,6 +2261,7 @@ watch(joining, (j) => {
                 @update:listen-muted="(v) => remoteListenMutedHandler(row.tile.peerId)(v)"
                 @commit-local-display-name="onCommitLocalTileDisplayName"
                 @mafia-toggle-life="onMafiaToggleLifeFromTile(row.tile.peerId)"
+                @mafia-force-camera-off="onMafiaForceCameraOffFromTile(row.tile.peerId)"
                 @mafia-viewport-layers="(v) => onCallTileViewportForLayers(row.tile.peerId, v)"
                 @remote-playback-stall="onRemotePlaybackStall"
               />
@@ -2200,7 +2275,16 @@ watch(joining, (j) => {
                 :aria-pressed="pinnedPeerId === row.tile.peerId"
                 @click.stop="togglePin(row.tile.peerId)"
               >
-                {{ pinnedPeerId === row.tile.peerId ? t('callPage.unpinTileShort') : t('callPage.pinTileShort') }}
+                <img
+                  v-if="isMafiaRoute"
+                  class="call-page__pin-icon"
+                  :src="mafiaTilePinIcon"
+                  alt=""
+                  aria-hidden="true"
+                />
+                <template v-else>
+                  {{ pinnedPeerId === row.tile.peerId ? t('callPage.unpinTileShort') : t('callPage.pinTileShort') }}
+                </template>
               </button>
             </div>
             <div
@@ -2227,6 +2311,10 @@ watch(joining, (j) => {
           <div
             class="call-page__bottom-cluster__center call-page__bottom-cluster__center--speak-dock"
           >
+            <MafiaHostActionsBar
+              v-if="isMafiaRoute && mafiaGameStore.isMafiaHost"
+              @force-mute-all="onMafiaForceMuteAll"
+            />
             <div
               class="call-page__dock"
               :class="{ 'call-page__dock--pending': joining }"
@@ -2235,66 +2323,37 @@ watch(joining, (j) => {
             >
             <div
             ref="micSplitRef"
-            class="call-page__dock-split"
+            class="call-page__dock-split call-page__dock-split--figma"
             :class="{
               'call-page__dock-split--open': micPickerOpen,
               'call-page__dock-split--solo': !showMediaDevicePickers,
             }"
           >
+            <img
+              class="call-page__dock-control-art"
+              :src="micEnabled ? callControlArt.micOn : callControlArt.micOff"
+              alt=""
+              aria-hidden="true"
+            />
             <button
               type="button"
               class="call-page__dock-btn call-page__dock-btn--split-main"
               :class="{ 'call-page__dock-btn--danger': !micEnabled }"
+              :aria-label="micEnabled ? t('callPage.muteMic') : t('callPage.unmute')"
               :title="micEnabled ? t('callPage.muteMic') : t('callPage.unmute')"
               :aria-pressed="!micEnabled"
               @click="toggleMic"
-            >
-              <span class="call-page__dock-ico" aria-hidden="true">
-                <svg
-                  v-if="micEnabled"
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="22"
-                  height="22"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                  <path d="M19 10v1a7 7 0 0 1-14 0v-1M12 19v3" />
-                </svg>
-                <svg
-                  v-else
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="22"
-                  height="22"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                  <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
-                  <path d="M12 19v3" />
-                  <path d="M3 3l18 18" />
-                </svg>
-              </span>
-            </button>
+            />
             <button
               v-if="showMediaDevicePickers"
               type="button"
               class="call-page__dock-btn call-page__dock-btn--split-chev"
+              :aria-label="t('callPage.micInputMenu')"
               :title="t('callPage.micInputMenu')"
               :aria-expanded="micPickerOpen"
               aria-haspopup="menu"
               @click.stop="micPickerOpen = !micPickerOpen; camPickerOpen = false"
-            >
-              <span class="call-page__dock-chev" aria-hidden="true" />
-            </button>
+            />
             <div
               v-if="micPickerOpen && showMediaDevicePickers"
               class="call-page__device-pop sa-scrollbar"
@@ -2318,65 +2377,37 @@ watch(joining, (j) => {
           </div>
           <div
             ref="camSplitRef"
-            class="call-page__dock-split"
+            class="call-page__dock-split call-page__dock-split--figma"
             :class="{
               'call-page__dock-split--open': camPickerOpen,
               'call-page__dock-split--solo': !showMediaDevicePickers,
             }"
           >
+            <img
+              class="call-page__dock-control-art"
+              :src="camEnabled ? callControlArt.cameraOn : callControlArt.cameraOff"
+              alt=""
+              aria-hidden="true"
+            />
             <button
               type="button"
               class="call-page__dock-btn call-page__dock-btn--split-main"
               :class="{ 'call-page__dock-btn--danger': !camEnabled }"
+              :aria-label="camEnabled ? t('callPage.cameraOff') : t('callPage.cameraOn')"
               :title="camEnabled ? t('callPage.cameraOff') : t('callPage.cameraOn')"
               :aria-pressed="!camEnabled"
               @click="toggleCam"
-            >
-              <span class="call-page__dock-ico" aria-hidden="true">
-                <svg
-                  v-if="camEnabled"
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="22"
-                  height="22"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="m22 8-6 4 6 4V8Z" />
-                  <rect width="14" height="12" x="2" y="6" rx="2" ry="2" />
-                </svg>
-                <svg
-                  v-else
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="22"
-                  height="22"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="m22 8-6 4 6 4V8Z" />
-                  <rect width="14" height="12" x="2" y="6" rx="2" ry="2" />
-                  <path d="M3 3l18 18" />
-                </svg>
-              </span>
-            </button>
+            />
             <button
               v-if="showMediaDevicePickers"
               type="button"
               class="call-page__dock-btn call-page__dock-btn--split-chev"
+              :aria-label="t('callPage.cameraInputMenu')"
               :title="t('callPage.cameraInputMenu')"
               :aria-expanded="camPickerOpen"
               aria-haspopup="menu"
               @click.stop="camPickerOpen = !camPickerOpen; micPickerOpen = false"
-            >
-              <span class="call-page__dock-chev" aria-hidden="true" />
-            </button>
+            />
             <div
               v-if="camPickerOpen && showMediaDevicePickers"
               class="call-page__device-pop sa-scrollbar"
@@ -2400,79 +2431,60 @@ watch(joining, (j) => {
           </div>
           <button
             type="button"
-            class="call-page__dock-btn call-page__dock-btn--compact-narrow-hide"
+            class="call-page__dock-btn call-page__dock-btn--figma call-page__dock-btn--compact-narrow-hide"
             :class="{ 'call-page__dock-btn--accent': handRaised }"
+            :aria-label="handRaised ? t('callPage.raiseHandOff') : t('callPage.raiseHandOn')"
             :title="handRaised ? t('callPage.raiseHandOff') : t('callPage.raiseHandOn')"
             :aria-pressed="handRaised"
             @click="toggleRaiseHand"
           >
-            <span class="call-page__dock-ico call-page__dock-ico--emoji" aria-hidden="true">✋</span>
+            <img
+              class="call-page__dock-control-art"
+              :src="handRaised ? callControlArt.handActive : callControlArt.hand"
+              alt=""
+              aria-hidden="true"
+            />
           </button>
           <button
             type="button"
-            class="call-page__dock-btn call-page__dock-btn--compact-narrow-hide"
+            class="call-page__dock-btn call-page__dock-btn--figma call-page__dock-btn--compact-narrow-hide"
             :class="{ 'call-page__dock-btn--accent': screenSharing }"
+            :aria-label="screenSharing ? t('callPage.screenShareStop') : t('callPage.screenShareStart')"
             :title="screenSharing ? t('callPage.screenShareStop') : t('callPage.screenShareStart')"
             :aria-pressed="screenSharing"
             @click="toggleScreenShare"
           >
-            <span class="call-page__dock-ico" aria-hidden="true">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="22"
-                height="22"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <rect width="20" height="14" x="2" y="3" rx="2" ry="2" />
-                <path d="M7 21h10" />
-              </svg>
-            </span>
+            <img
+              class="call-page__dock-control-art"
+              :src="screenSharing ? callControlArt.screenActive : callControlArt.screen"
+              alt=""
+              aria-hidden="true"
+            />
           </button>
           <button
             type="button"
             class="call-page__dock-btn call-page__dock-btn--compact-narrow-hide"
             :class="{ 'call-page__dock-btn--accent': chatOpen }"
+            :aria-label="chatOpen ? t('callPage.chatHide') : t('callPage.chatShow')"
             :title="chatOpen ? t('callPage.chatHide') : t('callPage.chatShow')"
             :aria-pressed="chatOpen"
             @click="chatOpen = !chatOpen"
           >
             <span class="call-page__dock-ico" aria-hidden="true">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="22"
-                height="22"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
-              </svg>
+              <img class="call-page__dock-icon-img" :src="callControlArt.chat" alt="" aria-hidden="true" />
             </span>
           </button>
           <button
             type="button"
-            class="call-page__dock-btn call-page__dock-btn--leave"
+            class="call-page__dock-btn call-page__dock-btn--figma call-page__dock-btn--leave"
+            :aria-label="t('callPage.leave')"
             :title="t('callPage.leave')"
             @click="leaveCall"
           >
-            <span class="call-page__dock-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                <path
-                  d="M10.09 15.59 11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"
-                />
-              </svg>
-            </span>
+            <img class="call-page__dock-control-art" :src="callControlArt.leave" alt="" aria-hidden="true" />
           </button>
         </div>
-            <MafiaSpeakingQueueBar v-if="isMafiaRoute" />
+            <MafiaSpeakingQueueBar v-if="isMafiaRoute && mafiaGameStore.isMafiaHost" />
           </div>
         </div>
 
@@ -3356,6 +3368,39 @@ watch(joining, (j) => {
   font-size: 0.66rem;
 }
 
+.call-page__tile-wrap--mafia-host-mode .call-page__pin-btn,
+.call-page__tile-wrap--mafia-cursor-default .call-page__pin-btn {
+  top: 7px;
+  left: 7px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.call-page__tile-wrap--mafia-host-mode .call-page__pin-btn:hover,
+.call-page__tile-wrap--mafia-host-mode .call-page__pin-btn:focus-visible,
+.call-page__tile-wrap--mafia-cursor-default .call-page__pin-btn:hover,
+.call-page__tile-wrap--mafia-cursor-default .call-page__pin-btn:focus-visible,
+.call-page__tile-wrap--mafia-host-mode .call-page__pin-btn--active,
+.call-page__tile-wrap--mafia-cursor-default .call-page__pin-btn--active {
+  background: transparent;
+  border-color: transparent;
+  filter: brightness(1.08);
+}
+
+.call-page__pin-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
 @media (max-width: 768px), (hover: none) {
   .call-page__pin-btn {
     opacity: 1;
@@ -3416,7 +3461,7 @@ watch(joining, (j) => {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: var(--sa-space-2) var(--sa-space-3);
+  gap: 10px;
   min-width: 0;
   max-width: 100%;
 }
@@ -3467,7 +3512,7 @@ watch(joining, (j) => {
     max-width: min(100%, 100vw - 0.5rem);
   }
 
-  .call-page__bottom-cluster__center--speak-dock :deep(.mafia-host-hud) {
+  .call-page__bottom-cluster__center--speak-dock :deep(.mafia-vote-hud) {
     align-self: center;
     max-width: min(100%, 100vw - 0.5rem);
     width: min(100%, 42rem);
@@ -3487,10 +3532,10 @@ watch(joining, (j) => {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem 0.75rem;
+  gap: 0.5rem;
   width: max-content;
   max-width: min(calc(100vw - 16px), 100%);
-  padding: 0.62rem 0.9rem;
+  padding: 0.4375rem 0.53125rem;
   /* overflow visible: device picker popups extend above the bar */
   box-sizing: border-box;
   border-radius: 999px;
@@ -3512,12 +3557,13 @@ watch(joining, (j) => {
 }
 
 .call-page__dock-btn {
-  width: 3.25rem;
-  height: 3.25rem;
+  position: relative;
+  width: 2.5625rem;
+  height: 2.5625rem;
   padding: 0;
   border-radius: 50%;
   border: 1px solid rgb(255 255 255 / 0.12);
-  background: rgb(15 9 28 / 0.34);
+  background: rgb(102 56 143 / 0.47);
   color: #f3f4f6;
   cursor: pointer;
   display: flex;
@@ -3540,16 +3586,33 @@ watch(joining, (j) => {
 
 .call-page__dock-btn--split-main:hover:not(:disabled),
 .call-page__dock-btn--split-chev:hover:not(:disabled) {
-  background: rgb(255 255 255 / 0.07);
+  background: transparent;
+  box-shadow: none;
+}
+
+.call-page__dock-btn--figma,
+.call-page__dock-split--figma .call-page__dock-btn {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.call-page__dock-btn--figma:hover:not(:disabled),
+.call-page__dock-split--figma .call-page__dock-btn:hover:not(:disabled) {
+  background: transparent;
+  box-shadow: none;
+  filter: brightness(1.08);
 }
 
 .call-page__dock-split {
   position: relative;
   display: inline-flex;
   align-items: stretch;
+  width: 3.75rem;
+  height: 2.5625rem;
   border-radius: 999px;
-  border: 1px solid rgb(255 255 255 / 0.12);
-  background: rgb(15 9 28 / 0.34);
+  border: none;
+  background: transparent;
   overflow: visible;
 }
 
@@ -3559,11 +3622,11 @@ watch(joining, (j) => {
 }
 
 .call-page__dock-split--solo .call-page__dock-btn--split-main {
-  width: 3.25rem;
-  height: 3.25rem;
+  width: 2.5625rem;
+  height: 2.5625rem;
   border-radius: 50%;
-  border: 1px solid rgb(255 255 255 / 0.12);
-  background: rgb(15 9 28 / 0.34);
+  border: none;
+  background: transparent;
 }
 
 .call-page__dock-split--open {
@@ -3571,18 +3634,18 @@ watch(joining, (j) => {
 }
 
 .call-page__dock-btn--split-main {
-  width: 2.75rem;
-  height: 3.25rem;
-  min-height: 3.25rem;
+  width: 2.6875rem;
+  height: 2.5625rem;
+  min-height: 2.5625rem;
   border-radius: 999px 0 0 999px;
   border: none;
-  border-right: 1px solid rgb(255 255 255 / 0.1);
+  background: transparent;
 }
 
 .call-page__dock-btn--split-chev {
-  width: 1.85rem;
-  min-width: 1.85rem;
-  height: 3.25rem;
+  width: 1.0625rem;
+  min-width: 1.0625rem;
+  height: 2.5625rem;
   padding: 0;
   border-radius: 0 999px 999px 0;
   border: none;
@@ -3685,10 +3748,39 @@ watch(joining, (j) => {
   box-shadow: 0 0 0 1px rgb(250 204 21 / 0.22);
 }
 
+.call-page__dock-btn--figma.call-page__dock-btn--accent,
+.call-page__dock-btn--figma.call-page__dock-btn--leave,
+.call-page__dock-btn--figma.call-page__dock-btn--leave:hover,
+.call-page__dock-split--figma .call-page__dock-btn--danger {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.call-page__dock-control-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.call-page__dock-split--figma > .call-page__dock-control-art {
+  position: absolute;
+  inset: 0;
+}
+
 .call-page__dock-ico {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.call-page__dock-icon-img {
+  display: block;
+  width: 1.21rem;
+  height: 1rem;
+  object-fit: contain;
 }
 
 .call-page__dock-ico--emoji {
@@ -3698,31 +3790,31 @@ watch(joining, (j) => {
 
 @media (max-width: 768px) {
   .call-page__dock-btn {
-    width: 2.6rem;
-    height: 2.6rem;
+    width: 2.5625rem;
+    height: 2.5625rem;
   }
 
   .call-page__dock-btn--split-main {
-    width: 2.3rem;
-    height: 2.6rem;
-    min-height: 2.6rem;
+    width: 2.6875rem;
+    height: 2.5625rem;
+    min-height: 2.5625rem;
   }
 
   .call-page__dock-btn--split-chev {
-    width: 1.5rem;
-    min-width: 1.5rem;
-    height: 2.6rem;
+    width: 1.0625rem;
+    min-width: 1.0625rem;
+    height: 2.5625rem;
   }
 
   .call-page__dock-split--solo .call-page__dock-btn--split-main {
-    width: 2.6rem;
-    height: 2.6rem;
+    width: 2.5625rem;
+    height: 2.5625rem;
   }
 }
 
 @media (max-width: 480px) {
   .call-page__dock {
-    padding: 0.4rem 0.6rem;
+    padding: 0.4rem 0.45rem;
     gap: 0.4rem;
     flex-wrap: nowrap;
     overflow-x: auto;
@@ -3742,14 +3834,14 @@ watch(joining, (j) => {
   }
 
   .call-page__dock-btn--split-main {
-    width: 2rem;
+    width: 2.3rem;
     height: 2.2rem;
     min-height: 2.2rem;
   }
 
   .call-page__dock-btn--split-chev {
-    width: 1.2rem;
-    min-width: 1.2rem;
+    width: 0.92rem;
+    min-width: 0.92rem;
     height: 2.2rem;
   }
 
@@ -3759,6 +3851,8 @@ watch(joining, (j) => {
   }
 
   .call-page__dock-split {
+    width: 3.22rem;
+    height: 2.2rem;
     flex-shrink: 0;
   }
 

@@ -33,6 +33,10 @@ import '@/eat-first/styles/motion.css'
 import { useCoinHubStore } from '@/stores/coinHub'
 import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
 import type { AuthMode } from '@/types/authMode'
+import { useMafiaGameStore } from '@/stores/mafiaGame'
+import mafiaHeaderCopyIcon from '@/assets/mafia/ui/header-copy.svg'
+import mafiaHeaderLogo from '@/assets/mafia/ui/header-logo.svg'
+import mafiaHeaderSettingsIcon from '@/assets/mafia/ui/header-settings.svg'
 
 useSeoApp()
 
@@ -50,6 +54,8 @@ const auth = useAuth()
 const { openStreamAuthModal } = useStreamAuthModal()
 const coinHub = useCoinHubStore()
 const { balance: coinHubBalance } = storeToRefs(coinHub)
+const mafiaGame = useMafiaGameStore()
+const { isMafiaHost: isCurrentMafiaHost } = storeToRefs(mafiaGame)
 const canEatFirstHost = computed(() => {
   const r = auth.user.value?.role
   return r === 'admin' || r === 'host'
@@ -234,7 +240,9 @@ const mafiaHeaderHasRoom = computed(() => {
   return Boolean(mafiaQueryAsStringRecord(route.query).room)
 })
 
-const mafiaHeaderObsCopyLabel = computed(() => t('mafiaPage.headerCenterObsButton'))
+const mafiaHeaderShowHostControls = computed(() => isMafiaRoute.value && isCurrentMafiaHost.value)
+const mafiaHeaderObsCopyLabel = computed(() => 'copy')
+const mafiaHeaderOldMode = ref(true)
 
 async function copyMafiaObsViewUrl(): Promise<void> {
   if (route.name !== 'mafia') {
@@ -268,38 +276,66 @@ async function copyMafiaObsViewUrl(): Promise<void> {
         :coin-hub-to="appLandingCoinHubRoute"
         :help-label="t('onboarding.openGuide')"
         :is-authenticated="auth.isAuthenticated.value"
-        :logo-src="BRAND_LOGO_LIGHT_SVG"
+        :logo-src="isMafiaRoute ? mafiaHeaderLogo : BRAND_LOGO_LIGHT_SVG"
+        :mafia-mode="isMafiaRoute"
         :profile-to="appLandingProfileTo"
         :show-help-button="isEatRoute && Boolean(onboardingForRoute)"
+        :show-coin="!isMafiaRoute"
         :title="headerTitle"
+        :user-prefix="isMafiaRoute && isCurrentMafiaHost ? 'host' : ''"
         :user-avatar="appLandingHeaderUserAvatar"
         :user-name="appLandingHeaderUserName"
         @open-help="openOnboardingForCurrentRoute"
         @login="openAppLandingAuth('login')"
       >
+        <template v-if="mafiaHeaderShowHostControls" #brand-extra>
+          <button
+            type="button"
+            class="app-shell-mafia-settings"
+            title="settings"
+            aria-label="settings"
+          >
+            <img class="app-shell-mafia-settings__icon" :src="mafiaHeaderSettingsIcon" alt="" aria-hidden="true" />
+          </button>
+        </template>
         <template v-if="isCallRoute || isMafiaRoute" #center>
           <div :id="CALL_ROOM_DROPDOWN_HOST_ID" class="app-shell-call-room-anchor">
             <button
               type="button"
               class="app-shell-call-join-room"
+              :class="{ 'app-shell-call-join-room--mafia': isMafiaRoute }"
               :aria-expanded="callRoomHeaderJoin.roomPopoverOpen"
               aria-haspopup="dialog"
               :aria-controls="CALL_ROOM_POPOVER_PANEL_ID"
               @click.stop="callRoomHeaderJoin.toggleRoomPopover()"
             >
-              {{ t('callPage.headerJoinRoom') }}
+              {{ isMafiaRoute ? 'room' : t('callPage.headerJoinRoom') }}
             </button>
           </div>
+        </template>
+        <template v-if="mafiaHeaderShowHostControls" #actions-start>
           <button
-            v-if="isMafiaRoute && mafiaHeaderHasRoom"
             type="button"
-            class="stream-nav__link stream-nav__link--btn"
+            class="app-shell-mafia-toggle"
+            :class="{ 'app-shell-mafia-toggle--new': !mafiaHeaderOldMode }"
+            :aria-pressed="!mafiaHeaderOldMode"
+            aria-label="old / new"
+            title="old / new"
+            @click="mafiaHeaderOldMode = !mafiaHeaderOldMode"
+          >
+            <span>{{ mafiaHeaderOldMode ? 'old' : 'new' }}</span>
+          </button>
+          <button
+            v-if="mafiaHeaderHasRoom"
+            type="button"
+            class="app-shell-mafia-copy"
             :class="{ 'stream-nav__link--active': isMafiaViewMode }"
             :title="mafiaHeaderObsCopyLabel"
             :aria-label="mafiaHeaderObsCopyLabel"
             @click="copyMafiaObsViewUrl"
           >
-            {{ mafiaHeaderObsCopyLabel }}
+            <img class="app-shell-mafia-copy__icon" :src="mafiaHeaderCopyIcon" alt="" aria-hidden="true" />
+            <span>{{ mafiaHeaderObsCopyLabel }}</span>
           </button>
         </template>
       </AppLandingHeader>
@@ -501,6 +537,143 @@ async function copyMafiaObsViewUrl(): Promise<void> {
 .app-shell-call-join-room:disabled {
   opacity: 0.42;
   cursor: not-allowed;
+}
+
+.app-shell-call-join-room--mafia {
+  width: 67px;
+  min-height: 31px;
+  padding: 0;
+  border: 0;
+  border-radius: 33px;
+  background: rgb(102 56 143 / 0.47);
+  color: #fff;
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+  font-size: 10px;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
+  line-height: 1;
+  text-transform: lowercase;
+  letter-spacing: 0;
+}
+
+.app-shell-mafia-settings,
+.app-shell-mafia-toggle,
+.app-shell-mafia-copy {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 33px;
+  color: #fff;
+  cursor: pointer;
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+  font-size: 10px;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
+  line-height: 1;
+  text-transform: lowercase;
+  letter-spacing: 0;
+  transition:
+    filter 0.16s ease,
+    transform 0.16s ease;
+}
+
+.app-shell-mafia-settings:hover,
+.app-shell-mafia-toggle:hover,
+.app-shell-mafia-copy:hover {
+  filter: brightness(1.08);
+}
+
+.app-shell-mafia-settings:focus-visible,
+.app-shell-mafia-toggle:focus-visible,
+.app-shell-mafia-copy:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.8);
+  outline-offset: 2px;
+}
+
+.app-shell-mafia-settings {
+  width: 31px;
+  height: 31px;
+  background: transparent;
+}
+
+.app-shell-mafia-settings__icon {
+  display: block;
+  width: 31px;
+  height: 31px;
+  object-fit: contain;
+}
+
+.app-shell-mafia-toggle {
+  position: relative;
+  width: 67px;
+  height: 31px;
+  overflow: hidden;
+  background: rgb(139 92 246 / 0.14);
+}
+
+.app-shell-mafia-toggle::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 63px;
+  height: 27px;
+  border-radius: 15.535px;
+  background: rgb(221 35 35 / 0.09);
+}
+
+.app-shell-mafia-toggle::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 15.535px;
+  background: rgb(255 13 13 / 0.22);
+  transition: transform 0.16s ease;
+}
+
+.app-shell-mafia-toggle--new::before {
+  background: rgb(100 246 92 / 0.14);
+}
+
+.app-shell-mafia-toggle--new::after {
+  background: rgb(100 246 92 / 0.14);
+  transform: translateX(36px);
+}
+
+.app-shell-mafia-toggle span {
+  position: relative;
+  z-index: 1;
+  transform: translateX(12px);
+}
+
+.app-shell-mafia-toggle--new span {
+  transform: translateX(-12px);
+}
+
+.app-shell-mafia-copy {
+  position: relative;
+  width: 76px;
+  height: 31px;
+  justify-content: flex-start;
+  padding-left: 8px;
+  background: rgb(139 92 246 / 0.14);
+}
+
+.app-shell-mafia-copy__icon {
+  position: absolute;
+  right: 6px;
+  top: 5px;
+  display: block;
+  width: 21px;
+  height: 21px;
+  object-fit: contain;
 }
 
 /* Same look as `AppShellStreamNav` .stream-nav__link (separate scoped component). */

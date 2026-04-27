@@ -20,6 +20,9 @@ const props = withDefaults(
     showHelpButton?: boolean
     helpLabel?: string
     compact?: boolean
+    mafiaMode?: boolean
+    showCoin?: boolean
+    userPrefix?: string
   }>(),
   {
     title: '',
@@ -31,6 +34,9 @@ const props = withDefaults(
     showHelpButton: false,
     helpLabel: '',
     compact: false,
+    mafiaMode: false,
+    showCoin: true,
+    userPrefix: '',
   },
 )
 
@@ -120,7 +126,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   <header
     ref="headerWrapper"
     class="app-landing-header"
-    :class="{ 'app-landing-header--compact': compact }"
+    :class="{ 'app-landing-header--compact': compact, 'app-landing-header--mafia': mafiaMode }"
     :aria-label="t('app.headerAria')"
   >
     <div ref="headerInner" class="app-landing-header__inner">
@@ -128,6 +134,9 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
         <RouterLink class="app-landing-header__brand" :to="{ name: 'home' }" :aria-label="brandName">
           <img class="app-landing-header__logo" :src="logoSrc" alt="" width="42" height="42" />
         </RouterLink>
+        <span v-if="$slots['brand-extra']" class="app-landing-header__brand-extra">
+          <slot name="brand-extra" />
+        </span>
 
         <div class="app-landing-header__center">
           <RouterLink class="app-landing-header__title" :to="{ name: 'home' }">
@@ -143,6 +152,8 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
         </div>
 
         <div class="app-landing-header__actions">
+          <slot name="actions-start" />
+
           <button
             v-if="showHelpButton"
             type="button"
@@ -154,14 +165,18 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
             ?
           </button>
 
-          <RouterLink class="app-landing-header__coin" :to="coinHubTo" :aria-label="t('app.openCoinHub')">
+          <RouterLink v-if="showCoin" class="app-landing-header__coin" :to="coinHubTo" :aria-label="t('app.openCoinHub')">
             <span class="app-landing-header__coin-label">{{ coinBalanceLabel }}</span>
             <span class="app-landing-header__coin-icon" aria-hidden="true">
               <img class="app-landing-header__coin-img" :src="coinIcon" alt="" width="44" height="44" />
             </span>
           </RouterLink>
 
-          <div class="app-landing-header__auth sa-glass-button" :aria-busy="authLoading">
+          <div
+            class="app-landing-header__auth sa-glass-button"
+            :class="{ 'app-landing-header__auth--mafia-host': mafiaMode && userPrefix.trim().length > 0 }"
+            :aria-busy="authLoading"
+          >
             <span v-if="authLoading" class="app-landing-header__auth-loading">{{ t('app.loading') }}</span>
             <component
               :is="profileTo ? RouterLink : 'button'"
@@ -171,6 +186,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
               :aria-label="profileActionLabel"
               :title="displayName || undefined"
             >
+              <span v-if="userPrefix.trim()" class="app-landing-header__user-prefix">{{ userPrefix.trim() }}</span>
               <span class="app-landing-header__avatar" aria-hidden="true">
                 <img
                   v-if="hasUserAvatar"
@@ -269,12 +285,25 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   position: relative;
   z-index: 1;
   grid-column: 1;
+  grid-row: 1;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 3.25rem;
+  justify-content: start;
+  width: 3rem;
   height: 3.25rem;
   border-radius: 0;
+}
+
+.app-landing-header__brand-extra {
+  position: relative;
+  z-index: 1;
+  grid-column: 1;
+  grid-row: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: start;
+  margin-left: 3rem;
+  pointer-events: auto;
 }
 
 .app-landing-header__logo {
@@ -582,6 +611,103 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.app-landing-header__user-prefix {
+  display: none;
+}
+
+.app-landing-header--mafia .app-landing-header__brand-extra {
+  margin-left: 3.25rem;
+}
+
+.app-landing-header--mafia .app-landing-header__center {
+  gap: 0;
+}
+
+.app-landing-header--mafia .app-landing-header__title {
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.app-landing-header--mafia .app-landing-header__logo {
+  width: 2.12rem;
+  height: 2.12rem;
+}
+
+.app-landing-header--mafia .app-landing-header__center-extra {
+  position: absolute;
+  left: calc(100% + 14px);
+  top: 50%;
+  gap: 8px;
+  transform: translateY(-50%);
+}
+
+.app-landing-header--mafia .app-landing-header__actions {
+  gap: 8px;
+  margin-right: 0;
+}
+
+.app-landing-header--mafia .app-landing-header__auth {
+  min-width: 165px;
+  min-height: 31px;
+  border: 0;
+  border-radius: 33px;
+  background: rgb(32 20 51 / 0.29);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+}
+
+.app-landing-header--mafia .app-landing-header__auth--mafia-host {
+  background: rgb(73 143 56 / 0.65);
+}
+
+.app-landing-header--mafia .app-landing-header__user {
+  max-width: 165px;
+  min-height: 31px;
+  padding: 0 4px 0 10px;
+  gap: 6px;
+}
+
+.app-landing-header--mafia .app-landing-header__user-prefix {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 31px;
+  color: #fff;
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+  font-size: 10px;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
+  line-height: 1;
+  text-transform: lowercase;
+}
+
+.app-landing-header--mafia .app-landing-header__avatar {
+  display: none;
+}
+
+.app-landing-header--mafia .app-landing-header__user-name {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 27px;
+  flex: 1 1 auto;
+  padding: 0 10px;
+  border-radius: 33px;
+  background: rgb(102 56 143 / 0.68);
+  color: #fff;
+  font-family: var(--app-home-ui, 'Marmelad', var(--sa-font-main, system-ui, sans-serif));
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.app-landing-header--mafia .app-landing-header__auth-buttons {
+  min-height: 31px;
 }
 
 .sr-only {

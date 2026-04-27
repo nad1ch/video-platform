@@ -2,6 +2,7 @@
 import { storeToRefs } from 'pinia'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import mafiaHostPanelCollapseIcon from '@/assets/mafia/ui/host-panel-collapse.svg'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
 import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
 import { mafiaGameSeatText } from '@/utils/mafiaSeatLabel'
@@ -17,27 +18,27 @@ const MAFIA_TEAM: ReadonlySet<MafiaRole> = new Set(['mafia', 'don'])
 
 const visible = computed(() => isMafiaHost.value)
 
-const MIN_W = 220
-const MAX_W = 400
+const MIN_W = 281
+const MAX_W = 360
 /** Enough for header + 3-line role strip + scroller padding; below this only inner area scrolls. */
-const MIN_H = 120
+const MIN_H = 126
 const MARGIN = 8
 /** Default gap from the viewport’s right edge to the panel (px). */
-const DEFAULT_RIGHT_INSET = 50
+const DEFAULT_LEFT_INSET = 70
+const DEFAULT_BOTTOM_INSET = 25
 
 const collapsed = ref(false)
-const size = ref({ w: 320, h: 156 })
+const size = ref({ w: 281, h: 126 })
 /** Default: bottom-right (aligned with public host-panel placement). */
 const pos = ref(
   (() => {
-    const w = 320
-    const h = 156
+    const h = 126
     if (typeof window === 'undefined') {
       return { x: MARGIN, y: 400 }
     }
     return {
-      x: Math.max(MARGIN, window.innerWidth - w - DEFAULT_RIGHT_INSET),
-      y: Math.max(MARGIN, window.innerHeight - h - MARGIN),
+      x: Math.max(MARGIN, DEFAULT_LEFT_INSET),
+      y: Math.max(MARGIN, window.innerHeight - h - DEFAULT_BOTTOM_INSET),
     }
   })(),
 )
@@ -245,7 +246,7 @@ function clampSize(): void {
   const maxH = maxPanelHeight()
   size.value.w = Math.min(
     MAX_W,
-    Math.max(MIN_W, Math.min(size.value.w, vw - MARGIN - DEFAULT_RIGHT_INSET)),
+    Math.max(MIN_W, Math.min(size.value.w, vw - MARGIN - DEFAULT_LEFT_INSET)),
   )
   size.value.h = Math.min(maxH, Math.max(MIN_H, size.value.h))
 }
@@ -254,7 +255,7 @@ function clampPos(): void {
   const vw = window.innerWidth
   const vh = window.innerHeight
   clampSize()
-  pos.value.x = Math.min(Math.max(MARGIN, pos.value.x), vw - size.value.w - DEFAULT_RIGHT_INSET)
+  pos.value.x = Math.min(Math.max(MARGIN, pos.value.x), vw - size.value.w - MARGIN)
   pos.value.y = Math.min(Math.max(MARGIN, pos.value.y), vh - size.value.h - MARGIN)
 }
 
@@ -265,8 +266,8 @@ function placeDefaultUnobstructed(): void {
   const vw = window.innerWidth
   const vh = window.innerHeight
   pos.value = {
-    x: Math.max(MARGIN, vw - w - DEFAULT_RIGHT_INSET),
-    y: Math.max(MARGIN, vh - h - MARGIN),
+    x: Math.max(MARGIN, Math.min(DEFAULT_LEFT_INSET, vw - w - MARGIN)),
+    y: Math.max(MARGIN, vh - h - DEFAULT_BOTTOM_INSET),
   }
   clampPos()
 }
@@ -354,7 +355,7 @@ function onPointerMoveResize(ev: PointerEvent): void {
     h: Math.min(maxH, Math.max(MIN_H, resizeOrigin.value.h + dy)),
   }
   const vw = window.innerWidth
-  size.value.w = Math.min(size.value.w, vw - MARGIN - DEFAULT_RIGHT_INSET)
+  size.value.w = Math.min(size.value.w, vw - MARGIN - DEFAULT_LEFT_INSET)
   clampPos()
 }
 
@@ -463,31 +464,46 @@ watch(visible, (v) => {
       >
         <span class="mafia-host-panel__grip" aria-hidden="true" />
         <h2 class="mafia-host-panel__title">{{ t('mafiaPage.hostPanelTitle') }}</h2>
-        <button
-          type="button"
-          class="sa-chip-btn mafia-host-panel__collapse-btn"
-          data-no-maid-drag
-          :aria-label="t('mafiaPage.hostPanelCollapse')"
-          :title="t('mafiaPage.hostPanelCollapse')"
-          @click="collapsePanel"
-        >
-          <svg
-            class="mafia-host-panel__collapse-ico"
-            viewBox="0 0 24 24"
-            width="16"
-            height="16"
-            aria-hidden="true"
-            focusable="false"
+        <div class="mafia-host-panel__head-actions" data-no-maid-drag>
+          <button
+            type="button"
+            class="sa-chip-btn mafia-host-panel__collapse-action mafia-host-panel__collapse-action--back"
+            :aria-label="t('mafiaPage.hostPanelCollapse')"
+            :title="t('mafiaPage.hostPanelCollapse')"
+            @click="collapsePanel"
           >
-            <path
-              d="M6 6l12 12M18 6L6 18"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.25"
-              stroke-linecap="round"
-            />
-          </svg>
-        </button>
+            <img
+              class="mafia-host-panel__back-ico"
+              :src="mafiaHostPanelCollapseIcon"
+              alt=""
+              aria-hidden="true"
+            >
+          </button>
+          <button
+            type="button"
+            class="sa-chip-btn mafia-host-panel__collapse-action mafia-host-panel__collapse-btn"
+            :aria-label="t('mafiaPage.hostPanelCollapse')"
+            :title="t('mafiaPage.hostPanelCollapse')"
+            @click="collapsePanel"
+          >
+            <svg
+              class="mafia-host-panel__collapse-ico"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                d="M6 6l12 12M18 6L6 18"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.25"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <div class="mafia-host-panel__scroller">
@@ -591,15 +607,18 @@ watch(visible, (v) => {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  border-radius: var(--sa-radius-sm);
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 76%, #000);
-  border: 1px solid var(--sa-color-border);
+  border-radius: 12.61px;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.025) 42%, transparent 72%),
+    rgb(60 36 99 / 0.41);
+  border: 1px solid rgb(255 255 255 / 0.11);
   color: var(--sa-color-text-body);
   box-shadow:
-    0 10px 36px rgb(0 0 0 / 0.48),
-    0 0 0 1px rgb(255 255 255 / 0.05);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    inset 0 -1px 0 rgb(255 255 255 / 0.05),
+    0 12px 30px rgb(8 2 20 / 0.28);
+  backdrop-filter: blur(10px) saturate(1.18);
+  -webkit-backdrop-filter: blur(10px) saturate(1.18);
   pointer-events: auto;
   font-size: 0.75rem;
   line-height: 1.3;
@@ -623,14 +642,15 @@ watch(visible, (v) => {
 }
 
 .mafia-host-panel__head {
+  box-sizing: border-box;
   display: flex;
-  align-items: center;
-  gap: var(--sa-space-2, 0.5rem);
+  align-items: flex-start;
+  gap: 0;
   flex-shrink: 0;
-  min-height: 2.05rem;
-  padding: 0.3rem 0.45rem 0.28rem;
+  min-height: 46px;
+  padding: 9px 8px 0 15px;
   margin: 0;
-  border-bottom: 1px solid var(--sa-color-border);
+  border-bottom: 0;
   cursor: grab;
   user-select: none;
   touch-action: none;
@@ -641,44 +661,48 @@ watch(visible, (v) => {
 }
 
 .mafia-host-panel__grip {
-  flex: 0 0 0.45rem;
-  width: 0.45rem;
-  height: 1.1rem;
-  border-left: 2px solid color-mix(in srgb, var(--sa-color-text-muted) 55%, transparent);
-  box-shadow: 2px 0 0 color-mix(in srgb, var(--sa-color-text-muted) 35%, transparent);
-  opacity: 0.6;
-  pointer-events: none;
+  display: none;
+}
+
+.mafia-host-panel__head-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
 }
 
 .mafia-host-panel__title {
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+  font-size: 20px;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
+  letter-spacing: 0;
   text-transform: uppercase;
-  color: var(--sa-color-text-main);
+  line-height: 27px;
+  color: #fff;
 }
 
-.mafia-host-panel__collapse-btn {
+.mafia-host-panel__collapse-action {
   flex-shrink: 0;
   box-sizing: border-box;
-  width: 2rem;
-  height: 2rem;
-  min-height: 2rem;
+  width: 27px;
+  height: 27px;
+  min-height: 27px;
   padding: 0;
   line-height: 0;
   font-size: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--ui-control-compact-radius, 8px);
-  border: 1px solid var(--sa-color-border);
-  background: color-mix(in srgb, var(--sa-color-surface) 88%, transparent);
-  color: var(--sa-color-text-main);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  border-radius: 12.61px;
+  border: 0;
+  background: rgb(74 50 116 / 0.69);
+  color: #fff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -686,13 +710,27 @@ watch(visible, (v) => {
     box-shadow 0.15s ease;
 }
 
-.mafia-host-panel__collapse-btn:hover:not(:disabled) {
-  border-color: var(--border-strong, var(--sa-color-primary-border));
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 70%, #fff 12%);
-  color: var(--text-heading, var(--sa-color-text-strong));
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.06),
-    0 2px 10px rgb(0 0 0 / 0.12);
+.mafia-host-panel__collapse-action:hover:not(:disabled) {
+  background: rgb(84 57 132 / 0.78);
+  color: #fff;
+  box-shadow: none;
+}
+
+.mafia-host-panel__collapse-action--back {
+  overflow: hidden;
+  background: transparent;
+}
+
+.mafia-host-panel__collapse-action--back:hover:not(:disabled) {
+  background: transparent;
+  filter: brightness(1.08);
+}
+
+.mafia-host-panel__back-ico {
+  display: block;
+  width: 27px;
+  height: 27px;
+  pointer-events: none;
 }
 
 .mafia-host-panel__collapse-ico {
@@ -705,10 +743,10 @@ watch(visible, (v) => {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
-  overflow-y: auto;
+  overflow-y: hidden;
   overflow-x: hidden;
   /* Symmetric insets + extra bottom so role glow / resize grip do not read as “cut off.” */
-  padding: 0.4rem 0.55rem 0.7rem 0.5rem;
+  padding: 0 4px 4px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -720,12 +758,12 @@ watch(visible, (v) => {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: stretch;
-  gap: 0.35rem;
+  gap: 3px;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
   /* Keeps the bottom rounded shell visible under selected-column glow. */
-  padding-bottom: 0.12rem;
+  padding-bottom: 0;
 }
 
 .mafia-host-panel__role-col {
@@ -735,15 +773,15 @@ watch(visible, (v) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.12rem;
+  gap: 3px;
   margin: 0;
-  padding: 0.3rem 0.15rem 0.3rem;
+  padding: 7px 4px 6px;
   font: inherit;
   overflow: visible;
   color: var(--sa-color-text-body);
-  background: color-mix(in srgb, var(--sa-color-surface) 40%, transparent);
-  border: 1px solid color-mix(in srgb, var(--sa-color-border) 80%, transparent);
-  border-radius: 6px;
+  background: rgb(74 50 116 / 0.69);
+  border: 0;
+  border-radius: 12.61px;
   cursor: pointer;
   user-select: none;
   text-align: center;
@@ -754,15 +792,12 @@ watch(visible, (v) => {
 }
 
 .mafia-host-panel__role-col:hover {
-  background: color-mix(in srgb, var(--sa-color-text-muted) 8%, var(--sa-color-surface));
+  background: rgb(84 57 132 / 0.76);
 }
 
 .mafia-host-panel__role-col--on {
-  border-color: color-mix(in srgb, var(--sa-color-primary) 55%, var(--sa-color-border));
-  background: color-mix(in srgb, var(--sa-color-primary) 16%, rgb(0 0 0 / 0.25));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 28%, transparent),
-    0 0 12px color-mix(in srgb, var(--sa-color-primary) 20%, transparent);
+  background: rgb(102 56 143 / 0.73);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
 }
 
 .mafia-host-panel__role-col--flash {
@@ -774,11 +809,12 @@ watch(visible, (v) => {
 }
 
 .mafia-host-panel__role-label {
-  font-size: 0.56rem;
-  font-weight: 700;
+  font-family: var(--app-home-ui, 'Marmelad', var(--sa-font-main, system-ui, sans-serif));
+  font-size: 12px;
+  font-weight: 400;
   line-height: 1.1;
-  letter-spacing: 0.02em;
-  color: color-mix(in srgb, var(--sa-color-text-muted) 88%, #fff);
+  letter-spacing: 0;
+  color: #fff;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -787,21 +823,22 @@ watch(visible, (v) => {
 
 .mafia-host-panel__role-value {
   display: block;
-  font-size: 1.15rem;
+  font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
+  font-size: 20px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-  color: #fde68a;
-  min-height: 1.2rem;
+  line-height: 1;
+  color: #ffd455;
+  min-height: 20px;
 }
 
 .mafia-host-panel__role-col:not(.mafia-host-panel__role-col--on) .mafia-host-panel__role-value {
-  color: #fde68a;
-  opacity: 0.9;
+  color: #ffd455;
+  opacity: 1;
 }
 
 .mafia-host-panel__role-result {
-  display: block;
+  display: none;
   text-align: center;
   font-size: 0.78rem;
   line-height: 1.2;
@@ -861,6 +898,7 @@ watch(visible, (v) => {
 }
 
 .mafia-host-panel__resize {
+  display: none;
   position: absolute;
   right: 2px;
   bottom: 2px;

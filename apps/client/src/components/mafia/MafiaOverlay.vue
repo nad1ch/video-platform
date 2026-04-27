@@ -2,11 +2,8 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
-import { createLogger } from '@/utils/logger'
-import ConfirmDialog from '@/eat-first/ui/molecules/ConfirmDialog.vue'
 import { MAFIA_TIMER_PRESET_MS, useMafiaGameStore } from '@/stores/mafiaGame'
-import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
-import mafiaIconDice from '@/assets/mafia/mafia-icon-dice.svg?raw'
+import mafiaTimerClock from '@/assets/mafia/ui/timer-clock.svg'
 
 const props = withDefaults(
   defineProps<{
@@ -20,16 +17,14 @@ const props = withDefaults(
 
 const isViewLayout = computed(() => Boolean(props.viewMode ?? props.streamView))
 
-const overlayLog = createLogger('mafia-overlay')
 const { t } = useI18n()
 const mafiaGame = useMafiaGameStore()
-const mafiaPlayersStore = useMafiaPlayersStore()
 const { isMafiaHost, mafiaTimer } = storeToRefs(mafiaGame)
 
 const nowMs = ref(Date.now())
 let nowTick: ReturnType<typeof setInterval> | undefined
 
-const selectedDurationMs = ref<(typeof MAFIA_TIMER_PRESET_MS)[number]>(MAFIA_TIMER_PRESET_MS[0]!)
+const selectedDurationMs = ref<(typeof MAFIA_TIMER_PRESET_MS)[number]>(MAFIA_TIMER_PRESET_MS[2]!)
 
 const remainingMs = computed(() => {
   const t = mafiaTimer.value
@@ -46,19 +41,20 @@ const timerDisplay = computed(() => {
   const totalSec = Math.floor(remainingMs.value / 1000)
   const m = Math.floor(totalSec / 60)
   const s = totalSec % 60
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${m}:${String(s).padStart(2, '0')}`
 })
-
-const showTimerCountdown = computed(
-  () => mafiaTimer.value != null && mafiaTimer.value.isRunning && timerDisplay.value != null,
-)
 
 const showTimerControls = computed(() => isMafiaHost.value && !isViewLayout.value)
 
-const nPlayers = computed(() => mafiaPlayersStore.joinOrder.length)
-const canReshuffle = computed(() => nPlayers.value >= 5 && nPlayers.value <= 12)
+const timerIdleDisplay = computed(() => {
+  const totalSec = Math.floor(selectedDurationMs.value / 1000)
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+})
 
-const reshuffleConfirmOpen = ref(false)
+const timerText = computed(() => timerDisplay.value ?? timerIdleDisplay.value)
+const useCompactTimer = computed(() => !showTimerControls.value)
 
 onMounted(() => {
   nowTick = setInterval(() => {
@@ -73,89 +69,37 @@ onUnmounted(() => {
   }
 })
 
-function shuffleButtonTitle(): string {
-  if (!canReshuffle.value) {
-    return t('mafiaPage.reshuffleCountHint')
-  }
-  return t('mafiaPage.overlayShuffleButtonTitle')
-}
-
-function openReshuffleConfirm(): void {
-  if (!canReshuffle.value) {
-    return
-  }
-  reshuffleConfirmOpen.value = true
-}
-
-function onReshuffleConfirm(): void {
-  const r = mafiaGame.reshuffleGame()
-  if (r.ok) {
-    return
-  }
-  if (r.error === 'count' || r.error === 'empty') {
-    overlayLog.info('reshuffle declined', { n: nPlayers.value, error: r.error })
-  }
-  if (r.error === 'message' && r.messageKey) {
-    overlayLog.info('reshuffle', t(r.messageKey))
-  }
-}
-
 function onSelectDuration(ms: (typeof MAFIA_TIMER_PRESET_MS)[number]): void {
   selectedDurationMs.value = ms
 }
 
-function onStartTimer(): void {
+function onToggleTimer(): void {
+  if (mafiaTimer.value?.isRunning) {
+    mafiaGame.stopTimer()
+    return
+  }
   mafiaGame.startTimer(selectedDurationMs.value)
-}
-
-function onStopTimer(): void {
-  mafiaGame.stopTimer()
 }
 </script>
 
 <template>
   <div class="mafia-overlay" role="presentation">
-    <div class="mafia-overlay__header call-floating-surface">
-      <div class="mafia-overlay__header-main">
-        <svg
-          class="mafia-overlay__timer-stopwatch"
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M12 5V3M9 3h6"
-            stroke="currentColor"
-            stroke-width="1.75"
-            stroke-linecap="round"
-          />
-          <circle
-            cx="12"
-            cy="14"
-            r="7"
-            stroke="currentColor"
-            stroke-width="1.75"
-          />
-          <path
-            d="M12 11v3l2 1"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
+    <div
+      class="mafia-overlay__header call-floating-surface"
+      :class="{ 'mafia-overlay__header--compact': useCompactTimer }"
+    >
+      <div
+        class="mafia-overlay__header-main"
+        :class="{ 'mafia-overlay__header-main--compact': useCompactTimer }"
+      >
+        <img class="mafia-overlay__timer-stopwatch" :src="mafiaTimerClock" alt="" aria-hidden="true" />
         <span
-          v-if="showTimerCountdown && timerDisplay != null"
           class="mafia-overlay__timer-text mafia-overlay__timer-text--mono"
           role="timer"
-          :aria-label="t('mafiaPage.timerCountdown', { time: timerDisplay })"
+          :aria-label="t('mafiaPage.timerCountdown', { time: timerText })"
         >
-          {{ t('mafiaPage.timerCountdown', { time: timerDisplay }) }}
+          {{ timerText }}
         </span>
-        <span v-else class="mafia-overlay__timer-text mafia-overlay__timer-text--mono">{{
-          t('mafiaPage.timerPlaceholder')
-        }}</span>
         <div
           v-if="showTimerControls"
           class="mafia-overlay__timer-ctrls"
@@ -178,57 +122,21 @@ function onStopTimer(): void {
               :aria-pressed="selectedDurationMs === ms"
               @click="onSelectDuration(ms)"
             >
-              {{ t('mafiaPage.timerSecShort', { n: ms / 1000 }) }}
+              {{ ms / 1000 }}
             </button>
           </div>
           <button
             type="button"
             class="sa-chip-btn mafia-overlay__timer-action mafia-overlay__timer-action--start"
-            :title="t('mafiaPage.timerStartButton')"
-            :aria-label="t('mafiaPage.timerStartButton')"
-            @click="onStartTimer"
+            :title="mafiaTimer?.isRunning ? t('mafiaPage.timerStopButton') : t('mafiaPage.timerStartButton')"
+            :aria-label="mafiaTimer?.isRunning ? t('mafiaPage.timerStopButton') : t('mafiaPage.timerStartButton')"
+            @click="onToggleTimer"
           >
-            {{ t('mafiaPage.timerStartButton') }}
-          </button>
-          <button
-            type="button"
-            class="sa-chip-btn mafia-overlay__timer-action mafia-overlay__timer-action--stop"
-            :disabled="mafiaTimer == null || !mafiaTimer.isRunning"
-            :title="t('mafiaPage.timerStopButton')"
-            :aria-label="t('mafiaPage.timerStopButton')"
-            @click="onStopTimer"
-          >
-            {{ t('mafiaPage.timerStopButton') }}
-          </button>
-        </div>
-        <div
-          v-if="showTimerControls"
-          class="mafia-overlay__round-tools"
-          role="group"
-          :aria-label="t('mafiaPage.overlayHostToolsGroupAria')"
-        >
-          <button
-            type="button"
-            class="mafia-overlay__icon-btn"
-            :disabled="!canReshuffle"
-            :title="shuffleButtonTitle()"
-            :aria-label="shuffleButtonTitle()"
-            @click="openReshuffleConfirm"
-          >
-            <span class="mafia-overlay__icon-svg mafia-overlay__icon-svg--raw" v-html="mafiaIconDice" />
+            {{ mafiaTimer?.isRunning ? 'Stop' : 'Start' }}
           </button>
         </div>
       </div>
     </div>
-
-    <ConfirmDialog
-      v-model:open="reshuffleConfirmOpen"
-      :title="t('mafiaPage.reshuffleConfirmTitle')"
-      :message="t('mafiaPage.reshuffleConfirmBody')"
-      :confirm-label="t('mafiaPage.reshuffleConfirmProceed')"
-      :cancel-label="t('mafiaPage.reshuffleConfirmCancel')"
-      @confirm="onReshuffleConfirm"
-    />
   </div>
 </template>
 
@@ -246,88 +154,119 @@ function onStopTimer(): void {
 /* Layout + spacing: matches `.call-page__dock` flex / padding / max-width. */
 .mafia-overlay__header {
   position: absolute;
-  top: max(0.5rem, env(safe-area-inset-top, 0px));
+  top: max(0px, env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem 0.75rem;
-  width: max-content;
-  max-width: min(42rem, calc(100vw - 16px));
-  padding: 0.62rem 0.9rem;
+  width: 277px;
+  max-width: calc(100vw - 16px);
+  min-height: 39px;
+  padding: 0;
+  border: 0;
+  border-radius: 25.268px;
+  background: rgb(80 57 119 / 0.43);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   pointer-events: auto;
 }
 
+.mafia-overlay__header--compact {
+  width: 102px;
+}
+
 .mafia-overlay__header-main {
-  display: inline-flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 22px 50px minmax(0, 1fr);
   align-items: center;
-  gap: 0.35rem 0.5rem;
+  column-gap: 7px;
+  width: 100%;
+  height: 39px;
+  padding: 0 11px;
+  box-sizing: border-box;
   min-width: 0;
+}
+
+.mafia-overlay__header-main--compact {
+  grid-template-columns: 22px 50px;
+  column-gap: 7px;
 }
 
 .mafia-overlay__timer-ctrls {
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.3rem 0.45rem;
+  gap: 5px;
+  min-width: 0;
 }
 
 .mafia-overlay__timer-presets {
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem;
+  gap: 4px;
 }
 
 .mafia-overlay__timer-preset {
-  min-height: auto;
-  padding: 0.22rem 0.45rem;
-  font-size: 0.7rem;
-  font-weight: 600;
+  width: 35px;
+  min-width: 35px;
+  min-height: 23.896px;
+  height: 23.896px;
+  padding: 0;
+  border: 0;
+  border-radius: 19.234px;
+  background: rgb(102 56 143 / 0.17);
+  color: rgb(255 255 255 / 0.94);
+  font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
+  font-size: 11.345px;
+  font-weight: 800;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: 'lnum' 1, 'tnum' 1;
+  line-height: 22.691px;
+  letter-spacing: -0.6807px;
+  text-align: center;
 }
 
 .mafia-overlay__timer-preset--active {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sa-color-primary, #a78bfa) 80%, var(--sa-color-border));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
 }
 
 .mafia-overlay__timer-action {
-  min-height: auto;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.7rem;
-  font-weight: 700;
+  width: 49px;
+  min-width: 49px;
+  min-height: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 19.234px;
+  background: rgb(102 56 143 / 0.17);
+  color: rgb(255 255 255 / 0.94);
+  font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
+  font-size: 11.345px;
+  font-weight: 800;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: 'lnum' 1, 'tnum' 1;
+  line-height: 22.691px;
+  letter-spacing: -0.6807px;
+  text-align: center;
 }
 
 .mafia-overlay__timer-stopwatch {
-  width: 1.05rem;
-  height: 1.05rem;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
-  color: var(--sa-color-primary, #a78bfa);
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--sa-color-primary) 50%, transparent));
-}
-
-.mafia-overlay__icon-svg--raw {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 0;
-}
-
-.mafia-overlay__icon-svg--raw :deep(svg) {
-  width: 1.15rem;
-  height: 1.15rem;
   display: block;
+  object-fit: contain;
 }
 
 /* Typography aligned with `.call-page__toast` / call HUD. */
 .mafia-overlay__timer-text {
-  font-size: 0.82rem;
-  font-weight: 600;
-  line-height: 1.35;
-  letter-spacing: 0.02em;
-  color: var(--sa-color-text-main);
+  font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 32px;
+  color: rgb(255 255 255 / 0.94);
+  transform: translateY(-2px);
 }
 
 .mafia-overlay__timer-text--mono {
