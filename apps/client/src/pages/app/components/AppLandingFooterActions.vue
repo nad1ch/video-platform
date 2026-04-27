@@ -125,7 +125,7 @@ onUnmounted(() => {
   min-height: var(--app-landing-footer-action-height, 2.35rem);
   box-sizing: border-box;
   border: 1px solid var(--app-landing-footer-action-border, rgba(255, 255, 255, 0.18));
-  border-radius: 999px;
+  border-radius: var(--app-landing-footer-action-radius, 999px);
   background: var(--app-landing-footer-feedback-bg, var(--app-home-glass-action-bg, rgba(81, 48, 116, 0.18)));
   color: var(--app-landing-footer-action-color, #fff);
   box-shadow: 0 10px 22px var(--app-landing-footer-action-drop-shadow, rgba(10, 3, 24, 0.2));
@@ -159,7 +159,7 @@ onUnmounted(() => {
   width: 100%;
   min-height: var(--app-landing-footer-action-height, 2.35rem);
   border: 1px solid var(--app-landing-footer-locale-border, rgba(255, 255, 255, 0.16));
-  border-radius: 1.25rem;
+  border-radius: var(--app-landing-footer-action-radius, 1.25rem);
   background: var(--app-landing-footer-locale-bg, var(--app-home-glass-action-bg, rgba(81, 48, 116, 0.18)));
   box-shadow: 0 10px 22px var(--app-landing-footer-action-drop-shadow, rgba(10, 3, 24, 0.2));
   color: var(--app-landing-footer-action-color, #fff);
@@ -193,7 +193,7 @@ onUnmounted(() => {
   width: 100%;
   overflow: hidden;
   border: 1px solid var(--app-landing-footer-locale-list-border, rgba(255, 255, 255, 0.16));
-  border-radius: 1.25rem;
+  border-radius: var(--app-landing-footer-locale-list-radius, var(--app-landing-footer-action-radius, 1.25rem));
   background: var(--app-landing-footer-locale-list-bg, rgba(65, 43, 91, 0.72));
   box-shadow:
     0 -12px 24px rgba(10, 3, 24, 0.26);
@@ -229,16 +229,16 @@ onUnmounted(() => {
 
 .app-landing-footer-actions__locale-trigger:hover,
 .app-landing-footer-actions__locale[open] .app-landing-footer-actions__locale-trigger {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(102, 56, 143, 0.26);
+  border-color: var(--app-landing-footer-locale-hover-border, rgba(255, 255, 255, 0.22));
+  background: var(--app-landing-footer-locale-hover-bg, rgba(102, 56, 143, 0.26));
   box-shadow:
-    0 12px 28px rgba(10, 3, 24, 0.24);
+    0 12px 28px var(--app-landing-footer-hover-drop-shadow, rgba(10, 3, 24, 0.24));
 }
 
 .app-landing-footer-actions__locale-option:hover,
 .app-landing-footer-actions__locale-option:focus-visible {
-  background: rgba(124, 77, 219, 0.42);
-  color: #fff;
+  background: var(--app-landing-footer-locale-option-hover-bg, rgba(124, 77, 219, 0.42));
+  color: var(--app-landing-footer-locale-option-hover-color, #fff);
 }
 
 .app-landing-footer-actions__locale-option--active:hover,
@@ -270,13 +270,13 @@ onUnmounted(() => {
 
 .app-landing-footer-actions--light .app-landing-footer-actions__locale-trigger:hover,
 .app-landing-footer-actions--light .app-landing-footer-actions__locale[open] .app-landing-footer-actions__locale-trigger {
-  background: rgba(91, 51, 125, 0.9);
+  background: var(--app-landing-footer-locale-hover-bg, rgba(91, 51, 125, 0.9));
 }
 
 .app-landing-footer-actions--light .app-landing-footer-actions__locale-option:hover,
 .app-landing-footer-actions--light .app-landing-footer-actions__locale-option:focus-visible {
-  background: rgba(124, 77, 219, 0.42);
-  color: #fff;
+  background: var(--app-landing-footer-locale-option-hover-bg, rgba(124, 77, 219, 0.42));
+  color: var(--app-landing-footer-locale-option-hover-color, #fff);
 }
 
 .app-landing-footer-actions__feedback:focus-visible,

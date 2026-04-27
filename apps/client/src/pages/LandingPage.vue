@@ -12,10 +12,10 @@ import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import AppLandingFooterActions from '@/pages/app/components/AppLandingFooterActions.vue'
 import EconomySlotBanner from '@/pages/app/components/EconomySlotBanner.vue'
 import { useAuth } from '@/composables/useAuth'
-import landingCameraIcon from '@/assets/landing/decor/landing-camera.png'
-import landingMegaphoneIcon from '@/assets/landing/decor/landing-megaphone.png'
-import landingMicrophoneIcon from '@/assets/landing/decor/landing-microphone.png'
-import landingMonitorIcon from '@/assets/landing/decor/landing-monitor.png'
+import landingCameraIcon from '@/assets/landing/decor/landing-camera.svg'
+import landingMegaphoneIcon from '@/assets/landing/decor/landing-megaphone.svg'
+import landingMicrophoneIcon from '@/assets/landing/decor/landing-microphone.svg'
+import landingMonitorIcon from '@/assets/landing/decor/landing-monitor.svg'
 import eatFirstIcon from '@/assets/landing/eat-first.png'
 import nadrawPhoneIcon from '@/assets/landing/nadraw-phone.png'
 import instagramIcon from '@/assets/landing/instagram.png'
@@ -113,6 +113,10 @@ const landingCriticalImageSources = Object.freeze([
   spyIcon,
   nadleGameIcon,
   nadrawPhoneIcon,
+  landingCameraIcon,
+  landingMegaphoneIcon,
+  landingMicrophoneIcon,
+  landingMonitorIcon,
 ] as const)
 
 const callBannerCards = Object.freeze([
@@ -130,6 +134,7 @@ const landingDecorIcons = Object.freeze([
       left: px(557),
       top: px(694),
       width: px(127),
+      height: px(96),
       transform: 'rotate(20deg)',
     }),
   }),
@@ -140,6 +145,7 @@ const landingDecorIcons = Object.freeze([
       left: px(1699),
       top: px(1091),
       width: px(137),
+      height: px(134),
       transform: 'rotate(-12deg)',
     }),
   }),
@@ -150,6 +156,7 @@ const landingDecorIcons = Object.freeze([
       left: px(618),
       top: px(1752),
       width: px(101),
+      height: px(101),
       transform: 'rotate(4deg)',
     }),
   }),
@@ -157,9 +164,10 @@ const landingDecorIcons = Object.freeze([
     alt: 'Monitor',
     asset: landingMonitorIcon,
     style: Object.freeze({
-      left: px(1958),
+      left: px(1918),
       top: px(1921),
       width: px(132),
+      height: px(102),
       transform: 'rotate(8deg)',
     }),
   }),
@@ -475,6 +483,13 @@ watch(
     <div class="landing__canvas">
       <LandingCloudBackdrop class="landing__background" />
 
+      <div class="landing-wordmark-layer" aria-hidden="true">
+        <p class="landing__wordmark landing__wordmark--1">StreamAssist</p>
+        <p class="landing__wordmark landing__wordmark--2">StreamAssist</p>
+        <p class="landing__wordmark landing__wordmark--3">StreamAssist</p>
+        <p class="landing__wordmark landing__wordmark--4">StreamAssist</p>
+      </div>
+
       <div class="landing-decor-icons" aria-hidden="true">
         <img
           v-for="icon in landingDecorIcons"
@@ -732,6 +747,13 @@ watch(
   will-change: transform;
 }
 
+.landing-wordmark-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .landing-decor-icons {
   position: absolute;
   inset: 0;
@@ -900,16 +922,14 @@ watch(
 .landing__wordmark {
   position: absolute;
   margin: 0;
-  font-family: var(--sa-font-display);
+  font-family: 'Climate Crisis', var(--sa-font-display);
   font-size: calc(var(--u) * 143.91);
-  line-height: calc(var(--u) * 192.3);
+  line-height: 1.0047;
   letter-spacing: calc(var(--u) * 1.4391);
   color: rgba(255, 255, 255, 0.02);
   pointer-events: none;
   white-space: nowrap;
   font-variation-settings: 'YEAR' 1979;
-  transform: translate3d(var(--landing-parallax-mid-x, 0px), var(--landing-parallax-mid-y, 0px), 0);
-  will-change: transform;
 }
 
 .landing__wordmark--1 {
@@ -1712,7 +1732,23 @@ watch(
   z-index: 7;
   --app-landing-footer-action-height: calc(var(--u) * 39);
   --app-landing-footer-action-font-size: calc(var(--u) * 13.5);
+  --app-landing-footer-action-radius: calc(var(--u) * 19.5);
+  --app-landing-footer-locale-list-radius: calc(var(--u) * 19.5);
+  --app-landing-footer-action-border: rgba(255, 255, 255, 0.96);
+  --app-landing-footer-locale-border: rgba(255, 255, 255, 0.96);
+  --app-landing-footer-locale-list-border: rgba(255, 255, 255, 0.28);
+  --app-landing-footer-feedback-bg: #fff;
+  --app-landing-footer-locale-bg: #fff;
+  --app-landing-footer-feedback-hover-bg: #fff;
+  --app-landing-footer-locale-hover-bg: #fff;
+  --app-landing-footer-locale-hover-border: rgba(255, 255, 255, 0.96);
+  --app-landing-footer-locale-list-bg: rgba(255, 255, 255, 0.62);
+  --app-landing-footer-action-color: #17131d;
+  --app-landing-footer-locale-option-color: #17131d;
+  --app-landing-footer-locale-option-hover-bg: rgba(255, 255, 255, 0.78);
+  --app-landing-footer-locale-option-hover-color: #17131d;
   --app-landing-footer-action-drop-shadow: rgba(10, 3, 24, 0.12);
+  --app-landing-footer-hover-drop-shadow: rgba(10, 3, 24, 0.12);
 }
 
 .landing-footer__locale-action {
