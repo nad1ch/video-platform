@@ -157,7 +157,9 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   width: 100%;
+  height: var(--app-landing-footer-action-height, 2.35rem);
   min-height: var(--app-landing-footer-action-height, 2.35rem);
+  box-sizing: border-box;
   border: 1px solid var(--app-landing-footer-locale-border, rgba(255, 255, 255, 0.16));
   border-radius: var(--app-landing-footer-action-radius, 1.25rem);
   background: var(--app-landing-footer-locale-bg, var(--app-home-glass-action-bg, rgba(81, 48, 116, 0.18)));

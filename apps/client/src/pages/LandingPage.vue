@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import twitchBrowseIllustration from '@/assets/landing/twitch-browse-illustration.svg'
 import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
 import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import AppLandingFooterActions from '@/pages/app/components/AppLandingFooterActions.vue'
+import AppGamesSection from '@/pages/app/components/AppGamesSection.vue'
 import EconomySlotBanner from '@/pages/app/components/EconomySlotBanner.vue'
 import { useAuth } from '@/composables/useAuth'
+import { useLandingCosmicParallax } from '@/composables/useLandingCosmicParallax'
 import avatarBeanieBody from '@/assets/landing/video-call/avatar-beanie-body.svg'
 import avatarBeanieExpression from '@/assets/landing/video-call/avatar-beanie-expression.svg'
 import avatarBeanieGlasses from '@/assets/landing/video-call/avatar-beanie-glasses.svg'
@@ -38,14 +40,20 @@ import landingMegaphoneIcon from '@/assets/landing/decor/landing-megaphone.svg'
 import landingMicrophoneIcon from '@/assets/landing/decor/landing-microphone.svg'
 import landingMonitorIcon from '@/assets/landing/decor/landing-monitor.svg'
 import eatFirstIcon from '@/assets/landing/eat-first.png'
+import eatFirstIconWebp from '@/assets/landing/eat-first.webp'
 import nadrawPhoneIcon from '@/assets/landing/nadraw-phone.png'
+import nadrawPhoneIconWebp from '@/assets/landing/nadraw-phone.webp'
 import instagramIcon from '@/assets/landing/instagram.png'
 import mafiaIcon from '@/assets/landing/mafia.png'
+import mafiaIconWebp from '@/assets/landing/mafia.webp'
 import spyIcon from '@/assets/landing/spy.png'
+import spyIconWebp from '@/assets/landing/spy.webp'
 import telegramIcon from '@/assets/landing/telegram.png'
 import tiktokIcon from '@/assets/landing/tiktok.png'
 import twitchIcon from '@/assets/landing/twitch.png'
 import nadleGameIcon from '@/assets/landing/nadle.png'
+import nadleGameIconWebp from '@/assets/landing/nadle.webp'
+import whoTakeShitIcon from '@/assets/landing/who-take-shit.png'
 import { persistLocale } from '@/eat-first/i18n/index.js'
 import {
   BRAND_LOGO_LIGHT_SVG,
@@ -81,30 +89,35 @@ type CallBannerCardLayer = {
   className: string
 }
 
+type LandingGameCard = {
+  id: string
+  title: string
+  to: RouteLocationRaw
+  image: string
+  imageWebp?: string
+  ariaLabel: string
+  tone?: 'violet' | 'amber' | 'green' | 'slate'
+}
+
 type LandingDecorIcon = {
   alt: string
   asset: string
   style: Readonly<Record<string, string>>
 }
 
-type GameCard = {
-  title: string
-  icon: string
-  to: { name: string; query?: Record<string, string>; params?: Record<string, string> }
-  cardStyle: Readonly<Record<string, string>>
-  labelStyle: Readonly<Record<string, string>>
-  iconStyle: Readonly<Record<string, string>>
-}
-
 const authRouteLogin = { path: '/auth', query: { redirect: '/app', mode: 'login' as const } } as const
 const callRoute = { name: 'call' } as const
 const coinHubRoute = { name: 'coin-hub' } as const
+const eatRoute = { name: 'eat', query: { view: 'join' } } satisfies RouteLocationRaw
+const mafiaRoute = { name: 'mafia' } satisfies RouteLocationRaw
 const landingFeedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
 const landingPageLoading = ref(true)
 const landingCanvasElement = ref<HTMLElement | null>(null)
 
 let landingReadyTimer: number | undefined
 let landingCanvasResizeObserver: ResizeObserver | undefined
+
+useLandingCosmicParallax(landingCanvasElement)
 
 const navItems = computed(
   () =>
@@ -278,144 +291,59 @@ const landingDecorIcons = Object.freeze([
   }),
 ] as readonly LandingDecorIcon[])
 
-const games = computed<readonly GameCard[]>(() => [
+const landingGameCards = computed<LandingGameCard[]>(() => [
   {
-    title: t('landing.gameEatFirst'),
-    icon: eatFirstIcon,
-    to: { name: 'eat', query: { view: 'join' } },
-    cardStyle: Object.freeze({
-      left: px(705),
-      top: px(1283.37),
-      width: px(352.5),
-      height: px(144),
-    }),
-    labelStyle: Object.freeze({
-      left: px(36.76),
-      top: px(35.38),
-      width: px(161.63),
-      height: px(107.52),
-    }),
-    iconStyle: Object.freeze({
-      left: px(203.25),
-      top: px(25.67),
-      width: px(95.03),
-      height: px(95.03),
-    }),
+    id: 'eat-first',
+    title: t('home.gameEatFirst'),
+    to: eatRoute,
+    image: eatFirstIcon,
+    imageWebp: eatFirstIconWebp,
+    ariaLabel: t('home.openEatFirst'),
+    tone: 'amber',
   },
   {
-    title: t('landing.gameMafia'),
-    icon: mafiaIcon,
-    to: { name: 'home' },
-    cardStyle: Object.freeze({
-      left: px(1089.75),
-      top: px(1282.62),
-      width: px(352.5),
-      height: px(144),
-    }),
-    labelStyle: Object.freeze({
-      left: px(41.62),
-      top: px(60.35),
-      width: px(120.7),
-      height: px(26.36),
-    }),
-    iconStyle: Object.freeze({
-      left: px(180.36),
-      top: px(13.87),
-      width: px(119.31),
-      height: px(119.31),
-    }),
+    id: 'mafia',
+    title: t('home.gameMafia'),
+    to: mafiaRoute,
+    image: mafiaIcon,
+    imageWebp: mafiaIconWebp,
+    ariaLabel: t('home.openMafia'),
+    tone: 'slate',
   },
   {
-    title: t('landing.gameSpy'),
-    icon: spyIcon,
-    to: { name: 'home' },
-    cardStyle: Object.freeze({
-      left: px(1473.75),
-      top: px(1282.62),
-      width: px(352.5),
-      height: px(144),
-    }),
-    labelStyle: Object.freeze({
-      left: px(52.72),
-      top: px(60.35),
-      width: px(120.7),
-      height: px(26.36),
-    }),
-    iconStyle: Object.freeze({
-      left: px(162.32),
-      top: px(4.86),
-      width: px(136.65),
-      height: px(136.65),
-    }),
-  },
-  {
-    title: t('landing.gameNadle'),
-    icon: nadleGameIcon,
+    id: 'nadle',
+    title: t('home.gameNadle'),
     to: { name: 'nadle-streamer', params: { streamer: defaultNadleStreamer } },
-    cardStyle: Object.freeze({
-      left: px(705),
-      top: px(1455.87),
-      width: px(352.5),
-      height: px(144),
-    }),
-    labelStyle: Object.freeze({
-      left: px(35.38),
-      top: px(56.88),
-      width: px(144.98),
-      height: px(31.22),
-    }),
-    iconStyle: Object.freeze({
-      left: px(199.78),
-      top: px(17.34),
-      width: px(108.21),
-      height: px(108.21),
-    }),
+    image: nadleGameIcon,
+    imageWebp: nadleGameIconWebp,
+    ariaLabel: t('home.openNadle'),
+    tone: 'green',
   },
   {
-    title: t('landing.gameNadraw'),
-    icon: nadrawPhoneIcon,
+    id: 'nadraw',
+    title: t('home.gameNadraw'),
     to: { name: 'nadraw-show', params: { streamer: defaultNadleStreamer } },
-    cardStyle: Object.freeze({
-      left: px(1089.75),
-      top: px(1455.12),
-      width: px(352.5),
-      height: px(144),
-    }),
-    labelStyle: Object.freeze({
-      left: px(35.38),
-      top: px(45.78),
-      width: px(144.98),
-      height: px(54.11),
-    }),
-    iconStyle: Object.freeze({
-      left: px(193.54),
-      top: px(18.73),
-      width: px(108.21),
-      height: px(108.21),
-    }),
+    image: nadrawPhoneIcon,
+    imageWebp: nadrawPhoneIconWebp,
+    ariaLabel: t('home.openNadraw'),
+    tone: 'violet',
   },
   {
-    title: t('landing.gameMic'),
-    icon: eatFirstIcon,
-    to: { name: 'home' },
-    cardStyle: Object.freeze({
-      left: px(1473.75),
-      top: px(1455.87),
-      width: px(352.5),
-      height: px(144),
-    }),
-    labelStyle: Object.freeze({
-      left: px(40.93),
-      top: px(34.68),
-      width: px(139.43),
-      height: px(70.06),
-    }),
-    iconStyle: Object.freeze({
-      left: px(189.37),
-      top: px(23.59),
-      width: px(93.65),
-      height: px(93.65),
-    }),
+    id: 'spy',
+    title: t('home.gameSpy'),
+    to: mafiaRoute,
+    image: spyIcon,
+    imageWebp: spyIconWebp,
+    ariaLabel: t('home.openSpy'),
+    tone: 'slate',
+  },
+  {
+    id: 'hot-seat',
+    title: t('home.gameMic'),
+    to: eatRoute,
+    image: whoTakeShitIcon,
+    ariaLabel: t('home.openHotSeat'),
+    tone: 'amber',
   },
 ])
 
@@ -426,7 +354,7 @@ const socialLinks = Object.freeze([
     href: 'https://www.instagram.com/nad1ch_/',
     style: Object.freeze({
       left: px(884.25),
-      top: px(2227.5),
+      top: px(2233.56),
       width: px(62.58),
       height: px(62.58),
     }),
@@ -437,7 +365,7 @@ const socialLinks = Object.freeze([
     href: 'https://www.tiktok.com/@nad1ch',
     style: Object.freeze({
       left: px(993.94),
-      top: px(2230.31),
+      top: px(2234.27),
       width: px(61.17),
       height: px(61.17),
     }),
@@ -448,7 +376,7 @@ const socialLinks = Object.freeze([
     href: 'https://t.me/nad1ch_tgh',
     style: Object.freeze({
       left: px(1100.81),
-      top: px(2227.5),
+      top: px(2229.7),
       width: px(70.31),
       height: px(70.31),
     }),
@@ -459,7 +387,7 @@ const socialLinks = Object.freeze([
     href: STREAMER_TWITCH_URL,
     style: Object.freeze({
       left: px(1233),
-      top: px(2230.31),
+      top: px(2229),
       width: px(71.72),
       height: px(71.72),
     }),
@@ -720,33 +648,7 @@ watch(
       </section>
 
       <section id="games" class="landing-section landing-section--games">
-        <h2 class="landing-section__title landing-u-text-outline-heading">{{ t('landing.gamesTitle') }}</h2>
-        <p class="landing-section__lead">
-          {{ t('landing.gamesLead') }}
-        </p>
-
-        <div class="games-grid">
-          <RouterLink
-            v-for="game in games"
-            :key="game.title"
-            :to="game.to"
-            class="games-grid__card"
-            :style="game.cardStyle"
-          >
-            <span class="games-grid__label landing-u-text-outline-game" :style="game.labelStyle">
-              {{ game.title }}
-            </span>
-            <img
-              class="games-grid__icon"
-              :src="game.icon"
-              :alt="game.title"
-              width="128"
-              height="128"
-              loading="eager"
-              :style="game.iconStyle"
-            />
-          </RouterLink>
-        </div>
+        <AppGamesSection class="landing-games-panel" :items="landingGameCards" :lead="t('landing.gamesLead')" />
       </section>
 
       <section id="economy" class="landing-section landing-section--economy">
@@ -884,7 +786,7 @@ watch(
   top: 0;
   bottom: 0;
   left: 50%;
-  width: 100vw;
+  width: calc(100vw + 240px);
   transform: translate3d(calc(-50% + var(--landing-parallax-bg-x, 0px)), var(--landing-parallax-bg-y, 0px), 0);
   will-change: transform;
 }
@@ -1435,8 +1337,8 @@ watch(
 
 .landing-topbar {
   position: absolute;
-  left: calc(var(--u) * 583.5);
-  right: calc(var(--u) * 611.221);
+  left: calc(var(--u) * 540);
+  right: calc(var(--u) * 570);
   top: calc(var(--u) * 21);
   min-height: calc(var(--u) * 61.5);
   display: flex;
@@ -1471,8 +1373,8 @@ watch(
   position: relative;
   left: auto;
   top: auto;
-  width: calc(var(--u) * 165);
-  height: calc(var(--u) * 52.5);
+  width: calc(var(--u) * 190);
+  height: calc(var(--u) * 60);
   overflow: visible;
 }
 
@@ -1481,8 +1383,8 @@ watch(
   left: calc(var(--u) * -12);
   top: calc(var(--u) * 2.25);
   width: auto;
-  height: calc(var(--u) * 48);
-  max-width: calc(var(--u) * 40);
+  height: calc(var(--u) * 55);
+  max-width: calc(var(--u) * 46);
   object-fit: contain;
   object-position: left center;
   display: block;
@@ -1491,13 +1393,13 @@ watch(
 
 .landing-header__brand-name {
   position: absolute;
-  left: calc(var(--u) * 33);
-  top: calc(var(--u) * 10.5);
+  left: calc(var(--u) * 38);
+  top: calc(var(--u) * 11.5);
   margin: 0;
   display: grid;
   font-family: var(--sa-font-display);
-  font-size: calc(var(--u) * 12);
-  line-height: calc(var(--u) * 13.2);
+  font-size: calc(var(--u) * 13.8);
+  line-height: calc(var(--u) * 15);
 }
 
 .landing-header__nav {
@@ -1507,7 +1409,7 @@ watch(
   flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
-  gap: calc(var(--u) * 18);
+  gap: calc(var(--u) * 40);
   min-width: 0;
 }
 
@@ -1518,7 +1420,8 @@ watch(
   flex: 0 0 auto;
   color: #fff;
   font-family: 'Marmelad', sans-serif;
-  font-size: calc(var(--u) * 12.75);
+  font-size: calc(var(--u) * 17.25);
+  font-weight: 600;
   line-height: 1;
   text-decoration: none;
   transition: opacity 0.16s ease;
@@ -1635,6 +1538,11 @@ watch(
   width: 100%;
   height: 100%;
   object-fit: contain;
+  image-rendering: auto;
+  shape-rendering: geometricPrecision;
+  text-rendering: geometricPrecision;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .landing-hero__core {
@@ -1889,6 +1797,7 @@ watch(
   position: absolute;
   transform: none;
   font-size: calc(var(--u) * 45);
+  line-height: calc(var(--u) * 54);
   text-align: center;
   margin-bottom: calc(var(--u) * 16);
 }
@@ -1905,14 +1814,14 @@ watch(
 }
 
 .landing-section--videocall .landing-section__title {
-  left: calc(var(--u) * 1086.56);
-  top: calc(var(--u) * 745.31);
-  width: calc(var(--u) * 387.75);
+  left: calc(var(--u) * 707.06);
+  top: calc(var(--u) * 736.81);
+  width: calc(var(--u) * 1124.25);
 }
 
 .landing-section--videocall .landing-section__lead {
   left: calc(var(--u) * 909.47);
-  top: calc(var(--u) * 812.81);
+  top: calc(var(--u) * 804.81);
   width: calc(var(--u) * 743.25);
 }
 
@@ -1977,8 +1886,8 @@ watch(
 
 .call-banner__cards {
   position: absolute;
-  left: calc(var(--u) * 397.5);
-  top: calc(var(--u) * 10.5);
+  left: calc(var(--u) * 392);
+  top: calc(var(--u) * 5.25);
   width: calc(var(--u) * 708);
   height: calc(var(--u) * 120);
   border: 0;
@@ -2363,6 +2272,78 @@ watch(
   position: static;
 }
 
+.landing-games-panel {
+  position: absolute;
+  left: calc(var(--u) * 700.03);
+  top: calc(var(--u) * 1154);
+  width: calc(var(--u) * 1130);
+  height: calc(var(--u) * 454);
+  --app-home-card-border: calc(var(--u) * 7.5);
+  --app-home-display: var(--sa-font-display);
+  --app-home-glass-blur: calc(var(--u) * 1);
+}
+
+.landing-games-panel :deep(.app-games__panel) {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.landing-games-panel :deep(.app-games__title) {
+  margin: 0 0 calc(var(--u) * 14);
+  font-size: calc(var(--u) * 45);
+  line-height: calc(var(--u) * 54);
+  text-shadow: none;
+}
+
+.landing-games-panel :deep(.app-games__lead) {
+  margin: 0 0 calc(var(--u) * 23);
+  width: 100%;
+  max-width: calc(var(--u) * 743.25);
+  margin-inline: auto;
+  font-family: 'Marmelad', sans-serif;
+  font-size: calc(var(--u) * 18);
+  line-height: calc(var(--u) * 28.5);
+  color: #e6e9ff;
+  opacity: 0.88;
+}
+
+.landing-games-panel :deep(.app-games__grid) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, calc(var(--u) * 144));
+  flex: 0 0 auto;
+  gap: calc(var(--u) * 28.5) calc(var(--u) * 32.25);
+}
+
+.landing-games-panel :deep(.app-game-card) {
+  min-height: 0;
+  padding: 0 calc(var(--u) * 36);
+  border-radius: calc(var(--u) * 37.5);
+  grid-template-columns: minmax(0, 1fr) calc(var(--u) * 118);
+  column-gap: calc(var(--u) * 14);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.006) 36%, transparent 70%),
+    radial-gradient(circle at 64% 22%, rgba(176, 123, 255, 0.04), transparent calc(var(--u) * 130)),
+    linear-gradient(120deg, rgba(124, 77, 219, 0.014) 0%, rgba(60, 36, 99, 0.024) 100%),
+    rgba(42, 21, 73, 0.025);
+}
+
+.landing-games-panel :deep(.app-game-card__title) {
+  font-size: calc(var(--u) * 18);
+  line-height: 1.06;
+}
+
+.landing-games-panel :deep(.app-game-card__visual) {
+  height: calc(var(--u) * 108);
+}
+
 .games-grid__card {
   position: absolute;
   display: block;
@@ -2419,14 +2400,14 @@ watch(
 }
 
 .landing-section--economy .landing-section__title {
-  left: calc(var(--u) * 1107.94);
-  top: calc(var(--u) * 1759.22);
-  width: calc(var(--u) * 407.25);
+  left: calc(var(--u) * 700.03);
+  top: calc(var(--u) * 1740.97);
+  width: calc(var(--u) * 1129.22);
 }
 
 .landing-section--economy .landing-section__lead {
   left: calc(var(--u) * 726);
-  top: calc(var(--u) * 1819.88);
+  top: calc(var(--u) * 1808.97);
   width: calc(var(--u) * 1074.38);
 }
 
@@ -2436,6 +2417,7 @@ watch(
   top: calc(var(--u) * 1860.47);
   width: calc(var(--u) * 1129.22);
   height: calc(var(--u) * 154.5);
+  --economy-slot-title-scale: 30;
 }
 
 .landing-footer__seo {
@@ -2485,11 +2467,11 @@ watch(
 .landing-footer__locale-action,
 .landing-footer__feedback-action {
   position: absolute;
-  top: calc(var(--u) * 2230.31);
+  top: calc(var(--u) * 2242.28);
   z-index: 7;
-  --app-landing-footer-action-height: calc(var(--u) * 39);
-  --app-landing-footer-action-font-size: calc(var(--u) * 13.5);
-  --app-landing-footer-action-radius: calc(var(--u) * 19.5);
+  --app-landing-footer-action-height: calc(var(--u) * 45);
+  --app-landing-footer-action-font-size: calc(var(--u) * 15);
+  --app-landing-footer-action-radius: calc(var(--u) * 22.5);
   --app-landing-footer-locale-list-radius: calc(var(--u) * 19.5);
   --app-landing-footer-action-border: rgba(255, 255, 255, 0.96);
   --app-landing-footer-locale-border: rgba(255, 255, 255, 0.96);
@@ -2510,12 +2492,24 @@ watch(
 
 .landing-footer__locale-action {
   left: calc(var(--u) * 700.03);
-  --app-landing-footer-locale-width: calc(var(--u) * 128);
+  --app-landing-footer-locale-width: calc(var(--u) * 148);
 }
 
 .landing-footer__feedback-action {
-  left: calc(var(--u) * 1376.44);
-  --app-landing-footer-feedback-width: calc(var(--u) * 128);
+  left: calc(var(--u) * 1340.94);
+  --app-landing-footer-feedback-width: calc(var(--u) * 148);
+}
+
+.landing-footer__locale-action,
+.landing-footer__feedback-action {
+  transition: transform 0.2s ease;
+}
+
+.landing-footer__locale-action:hover,
+.landing-footer__locale-action:focus-within,
+.landing-footer__feedback-action:hover,
+.landing-footer__feedback-action:focus-within {
+  transform: translateY(calc(var(--u) * -3)) scale(1.04);
 }
 
 .landing-footer__social {
@@ -2624,7 +2618,7 @@ watch(
   }
 
   .landing__background {
-    width: calc(var(--landing-backdrop-u) * 2560);
+    width: calc((var(--landing-backdrop-u) * 2560) + 240px);
   }
 
   .landing-decor-icons {
@@ -2748,14 +2742,14 @@ watch(
     width: 83px;
     height: 39px;
     border-radius: 19.5px;
-    border-color: rgba(255, 255, 255, 0.48);
+    border-color: rgba(255, 255, 255, 0.45);
     background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.035) 52%, transparent),
-      rgba(42, 20, 73, 0.46);
+      linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.78)),
+      rgba(255, 255, 255, 0.82);
     flex-shrink: 0;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.18),
-      0 10px 24px rgba(8, 2, 20, 0.2);
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 10px 24px rgba(10, 3, 24, 0.14);
   }
 
   .landing-auth::before {
@@ -2770,7 +2764,7 @@ watch(
     justify-content: center;
     width: 100%;
     height: 100%;
-    color: #fff;
+    color: #111827;
     font-size: 13.5px;
   }
 
@@ -2844,7 +2838,7 @@ watch(
     display: grid;
     justify-items: center;
     width: min(100%, var(--landing-panel-width));
-    gap: 12px;
+    gap: 8px;
     margin-inline: auto;
     margin-top: 0;
   }
@@ -2924,7 +2918,7 @@ watch(
     --app-call-u: calc(100cqw / 641);
     position: absolute;
     left: calc(var(--u) * 42);
-    top: calc(var(--u) * 22);
+    top: 50%;
     width: calc(var(--u) * 1040);
     height: calc(var(--u) * 334);
     display: block;
@@ -2933,6 +2927,7 @@ watch(
     overflow: hidden;
     container-type: inline-size;
     border-radius: calc(var(--u) * 24);
+    transform: translateY(calc(-50% + calc(var(--u) * 6)));
   }
 
   .call-banner__card {
@@ -2986,6 +2981,61 @@ watch(
     width: min(100%, var(--landing-panel-width));
     margin-top: 0;
     justify-content: center;
+  }
+
+  .landing-games-panel {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: min(100%, var(--landing-panel-width));
+    height: auto;
+    --app-home-card-border: 6.689px;
+    --app-home-glass-blur: 0.9px;
+  }
+
+  .landing-games-panel :deep(.app-games__panel) {
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .landing-games-panel :deep(.app-games__title) {
+    margin: 0 0 8px;
+    font-size: 32px;
+    line-height: 51.806px;
+  }
+
+  .landing-games-panel :deep(.app-games__lead) {
+    margin: 0 0 8px;
+    max-width: 663px;
+    margin-inline: auto;
+    font-size: 12px;
+    line-height: 25.35px;
+    text-align: center;
+  }
+
+  .landing-games-panel :deep(.app-games__grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    gap: 21px 25px;
+  }
+
+  .landing-games-panel :deep(.app-game-card) {
+    min-height: 128px;
+    padding: 0 18px;
+    border-radius: 33.445px;
+    grid-template-columns: minmax(0, 1fr) min(88px, 24vw);
+    column-gap: 10px;
+  }
+
+  .landing-games-panel :deep(.app-game-card__title) {
+    font-size: clamp(11px, 2.6vw, 17px);
+    line-height: 1.06;
+  }
+
+  .landing-games-panel :deep(.app-game-card__visual) {
+    height: min(88px, 24vw);
   }
 
   .games-grid__card {
@@ -3065,11 +3115,12 @@ watch(
     display: grid;
     width: min(100%, var(--landing-panel-width));
     margin: 0 auto;
-    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr) auto;
     grid-template-areas:
-      'locale socials . feedback columns';
+      '. socials socials . columns'
+      '. locale feedback . columns';
     align-items: start;
-    gap: 20px clamp(14px, 3vw, 28px);
+    gap: 16px clamp(14px, 3vw, 28px);
   }
 
   .landing-footer__static {
@@ -3084,8 +3135,8 @@ watch(
     align-self: start;
     justify-self: start;
     --app-landing-footer-action-height: 40px;
-    --app-landing-footer-action-font-size: 14px;
-    --app-landing-footer-locale-width: 122px;
+    --app-landing-footer-action-font-size: 13px;
+    --app-landing-footer-locale-width: 112px;
   }
 
   .landing-footer__feedback-action {
@@ -3096,19 +3147,19 @@ watch(
     align-self: start;
     justify-self: start;
     --app-landing-footer-action-height: 40px;
-    --app-landing-footer-action-font-size: 14px;
-    --app-landing-footer-feedback-width: 122px;
+    --app-landing-footer-action-font-size: 13px;
+    --app-landing-footer-feedback-width: 112px;
   }
 
   .landing-footer__socials {
     grid-area: socials;
     display: flex;
-    justify-content: flex-start;
+    justify-content: center;
     align-items: center;
     flex-wrap: wrap;
     gap: 28px;
     width: auto;
-    justify-self: start;
+    justify-self: center;
   }
 
   .landing-footer__social {
@@ -3314,7 +3365,7 @@ watch(
   }
 
   .landing-section {
-    gap: 10px;
+    gap: 6px;
   }
 
   .landing-section--videocall {
@@ -3367,6 +3418,47 @@ watch(
     margin-top: 0;
   }
 
+  .landing-games-panel {
+    width: min(100%, var(--landing-panel-width));
+    --app-home-card-border: 3.5px;
+  }
+
+  .landing-games-panel :deep(.app-games__title) {
+    font-size: clamp(22px, 6.6vw, 28px);
+    line-height: 1.55;
+    margin-bottom: 6px;
+  }
+
+  .landing-games-panel :deep(.app-games__lead) {
+    margin-bottom: 6px;
+    max-width: min(100%, 263px);
+    margin-inline: auto;
+    font-size: clamp(8px, 1.95vw, 10px);
+    line-height: clamp(10px, 3vw, 16px);
+    text-align: center;
+  }
+
+  .landing-games-panel :deep(.app-games__grid) {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .landing-games-panel :deep(.app-game-card) {
+    min-height: clamp(66px, 20vw, 96px);
+    padding: 0 16px !important;
+    border-radius: 24px;
+    grid-template-columns: minmax(0, 1fr) min(72px, 22vw);
+    border-width: var(--app-home-card-border) !important;
+  }
+
+  .landing-games-panel :deep(.app-game-card__title) {
+    font-size: clamp(11px, 3.8vw, 16px) !important;
+  }
+
+  .landing-games-panel :deep(.app-game-card__visual) {
+    height: min(72px, 22vw) !important;
+  }
+
   .games-grid__card {
     min-height: clamp(66px, 20vw, 96px);
     border-radius: 24px;
@@ -3403,23 +3495,24 @@ watch(
 
   .landing-footer__panel {
     width: min(100%, var(--landing-panel-width));
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr) auto;
     grid-template-areas:
-      'locale socials feedback columns';
-    gap: 16px 10px;
+      '. socials socials . columns'
+      '. locale feedback . columns';
+    gap: 12px 10px;
     align-items: start;
   }
 
   .landing-footer__locale-action {
-    --app-landing-footer-action-height: 28px;
+    --app-landing-footer-action-height: 26px;
     --app-landing-footer-action-font-size: 10.5px;
-    --app-landing-footer-locale-width: 82px;
+    --app-landing-footer-locale-width: 78px;
   }
 
   .landing-footer__feedback-action {
-    --app-landing-footer-action-height: 28px;
+    --app-landing-footer-action-height: 26px;
     --app-landing-footer-action-font-size: 10.5px;
-    --app-landing-footer-feedback-width: 82px;
+    --app-landing-footer-feedback-width: 78px;
   }
 
   .landing-footer__columns {
@@ -3438,7 +3531,7 @@ watch(
   }
 
   .landing-footer__socials {
-    justify-content: flex-start;
+    justify-content: center;
     gap: 16px;
   }
 
@@ -3519,7 +3612,7 @@ watch(
   }
 
   .landing-section {
-    gap: 8px;
+    gap: 5px;
   }
 
   .landing-section__title {
@@ -3546,6 +3639,36 @@ watch(
 
   .games-grid {
     gap: 12px;
+  }
+
+  .landing-games-panel :deep(.app-games__grid) {
+    gap: 12px;
+  }
+
+  .landing-games-panel :deep(.app-games__title) {
+    margin-bottom: 5px;
+  }
+
+  .landing-games-panel :deep(.app-games__lead) {
+    margin-bottom: 5px;
+  }
+
+  .landing-games-panel :deep(.app-game-card) {
+    min-height: 74px !important;
+    padding: 0 12px !important;
+    border-radius: 20px;
+    grid-template-columns: minmax(0, 1fr) min(52px, 20vw);
+    --app-home-card-border: 3px;
+    border-width: var(--app-home-card-border) !important;
+  }
+
+  .landing-games-panel :deep(.app-game-card__title) {
+    font-size: clamp(10px, 3.2vw, 12.5px) !important;
+    line-height: 1.05;
+  }
+
+  .landing-games-panel :deep(.app-game-card__visual) {
+    height: min(52px, 20vw) !important;
   }
 
   .games-grid__card {
@@ -3576,16 +3699,39 @@ watch(
   }
 
   .landing-footer__panel {
-    gap: 14px 6px;
+    grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'locale . socials . columns'
+      'feedback . socials . columns';
+    gap: 8px 10px;
+    align-items: start;
+  }
+
+  .landing-footer__locale-action {
+    --app-landing-footer-action-height: 22px;
+    --app-landing-footer-action-font-size: 8.5px;
+    --app-landing-footer-locale-width: 68px;
+  }
+
+  .landing-footer__feedback-action {
+    --app-landing-footer-action-height: 22px;
+    --app-landing-footer-action-font-size: 8.5px;
+    --app-landing-footer-feedback-width: 68px;
   }
 
   .landing-footer__socials {
-    gap: 12px;
+    display: grid;
+    grid-template-columns: repeat(2, 26px);
+    gap: 10px 14px;
+    justify-content: center;
+    align-items: center;
+    justify-self: center;
+    margin-top: 4px;
   }
 
   .landing-footer__social {
-    width: 22px !important;
-    height: 22px !important;
+    width: 26px !important;
+    height: 26px !important;
   }
 
   .landing-footer__columns {

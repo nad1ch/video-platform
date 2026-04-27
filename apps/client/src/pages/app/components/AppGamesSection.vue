@@ -17,6 +17,7 @@ type AppGameCard = {
 
 const props = defineProps<{
   items: AppGameCard[]
+  lead?: string
 }>()
 
 const { t } = useI18n()
@@ -35,6 +36,7 @@ function prefetchItem(item: AppGameCard): void {
   <section class="app-games" aria-labelledby="app-games-title">
     <div class="app-games__panel">
       <h2 id="app-games-title" class="app-games__title">{{ t('home.sectionGames') }}</h2>
+      <p v-if="lead" class="app-games__lead">{{ lead }}</p>
 
       <div v-if="hasItems" class="app-games__grid">
         <RouterLink
@@ -126,6 +128,17 @@ function prefetchItem(item: AppGameCard): void {
   text-align: center;
   text-transform: uppercase;
   text-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.app-games__lead {
+  position: relative;
+  z-index: 1;
+  margin: -0.35rem 0 1rem;
+  color: rgba(230, 233, 255, 0.88);
+  font-family: var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .app-games__grid {

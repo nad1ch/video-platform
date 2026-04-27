@@ -64,7 +64,11 @@ const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
   inset: 0;
   display: block;
   overflow: hidden;
-  border: var(--app-home-card-border, 5px) solid #fff;
+  border: var(
+      --economy-slot-border-width,
+      var(--app-home-card-border, calc(var(--economy-slot-u) * var(--economy-slot-border-scale, 7.5)))
+    )
+    solid #fff;
   border-radius: calc(var(--economy-slot-u) * 41.25);
   box-sizing: border-box;
   background: linear-gradient(166.6115811995453deg, rgba(124, 77, 219, 0.096) 0%, rgba(60, 36, 99, 0.094) 73.206%);
@@ -109,7 +113,7 @@ const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
   margin: 0;
   color: #fff;
   font-family: 'Climate Crisis', var(--sa-font-display);
-  font-size: calc(var(--economy-slot-u) * 36);
+  font-size: var(--economy-slot-title-font-size, calc(var(--economy-slot-u) * var(--economy-slot-title-scale, 36)));
   font-variation-settings: 'YEAR' 1979;
   font-weight: 400;
   letter-spacing: 0;
