@@ -668,6 +668,8 @@
     "authPasswordLabel": "Password",
     "authEmailPlaceholder": "Email address",
     "authPasswordPlaceholder": "••••••••",
+    "authPasswordShow": "Show password",
+    "authPasswordHide": "Hide password",
     "authEmailContinue": "Continue with email",
     "authEmailCreated": "Account created. You're signed in.",
     "authEmailLoggedIn": "Signed in.",

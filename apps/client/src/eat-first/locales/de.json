@@ -664,6 +664,8 @@
     "authPasswordLabel": "Passwort",
     "authEmailPlaceholder": "E-Mail-Adresse",
     "authPasswordPlaceholder": "••••••••",
+    "authPasswordShow": "Passwort anzeigen",
+    "authPasswordHide": "Passwort ausblenden",
     "authEmailContinue": "Mit E-Mail fortfahren",
     "authEmailCreated": "Konto erstellt. Du bist angemeldet.",
     "authEmailLoggedIn": "Angemeldet.",

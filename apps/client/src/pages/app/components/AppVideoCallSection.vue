@@ -106,15 +106,15 @@ const previewTiles = [
 <template>
   <section class="app-call app-call__panel" aria-labelledby="app-call-title">
     <h2 id="app-call-title" class="app-call__title">{{ t('home.sectionVideoCall') }}</h2>
+    <span class="app-call__button-title" aria-hidden="true">{{ t('home.sectionVideoCall') }}</span>
 
     <RouterLink class="app-call__button" :to="to" :aria-label="authHint">
-      <span class="app-call__button-title" aria-hidden="true">{{ t('home.sectionVideoCall') }}</span>
       <span class="app-call__screen" aria-hidden="true">
         <span
           v-for="tile in previewTiles"
           :key="tile.id"
           class="app-call__tile"
-          :class="`app-call__tile--${tile.tone}`"
+          :class="[`app-call__tile--${tile.tone}`, `app-call__tile--${tile.id}`]"
         >
           <img
             v-for="layer in tile.layers"
@@ -142,6 +142,8 @@ const previewTiles = [
   padding: 0;
   overflow: visible;
   box-sizing: border-box;
+  container-type: inline-size;
+  --app-call-u: calc(100cqw / 671);
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 1.8rem;
   background:
@@ -169,33 +171,19 @@ const previewTiles = [
 }
 
 .app-call__button {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  top: calc(var(--app-call-u) * 54);
+  z-index: 1;
   display: block;
-  width: 100%;
-  height: 100%;
+  width: calc(var(--app-call-u) * 641);
+  height: calc(var(--app-call-u) * 206);
   min-height: 0;
   overflow: hidden;
-  border-radius: inherit;
-  container-type: inline-size;
-  --app-call-u: calc(100cqw / 671);
-  background:
-    linear-gradient(144.828deg, rgba(124, 77, 219, 0.144) 0%, rgba(60, 36, 99, 0.141) 73.206%),
-    rgba(18, 8, 34, 0.14);
+  border-radius: 1.8rem;
   color: inherit;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
-    0 14px 36px rgba(11, 3, 23, 0.34);
   text-decoration: none;
-  transform-origin: center;
-  transition:
-    transform 0.18s ease,
-    filter 0.18s ease;
-}
-
-.app-call__button:hover {
-  transform: translateY(-3px);
-  filter: drop-shadow(0 14px 32px rgba(6, 2, 18, 0.28));
+  transform: translateX(-50%);
 }
 
 .app-call__button:focus-visible {
@@ -225,13 +213,10 @@ const previewTiles = [
 }
 
 .app-call__screen {
-  position: absolute;
-  left: calc(var(--app-call-u) * 13);
-  top: calc(var(--app-call-u) * 54);
-  z-index: 1;
+  position: relative;
   display: block;
-  width: calc(var(--app-call-u) * 641);
-  height: calc(var(--app-call-u) * 206);
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   border: var(--app-home-card-border, 5px) solid rgba(255, 255, 255, 0.96);
   border-radius: 1.8rem;
@@ -275,12 +260,12 @@ const previewTiles = [
 }
 
 .app-call__tile:nth-child(-n + 4) {
-  top: calc(var(--app-call-u) * 18);
+  top: calc(var(--app-call-u) * 11);
   height: calc(var(--app-call-u) * 84.97);
 }
 
 .app-call__tile:nth-child(n + 5) {
-  top: calc(var(--app-call-u) * 113.08);
+  top: calc(var(--app-call-u) * 106.08);
   height: calc(var(--app-call-u) * 80.92);
 }
 
@@ -342,6 +327,93 @@ const previewTiles = [
   display: block;
   max-width: none;
   object-fit: contain;
+  pointer-events: none;
+  transform-origin: center bottom;
+}
+
+.app-call__tile--host:hover .app-call__avatar--host {
+  animation: app-call-host-greeting 0.78s ease-in-out infinite;
+}
+
+.app-call__tile--headband:hover .app-call__avatar--headband-halo {
+  animation: app-call-headband-halo-drift 1.05s ease-in-out infinite;
+}
+
+.app-call__tile--headband:hover .app-call__avatar--headband-body {
+  animation: app-call-headband-body-sigh 0.92s ease-in-out infinite;
+}
+
+.app-call__tile--headband:hover .app-call__avatar--headband-head,
+.app-call__tile--headband:hover .app-call__avatar--headband-expression,
+.app-call__tile--headband:hover .app-call__avatar--headband-marks {
+  animation: app-call-headband-sad-nod 0.92s ease-in-out infinite;
+}
+
+.app-call__tile--headband:hover .app-call__avatar--headband-hair {
+  animation: app-call-headband-hair-droop 0.92s ease-in-out infinite;
+}
+
+.app-call__tile--headphones:hover .app-call__avatar--headphones {
+  animation: app-call-headphones-beat 0.62s ease-in-out infinite;
+}
+
+.app-call__tile--cap:hover .app-call__avatar--cap {
+  animation: app-call-cap-surprise 0.72s ease-in-out infinite;
+}
+
+.app-call__tile--bucket:hover .app-call__avatar--bucket-halo {
+  animation: app-call-bucket-halo-steady 0.86s ease-in-out infinite;
+}
+
+.app-call__tile--bucket:hover .app-call__avatar--bucket-body {
+  animation: app-call-bucket-body-brace 0.82s ease-in-out infinite;
+}
+
+.app-call__tile--bucket:hover .app-call__avatar--bucket-head,
+.app-call__tile--bucket:hover .app-call__avatar--bucket-expression {
+  animation: app-call-bucket-confident-nod 0.82s ease-in-out infinite;
+}
+
+.app-call__tile--bucket:hover .app-call__avatar--bucket-hat {
+  animation: app-call-bucket-hat-tap 0.82s ease-in-out infinite;
+}
+
+.app-call__tile--glasses-hat:hover .app-call__avatar--glasses-hat {
+  animation: app-call-glasses-hat-nervous 0.68s ease-in-out infinite;
+}
+
+.app-call__tile--beanie:hover .app-call__avatar--beanie-body {
+  animation: app-call-beanie-body-chuckle 0.74s ease-in-out infinite;
+}
+
+.app-call__tile--beanie:hover .app-call__avatar--beanie-head,
+.app-call__tile--beanie:hover .app-call__avatar--beanie-expression {
+  animation: app-call-beanie-smile-bob 0.74s ease-in-out infinite;
+}
+
+.app-call__tile--beanie:hover .app-call__avatar--beanie-hat {
+  animation: app-call-beanie-hat-soft 0.74s ease-in-out infinite;
+}
+
+.app-call__tile--beanie:hover .app-call__avatar--beanie-glasses {
+  animation: app-call-beanie-glasses-smile 0.74s ease-in-out infinite;
+}
+
+.app-call__tile--sidecap:hover .app-call__avatar--sidecap-halo {
+  animation: app-call-sidecap-halo-party 0.7s ease-in-out infinite;
+}
+
+.app-call__tile--sidecap:hover .app-call__avatar--sidecap-body {
+  animation: app-call-sidecap-body-groove 0.7s ease-in-out infinite;
+}
+
+.app-call__tile--sidecap:hover .app-call__avatar--sidecap-head,
+.app-call__tile--sidecap:hover .app-call__avatar--sidecap-expression {
+  animation: app-call-sidecap-playful-tilt 0.7s ease-in-out infinite;
+}
+
+.app-call__tile--sidecap:hover .app-call__avatar--sidecap-hat {
+  animation: app-call-sidecap-hat-swing 0.7s ease-in-out infinite;
 }
 
 .app-call__avatar--host,
@@ -526,6 +598,268 @@ const previewTiles = [
   top: 49.3%;
   width: 17%;
   height: 22%;
+}
+
+@keyframes app-call-host-greeting {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  30% {
+    transform: translateY(-2.4%) rotate(-3deg);
+  }
+
+  62% {
+    transform: translateY(-1%) rotate(3deg);
+  }
+}
+
+@keyframes app-call-headband-halo-drift {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+
+  55% {
+    transform: translateY(1.4%) scale(0.985);
+    opacity: 0.9;
+  }
+}
+
+@keyframes app-call-headband-body-sigh {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  55% {
+    transform: translateY(1.6%);
+  }
+}
+
+@keyframes app-call-headband-sad-nod {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  55% {
+    transform: translateY(1.6%) rotate(-1.2deg);
+  }
+}
+
+@keyframes app-call-headband-hair-droop {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  55% {
+    transform: translateY(1.2%) rotate(-1deg);
+  }
+}
+
+@keyframes app-call-headphones-beat {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+
+  26% {
+    transform: translateY(-2%) rotate(-1.6deg) scale(1.01);
+  }
+
+  58% {
+    transform: translateY(0.8%) rotate(1.4deg) scale(0.995);
+  }
+}
+
+@keyframes app-call-cap-surprise {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  28% {
+    transform: translateY(-3.2%) scale(1.025);
+  }
+
+  64% {
+    transform: translateY(-0.8%) scale(1.005);
+  }
+}
+
+@keyframes app-call-bucket-halo-steady {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  48% {
+    transform: scale(1.018);
+    opacity: 0.94;
+  }
+}
+
+@keyframes app-call-bucket-body-brace {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+
+  45% {
+    transform: translateY(0.8%) scaleY(0.992);
+  }
+}
+
+@keyframes app-call-bucket-confident-nod {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  42% {
+    transform: translateY(1%) rotate(1.6deg);
+  }
+}
+
+@keyframes app-call-bucket-hat-tap {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  42% {
+    transform: translateY(-1.4%) rotate(1.2deg);
+  }
+}
+
+@keyframes app-call-glasses-hat-nervous {
+  0%,
+  100% {
+    transform: translateX(0) translateY(0) rotate(0deg);
+  }
+
+  22% {
+    transform: translateX(-1.6%) translateY(-0.6%) rotate(-1deg);
+  }
+
+  44% {
+    transform: translateX(1.2%) translateY(0.2%) rotate(0.8deg);
+  }
+
+  68% {
+    transform: translateX(-0.6%) translateY(-0.4%) rotate(-0.4deg);
+  }
+}
+
+@keyframes app-call-beanie-body-chuckle {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+
+  45% {
+    transform: translateY(0.9%) scaleY(0.992);
+  }
+}
+
+@keyframes app-call-beanie-smile-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  38% {
+    transform: translateY(-1.2%) rotate(1deg);
+  }
+
+  76% {
+    transform: translateY(-0.4%) rotate(-0.6deg);
+  }
+}
+
+@keyframes app-call-beanie-hat-soft {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  38% {
+    transform: translateY(-1.8%) rotate(1.2deg);
+  }
+}
+
+@keyframes app-call-beanie-glasses-smile {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  45% {
+    transform: translateY(-1.3%);
+  }
+}
+
+@keyframes app-call-sidecap-halo-party {
+  0%,
+  100% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: translateX(1.2%) scale(1.025);
+    opacity: 0.92;
+  }
+}
+
+@keyframes app-call-sidecap-body-groove {
+  0%,
+  100% {
+    transform: translateX(0) translateY(0);
+  }
+
+  35% {
+    transform: translateX(1.2%) translateY(-0.7%);
+  }
+
+  70% {
+    transform: translateX(-1%) translateY(0.2%);
+  }
+}
+
+@keyframes app-call-sidecap-playful-tilt {
+  0%,
+  100% {
+    transform: translateX(0) translateY(0) rotate(0deg);
+  }
+
+  35% {
+    transform: translateX(1.4%) translateY(-1.2%) rotate(1.2deg);
+  }
+
+  70% {
+    transform: translateX(-1%) translateY(-0.3%) rotate(-0.8deg);
+  }
+}
+
+@keyframes app-call-sidecap-hat-swing {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+
+  35% {
+    transform: translateX(1.8%) rotate(2deg);
+  }
+
+  70% {
+    transform: translateX(-1%) rotate(-1deg);
+  }
 }
 
 @media (max-width: 580px) {

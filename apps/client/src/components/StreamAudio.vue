@@ -116,6 +116,18 @@ function silenceElement(detach: boolean): void {
   }
 }
 
+function softMuteElementForWebAudio(s: MediaStream): void {
+  const a = el.value
+  if (!a) {
+    return
+  }
+  if (a.srcObject !== s) {
+    a.srcObject = s
+  }
+  a.muted = true
+  a.volume = 1
+}
+
 async function bindAudioGraph(): Promise<void> {
   const generation = ++bindGeneration
   await nextTick()
@@ -127,33 +139,22 @@ async function bindAudioGraph(): Promise<void> {
 
   const s = props.stream
 
-  if (!s || s.getAudioTracks().length === 0) {
+  if (!s) {
     silenceElement(true)
     return
   }
 
-  if (import.meta.env.DEV) {
-    let ctxState = 'no-audio-context'
-    if (typeof AudioContext !== 'undefined') {
-      try {
-        ctxState = getSharedCallPlaybackContext().state
-      } catch {
-        ctxState = 'unavailable'
-      }
-    }
-    console.log('[stream-audio] bind', {
-      tracks: s.getAudioTracks().map((t) => ({
-        id: t.id,
-        muted: t.muted,
-        readyState: t.readyState,
-        enabled: t.enabled,
-      })),
-      ctxState,
-      unlocked: isAudioPlaybackUnlocked(),
-    })
+  if (s.getAudioTracks().length === 0) {
+    silenceElement(true)
+    return
   }
 
-  if (typeof AudioContext === 'undefined' || !shouldUseWebAudioPlayback()) {
+  if (typeof AudioContext === 'undefined') {
+    await bindElementFallback(s, generation)
+    return
+  }
+
+  if (!shouldUseWebAudioPlayback()) {
     await bindElementFallback(s, generation)
     return
   }
@@ -164,13 +165,13 @@ async function bindAudioGraph(): Promise<void> {
       return
     }
     const ctx = getSharedCallPlaybackContext()
-    silenceElement(true)
+    softMuteElementForWebAudio(s)
     sourceNode = ctx.createMediaStreamSource(s)
     gainNode = ctx.createGain()
-    applyGain()
     sourceNode.connect(gainNode)
     gainNode.connect(ctx.destination)
     usingWebAudio = true
+    applyGain()
 
     if (isAudioPlaybackUnlocked()) {
       requestAnimationFrame(() => {
@@ -252,6 +253,10 @@ watch(
   () => {
     const s = props.stream
     if (s && s.getAudioTracks().length > 0) {
+      if (usingWebAudio && shouldUseWebAudioPlayback()) {
+        applyGain()
+        return
+      }
       void bindAudioGraph()
       return
     }

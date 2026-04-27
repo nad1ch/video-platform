@@ -668,6 +668,8 @@
     "authPasswordLabel": "Hasło",
     "authEmailPlaceholder": "Adres e-mail",
     "authPasswordPlaceholder": "••••••••",
+    "authPasswordShow": "Pokaż hasło",
+    "authPasswordHide": "Ukryj hasło",
     "authEmailContinue": "Kontynuuj przez e-mail",
     "authEmailCreated": "Konto utworzone. Jesteś zalogowany.",
     "authEmailLoggedIn": "Zalogowano.",

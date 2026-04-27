@@ -11,6 +11,7 @@ import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
 import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import AppLandingFooterActions from '@/pages/app/components/AppLandingFooterActions.vue'
 import EconomySlotBanner from '@/pages/app/components/EconomySlotBanner.vue'
+import { useAuth } from '@/composables/useAuth'
 import landingCameraIcon from '@/assets/landing/decor/landing-camera.png'
 import landingMegaphoneIcon from '@/assets/landing/decor/landing-megaphone.png'
 import landingMicrophoneIcon from '@/assets/landing/decor/landing-microphone.png'
@@ -36,6 +37,7 @@ import { landingDesignPx as px } from '@/utils/landingDesignPx'
 const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const auth = useAuth()
 
 const defaultNadleStreamer =
   (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
@@ -401,6 +403,11 @@ function goLandingNav(href: string) {
   void router.push({ path: '/', query: route.query, hash })
 }
 
+async function goLandingAuth(): Promise<void> {
+  await auth.ensureAuthLoaded()
+  await router.push(auth.isAuthenticated.value ? { path: '/app' } : authRouteLogin)
+}
+
 function waitForLandingImage(src: string): Promise<void> {
   return new Promise((resolve) => {
     const img = new Image()
@@ -513,7 +520,9 @@ watch(
         </nav>
 
         <div class="landing-topbar__end landing-auth sa-glass-button" :aria-label="t('landing.accountAria')">
-          <RouterLink class="landing-auth__link" :to="authRouteLogin">{{ t('landing.login') }}</RouterLink>
+          <button type="button" class="landing-auth__link" @click="goLandingAuth">
+            {{ t('landing.login') }}
+          </button>
         </div>
       </header>
 
@@ -1133,7 +1142,13 @@ watch(
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  background: transparent;
   color: #111827;
+  cursor: pointer;
   font-family: 'Marmelad', sans-serif;
   font-size: calc(var(--u) * 13.5);
   line-height: 1;
