@@ -2,16 +2,37 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import callBannerCardOne from '@/assets/landing/call-banner/card-1.png'
-import callBannerCardTwo from '@/assets/landing/call-banner/card-2.png'
-import callBannerCardThree from '@/assets/landing/call-banner/card-3.png'
-import callBannerCardFour from '@/assets/landing/call-banner/card-4.png'
 import twitchBrowseIllustration from '@/assets/landing/twitch-browse-illustration.svg'
 import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
 import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import AppLandingFooterActions from '@/pages/app/components/AppLandingFooterActions.vue'
 import EconomySlotBanner from '@/pages/app/components/EconomySlotBanner.vue'
 import { useAuth } from '@/composables/useAuth'
+import avatarBeanieBody from '@/assets/landing/video-call/avatar-beanie-body.svg'
+import avatarBeanieExpression from '@/assets/landing/video-call/avatar-beanie-expression.svg'
+import avatarBeanieGlasses from '@/assets/landing/video-call/avatar-beanie-glasses.svg'
+import avatarBeanieHat from '@/assets/landing/video-call/avatar-beanie-hat.svg'
+import avatarBeanieHead from '@/assets/landing/video-call/avatar-beanie-head.svg'
+import avatarBucketBody from '@/assets/landing/video-call/avatar-bucket-body.svg'
+import avatarBucketExpression from '@/assets/landing/video-call/avatar-bucket-expression.svg'
+import avatarBucketHalo from '@/assets/landing/video-call/avatar-bucket-halo.svg'
+import avatarBucketHat from '@/assets/landing/video-call/avatar-bucket-hat.svg'
+import avatarBucketHead from '@/assets/landing/video-call/avatar-bucket-head.svg'
+import avatarCap from '@/assets/landing/video-call/avatar-cap.svg'
+import avatarGlassesHat from '@/assets/landing/video-call/avatar-glasses-hat.svg'
+import avatarHeadbandBody from '@/assets/landing/video-call/avatar-headband-body.svg'
+import avatarHeadbandExpression from '@/assets/landing/video-call/avatar-headband-expression.svg'
+import avatarHeadbandHair from '@/assets/landing/video-call/avatar-headband-hair.svg'
+import avatarHeadbandHalo from '@/assets/landing/video-call/avatar-headband-halo.svg'
+import avatarHeadbandHead from '@/assets/landing/video-call/avatar-headband-head.svg'
+import avatarHeadbandMarks from '@/assets/landing/video-call/avatar-headband-marks.svg'
+import avatarHeadphones from '@/assets/landing/video-call/avatar-headphones.svg'
+import avatarHost from '@/assets/landing/video-call/avatar-host.svg'
+import avatarSidecapBody from '@/assets/landing/video-call/avatar-sidecap-body.svg'
+import avatarSidecapExpression from '@/assets/landing/video-call/avatar-sidecap-expression.svg'
+import avatarSidecapHalo from '@/assets/landing/video-call/avatar-sidecap-halo.svg'
+import avatarSidecapHat from '@/assets/landing/video-call/avatar-sidecap-hat.svg'
+import avatarSidecapHead from '@/assets/landing/video-call/avatar-sidecap-head.svg'
 import landingCameraIcon from '@/assets/landing/decor/landing-camera.svg'
 import landingMegaphoneIcon from '@/assets/landing/decor/landing-megaphone.svg'
 import landingMicrophoneIcon from '@/assets/landing/decor/landing-microphone.svg'
@@ -49,8 +70,15 @@ type NavItem = {
 }
 
 type CallBannerCard = {
-  asset: string
+  id: string
+  tone: 'violet' | 'indigo' | 'brown' | 'olive' | 'sand' | 'pink' | 'rose' | 'purple'
+  layers: readonly CallBannerCardLayer[]
   style: Readonly<Record<string, string>>
+}
+
+type CallBannerCardLayer = {
+  src: string
+  className: string
 }
 
 type LandingDecorIcon = {
@@ -107,9 +135,15 @@ const landingFooterLocaleOptions = computed(
 const landingCriticalImageSources = Object.freeze([
   BRAND_LOGO_LIGHT_SVG,
   twitchBrowseIllustration,
-  callBannerCardOne,
-  callBannerCardTwo,
-  callBannerCardThree,
+  avatarHost,
+  avatarHeadbandHalo,
+  avatarHeadbandBody,
+  avatarHeadbandHead,
+  avatarHeadbandHair,
+  avatarHeadbandExpression,
+  avatarHeadbandMarks,
+  avatarHeadphones,
+  avatarCap,
   eatFirstIcon,
   mafiaIcon,
   spyIcon,
@@ -122,10 +156,79 @@ const landingCriticalImageSources = Object.freeze([
 ] as const)
 
 const callBannerCards = Object.freeze([
-  Object.freeze({ asset: callBannerCardOne, style: Object.freeze({ left: px(24.5), width: px(159) }) }),
-  Object.freeze({ asset: callBannerCardTwo, style: Object.freeze({ left: px(193.5), width: px(160) }) }),
-  Object.freeze({ asset: callBannerCardThree, style: Object.freeze({ left: px(363.5), width: px(160) }) }),
-  Object.freeze({ asset: callBannerCardFour, style: Object.freeze({ left: px(533.5), width: px(159) }) }),
+  Object.freeze({
+    id: 'host',
+    tone: 'violet',
+    layers: Object.freeze([{ src: avatarHost, className: 'call-banner__avatar--host' }]),
+    style: Object.freeze({ left: px(24.5), width: px(159) }),
+  }),
+  Object.freeze({
+    id: 'headband',
+    tone: 'indigo',
+    layers: Object.freeze([
+      { src: avatarHeadbandHalo, className: 'call-banner__avatar--headband-halo' },
+      { src: avatarHeadbandBody, className: 'call-banner__avatar--headband-body' },
+      { src: avatarHeadbandHead, className: 'call-banner__avatar--headband-head' },
+      { src: avatarHeadbandHair, className: 'call-banner__avatar--headband-hair' },
+      { src: avatarHeadbandExpression, className: 'call-banner__avatar--headband-expression' },
+      { src: avatarHeadbandMarks, className: 'call-banner__avatar--headband-marks' },
+    ]),
+    style: Object.freeze({ left: px(193.5), width: px(160) }),
+  }),
+  Object.freeze({
+    id: 'headphones',
+    tone: 'brown',
+    layers: Object.freeze([{ src: avatarHeadphones, className: 'call-banner__avatar--headphones' }]),
+    style: Object.freeze({ left: px(363.5), width: px(160) }),
+  }),
+  Object.freeze({
+    id: 'cap',
+    tone: 'olive',
+    layers: Object.freeze([{ src: avatarCap, className: 'call-banner__avatar--cap' }]),
+    style: Object.freeze({ left: px(533.5), width: px(159) }),
+  }),
+  Object.freeze({
+    id: 'bucket',
+    tone: 'sand',
+    layers: Object.freeze([
+      { src: avatarBucketHalo, className: 'call-banner__avatar--bucket-halo' },
+      { src: avatarBucketBody, className: 'call-banner__avatar--bucket-body' },
+      { src: avatarBucketHead, className: 'call-banner__avatar--bucket-head' },
+      { src: avatarBucketHat, className: 'call-banner__avatar--bucket-hat' },
+      { src: avatarBucketExpression, className: 'call-banner__avatar--bucket-expression' },
+    ]),
+    style: Object.freeze({ left: px(24.5), width: px(159) }),
+  }),
+  Object.freeze({
+    id: 'glasses-hat',
+    tone: 'pink',
+    layers: Object.freeze([{ src: avatarGlassesHat, className: 'call-banner__avatar--glasses-hat' }]),
+    style: Object.freeze({ left: px(193.5), width: px(160) }),
+  }),
+  Object.freeze({
+    id: 'beanie',
+    tone: 'rose',
+    layers: Object.freeze([
+      { src: avatarBeanieBody, className: 'call-banner__avatar--beanie-body' },
+      { src: avatarBeanieHead, className: 'call-banner__avatar--beanie-head' },
+      { src: avatarBeanieHat, className: 'call-banner__avatar--beanie-hat' },
+      { src: avatarBeanieGlasses, className: 'call-banner__avatar--beanie-glasses' },
+      { src: avatarBeanieExpression, className: 'call-banner__avatar--beanie-expression' },
+    ]),
+    style: Object.freeze({ left: px(363.5), width: px(160) }),
+  }),
+  Object.freeze({
+    id: 'sidecap',
+    tone: 'purple',
+    layers: Object.freeze([
+      { src: avatarSidecapHalo, className: 'call-banner__avatar--sidecap-halo' },
+      { src: avatarSidecapBody, className: 'call-banner__avatar--sidecap-body' },
+      { src: avatarSidecapHead, className: 'call-banner__avatar--sidecap-head' },
+      { src: avatarSidecapHat, className: 'call-banner__avatar--sidecap-hat' },
+      { src: avatarSidecapExpression, className: 'call-banner__avatar--sidecap-expression' },
+    ]),
+    style: Object.freeze({ left: px(533.5), width: px(159) }),
+  }),
 ] as readonly CallBannerCard[])
 
 const landingDecorIcons = Object.freeze([
@@ -590,18 +693,28 @@ watch(
           {{ t('landing.videoCallLead') }}
         </p>
 
-        <RouterLink class="call-banner" :to="callRoute">
+        <RouterLink class="call-banner" :class="{ 'call-banner--compact-title': locale === 'uk' }" :to="callRoute">
           <span class="call-banner__title landing-u-text-outline-cta">{{ t('landing.videoCallCta') }}</span>
 
           <span class="call-banner__cards">
-            <img
+            <span
               v-for="(card, index) in callBannerCards"
               :key="`call-card-${index}`"
               class="call-banner__card"
-              :src="card.asset"
-              alt=""
+              :class="[`call-banner__card--${card.tone}`, `call-banner__card--${card.id}`]"
               :style="card.style"
-            />
+            >
+              <img
+                v-for="layer in card.layers"
+                :key="layer.className"
+                class="call-banner__avatar-layer"
+                :class="layer.className"
+                :src="layer.src"
+                alt=""
+                loading="eager"
+                decoding="async"
+              />
+            </span>
           </span>
         </RouterLink>
       </section>
@@ -945,6 +1058,268 @@ watch(
 
   50% {
     transform: translateY(calc(var(--u) * -0.65));
+  }
+}
+
+@keyframes app-call-host-greeting {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  30% {
+    transform: translateY(-2.4%) rotate(-3deg);
+  }
+
+  62% {
+    transform: translateY(-1%) rotate(3deg);
+  }
+}
+
+@keyframes app-call-headband-halo-drift {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+
+  55% {
+    transform: translateY(1.4%) scale(0.985);
+    opacity: 0.9;
+  }
+}
+
+@keyframes app-call-headband-body-sigh {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  55% {
+    transform: translateY(1.6%);
+  }
+}
+
+@keyframes app-call-headband-sad-nod {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  55% {
+    transform: translateY(1.6%) rotate(-1.2deg);
+  }
+}
+
+@keyframes app-call-headband-hair-droop {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  55% {
+    transform: translateY(1.2%) rotate(-1deg);
+  }
+}
+
+@keyframes app-call-headphones-beat {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+
+  26% {
+    transform: translateY(-2%) rotate(-1.6deg) scale(1.01);
+  }
+
+  58% {
+    transform: translateY(0.8%) rotate(1.4deg) scale(0.995);
+  }
+}
+
+@keyframes app-call-cap-surprise {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  28% {
+    transform: translateY(-3.2%) scale(1.025);
+  }
+
+  64% {
+    transform: translateY(-0.8%) scale(1.005);
+  }
+}
+
+@keyframes app-call-bucket-halo-steady {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  48% {
+    transform: scale(1.018);
+    opacity: 0.94;
+  }
+}
+
+@keyframes app-call-bucket-body-brace {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+
+  45% {
+    transform: translateY(0.8%) scaleY(0.992);
+  }
+}
+
+@keyframes app-call-bucket-confident-nod {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  42% {
+    transform: translateY(1%) rotate(1.6deg);
+  }
+}
+
+@keyframes app-call-bucket-hat-tap {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  42% {
+    transform: translateY(-1.4%) rotate(1.2deg);
+  }
+}
+
+@keyframes app-call-glasses-hat-nervous {
+  0%,
+  100% {
+    transform: translateX(0) translateY(0) rotate(0deg);
+  }
+
+  22% {
+    transform: translateX(-1.6%) translateY(-0.6%) rotate(-1deg);
+  }
+
+  44% {
+    transform: translateX(1.2%) translateY(0.2%) rotate(0.8deg);
+  }
+
+  68% {
+    transform: translateX(-0.6%) translateY(-0.4%) rotate(-0.4deg);
+  }
+}
+
+@keyframes app-call-beanie-body-chuckle {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+
+  45% {
+    transform: translateY(0.9%) scaleY(0.992);
+  }
+}
+
+@keyframes app-call-beanie-smile-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  38% {
+    transform: translateY(-1.2%) rotate(1deg);
+  }
+
+  76% {
+    transform: translateY(-0.4%) rotate(-0.6deg);
+  }
+}
+
+@keyframes app-call-beanie-hat-soft {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  38% {
+    transform: translateY(-1.8%) rotate(1.2deg);
+  }
+}
+
+@keyframes app-call-beanie-glasses-smile {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  45% {
+    transform: translateY(-1.3%);
+  }
+}
+
+@keyframes app-call-sidecap-halo-party {
+  0%,
+  100% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: translateX(1.2%) scale(1.025);
+    opacity: 0.92;
+  }
+}
+
+@keyframes app-call-sidecap-body-groove {
+  0%,
+  100% {
+    transform: translateX(0) translateY(0);
+  }
+
+  35% {
+    transform: translateX(1.2%) translateY(-0.7%);
+  }
+
+  70% {
+    transform: translateX(-1%) translateY(0.2%);
+  }
+}
+
+@keyframes app-call-sidecap-playful-tilt {
+  0%,
+  100% {
+    transform: translateX(0) translateY(0) rotate(0deg);
+  }
+
+  35% {
+    transform: translateX(1.4%) translateY(-1.2%) rotate(1.2deg);
+  }
+
+  70% {
+    transform: translateX(-1%) translateY(-0.3%) rotate(-0.8deg);
+  }
+}
+
+@keyframes app-call-sidecap-hat-swing {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+
+  35% {
+    transform: translateX(1.8%) rotate(2deg);
+  }
+
+  70% {
+    transform: translateX(-1%) rotate(-1deg);
   }
 }
 
@@ -1594,29 +1969,382 @@ watch(
   white-space: nowrap;
 }
 
+.call-banner--compact-title .call-banner__title {
+  width: calc(var(--u) * 348);
+  font-size: calc(var(--u) * 30);
+  letter-spacing: calc(var(--u) * -0.45);
+}
+
 .call-banner__cards {
   position: absolute;
   left: calc(var(--u) * 397.5);
   top: calc(var(--u) * 10.5);
   width: calc(var(--u) * 708);
   height: calc(var(--u) * 120);
-  border: calc(var(--u) * 1.5) solid rgba(255, 255, 255, 0.16);
+  border: 0;
   border-radius: calc(var(--u) * 28);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 42%),
-    rgba(63, 37, 93, 0.58);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 calc(var(--u) * 8) calc(var(--u) * 20) rgba(8, 2, 20, 0.18);
+  background: transparent;
+  box-shadow: none;
   z-index: 1;
 }
 
 .call-banner__card {
   position: absolute;
   top: calc(var(--u) * 17.5);
+  display: block;
   height: calc(var(--u) * 91);
-  object-fit: fill;
+  overflow: hidden;
+  border: calc(var(--u) * 1) solid rgba(255, 255, 255, 0.28);
+  border-radius: calc(var(--u) * 14);
+  box-sizing: border-box;
   filter: drop-shadow(0 calc(var(--u) * 8) calc(var(--u) * 8) rgba(8, 2, 20, 0.2));
+  transform-origin: center;
+  transition:
+    box-shadow 0.22s ease,
+    transform 0.22s ease;
+}
+
+.call-banner__card:hover {
+  transform: scale(1.018);
+  box-shadow: 0 calc(var(--u) * 6) calc(var(--u) * 16) rgba(4, 1, 12, 0.2);
+}
+
+.call-banner__card:nth-child(n + 5) {
+  display: none;
+}
+
+.call-banner__card::before,
+.call-banner__card::after {
+  position: absolute;
+  z-index: 2;
+  height: calc(var(--u) * 4.86);
+  border-radius: 999px;
+  content: '';
+}
+
+.call-banner__card::before {
+  left: 6.15%;
+  bottom: 9.55%;
+  width: 16.88%;
+  background: #f2f4ff;
+}
+
+.call-banner__card::after {
+  right: 6.95%;
+  top: 7.45%;
+  width: 13.9%;
+  background: #6e72f8;
+}
+
+.call-banner__card--violet {
+  background: rgba(108, 36, 185, 0.66);
+}
+
+.call-banner__card--indigo {
+  background: rgba(79, 26, 200, 0.75);
+}
+
+.call-banner__card--brown {
+  background: #704e3a;
+}
+
+.call-banner__card--olive {
+  background: rgba(143, 157, 83, 0.51);
+}
+
+.call-banner__card--sand {
+  background: rgba(246, 192, 92, 0.35);
+}
+
+.call-banner__card--pink {
+  background: rgba(244, 124, 255, 0.42);
+}
+
+.call-banner__card--rose {
+  background: rgba(208, 90, 90, 0.46);
+}
+
+.call-banner__card--purple {
+  background: rgba(139, 92, 246, 0.51);
+}
+
+.call-banner__avatar-layer {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  max-width: none;
+  object-fit: contain;
+  pointer-events: none;
+  transform-origin: center bottom;
+}
+
+.call-banner__card--host:hover .call-banner__avatar--host {
+  animation: app-call-host-greeting 0.78s ease-in-out infinite;
+}
+
+.call-banner__card--headband:hover .call-banner__avatar--headband-halo {
+  animation: app-call-headband-halo-drift 1.05s ease-in-out infinite;
+}
+
+.call-banner__card--headband:hover .call-banner__avatar--headband-body {
+  animation: app-call-headband-body-sigh 0.92s ease-in-out infinite;
+}
+
+.call-banner__card--headband:hover .call-banner__avatar--headband-head,
+.call-banner__card--headband:hover .call-banner__avatar--headband-expression,
+.call-banner__card--headband:hover .call-banner__avatar--headband-marks {
+  animation: app-call-headband-sad-nod 0.92s ease-in-out infinite;
+}
+
+.call-banner__card--headband:hover .call-banner__avatar--headband-hair {
+  animation: app-call-headband-hair-droop 0.92s ease-in-out infinite;
+}
+
+.call-banner__card--headphones:hover .call-banner__avatar--headphones {
+  animation: app-call-headphones-beat 0.62s ease-in-out infinite;
+}
+
+.call-banner__card--cap:hover .call-banner__avatar--cap {
+  animation: app-call-cap-surprise 0.72s ease-in-out infinite;
+}
+
+.call-banner__card--bucket:hover .call-banner__avatar--bucket-halo {
+  animation: app-call-bucket-halo-steady 0.86s ease-in-out infinite;
+}
+
+.call-banner__card--bucket:hover .call-banner__avatar--bucket-body {
+  animation: app-call-bucket-body-brace 0.82s ease-in-out infinite;
+}
+
+.call-banner__card--bucket:hover .call-banner__avatar--bucket-head,
+.call-banner__card--bucket:hover .call-banner__avatar--bucket-expression {
+  animation: app-call-bucket-confident-nod 0.82s ease-in-out infinite;
+}
+
+.call-banner__card--bucket:hover .call-banner__avatar--bucket-hat {
+  animation: app-call-bucket-hat-tap 0.82s ease-in-out infinite;
+}
+
+.call-banner__card--glasses-hat:hover .call-banner__avatar--glasses-hat {
+  animation: app-call-glasses-hat-nervous 0.68s ease-in-out infinite;
+}
+
+.call-banner__card--beanie:hover .call-banner__avatar--beanie-body {
+  animation: app-call-beanie-body-chuckle 0.74s ease-in-out infinite;
+}
+
+.call-banner__card--beanie:hover .call-banner__avatar--beanie-head,
+.call-banner__card--beanie:hover .call-banner__avatar--beanie-expression {
+  animation: app-call-beanie-smile-bob 0.74s ease-in-out infinite;
+}
+
+.call-banner__card--beanie:hover .call-banner__avatar--beanie-hat {
+  animation: app-call-beanie-hat-soft 0.74s ease-in-out infinite;
+}
+
+.call-banner__card--beanie:hover .call-banner__avatar--beanie-glasses {
+  animation: app-call-beanie-glasses-smile 0.74s ease-in-out infinite;
+}
+
+.call-banner__card--sidecap:hover .call-banner__avatar--sidecap-halo {
+  animation: app-call-sidecap-halo-party 0.7s ease-in-out infinite;
+}
+
+.call-banner__card--sidecap:hover .call-banner__avatar--sidecap-body {
+  animation: app-call-sidecap-body-groove 0.7s ease-in-out infinite;
+}
+
+.call-banner__card--sidecap:hover .call-banner__avatar--sidecap-head,
+.call-banner__card--sidecap:hover .call-banner__avatar--sidecap-expression {
+  animation: app-call-sidecap-playful-tilt 0.7s ease-in-out infinite;
+}
+
+.call-banner__card--sidecap:hover .call-banner__avatar--sidecap-hat {
+  animation: app-call-sidecap-hat-swing 0.7s ease-in-out infinite;
+}
+
+.call-banner__avatar--host,
+.call-banner__avatar--headphones,
+.call-banner__avatar--cap,
+.call-banner__avatar--glasses-hat {
+  height: 113%;
+}
+
+.call-banner__avatar--host {
+  left: 24.82%;
+  top: 2.38%;
+  width: 54.61%;
+}
+
+.call-banner__avatar--headphones {
+  left: 24.11%;
+  top: 2.38%;
+  width: 56.74%;
+}
+
+.call-banner__avatar--cap {
+  left: 24.82%;
+  top: 2.38%;
+  width: 53.4%;
+}
+
+.call-banner__avatar--glasses-hat {
+  left: 23.4%;
+  top: 2.5%;
+  width: 53.2%;
+}
+
+.call-banner__avatar--headband-halo {
+  left: 22.7%;
+  top: 2.38%;
+  width: 54.95%;
+  height: 90.44%;
+  z-index: 0;
+}
+
+.call-banner__avatar--headband-body {
+  left: 36.16%;
+  top: 69.31%;
+  width: 29.1%;
+  height: 49.74%;
+}
+
+.call-banner__avatar--headband-head {
+  left: 35.09%;
+  top: 26.8%;
+  width: 30.17%;
+  height: 50.65%;
+}
+
+.call-banner__avatar--headband-hair {
+  left: 34.55%;
+  top: 21.37%;
+  width: 33.94%;
+  height: 36.18%;
+}
+
+.call-banner__avatar--headband-expression {
+  left: 41.8%;
+  top: 49.8%;
+  width: 17.3%;
+  height: 19.6%;
+}
+
+.call-banner__avatar--headband-marks {
+  left: 39.95%;
+  top: 57.9%;
+  width: 20.2%;
+  height: 4%;
+}
+
+.call-banner__avatar--bucket-halo,
+.call-banner__avatar--sidecap-halo {
+  z-index: 0;
+}
+
+.call-banner__avatar--bucket-halo {
+  left: 22.2%;
+  top: 2.5%;
+  width: 54.4%;
+  height: 94%;
+}
+
+.call-banner__avatar--bucket-body {
+  left: 36.74%;
+  top: 72.99%;
+  width: 28.26%;
+  height: 50.76%;
+}
+
+.call-banner__avatar--bucket-head {
+  left: 35.61%;
+  top: 28.82%;
+  width: 29.87%;
+  height: 52.63%;
+}
+
+.call-banner__avatar--bucket-hat {
+  left: 33%;
+  top: 13.78%;
+  width: 35.09%;
+  height: 39.48%;
+}
+
+.call-banner__avatar--bucket-expression {
+  left: 40.92%;
+  top: 54.2%;
+  width: 16%;
+  height: 16.41%;
+}
+
+.call-banner__avatar--beanie-body {
+  left: 24.82%;
+  top: 2.5%;
+  width: 53.19%;
+  height: 115.81%;
+}
+
+.call-banner__avatar--beanie-head {
+  left: 36.82%;
+  top: 27.32%;
+  width: 29.2%;
+  height: 51.47%;
+}
+
+.call-banner__avatar--beanie-hat {
+  left: 36.3%;
+  top: 19.96%;
+  width: 30.24%;
+  height: 23.9%;
+}
+
+.call-banner__avatar--beanie-glasses {
+  left: 39.25%;
+  top: 45.39%;
+  width: 24.3%;
+  height: 14.4%;
+}
+
+.call-banner__avatar--beanie-expression {
+  left: 44.12%;
+  top: 50.29%;
+  width: 15.64%;
+  height: 21.8%;
+}
+
+.call-banner__avatar--sidecap-halo {
+  left: 22.76%;
+  top: 2.5%;
+  width: 53.84%;
+  height: 93%;
+}
+
+.call-banner__avatar--sidecap-body {
+  left: 34.95%;
+  top: 70.41%;
+  width: 31.2%;
+  height: 52.09%;
+}
+
+.call-banner__avatar--sidecap-head {
+  left: 35.41%;
+  top: 26.69%;
+  width: 29.55%;
+  height: 52.09%;
+}
+
+.call-banner__avatar--sidecap-hat {
+  left: 28.15%;
+  top: 18.31%;
+  width: 36.29%;
+  height: 33.4%;
+}
+
+.call-banner__avatar--sidecap-expression {
+  left: 41.1%;
+  top: 49.3%;
+  width: 17%;
+  height: 22%;
 }
 
 .landing-section--games .landing-section__title {
@@ -2173,45 +2901,81 @@ watch(
     top: auto;
     width: min(100%, var(--landing-panel-width));
     height: auto;
-    aspect-ratio: 1124.25 / 154.5;
+    aspect-ratio: 1124.25 / 360;
     margin-top: 0;
     padding: 0;
     display: block;
     box-sizing: border-box;
+    container-type: inline-size;
     border-radius: calc(var(--u) * 41.25);
     border-width: calc(var(--u) * 7.5);
   }
 
+  .call-banner__title,
+  .call-banner__cards {
+    --u: calc(100cqw / 1124.25);
+  }
+
   .call-banner__title {
-    position: absolute;
-    left: calc(var(--u) * 39.5);
-    top: calc(var(--u) * 36.5);
-    width: calc(var(--u) * 378);
-    height: calc(var(--u) * 60);
-    margin: 0;
-    font-size: calc(var(--u) * 36);
-    line-height: calc(var(--u) * 58.5);
-    text-align: left;
+    display: none;
   }
 
   .call-banner__cards {
+    --app-call-u: calc(100cqw / 641);
     position: absolute;
-    left: calc(var(--u) * 400.5);
-    top: calc(var(--u) * 6.5);
-    width: calc(var(--u) * 703);
-    height: calc(var(--u) * 128);
+    left: calc(var(--u) * 42);
+    top: calc(var(--u) * 22);
+    width: calc(var(--u) * 1040);
+    height: calc(var(--u) * 334);
     display: block;
     padding: 0;
     margin: 0;
-    border-radius: calc(var(--u) * 30);
+    overflow: hidden;
+    container-type: inline-size;
+    border-radius: calc(var(--u) * 24);
   }
 
   .call-banner__card {
     position: absolute;
-    top: calc(var(--u) * 23.5);
     display: block;
-    height: calc(var(--u) * 96);
+    width: 22.44% !important;
+    height: auto;
     aspect-ratio: auto;
+    border-radius: calc(var(--app-call-u) * 14);
+  }
+
+  .call-banner__card:nth-child(n + 5) {
+    display: block;
+  }
+
+  .call-banner__card:nth-child(-n + 4) {
+    top: calc(var(--app-call-u) * 11);
+    height: calc(var(--app-call-u) * 84.97);
+  }
+
+  .call-banner__card:nth-child(n + 5) {
+    top: calc(var(--app-call-u) * 106.08);
+    height: calc(var(--app-call-u) * 80.92);
+  }
+
+  .call-banner__card:nth-child(1),
+  .call-banner__card:nth-child(5) {
+    left: calc(var(--app-call-u) * 18) !important;
+  }
+
+  .call-banner__card:nth-child(2),
+  .call-banner__card:nth-child(6) {
+    left: calc(var(--app-call-u) * 171.04) !important;
+  }
+
+  .call-banner__card:nth-child(3),
+  .call-banner__card:nth-child(7) {
+    left: calc(var(--app-call-u) * 325.1) !important;
+  }
+
+  .call-banner__card:nth-child(4),
+  .call-banner__card:nth-child(8) {
+    left: calc(var(--app-call-u) * 478.14) !important;
   }
 
   .games-grid {
@@ -2587,9 +3351,9 @@ watch(
   .call-banner__cards {
     display: block;
     gap: 0;
-    width: calc(var(--u) * 703);
+    width: calc(var(--u) * 1040);
     padding: 0;
-    border-radius: calc(var(--u) * 30);
+    border-radius: calc(var(--u) * 24);
   }
 
   .call-banner__title {
@@ -2855,6 +3619,16 @@ watch(
   .call-banner,
   .economy-banner {
     animation: none;
+  }
+
+  .call-banner__card,
+  .call-banner__avatar-layer {
+    animation: none;
+    transition: none;
+  }
+
+  .call-banner__card:hover {
+    transform: none;
   }
 }
 
