@@ -665,6 +665,8 @@
     "authPasswordLabel": "Пароль",
     "authEmailPlaceholder": "Електронна пошта",
     "authPasswordPlaceholder": "••••••••",
+    "authPasswordShow": "Показати пароль",
+    "authPasswordHide": "Сховати пароль",
     "authEmailContinue": "Продовжити з поштою",
     "authEmailCreated": "Обліковий запис створено. Ти в системі.",
     "authEmailLoggedIn": "Вхід виконано.",

@@ -42,7 +42,7 @@ watch([loaded, isAuthenticated], () => {
 
 <template>
   <div class="auth-page eat-first-root page-stack" :data-theme="theme">
-    <LandingCloudBackdrop class="auth-page__backdrop" />
+    <LandingCloudBackdrop class="auth-page__backdrop" variant="app" />
     <div class="auth-page__surface">
       <div class="auth-page__inner">
         <header class="auth-page__head">
@@ -225,6 +225,59 @@ watch([loaded, isAuthenticated], () => {
   background: var(--bg-input, color-mix(in srgb, var(--sa-color-surface) 90%, transparent));
   color: var(--text-heading, var(--sa-color-text-main));
   font-size: 0.875rem;
+}
+
+.auth-page :deep(.auth-page-password-control) {
+  position: relative;
+  width: 100%;
+}
+
+.auth-page :deep(.auth-page-input--with-action) {
+  padding-right: 2.75rem;
+}
+
+.auth-page :deep(.auth-page-password-toggle) {
+  position: absolute;
+  top: 50%;
+  right: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-md, var(--sa-radius-sm));
+  background: transparent;
+  color: var(--text-muted, var(--sa-color-text-muted));
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.auth-page :deep(.auth-page-password-toggle:hover:not(:disabled)) {
+  border-color: var(--border-subtle, var(--sa-color-border));
+  background: color-mix(in srgb, var(--sa-color-surface-raised) 82%, transparent);
+  color: var(--text-heading, var(--sa-color-text-main));
+}
+
+.auth-page :deep(.auth-page-password-toggle:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--sa-color-primary) 65%, transparent);
+  outline-offset: 2px;
+}
+
+.auth-page :deep(.auth-page-password-toggle:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.auth-page :deep(.auth-page-password-toggle__icon) {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
 }
 
 .auth-page :deep(.auth-page-input::placeholder) {
