@@ -73,8 +73,10 @@ const callRoute = { name: 'call' } as const
 const coinHubRoute = { name: 'coin-hub' } as const
 const landingFeedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
 const landingPageLoading = ref(true)
+const landingCanvasElement = ref<HTMLElement | null>(null)
 
 let landingReadyTimer: number | undefined
+let landingCanvasResizeObserver: ResizeObserver | undefined
 
 const navItems = computed(
   () =>
@@ -392,6 +394,22 @@ function landingUsesFlowLayout(): boolean {
   return typeof window !== 'undefined' && window.matchMedia(LANDING_FLOW_LAYOUT_MEDIA).matches
 }
 
+function syncLandingBackdropUnit(): void {
+  const canvas = landingCanvasElement.value
+  if (typeof window === 'undefined' || canvas == null) return
+
+  if (!landingUsesFlowLayout()) {
+    canvas.style.removeProperty('--landing-backdrop-u')
+    return
+  }
+
+  const width = canvas.clientWidth
+  const height = canvas.scrollHeight
+  if (width <= 0 || height <= 0) return
+
+  canvas.style.setProperty('--landing-backdrop-u', `${Math.max(width / 2560, height / 2655)}px`)
+}
+
 function getLandingFlowScrollTop(hash: string): number | null {
   if (typeof window === 'undefined' || !landingUsesFlowLayout()) return null
   const target = document.querySelector<HTMLElement>(hash)
@@ -440,6 +458,13 @@ function waitForLandingTimeout(ms: number): Promise<void> {
 }
 
 onMounted(() => {
+  syncLandingBackdropUnit()
+  if (typeof ResizeObserver !== 'undefined' && landingCanvasElement.value != null) {
+    landingCanvasResizeObserver = new ResizeObserver(syncLandingBackdropUnit)
+    landingCanvasResizeObserver.observe(landingCanvasElement.value)
+  }
+  window.addEventListener('resize', syncLandingBackdropUnit)
+
   void Promise.race([
     Promise.allSettled([
       waitForLandingFonts(),
@@ -461,6 +486,8 @@ onUnmounted(() => {
   if (landingReadyTimer !== undefined) {
     window.clearTimeout(landingReadyTimer)
   }
+  landingCanvasResizeObserver?.disconnect()
+  window.removeEventListener('resize', syncLandingBackdropUnit)
 })
 
 watch(
@@ -480,7 +507,7 @@ watch(
   <div class="landing page-stack">
     <AppFullPageLoader :visible="landingPageLoading" :aria-label="t('landing.loadingAria')" label="" />
 
-    <div class="landing__canvas">
+    <div ref="landingCanvasElement" class="landing__canvas">
       <LandingCloudBackdrop class="landing__background" />
 
       <div class="landing-wordmark-layer" aria-hidden="true">
@@ -712,6 +739,7 @@ watch(
 
 .landing__canvas {
   --u: calc(100cqw / 2560);
+  --landing-backdrop-u: var(--u);
   --landing-parallax-bg-x: 0px;
   --landing-parallax-bg-y: 0px;
   --landing-parallax-mid-x: 0px;
@@ -738,6 +766,7 @@ watch(
 }
 
 .landing__background {
+  --u: var(--landing-backdrop-u);
   position: absolute;
   top: 0;
   bottom: 0;
@@ -1864,6 +1893,18 @@ watch(
     aspect-ratio: auto;
     min-height: 100vh;
     padding: 21px var(--landing-section-gutter) 152px;
+  }
+
+  .landing__background {
+    width: calc(var(--landing-backdrop-u) * 2560);
+  }
+
+  .landing-decor-icons {
+    --u: var(--landing-backdrop-u);
+    left: 50%;
+    right: auto;
+    width: calc(var(--landing-backdrop-u) * 2560);
+    transform: translateX(-50%);
   }
 
   .landing__bolt {
