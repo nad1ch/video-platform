@@ -96,7 +96,19 @@
     "sectionVideoCall": "Videoanruf",
     "sectionEconomy": "Economy",
     "sectionGames": "Spiele",
-    "emptyGames": "Noch keine Spiele verfügbar."
+    "emptyGames": "Noch keine Spiele verfügbar.",
+    "comingSoonEyebrow": "coming soon...",
+    "comingSoonStatus": "Coming soon",
+    "comingSoonClose": "Coming-soon-Vorschau schließen",
+    "gameEatFirstComingSoonTitle": "Wen essen wir zuerst",
+    "gameEatFirstComingSoonDesc": "Die Spieler stimmen ab, wer zuerst “gegessen” wird. Überzeuge, manipuliere oder überlebe einfach — der Chat kann alles verändern.",
+    "gameSpyComingSoonTitle": "Spion",
+    "gameSpyComingSoonDesc": "Einer von euch ist der Spion. Alle kennen den Ort — außer dem Verräter. Stelle clevere Fragen, bluffe und lass dich nicht entlarven.",
+    "gameMicComingSoonTitle": "Who Took a Shi*t",
+    "gameMicComingSoonDesc": "Jemand war es... aber wer? Finde den Schuldigen, erfinde ein Alibi und lass dich nicht erwischen. Der Chat hilft beim Urteil.",
+    "economyComingSoonTitle": "Interaktions-Economy",
+    "economyComingSoonDesc": "Die Plattform hat ein eigenes Punktesystem, das dich für Aktivität während Streams belohnt. Je mehr du zusiehst, chattest und teilnimmst — desto mehr Punkte sammelst du.\nDu kannst diese Punkte für Interaktionen mit dem Streamer ausgeben: Gameplay beeinflussen, Events auslösen, Aufmerksamkeit bekommen oder zusätzliche Features freischalten.\nEs ist nicht nur Zuschauen — es ist Teilnahme, bei der jede Aktion zählt.",
+    "openEconomyComingSoon": "Interaktions-Economy-Vorschau öffnen"
   },
   "routes": {
     "call": "Videoanruf",

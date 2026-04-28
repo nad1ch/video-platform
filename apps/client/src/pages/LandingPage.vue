@@ -107,8 +107,7 @@ type LandingDecorIcon = {
 
 const authRouteLogin = { path: '/auth', query: { redirect: '/app', mode: 'login' as const } } as const
 const callRoute = { name: 'call' } as const
-const coinHubRoute = { name: 'coin-hub' } as const
-const eatRoute = { name: 'eat', query: { view: 'join' } } satisfies RouteLocationRaw
+const economyComingSoonRoute = { name: 'home', query: { comingSoon: 'economy' } } satisfies RouteLocationRaw
 const mafiaRoute = { name: 'mafia' } satisfies RouteLocationRaw
 const landingFeedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
 const landingPageLoading = ref(true)
@@ -295,7 +294,7 @@ const landingGameCards = computed<LandingGameCard[]>(() => [
   {
     id: 'eat-first',
     title: t('home.gameEatFirst'),
-    to: eatRoute,
+    to: { name: 'home', query: { comingSoon: 'eat-first' } },
     image: eatFirstIcon,
     imageWebp: eatFirstIconWebp,
     ariaLabel: t('home.openEatFirst'),
@@ -331,7 +330,7 @@ const landingGameCards = computed<LandingGameCard[]>(() => [
   {
     id: 'spy',
     title: t('home.gameSpy'),
-    to: mafiaRoute,
+    to: { name: 'home', query: { comingSoon: 'spy' } },
     image: spyIcon,
     imageWebp: spyIconWebp,
     ariaLabel: t('home.openSpy'),
@@ -340,7 +339,7 @@ const landingGameCards = computed<LandingGameCard[]>(() => [
   {
     id: 'hot-seat',
     title: t('home.gameMic'),
-    to: eatRoute,
+    to: { name: 'home', query: { comingSoon: 'hot-seat' } },
     image: whoTakeShitIcon,
     ariaLabel: t('home.openHotSeat'),
     tone: 'amber',
@@ -657,7 +656,7 @@ watch(
           {{ t('landing.economyLead') }}
         </p>
 
-        <EconomySlotBanner class="economy-banner" :to="coinHubRoute" />
+        <EconomySlotBanner class="economy-banner" :to="economyComingSoonRoute" />
       </section>
 
       <footer id="footer" class="landing-footer" :aria-label="t('landing.siteFooterAria')">

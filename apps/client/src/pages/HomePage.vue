@@ -18,19 +18,27 @@ import spyImageWebp from '@/assets/landing/spy.webp'
 import whoTakeShitImage from '@/assets/landing/who-take-shit.png'
 import { useAuth } from '@/composables/useAuth'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
-import { loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
+import { loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
 import { prefetchRoute } from '@/utils/routePrefetch'
 
 type AppGameCard = {
   id: string
   title: string
   subtitle?: string
-  to: RouteLocationRaw
+  to?: RouteLocationRaw
   image: string
   imageWebp?: string
   ariaLabel: string
   tone?: 'violet' | 'amber' | 'green' | 'slate'
   prefetch?: () => void
+  modalVisual?: 'image' | 'economy-slot'
+  comingSoon?: {
+    eyebrow: string
+    title?: string
+    description: string
+    status: string
+    variant?: 'game' | 'economy'
+  }
 }
 
 const { t } = useI18n()
@@ -44,8 +52,7 @@ const defaultNadleStreamer =
 
 const callRoute = { name: 'call' } satisfies RouteLocationRaw
 const mafiaRoute = { name: 'mafia' } satisfies RouteLocationRaw
-const eatRoute = { name: 'eat', query: { view: 'join' } } satisfies RouteLocationRaw
-const coinHubRoute = { name: 'coin-hub' } satisfies RouteLocationRaw
+const economyComingSoonRoute = { name: 'home', query: { comingSoon: 'economy' } } satisfies RouteLocationRaw
 
 const nadleRoute = computed<RouteLocationRaw>(() => ({
   name: 'nadle-streamer',
@@ -57,7 +64,6 @@ const nadrawRoute = computed<RouteLocationRaw>(() => ({
   params: { streamer: defaultNadleStreamer },
 }))
 
-const prefetchEat = () => prefetchRoute(loadEatFirstPage)
 const prefetchMafia = () => prefetchRoute(loadMafiaPage)
 const prefetchNadle = () => prefetchRoute(loadNadleStreamPage)
 
@@ -65,12 +71,16 @@ const gameCards = computed<AppGameCard[]>(() => [
   {
     id: 'eat-first',
     title: t('home.gameEatFirst'),
-    to: eatRoute,
     image: eatFirstImage,
     imageWebp: eatFirstImageWebp,
     ariaLabel: t('home.openEatFirst'),
     tone: 'amber',
-    prefetch: prefetchEat,
+    comingSoon: {
+      eyebrow: t('home.comingSoonEyebrow'),
+      title: t('home.gameEatFirstComingSoonTitle'),
+      description: t('home.gameEatFirstComingSoonDesc'),
+      status: t('home.comingSoonStatus'),
+    },
   },
   {
     id: 'mafia',
@@ -104,21 +114,46 @@ const gameCards = computed<AppGameCard[]>(() => [
   {
     id: 'spy',
     title: t('home.gameSpy'),
-    to: mafiaRoute,
     image: spyImage,
     imageWebp: spyImageWebp,
     ariaLabel: t('home.openSpy'),
     tone: 'slate',
-    prefetch: prefetchMafia,
+    comingSoon: {
+      eyebrow: t('home.comingSoonEyebrow'),
+      title: t('home.gameSpyComingSoonTitle'),
+      description: t('home.gameSpyComingSoonDesc'),
+      status: t('home.comingSoonStatus'),
+    },
   },
   {
     id: 'hot-seat',
     title: t('home.gameMic'),
-    to: eatRoute,
     image: whoTakeShitImage,
     ariaLabel: t('home.openHotSeat'),
     tone: 'amber',
-    prefetch: prefetchEat,
+    comingSoon: {
+      eyebrow: t('home.comingSoonEyebrow'),
+      title: t('home.gameMicComingSoonTitle'),
+      description: t('home.gameMicComingSoonDesc'),
+      status: t('home.comingSoonStatus'),
+    },
+  },
+])
+
+const economyComingSoonCards = computed<AppGameCard[]>(() => [
+  {
+    id: 'economy',
+    title: t('home.economyComingSoonTitle'),
+    image: '',
+    ariaLabel: t('home.openEconomyComingSoon'),
+    modalVisual: 'economy-slot',
+    comingSoon: {
+      eyebrow: t('home.comingSoonEyebrow'),
+      title: t('home.economyComingSoonTitle'),
+      description: t('home.economyComingSoonDesc'),
+      status: t('home.comingSoonStatus'),
+      variant: 'economy',
+    },
   },
 ])
 
@@ -129,6 +164,17 @@ const authRedirectTarget = computed(() => {
 })
 
 const authLoading = computed(() => !auth.loaded.value)
+const comingSoonGameId = computed(() => {
+  const value = route.query.comingSoon
+  return typeof value === 'string' ? value : null
+})
+
+function clearComingSoonGame(): void {
+  if (!('comingSoon' in route.query)) return
+  const query = { ...route.query }
+  delete query.comingSoon
+  void router.replace({ name: 'home', query })
+}
 
 onMounted(() => {
   void auth.refresh()
@@ -173,10 +219,15 @@ watch(
         <div class="app-home__grid">
           <div class="app-home__feature-stack">
             <AppVideoCallSection :to="callRoute" :auth-hint="t('home.openVideoCall')" />
-            <AppEconomySection :to="coinHubRoute" />
+            <AppEconomySection :to="economyComingSoonRoute" />
           </div>
 
-          <AppGamesSection :items="gameCards" />
+          <AppGamesSection
+            :items="gameCards"
+            :modal-items="economyComingSoonCards"
+            :coming-soon-item-id="comingSoonGameId"
+            @coming-soon-close="clearComingSoonGame"
+          />
         </div>
       </main>
     </div>

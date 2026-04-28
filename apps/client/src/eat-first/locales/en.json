@@ -96,7 +96,19 @@
     "sectionVideoCall": "Videocall",
     "sectionEconomy": "Economy",
     "sectionGames": "Games",
-    "emptyGames": "No games available yet."
+    "emptyGames": "No games available yet.",
+    "comingSoonEyebrow": "coming soon...",
+    "comingSoonStatus": "Coming soon",
+    "comingSoonClose": "Close coming soon preview",
+    "gameEatFirstComingSoonTitle": "Who we should eat first",
+    "gameEatFirstComingSoonDesc": "Players vote on who gets “eaten” first. Convince, manipulate, or just survive — the chat can change everything.",
+    "gameSpyComingSoonTitle": "Spy",
+    "gameSpyComingSoonDesc": "One of you is the spy. Everyone knows the location — except the traitor. Ask smart questions, bluff, and don’t get exposed.",
+    "gameMicComingSoonTitle": "Who Took a Shi*t",
+    "gameMicComingSoonDesc": "Players vote on who gets “eaten” first. Convince, manipulate, or just survive — the chat helps shape the decision.",
+    "economyComingSoonTitle": "Interaction Economy",
+    "economyComingSoonDesc": "The platform features its own point system that rewards you for being active during streams. The more you watch, chat, and participate — the more points you earn.\nYou can spend these points to interact with the streamer: influence gameplay, trigger events, get attention, or unlock extra features.\nIt’s not just watching — it’s participation, where every action matters.",
+    "openEconomyComingSoon": "Open Interaction Economy preview"
   },
   "routes": {
     "call": "Video call",

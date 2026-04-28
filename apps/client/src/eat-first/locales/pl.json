@@ -96,7 +96,19 @@
     "sectionVideoCall": "Połączenie wideo",
     "sectionEconomy": "Ekonomia",
     "sectionGames": "Gry",
-    "emptyGames": "Nie ma jeszcze gier."
+    "emptyGames": "Nie ma jeszcze gier.",
+    "comingSoonEyebrow": "coming soon...",
+    "comingSoonStatus": "Coming soon",
+    "comingSoonClose": "Zamknij podgląd coming soon",
+    "gameEatFirstComingSoonTitle": "Kogo zjemy pierwszego",
+    "gameEatFirstComingSoonDesc": "Gracze głosują, kto zostanie “zjedzony” jako pierwszy. Przekonuj, manipuluj albo po prostu przetrwaj — czat może zmienić wszystko.",
+    "gameSpyComingSoonTitle": "Szpieg",
+    "gameSpyComingSoonDesc": "Jedno z was jest szpiegiem. Wszyscy znają miejsce — oprócz zdrajcy. Zadawaj sprytne pytania, blefuj i nie daj się odkryć.",
+    "gameMicComingSoonTitle": "Who Took a Shi*t",
+    "gameMicComingSoonDesc": "Ktoś to zrobił... ale kto? Szukaj winnego, wymyśl alibi i nie daj się złapać. Czat pomoże wydać wyrok.",
+    "economyComingSoonTitle": "Ekonomia interakcji",
+    "economyComingSoonDesc": "Platforma ma własny system punktów, który nagradza aktywność podczas streamów. Im więcej oglądasz, piszesz na czacie i bierzesz udział w wydarzeniach — tym więcej punktów zdobywasz.\nPunkty możesz wydawać na interakcje ze streamerem: wpływać na rozgrywkę, uruchamiać wydarzenia, zwracać uwagę albo odblokowywać dodatkowe funkcje.\nTo nie tylko oglądanie — to udział, w którym każda akcja ma znaczenie.",
+    "openEconomyComingSoon": "Otwórz podgląd ekonomii interakcji"
   },
   "routes": {
     "call": "Połączenie wideo",
