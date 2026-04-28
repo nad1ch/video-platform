@@ -73,54 +73,65 @@ defineProps<{
     <p v-if="selfStreakSummary" class="nadle-page__glb-self-streak" aria-live="polite">{{ selfStreakSummary }}</p>
 
     <p v-if="error" class="nadle-page__glb-banner" role="alert">{{ error }}</p>
-    <p v-else-if="loading" class="nadle-page__glb-muted">{{ loadingText }}</p>
-    <div v-else-if="rows.length === 0" class="nadle-page__glb-empty">
-      <div class="nadle-page__glb-podium" aria-hidden="true">
-        <span class="nadle-page__glb-podium-step">1</span>
-        <span class="nadle-page__glb-podium-step">2</span>
-        <span class="nadle-page__glb-podium-step">3</span>
+    <div
+      v-else
+      class="nadle-page__glb-body"
+      :class="{ 'nadle-page__glb-body--loading': loading }"
+      :aria-busy="loading ? 'true' : 'false'"
+    >
+      <div v-if="rows.length === 0 && !loading" class="nadle-page__glb-empty">
+        <div class="nadle-page__glb-podium" aria-hidden="true">
+          <span class="nadle-page__glb-podium-step">1</span>
+          <span class="nadle-page__glb-podium-step">2</span>
+          <span class="nadle-page__glb-podium-step">3</span>
+        </div>
+        <p class="nadle-page__glb-muted nadle-page__glb-muted--empty">{{ emptyText }}</p>
       </div>
-      <p class="nadle-page__glb-muted nadle-page__glb-muted--empty">{{ emptyText }}</p>
-    </div>
-    <div v-else class="nadle-page__glb-scroll">
-      <table class="nadle-page__glb-table" :aria-label="scoreColumnHeader">
-        <thead>
-          <tr>
-            <th scope="col" class="nadle-page__glb-th nadle-page__glb-th--rank">{{ colRank }}</th>
-            <th scope="col" class="nadle-page__glb-th nadle-page__glb-th--player-col">{{ colPlayer }}</th>
-            <th scope="col" class="nadle-page__glb-th nadle-page__glb-th--score">{{ scoreColumnHeader }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="row in rows"
-            :key="row.rowKey"
-            class="nadle-page__glb-tr"
-            :class="{ 'nadle-page__glb-tr--self': row.isSelf }"
-          >
-            <td class="nadle-page__glb-td nadle-page__glb-td--rank">{{ row.rank }}</td>
-            <td class="nadle-page__glb-td nadle-page__glb-td--player">
-              <span class="nadle-page__glb-player">
-                <img
-                  v-if="row.avatarUrl"
-                  class="nadle-page__glb-avatar"
-                  :src="row.avatarUrl"
-                  alt=""
-                  width="28"
-                  height="28"
-                  referrerpolicy="no-referrer"
-                />
-                <span v-else class="nadle-page__glb-avatar nadle-page__glb-avatar--ph" aria-hidden="true">{{
-                  row.initials
-                }}</span>
-                <span class="nadle-page__glb-name">{{ row.displayName }}</span>
-                <span v-if="row.isSelf" class="nadle-page__glb-you">{{ youLabel }}</span>
-              </span>
-            </td>
-            <td class="nadle-page__glb-td nadle-page__glb-td--score">{{ row.score }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-else-if="rows.length > 0" class="nadle-page__glb-scroll">
+        <table class="nadle-page__glb-table" :aria-label="scoreColumnHeader">
+          <thead>
+            <tr>
+              <th scope="col" class="nadle-page__glb-th nadle-page__glb-th--rank">{{ colRank }}</th>
+              <th scope="col" class="nadle-page__glb-th nadle-page__glb-th--player-col">{{ colPlayer }}</th>
+              <th scope="col" class="nadle-page__glb-th nadle-page__glb-th--score">{{ scoreColumnHeader }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in rows"
+              :key="row.rowKey"
+              class="nadle-page__glb-tr"
+              :class="{ 'nadle-page__glb-tr--self': row.isSelf }"
+            >
+              <td class="nadle-page__glb-td nadle-page__glb-td--rank">{{ row.rank }}</td>
+              <td class="nadle-page__glb-td nadle-page__glb-td--player">
+                <span class="nadle-page__glb-player">
+                  <img
+                    v-if="row.avatarUrl"
+                    class="nadle-page__glb-avatar"
+                    :src="row.avatarUrl"
+                    alt=""
+                    width="28"
+                    height="28"
+                    referrerpolicy="no-referrer"
+                  />
+                  <span v-else class="nadle-page__glb-avatar nadle-page__glb-avatar--ph" aria-hidden="true">{{
+                    row.initials
+                  }}</span>
+                  <span class="nadle-page__glb-name">{{ row.displayName }}</span>
+                  <span v-if="row.isSelf" class="nadle-page__glb-you">{{ youLabel }}</span>
+                </span>
+              </td>
+              <td class="nadle-page__glb-td nadle-page__glb-td--score">{{ row.score }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <Transition name="nadle-glb-loader">
+        <div v-if="loading" class="nadle-page__glb-loader" role="status" :aria-label="loadingText">
+          <span class="nadle-page__glb-loader-dot" aria-hidden="true" />
+        </div>
+      </Transition>
     </div>
   </section>
 </template>
@@ -192,14 +203,12 @@ defineProps<{
   border-radius: 15.535px;
   cursor: pointer;
   transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 
 .nadle-page__glb-tab:hover {
-  border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(102, 56, 143, 0.58);
+  transform: scale(1.025);
 }
 
 .nadle-page__glb-tab--active {
@@ -262,9 +271,12 @@ defineProps<{
 }
 
 .nadle-page__glb-empty {
+  flex: 1 1 auto;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: var(--sa-space-2);
   padding: var(--sa-space-2) 0 var(--sa-space-1);
 }
@@ -316,6 +328,79 @@ defineProps<{
   padding: 6px;
 }
 
+.nadle-page__glb-body {
+  position: relative;
+  flex: 1 1 auto;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 5.5rem;
+}
+
+.nadle-page__glb-body > :not(.nadle-page__glb-loader) {
+  transition: opacity 0.18s ease;
+}
+
+.nadle-page__glb-body--loading > :not(.nadle-page__glb-loader) {
+  opacity: 0.72;
+}
+
+.nadle-page__glb-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 15.535px;
+  pointer-events: none;
+  background: rgba(20, 8, 42, 0.18);
+  -webkit-backdrop-filter: blur(1.5px);
+  backdrop-filter: blur(1.5px);
+}
+
+.nadle-page__glb-loader-dot {
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 0 18px rgba(146, 82, 206, 0.32);
+  animation: nadle-glb-loader-spin 0.74s linear infinite;
+}
+
+.nadle-glb-loader-enter-active,
+.nadle-glb-loader-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.nadle-glb-loader-enter-from,
+.nadle-glb-loader-leave-to {
+  opacity: 0;
+  transform: scale(0.985);
+}
+
+@keyframes nadle-glb-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nadle-page__glb-loader-dot {
+    animation: none;
+  }
+
+  .nadle-page__glb-body > :not(.nadle-page__glb-loader),
+  .nadle-glb-loader-enter-active,
+  .nadle-glb-loader-leave-active {
+    transition: none;
+  }
+}
+
 .nadle-page__glb-table {
   width: 100%;
   max-width: 100%;
@@ -338,8 +423,9 @@ defineProps<{
   letter-spacing: 0;
   line-height: 1.2;
   white-space: normal;
-  overflow-wrap: anywhere;
-  word-wrap: break-word;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
   vertical-align: bottom;
   box-sizing: border-box;
 }
@@ -367,6 +453,9 @@ defineProps<{
   border-bottom: 0;
   background: rgba(102, 56, 143, 0.11);
   vertical-align: middle;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
 }
 
 .nadle-page__glb-tr:hover .nadle-page__glb-td {
@@ -398,6 +487,10 @@ defineProps<{
 .nadle-page__glb-tr--self .nadle-page__glb-td {
   background: #414d34;
   box-shadow: none;
+}
+
+.nadle-page__glb-tr--self:hover .nadle-page__glb-td {
+  background: #4b5b3a;
 }
 
 .nadle-page__glb-tr--self .nadle-page__glb-td:first-child {

@@ -179,12 +179,14 @@ const emit = defineEmits<{
   gap: 7px;
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
 }
 
 .nadle-page__kbd-main {
   flex: 0 1 auto;
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -199,6 +201,7 @@ const emit = defineEmits<{
   justify-content: center;
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
 }
 
 .nadle-page__kbd-row--mid {
@@ -246,6 +249,47 @@ const emit = defineEmits<{
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.07),
     0 2px 0 rgba(0, 0, 0, 0.16);
+}
+
+.nadle-page__kbd-row--actions :deep(.nadle-page__kbd-side-action:hover:not(:disabled)),
+.nadle-page__kbd-row--actions :deep(.nadle-page__len-btn--kbd:hover:not(:disabled)) {
+  transform: scale(1.025);
+  filter: none;
+}
+
+.nadle-page__kbd-row--actions :deep(.nadle-page__kbd-side-action) {
+  transition: transform 0.15s ease;
+}
+
+.nadle-page__kbd-row--actions :deep(.nadle-page__kbd-side-action:hover:not(:disabled)) {
+  border-color: rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 48%),
+    rgba(102, 56, 143, 0.05);
+  color: #ffffff;
+}
+
+.nadle-page__kbd-row--actions :deep(.nadle-page__kbd-side-action:last-child:hover:not(:disabled)) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 48%),
+    rgba(255, 59, 48, 0.3);
+}
+
+.nadle-page__kbd-row--actions :deep(.nadle-page__len-btn--kbd) {
+  transition: transform 0.15s ease;
+}
+
+.nadle-page__kbd-row--actions :deep(.nadle-page__len-btn--kbd.app-btn--ghost:hover:not(:disabled)) {
+  border-color: color-mix(in srgb, var(--sa-color-border) 80%, transparent);
+  background: color-mix(in srgb, var(--sa-color-surface) 75%, transparent);
+  color: var(--sa-color-text-main);
+}
+
+.nadle-page__kbd-row--actions :deep(.nadle-page__len-btn--kbd.app-btn--primary:hover:not(:disabled)) {
+  border-color: var(--sa-color-primary-border);
+  background: color-mix(in srgb, var(--sa-color-primary) 88%, var(--sa-color-bg-deep));
+  color: var(--sa-color-text-strong);
+  box-shadow: none;
 }
 
 .nadle-page__kbd :deep(.nadle-page__kbd-key--absent) {
@@ -339,7 +383,7 @@ const emit = defineEmits<{
   }
 
   .nadle-page__kbd-row:nth-child(3) {
-    transform: translateX(-19px);
+    transform: none;
   }
 
   .nadle-page__kbd :deep(.nadle-page__kbd-key) {
@@ -373,13 +417,30 @@ const emit = defineEmits<{
   }
 }
 
+@media (min-width: 1201px) and (max-width: 1480px) {
+  .nadle-page__kbd-row {
+    gap: clamp(4px, 0.55vw, 8px);
+  }
+
+  .nadle-page__kbd :deep(.nadle-page__kbd-key) {
+    flex-basis: clamp(39px, 3.25vw, 53px);
+    width: clamp(39px, 3.25vw, 53px);
+    min-width: clamp(39px, 3.25vw, 53px);
+  }
+}
+
 @media (max-width: 1200px) {
   .nadle-page__kbd {
     gap: clamp(0.35rem, 0.8vw, var(--sa-space-2));
   }
 
   .nadle-page__kbd-inner {
+    align-items: center;
     gap: clamp(4px, 0.65vw, 6px);
+  }
+
+  .nadle-page__kbd-main {
+    width: min(100%, 58rem);
   }
 
   .nadle-page__kbd-row {
@@ -416,7 +477,7 @@ const emit = defineEmits<{
 @media (max-width: 520px) {
   .nadle-page__kbd-row--actions {
     gap: 0.45rem;
-    padding-inline: 0.25rem;
+    padding-inline: 0;
     margin-top: 4px;
   }
 
@@ -429,7 +490,7 @@ const emit = defineEmits<{
   }
 
   .nadle-page__kbd-row {
-    gap: 4px;
+    gap: clamp(2px, 0.85vw, 4px);
   }
 
   .nadle-page__kbd-row--mid {
@@ -437,8 +498,9 @@ const emit = defineEmits<{
   }
 
   .nadle-page__kbd :deep(.nadle-page__kbd-key) {
-    min-width: 22px;
-    font-size: 10.5px;
+    min-width: 0;
+    font-size: clamp(8.5px, 2.9vw, 10.5px);
+    padding-inline: 0.05rem;
   }
 
   .nadle-page__kbd :deep(.nadle-page__kbd-side-action) {

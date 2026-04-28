@@ -396,9 +396,11 @@ onUnmounted(() => {
                 {{ secretPeekVisible ? t('nadleUi.hideWord') : t('nadleUi.showWord') }}
               </AppButton>
             </div>
-            <p v-if="secretPeekVisible" class="nadle-page__peek-word nadle-page__peek-word--side" aria-live="polite">
-              {{ secretWord }}
-            </p>
+            <Transition name="nadle-peek-word">
+              <p v-if="secretPeekVisible" class="nadle-page__peek-word nadle-page__peek-word--side" aria-live="polite">
+                {{ secretWord }}
+              </p>
+            </Transition>
           </div>
 
         </AppCard>
@@ -810,11 +812,11 @@ onUnmounted(() => {
   }
 
   .nadle-page--len6 {
-    --nadle-cell: clamp(41px, min(6.9vmin, 7.5dvh), 65px);
+    --nadle-cell: clamp(48px, min(7.6vmin, 8.45dvh), 74px);
   }
 
   .nadle-page--len7 {
-    --nadle-cell: clamp(36px, min(6.15vmin, 6.65dvh), 58px);
+    --nadle-cell: clamp(48px, min(7.6vmin, 8.45dvh), 74px);
   }
 
   .nadle-page__grid {
@@ -822,13 +824,26 @@ onUnmounted(() => {
     justify-content: center;
     flex: 1 1 auto;
     min-height: 0;
-    height: min(725px, 100%);
-    max-height: 725px;
+    height: 100%;
+    max-height: 100%;
     grid-template-columns:
       minmax(278px, 336px)
       minmax(0, 845px)
       minmax(278px, 336px);
     gap: 13px;
+  }
+
+  @media (max-width: 1480px) {
+    .nadle-page__grid {
+      grid-template-columns:
+        minmax(220px, 260px)
+        minmax(0, 1fr)
+        minmax(220px, 260px);
+    }
+
+    .nadle-page__game {
+      padding-inline: clamp(14px, 2vw, 34px);
+    }
   }
 
   @media (max-height: 820px) {
@@ -841,11 +856,11 @@ onUnmounted(() => {
     }
 
     .nadle-page--len6 {
-      --nadle-cell: clamp(30px, 4.4dvh, 34px);
+      --nadle-cell: clamp(34px, 5dvh, 38px);
     }
 
     .nadle-page--len7 {
-      --nadle-cell: clamp(27px, 4dvh, 31px);
+      --nadle-cell: clamp(34px, 5dvh, 38px);
     }
 
     .nadle-page__game {
@@ -1000,6 +1015,83 @@ onUnmounted(() => {
   }
 }
 
+@media (min-width: 1024px) and (max-width: 1200px) {
+  .nadle-page {
+    max-width: min(100%, 1200px);
+    padding-inline: clamp(0.65rem, 1.25vw, 1rem);
+  }
+
+  .nadle-page__grid {
+    display: grid;
+    grid-template-columns: minmax(250px, 300px) minmax(0, 1fr);
+    grid-template-rows: minmax(260px, 0.9fr) minmax(260px, 1.1fr);
+    grid-template-areas:
+      "leader game"
+      "chat game";
+    align-items: stretch;
+    gap: 13px;
+    min-height: calc(100dvh - 180px);
+  }
+
+  .nadle-page__grid > .nadle-page__stack {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    width: 100%;
+    overflow-x: clip;
+  }
+
+  .nadle-page__grid > .nadle-page__stack--leader {
+    grid-area: leader;
+    order: initial;
+    overflow: hidden;
+  }
+
+  .nadle-page__grid > .nadle-page__stack--game {
+    grid-area: game;
+    order: initial;
+    min-height: 0;
+  }
+
+  .nadle-page__grid > .nadle-page__stack--chat {
+    grid-area: chat;
+    order: initial;
+    min-height: 0;
+  }
+
+  .nadle-page__grid > .nadle-page__chat-mobile-trigger {
+    display: none;
+  }
+
+  .nadle-page__game,
+  .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    justify-content: stretch;
+    padding-inline: clamp(14px, 2.2vw, 26px);
+  }
+
+  .nadle-page__grid :deep(.nadle-page__stack--game .nadle-page__guess-board) {
+    flex: 1 1 auto;
+    min-height: 0;
+    justify-content: space-between;
+  }
+
+  .nadle-page__grid :deep(.nadle-page__stack--leader > .nadle-page__leader-stack),
+  .nadle-page__grid :deep(.nadle-page__stack--chat > .twitch-relay-chat__shell) {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .nadle-page__leader-stack :deep(.nadle-page__global-lb),
+  .nadle-page__leader-stack :deep(.nadle-page__glb-scroll) {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
 @supports (width: 1cqi) {
   @media (max-width: 1200px) {
     /* Один плавний режим для всіх <=1200px, без окремого "перелому" на 960px. */
@@ -1051,9 +1143,30 @@ onUnmounted(() => {
   }
 }
 
+@media (min-width: 1024px) and (max-width: 1200px) {
+  .nadle-page {
+    --nadle-gap: clamp(7px, 0.75vw, 10px);
+  }
+
+  .nadle-page--len5 .nadle-page__game,
+  .nadle-page--len6 .nadle-page__game,
+  .nadle-page--len7 .nadle-page__game {
+    --nadle-cell: min(
+      clamp(58px, 6.1vw, 72px),
+      calc((100cqi - (var(--nadle-len-css, 5) - 1) * var(--nadle-gap)) / var(--nadle-len-css, 5))
+    );
+  }
+}
+
 @media (max-width: 520px) {
   .nadle-page {
-    padding-inline: var(--sa-space-2);
+    padding-inline: clamp(0.25rem, 1.6vw, var(--sa-space-2));
+    --nadle-gap: clamp(3px, 1vw, 5px);
+  }
+
+  .nadle-page__game,
+  .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
+    padding-inline: clamp(4px, 1.7vw, 8px);
   }
 
 }
@@ -1133,7 +1246,14 @@ onUnmounted(() => {
   .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
     flex: 1 1 auto;
     min-height: 0;
-    justify-content: flex-start;
+    height: 100%;
+    justify-content: stretch;
+  }
+
+  .nadle-page__grid :deep(.nadle-page__stack--game .nadle-page__guess-board) {
+    flex: 1 1 auto;
+    min-height: 0;
+    justify-content: space-between;
   }
 
   .nadle-page__grid :deep(.nadle-page__stack--leader > .nadle-page__leader-stack) {
@@ -1189,7 +1309,7 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: stretch;
   gap: var(--sa-space-2);
-  margin: 0 10px 10px;
+  margin: 10px 10px 10px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1220,13 +1340,48 @@ onUnmounted(() => {
 }
 
 .nadle-page__peek-word--side {
-  margin: 0;
+  --nadle-peek-word-gap: clamp(0.45rem, 1.4vw, 0.8rem);
+  margin: 0 0 var(--nadle-peek-word-gap);
+  overflow: hidden;
   text-align: center;
   font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   color: var(--sa-color-warning);
   word-break: break-word;
+}
+
+.nadle-peek-word-enter-active,
+.nadle-peek-word-leave-active {
+  transform-origin: top center;
+  transition:
+    max-height 0.22s ease,
+    opacity 0.18s ease,
+    transform 0.22s ease,
+    margin-bottom 0.22s ease;
+}
+
+.nadle-peek-word-enter-from,
+.nadle-peek-word-leave-to {
+  max-height: 0;
+  margin-bottom: 0;
+  opacity: 0;
+  transform: translateY(-0.35rem) scaleY(0.86);
+}
+
+.nadle-peek-word-enter-to,
+.nadle-peek-word-leave-from {
+  max-height: 3.5rem;
+  margin-bottom: var(--nadle-peek-word-gap);
+  opacity: 1;
+  transform: translateY(0) scaleY(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nadle-peek-word-enter-active,
+  .nadle-peek-word-leave-active {
+    transition: none;
+  }
 }
 
 .nadle-page__secret {

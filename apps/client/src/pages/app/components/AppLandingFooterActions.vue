@@ -290,16 +290,21 @@ onUnmounted(() => {
 
 @media (max-width: 640px) {
   .app-landing-footer-actions {
-    flex-direction: column;
+    flex-direction: row;
     align-items: stretch;
+    width: 100%;
   }
 
   .app-landing-footer-actions--both .app-landing-footer-actions__locale {
-    width: 100%;
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
   }
 
   .app-landing-footer-actions--both .app-landing-footer-actions__feedback {
-    width: 100%;
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
   }
 }
 
