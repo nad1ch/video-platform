@@ -11,7 +11,7 @@ import NadleLocalBoardGrid from '@/components/nadle/NadleLocalBoardGrid.vue'
 import NadleOnScreenKeyboard from '@/components/nadle/NadleOnScreenKeyboard.vue'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import { useNadleGlobalLeaderboard } from '@/composables/useNadleGlobalLeaderboard'
-import { useNadleState } from '@/composables/useNadleState'
+import { NADLE_DICTIONARY_ERROR_TEXT, useNadleState } from '@/composables/useNadleState'
 import { useNadleStatusBanners } from '@/composables/useNadleStatusBanners'
 import { useNadleStreamerRoom } from '@/composables/useNadleStreamerRoom'
 import { postNadleWin } from '@/nadle/nadleApi'
@@ -75,6 +75,19 @@ const {
 })
 
 const lastError = ref<string | null>(null)
+const nadleToastText = ref<string | null>(null)
+let nadleToastTimer: number | undefined
+
+function showNadleToast(text: string): void {
+  nadleToastText.value = text
+  if (nadleToastTimer !== undefined) {
+    window.clearTimeout(nadleToastTimer)
+  }
+  nadleToastTimer = window.setTimeout(() => {
+    nadleToastText.value = null
+    nadleToastTimer = undefined
+  }, 2200)
+}
 
 /** Unique per page load / tab — never from localStorage (avoids WS / UI collisions across tabs). */
 const nadleTabPeerId =
@@ -161,6 +174,14 @@ const { topBanner, wsStatusLabel, ircRelayBanner } = useNadleStatusBanners({
   lastError,
   wsStatus,
   ircRelayStatus,
+})
+
+watch(lastError, (text) => {
+  if (text !== NADLE_DICTIONARY_ERROR_TEXT) {
+    return
+  }
+  showNadleToast(text)
+  lastError.value = null
 })
 
 function formatCooldownHint(ms: number): string {
@@ -344,6 +365,9 @@ onUnmounted(() => {
   disposeNadleWs()
   document.documentElement.classList.remove(NADLE_ROUTE_HTML_CLASS)
   window.removeEventListener('keydown', onWindowKeydown)
+  if (nadleToastTimer !== undefined) {
+    window.clearTimeout(nadleToastTimer)
+  }
 })
 </script>
 
@@ -361,6 +385,12 @@ onUnmounted(() => {
       >
         {{ topBanner.text }}
       </p>
+
+      <Transition name="nadle-toast">
+        <div v-if="nadleToastText" class="nadle-page__toast" role="status" aria-live="polite">
+          {{ nadleToastText }}
+        </div>
+      </Transition>
 
       <div class="nadle-page__grid">
         <AppCard class="nadle-page__stack nadle-page__stack--side nadle-page__stack--leader">
@@ -603,6 +633,72 @@ onUnmounted(() => {
 .nadle-page__banner--warn {
   background: color-mix(in srgb, var(--sa-color-warning) 14%, var(--sa-color-surface));
   border-color: color-mix(in srgb, var(--sa-color-warning) 45%, var(--sa-color-border));
+}
+
+.nadle-page__toast {
+  position: fixed;
+  top: calc(72px + env(safe-area-inset-top, 0px));
+  right: clamp(0.85rem, 2vw, 1.4rem);
+  z-index: 12060;
+  box-sizing: border-box;
+  max-width: min(22rem, calc(100vw - 1.5rem));
+  padding: 0.62rem 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.035) 44%, transparent),
+    rgba(45, 24, 72, 0.9);
+  color: #ffffff;
+  font-family: "Marmelad", var(--sa-font-main);
+  font-size: 0.86rem;
+  line-height: 1.25;
+  text-align: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 14px 32px rgba(8, 2, 18, 0.36);
+  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+  backdrop-filter: blur(18px) saturate(1.18);
+  pointer-events: none;
+}
+
+.nadle-toast-enter-active,
+.nadle-toast-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.nadle-toast-enter-from,
+.nadle-toast-leave-to {
+  opacity: 0;
+  transform: translateY(-0.45rem) scale(0.98);
+}
+
+@media (max-width: 520px) {
+  .nadle-page__toast {
+    left: 50%;
+    right: auto;
+    top: calc(72px + env(safe-area-inset-top, 0px));
+    width: max-content;
+    transform: translateX(-50%);
+  }
+
+  .nadle-toast-enter-from,
+  .nadle-toast-leave-to {
+    transform: translate(-50%, -0.45rem) scale(0.98);
+  }
+
+  .nadle-toast-enter-to,
+  .nadle-toast-leave-from {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nadle-toast-enter-active,
+  .nadle-toast-leave-active {
+    transition: none;
+  }
 }
 
 .nadle-page__setup {

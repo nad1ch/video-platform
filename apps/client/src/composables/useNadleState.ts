@@ -17,6 +17,8 @@ import { readStorageJson, writeStorageJson } from '@/utils/storageJson.js'
 const NADLE_WORD_LEN_KEY = 'streamassist_nadle_word_len'
 const NADLE_LOCAL_STATS_KEY = 'streamassist_nadle_local_stats'
 
+export const NADLE_DICTIONARY_ERROR_TEXT = 'Слова немає в словнику.'
+
 type LocalWinStats = { won: number; lost: number }
 
 function loadWordLength(scope: string): WordLength {
@@ -216,7 +218,7 @@ export function useNadleState(options: UseNadleStateOptions) {
       return
     }
     if (!isAllowedGuess(guess, len)) {
-      lastError.value = 'Слова немає в словнику.'
+      lastError.value = NADLE_DICTIONARY_ERROR_TEXT
       return
     }
     const feedback = computeFeedback(secretWord.value, guess)

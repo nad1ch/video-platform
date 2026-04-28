@@ -79,12 +79,12 @@ const emit = defineEmits<{
     <div class="nadle-page__kbd-row nadle-page__kbd-row--actions" role="group" :aria-label="kbdToolbarAria">
       <AppButton
         type="button"
-        variant="secondary"
-        class="nadle-page__kbd-action nadle-page__kbd-side-action"
-        :disabled="enterDisabled"
-        @click="emit('enter')"
+        variant="ghost"
+        class="nadle-page__kbd-action nadle-page__kbd-side-action nadle-page__kbd-side-action--delete"
+        :disabled="keysDisabled"
+        @click="emit('backspace')"
       >
-        {{ enterLabel }}
+        delete
       </AppButton>
       <AppButton
         v-for="n in wordLengthOptions"
@@ -98,12 +98,12 @@ const emit = defineEmits<{
       </AppButton>
       <AppButton
         type="button"
-        variant="ghost"
-        class="nadle-page__kbd-action nadle-page__kbd-side-action"
-        :disabled="keysDisabled"
-        @click="emit('backspace')"
+        variant="secondary"
+        class="nadle-page__kbd-action nadle-page__kbd-side-action nadle-page__kbd-side-action--enter"
+        :disabled="enterDisabled"
+        @click="emit('enter')"
       >
-        delete
+        {{ enterLabel }}
       </AppButton>
     </div>
   </div>
@@ -269,7 +269,7 @@ const emit = defineEmits<{
   color: #ffffff;
 }
 
-.nadle-page__kbd-row--actions :deep(.nadle-page__kbd-side-action:last-child:hover:not(:disabled)) {
+.nadle-page__kbd-row--actions :deep(.nadle-page__kbd-side-action--delete:hover:not(:disabled)) {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 48%),
     rgba(255, 59, 48, 0.3);
@@ -358,7 +358,7 @@ const emit = defineEmits<{
     0 2px 0 rgba(0, 0, 0, 0.18);
 }
 
-.nadle-page__kbd-row--actions :deep(.nadle-page__kbd-side-action:last-child) {
+.nadle-page__kbd-row--actions :deep(.nadle-page__kbd-side-action--delete) {
   font-family: "Climate Crisis", var(--sa-font-display);
   font-size: 10px;
   text-transform: lowercase;
@@ -411,7 +411,7 @@ const emit = defineEmits<{
     padding: 0 0.22rem;
   }
 
-  .nadle-page__kbd-row--actions :deep(.nadle-page__kbd-side-action:last-child) {
+  .nadle-page__kbd-row--actions :deep(.nadle-page__kbd-side-action--delete) {
     font-family: "Climate Crisis", var(--sa-font-display);
     font-size: 10px;
   }
