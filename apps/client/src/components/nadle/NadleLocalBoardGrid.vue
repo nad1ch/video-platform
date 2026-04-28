@@ -47,6 +47,7 @@ const emit = defineEmits<{
           'nadle-page__cell--empty': !cell.locked && !cell.letter,
           'nadle-page__cell--draft': !cell.locked && Boolean(cell.letter),
         }"
+        :style="{ '--nadle-reveal-delay': `${cell.colIndex * 86}ms` }"
         :data-f="cell.feedback ?? undefined"
         role="gridcell"
       >
@@ -84,6 +85,7 @@ const emit = defineEmits<{
 }
 
 .nadle-page__cell--tile {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -109,6 +111,31 @@ const emit = defineEmits<{
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.055),
     inset 0 -10px 18px rgba(0, 0, 0, 0.08);
+}
+
+.nadle-page__cell--tile[data-f] {
+  animation: nadle-cell-reveal 0.82s cubic-bezier(0.22, 0.78, 0.24, 1) both;
+  animation-delay: var(--nadle-reveal-delay, 0ms);
+  transform-origin: center;
+  will-change: transform, filter;
+}
+
+.nadle-page__cell--tile[data-f]::before {
+  position: absolute;
+  inset: -45%;
+  content: '';
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 28%,
+    rgba(255, 255, 255, 0.26) 46%,
+    rgba(255, 255, 255, 0.08) 54%,
+    transparent 70%
+  );
+  opacity: 0;
+  transform: translateX(-75%) rotate(18deg);
+  animation: nadle-cell-reveal-shine 0.68s ease-out both;
+  animation-delay: calc(var(--nadle-reveal-delay, 0ms) + 0.24s);
 }
 
 .nadle-page__cell--empty {
@@ -147,5 +174,58 @@ const emit = defineEmits<{
   background: rgba(102, 56, 143, 0.33);
   border-color: rgba(255, 255, 255, 0.14);
   color: #ffffff;
+}
+
+@keyframes nadle-cell-reveal {
+  0% {
+    opacity: 0.86;
+    transform: perspective(720px) translateY(0) rotateX(0deg) scale(0.98);
+    filter: brightness(1);
+  }
+
+  34% {
+    color: transparent;
+    transform: perspective(720px) translateY(-3px) rotateX(58deg) scale(0.975);
+    filter: brightness(1.14) saturate(1.08);
+  }
+
+  66% {
+    color: #ffffff;
+    transform: perspective(720px) translateY(-1px) rotateX(-7deg) scale(1.025);
+    filter: brightness(1.22) saturate(1.12);
+  }
+
+  84% {
+    transform: perspective(720px) translateY(0) rotateX(3deg) scale(0.998);
+  }
+
+  100% {
+    opacity: 1;
+    transform: perspective(720px) translateY(0) rotateX(0deg) scale(1);
+    filter: brightness(1) saturate(1);
+  }
+}
+
+@keyframes nadle-cell-reveal-shine {
+  0% {
+    opacity: 0;
+    transform: translateX(-75%) rotate(18deg);
+  }
+
+  42% {
+    opacity: 0.8;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(75%) rotate(18deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nadle-page__cell--tile[data-f],
+  .nadle-page__cell--tile[data-f]::before {
+    animation: none;
+  }
 }
 </style>
