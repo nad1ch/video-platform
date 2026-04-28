@@ -497,6 +497,7 @@ onUnmounted(() => {
         >
           <TwitchRelayChatPanel
             ref="chatPanelRef"
+            flex-rail
             :ws-status="wsStatus"
             :ws-status-label="wsStatusLabel"
             :chat-title="t('nadleUi.chatTitle')"
@@ -537,9 +538,16 @@ onUnmounted(() => {
 }
 
 .nadle-page {
-  --nadle-cell: 78px;
-  --nadle-gap: 10px;
+  --nadle-cell: 61px;
+  --nadle-gap: 11px;
   --nadle-len-css: 5;
+  --nadle-panel-radius: 29px;
+  --nadle-panel-bg: linear-gradient(105deg, rgba(124, 77, 219, 0.173) 0%, rgba(60, 36, 99, 0.169) 73.21%);
+  --nadle-panel-border: rgba(255, 255, 255, 0.22);
+  --nadle-control-bg: rgba(102, 56, 143, 0.47);
+  --nadle-control-bg-muted: rgba(102, 56, 143, 0.11);
+  --nadle-control-bg-soft: rgba(102, 56, 143, 0.05);
+  --nadle-tile-bg: rgba(102, 56, 143, 0.33);
   flex: 1 1 auto;
   padding-block: var(--sa-space-2) var(--sa-space-5);
   /* AppContainer `flush` прибирає зовнішній padding — відступи лише тут */
@@ -556,12 +564,12 @@ onUnmounted(() => {
 }
 
 .nadle-page--len6 {
-  --nadle-cell: 66px;
+  --nadle-cell: 54px;
   --nadle-len-css: 6;
 }
 
 .nadle-page--len7 {
-  --nadle-cell: 56px;
+  --nadle-cell: 48px;
   --nadle-len-css: 7;
 }
 
@@ -572,12 +580,22 @@ onUnmounted(() => {
 
 .nadle-page__banner {
   margin: 0;
-  padding: var(--sa-space-2) var(--sa-space-3);
-  border-radius: var(--sa-radius-sm);
-  background: var(--sa-color-primary-soft);
-  border: 1px solid var(--sa-color-primary-border);
+  padding: 11px 15px;
+  border-radius: var(--nadle-panel-radius);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.16) 0 1px, transparent 1.7px),
+    radial-gradient(circle at 34% 58%, rgba(102, 56, 143, 0.2), transparent 32%),
+    var(--nadle-panel-bg);
+  border: 1px solid var(--nadle-panel-border);
   color: var(--sa-color-text-main);
+  font-family: "Marmelad", var(--sa-font-main);
   font-size: 0.85rem;
+  font-weight: 400;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 12px 32px rgba(3, 1, 9, 0.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.18);
+  backdrop-filter: blur(20px) saturate(1.18);
 }
 
 .nadle-page__banner--warn {
@@ -776,8 +794,10 @@ onUnmounted(() => {
   }
 
   .nadle-page {
-    --nadle-gap: clamp(6px, 1vmin, 10px);
-    max-width: min(87.5rem, 100%);
+    --nadle-gap: clamp(10px, 1.35vmin, 13px);
+    padding-block: 18px 18px;
+    padding-inline: clamp(6px, 0.75vw, 12px);
+    max-width: min(1577px, 100%);
     flex: 1 1 auto;
     min-height: 0;
     height: 100%;
@@ -786,15 +806,15 @@ onUnmounted(() => {
   }
 
   .nadle-page--len5 {
-    --nadle-cell: clamp(40px, min(7.2vmin, 7dvh), 78px);
+    --nadle-cell: clamp(48px, min(7.6vmin, 8.45dvh), 74px);
   }
 
   .nadle-page--len6 {
-    --nadle-cell: clamp(34px, min(6.2vmin, 6.2dvh), 66px);
+    --nadle-cell: clamp(41px, min(6.9vmin, 7.5dvh), 65px);
   }
 
   .nadle-page--len7 {
-    --nadle-cell: clamp(30px, min(5.4vmin, 5.5dvh), 56px);
+    --nadle-cell: clamp(36px, min(6.15vmin, 6.65dvh), 58px);
   }
 
   .nadle-page__grid {
@@ -802,18 +822,35 @@ onUnmounted(() => {
     justify-content: center;
     flex: 1 1 auto;
     min-height: 0;
-    height: 100%;
-    /* Було: боки min 260px + центр minmax(0,720px) — усе стискання «їло» лише центр.
-       Співвідношення ~ як колишні max: 300 : 720 : 320 → 15fr : 36fr : 16fr. */
+    height: min(725px, 100%);
+    max-height: 725px;
     grid-template-columns:
-      minmax(10.25rem, 15fr)
-      minmax(18.5rem, 36fr)
-      minmax(10.25rem, 16fr);
+      minmax(278px, 336px)
+      minmax(0, 845px)
+      minmax(278px, 336px);
+    gap: 13px;
   }
 
   @media (max-height: 820px) {
+    .nadle-page {
+      --nadle-gap: 6px;
+    }
+
+    .nadle-page--len5 {
+      --nadle-cell: clamp(34px, 5dvh, 38px);
+    }
+
+    .nadle-page--len6 {
+      --nadle-cell: clamp(30px, 4.4dvh, 34px);
+    }
+
+    .nadle-page--len7 {
+      --nadle-cell: clamp(27px, 4dvh, 31px);
+    }
+
     .nadle-page__game {
-      gap: var(--sa-space-2);
+      gap: 8px;
+      padding-block: 12px;
     }
   }
 }
@@ -887,6 +924,7 @@ onUnmounted(() => {
     justify-content: flex-start;
     max-width: 100%;
     overflow: visible;
+    padding: clamp(12px, 3vw, 18px) clamp(10px, 4vw, 48px) clamp(12px, 3vw, 16px);
   }
 
   .nadle-page__stack--leader > .nadle-page__leader-stack {
@@ -1026,30 +1064,37 @@ onUnmounted(() => {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  border-color: color-mix(in srgb, var(--sa-color-border) 82%, rgba(255, 255, 255, 0.12));
+  box-sizing: border-box;
+  padding: 0;
+  border-radius: var(--nadle-panel-radius);
+  border-color: var(--nadle-panel-border);
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--sa-color-bg-card) 94%, rgba(255, 255, 255, 0.02)), color-mix(in srgb, var(--sa-color-bg-card) 88%, transparent));
+    radial-gradient(circle at 55% 8%, rgba(255, 255, 255, 0.2) 0 1px, transparent 1.7px),
+    radial-gradient(circle at 28% 58%, rgba(102, 56, 143, 0.21), transparent 34%),
+    var(--nadle-panel-bg);
   box-shadow:
-    var(--sa-shadow-card),
-    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.045),
+    0 16px 44px rgba(3, 1, 9, 0.24);
+  overflow: hidden;
+  -webkit-backdrop-filter: blur(20px) saturate(1.18);
+  backdrop-filter: blur(20px) saturate(1.18);
 }
 
 .nadle-page__stack--game {
   justify-content: flex-start;
-  border-color: color-mix(in srgb, var(--sa-color-primary-border) 42%, var(--sa-color-border));
   background:
-    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--sa-color-primary) 10%, transparent), transparent 42%),
-    linear-gradient(180deg, color-mix(in srgb, var(--sa-color-bg-card) 96%, rgba(255, 255, 255, 0.025)), color-mix(in srgb, var(--sa-color-bg-card) 90%, transparent));
-  box-shadow:
-    var(--sa-shadow-card),
-    inset 0 1px 0 rgba(255, 255, 255, 0.055),
-    0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 8%, transparent);
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.7px),
+    radial-gradient(circle at 34% 58%, rgba(102, 56, 143, 0.23), transparent 30%),
+    linear-gradient(124deg, rgba(124, 77, 219, 0.173) 0%, rgba(60, 36, 99, 0.169) 73.21%);
 }
 
 .nadle-page__stack--leader,
 .nadle-page__stack--chat {
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--sa-color-bg-card) 91%, rgba(255, 255, 255, 0.015)), color-mix(in srgb, var(--sa-color-bg-card) 84%, transparent));
+    radial-gradient(circle at 54% 3%, rgba(255, 255, 255, 0.2) 0 1px, transparent 1.7px),
+    radial-gradient(circle at 32% 54%, rgba(102, 56, 143, 0.22), transparent 35%),
+    var(--nadle-panel-bg);
 }
 
 .nadle-page__grid :deep(.nadle-page__stack--game > p) {
@@ -1071,6 +1116,7 @@ onUnmounted(() => {
   .nadle-page__grid :deep(.nadle-page__stack--chat) {
     flex: 0 0 auto;
     width: 100%;
+    max-width: 336px;
   }
 
   .nadle-page__grid :deep(.nadle-page__stack) {
@@ -1087,7 +1133,7 @@ onUnmounted(() => {
   .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
     flex: 1 1 auto;
     min-height: 0;
-    justify-content: center;
+    justify-content: flex-start;
   }
 
   .nadle-page__grid :deep(.nadle-page__stack--leader > .nadle-page__leader-stack) {
@@ -1143,11 +1189,10 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: stretch;
   gap: var(--sa-space-2);
-  margin: 0 0 var(--sa-space-2);
-  padding: var(--sa-space-2);
-  border-radius: var(--sa-radius-sm);
-  border: 1px solid var(--sa-color-border);
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 45%, transparent);
+  margin: 0 10px 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .nadle-page__side-tools-row {
@@ -1165,8 +1210,13 @@ onUnmounted(() => {
   min-width: 0;
   width: auto;
   justify-content: center;
-  font-size: 0.72rem;
+  min-height: 41px;
+  border-radius: 29px;
+  font-family: "Climate Crisis", var(--sa-font-display);
+  font-size: 14px;
+  letter-spacing: 0;
   padding-inline: 0.35rem;
+  background: rgba(102, 56, 143, 0.66);
 }
 
 .nadle-page__peek-word--side {
@@ -1202,14 +1252,15 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--sa-space-3);
+  gap: 13px;
   flex: 1 1 auto;
   width: 100%;
   max-width: 100%;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 0;
   min-width: 0;
   box-sizing: border-box;
+  padding: 22px 57px 18px;
   container-type: inline-size;
   container-name: nadle-game;
 }
@@ -1382,6 +1433,11 @@ onUnmounted(() => {
 @media (max-width: 640px) {
   .nadle-page__side-tools-row {
     flex-direction: column;
+  }
+
+  .nadle-page__grid > .nadle-page__stack {
+    width: min(100%, calc(100vw - 16px));
+    align-self: center;
   }
 }
 

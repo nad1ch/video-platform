@@ -145,15 +145,19 @@ defineExpose({ scrollToBottom })
 .twitch-relay-chat__shell {
   display: flex;
   flex-direction: column;
-  gap: var(--sa-space-2);
+  gap: 12px;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   min-height: 0;
+  height: 100%;
+  padding: 17px 10px 11px 23px;
+  box-sizing: border-box;
 }
 
 /** Sidebar / split layout: never grow past parent; scroll messages inside the feed. */
 .twitch-relay-chat__shell--flex-rail {
+  position: relative;
   height: 100%;
   max-height: 100%;
   min-height: 0;
@@ -187,40 +191,54 @@ defineExpose({ scrollToBottom })
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--sa-space-2);
+  gap: 8px;
 }
 
 .twitch-relay-chat__len-hint {
-  margin: 0 0 var(--sa-space-2);
-  font-size: 0.78rem;
-  line-height: 1.45;
-  color: color-mix(in srgb, var(--sa-color-text-body) 88%, var(--sa-color-primary) 12%);
+  margin: 7px 0 0;
+  font-family: "Marmelad", var(--sa-font-main);
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: #ffffff;
 }
 
 .twitch-relay-chat__title {
   margin: 0;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--sa-color-text-main);
+  font-family: "Climate Crisis", var(--sa-font-display);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: 0;
+  color: #ffffff;
 }
 
 .twitch-relay-chat__ws-pill {
   flex-shrink: 0;
-  font-size: 0.62rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--sa-color-primary) 18%, var(--sa-color-border));
-  background: color-mix(in srgb, var(--sa-color-surface-raised) 78%, var(--sa-color-primary-soft) 22%);
-  color: color-mix(in srgb, var(--sa-color-text-muted) 75%, var(--sa-color-primary) 25%);
+  min-width: 58px;
+  min-height: 0;
+  height: 20px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: "Marmelad", var(--sa-font-main);
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: lowercase;
+  letter-spacing: 0;
+  line-height: 20px;
+  white-space: nowrap;
+  padding: 0 9px;
+  border-radius: 11.362px;
+  border: 0;
+  background: rgba(255, 59, 48, 0.44);
+  color: #ffffff;
 }
 
 .twitch-relay-chat__ws-pill[data-state='open'] {
-  border-color: color-mix(in srgb, var(--sa-color-primary) 45%, transparent);
-  color: var(--sa-color-primary);
-  background: color-mix(in srgb, var(--sa-color-primary-soft) 75%, transparent);
+  color: #ffffff;
+  background: rgba(255, 59, 48, 0.44);
 }
 
 .twitch-relay-chat__ws-pill[data-state='error'] {
@@ -232,32 +250,42 @@ defineExpose({ scrollToBottom })
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sa-space-2);
-  margin-top: 0.15rem;
+  gap: 8px;
+  margin-top: 6px;
   width: 100%;
   max-width: 100%;
   min-width: 0;
 }
 
 .twitch-relay-chat__channel-pill {
-  font-family: var(--sa-font-mono);
-  font-size: 0.68rem;
-  padding: 0.12rem 0.48rem;
-  border-radius: var(--sa-radius-sm);
-  background: color-mix(in srgb, var(--sa-color-primary-soft) 42%, var(--sa-color-surface-raised) 58%);
-  border: 1px solid color-mix(in srgb, var(--sa-color-primary) 32%, var(--sa-color-border));
-  color: var(--sa-color-text-main);
+  font-family: "Marmelad", var(--sa-font-main);
+  font-size: 11.5px;
+  line-height: 1.2;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  color: #ffffff;
 }
 
 .twitch-relay-chat__external {
   margin-left: auto;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--sa-color-primary);
+  min-height: 19px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: "Marmelad", var(--sa-font-main);
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: lowercase;
+  color: #ffffff;
   text-decoration: none;
-  padding: 0.18rem 0.5rem;
-  border-radius: var(--sa-radius-sm);
-  border: 1px solid color-mix(in srgb, var(--sa-color-primary) 38%, transparent);
+  line-height: 1;
+  padding: 1px 10px 0;
+  border-radius: 11.362px;
+  border: 0;
+  background: rgba(102, 56, 143, 0.33);
   transition:
     background 0.15s ease,
     color 0.15s ease,
@@ -265,8 +293,8 @@ defineExpose({ scrollToBottom })
 }
 
 .twitch-relay-chat__external:hover {
-  background: color-mix(in srgb, var(--sa-color-primary-soft) 85%, transparent);
-  color: var(--sa-color-text-main);
+  background: rgba(102, 56, 143, 0.48);
+  color: #ffffff;
 }
 
 @media (max-width: 640px) {
@@ -281,21 +309,19 @@ defineExpose({ scrollToBottom })
 }
 
 .twitch-relay-chat__feed {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   width: 100%;
   min-height: 8rem;
   overflow: auto;
-  border-radius: var(--sa-radius-md);
-  border: 1px solid color-mix(in srgb, var(--sa-color-primary) 24%, var(--sa-color-border));
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--sa-color-surface-raised) 62%, var(--sa-color-primary) 14%) 0%,
-    color-mix(in srgb, var(--sa-color-bg-deep, #0a0610) 82%, var(--sa-color-primary) 12%) 55%,
-    color-mix(in srgb, var(--sa-color-bg-deep, #08050c) 90%, var(--sa-color-primary) 6%) 100%
-  );
+  font-family: "Marmelad", var(--sa-font-main);
+  border-radius: 29px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background:
+    radial-gradient(circle at 48% 8%, rgba(102, 56, 143, 0.28), transparent 45%),
+    linear-gradient(165deg, rgba(72, 45, 106, 0.62) 0%, rgba(39, 28, 55, 0.7) 58%, rgba(25, 20, 33, 0.78) 100%);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.05),
-    0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 8%, transparent);
+    0 0 0 1px rgba(102, 56, 143, 0.08);
 }
 
 .twitch-relay-chat__empty {
@@ -478,10 +504,27 @@ defineExpose({ scrollToBottom })
     height: 100%;
   }
 
+  .twitch-relay-chat__shell--flex-rail .twitch-relay-chat__head {
+    position: relative;
+    z-index: 1;
+  }
+
   .twitch-relay-chat__feed {
     flex: 1 1 0;
     min-height: min(12rem, 42dvh);
     overflow-y: auto;
+  }
+
+  .twitch-relay-chat__shell--flex-rail .twitch-relay-chat__feed {
+    position: absolute;
+    left: 50%;
+    top: 17%;
+    bottom: 11px;
+    width: calc(100% - 20px);
+    transform: translateX(-50%);
+    flex: none;
+    min-height: 0;
+    max-height: none;
   }
 }
 </style>

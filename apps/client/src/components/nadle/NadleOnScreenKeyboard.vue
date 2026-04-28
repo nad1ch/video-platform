@@ -103,7 +103,7 @@ const emit = defineEmits<{
         :disabled="keysDisabled"
         @click="emit('backspace')"
       >
-        ⌫
+        delete
       </AppButton>
     </div>
   </div>
@@ -118,29 +118,29 @@ const emit = defineEmits<{
 
   @media (max-height: 820px) {
     .nadle-page__kbd {
-      gap: var(--sa-space-1);
+      gap: 6px;
     }
 
     .nadle-page__kbd :deep(.nadle-page__kbd-key) {
-      height: 42px;
-      min-width: 34px;
-      font-size: 14px;
+      height: 22px;
+      min-width: 27px;
+      font-size: 10px;
       padding: 0 0.2rem;
     }
 
     .nadle-page__kbd :deep(.nadle-page__kbd-side-action) {
-      min-width: 48px;
-      max-width: 4rem;
-      height: 40px;
+      min-width: 58px;
+      max-width: 64px;
+      height: 24px;
       padding: 0 0.22rem;
-      font-size: 0.6rem;
+      font-size: 8px;
     }
 
     .nadle-page__kbd-row--actions :deep(.nadle-page__len-btn--kbd) {
-      height: 40px;
-      min-width: 1.85rem;
-      max-width: 2.5rem;
-      font-size: 0.78rem;
+      height: 24px;
+      min-width: 24px;
+      max-width: 24px;
+      font-size: 12px;
     }
   }
 }
@@ -163,11 +163,11 @@ const emit = defineEmits<{
   margin-inline: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--sa-space-2);
+  gap: 16px;
   align-items: center;
   flex-shrink: 0;
   min-width: 0;
-  min-height: 160px;
+  min-height: 0;
   overflow: visible;
 }
 
@@ -176,7 +176,7 @@ const emit = defineEmits<{
   flex-direction: column;
   align-items: stretch;
   justify-content: center;
-  gap: 6px;
+  gap: 7px;
   width: 100%;
   min-width: 0;
 }
@@ -187,29 +187,30 @@ const emit = defineEmits<{
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--sa-space-2);
+  gap: 7px;
   align-items: center;
+  max-width: 845px;
 }
 
 .nadle-page__kbd-row {
   display: flex;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 8px;
   justify-content: center;
   width: 100%;
   min-width: 0;
 }
 
 .nadle-page__kbd-row--mid {
-  padding-inline: min(1rem, 2.5vw);
+  padding-inline: 0;
 }
 
 .nadle-page__kbd :deep(.nadle-page__kbd-key) {
   box-sizing: border-box;
   flex: 1 1 0;
   width: 0;
-  min-width: 40px;
-  height: 48px;
+  min-width: 53px;
+  height: 33px;
   max-height: none;
   display: inline-flex;
   align-items: center;
@@ -217,14 +218,16 @@ const emit = defineEmits<{
   padding: 0 0.25rem;
   overflow: hidden;
   line-height: 1;
-  font-size: 16px;
-  font-weight: 700;
+  font-family: "Climate Crisis", var(--sa-font-display);
+  font-size: 12px;
+  font-weight: 400;
   text-transform: none;
-  border-color: color-mix(in srgb, var(--sa-color-border) 82%, rgba(255, 255, 255, 0.16));
+  border-color: rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 48%),
-    color-mix(in srgb, var(--sa-color-surface-raised) 82%, transparent);
-  color: var(--sa-color-text-main);
+    rgba(102, 56, 143, 0.31);
+  color: #ffffff;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 2px 0 rgba(0, 0, 0, 0.18);
@@ -236,51 +239,50 @@ const emit = defineEmits<{
 }
 
 .nadle-page__kbd :deep(.nadle-page__kbd-key:hover:not(:disabled)) {
-  border-color: color-mix(in srgb, var(--sa-color-primary-border) 72%, var(--sa-color-border));
+  border-color: rgba(255, 255, 255, 0.24);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 48%),
-    color-mix(in srgb, var(--sa-color-primary) 12%, var(--sa-color-surface-raised));
+    rgba(102, 56, 143, 0.44);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 2px 0 rgba(0, 0, 0, 0.16),
-    0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 24%, transparent);
+    0 2px 0 rgba(0, 0, 0, 0.16);
 }
 
 .nadle-page__kbd :deep(.nadle-page__kbd-key--absent) {
   opacity: 0.52;
-  border-color: color-mix(in srgb, var(--sa-color-border) 58%, transparent);
-  background: color-mix(in srgb, var(--sa-color-surface) 78%, transparent);
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(102, 56, 143, 0.18);
   color: color-mix(in srgb, var(--sa-color-text-muted) 86%, var(--sa-color-text-main));
 }
 
 .nadle-page__kbd :deep(.nadle-page__kbd-key--present) {
-  border-color: color-mix(in srgb, var(--sa-color-warning) 68%, var(--sa-color-border));
-  background: color-mix(in srgb, var(--sa-color-warning) 24%, var(--sa-color-surface-raised));
-  color: var(--sa-color-text-main);
+  border-color: rgba(255, 212, 85, 0.28);
+  background: rgba(167, 156, 59, 0.63);
+  color: #ffffff;
 }
 
 .nadle-page__kbd :deep(.nadle-page__kbd-key--correct) {
-  border-color: color-mix(in srgb, var(--sa-color-success) 68%, var(--sa-color-border));
-  background: color-mix(in srgb, var(--sa-color-success) 28%, var(--sa-color-surface-raised));
-  color: var(--sa-color-text-strong);
+  border-color: rgba(169, 209, 111, 0.34);
+  background: rgba(105, 143, 56, 0.49);
+  color: #ffffff;
 }
 
 .nadle-page__kbd-row--actions {
   flex-wrap: nowrap;
   justify-content: center;
   align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  padding-top: 2px;
+  gap: 5px;
+  margin-top: 0;
+  padding-top: 0;
   max-width: 100%;
 }
 
 .nadle-page__kbd-row--actions :deep(.nadle-page__len-btn--kbd) {
   box-sizing: border-box;
   flex: 0 1 auto;
-  min-width: 2.25rem;
-  max-width: 3.25rem;
-  height: 48px;
+  min-width: 33px;
+  max-width: 33px;
+  height: 33px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -289,48 +291,85 @@ const emit = defineEmits<{
 .nadle-page__kbd :deep(.nadle-page__kbd-side-action) {
   box-sizing: border-box;
   flex: 0 0 auto;
-  min-width: 56px;
-  max-width: 5rem;
+  min-width: 84px;
+  max-width: 85px;
   width: auto;
-  height: 48px;
+  height: 33px;
   min-height: 0;
   max-height: none;
   padding: 0 0.35rem;
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-family: "Climate Crisis", var(--sa-font-display);
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: lowercase;
+  letter-spacing: 0;
   line-height: 1.1;
-  border-color: color-mix(in srgb, var(--sa-color-primary-border) 48%, var(--sa-color-border));
+  border-color: rgba(255, 255, 255, 0.14);
+  border-radius: 15.535px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 48%),
-    color-mix(in srgb, var(--sa-color-primary) 10%, var(--sa-color-surface-raised));
+    rgba(102, 56, 143, 0.05);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 2px 0 rgba(0, 0, 0, 0.18);
 }
 
+.nadle-page__kbd-row--actions :deep(.nadle-page__kbd-side-action:last-child) {
+  font-family: "Climate Crisis", var(--sa-font-display);
+  font-size: 10px;
+  text-transform: lowercase;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 48%),
+    rgba(255, 59, 48, 0.3);
+}
+
 @media (min-width: 1201px) {
+  .nadle-page__kbd {
+    max-width: 845px;
+    transform: translateY(-4px);
+  }
+
+  .nadle-page__kbd-row {
+    width: auto;
+    max-width: 100%;
+  }
+
+  .nadle-page__kbd-row--mid {
+    transform: none;
+  }
+
+  .nadle-page__kbd-row:nth-child(3) {
+    transform: translateX(-19px);
+  }
+
   .nadle-page__kbd :deep(.nadle-page__kbd-key) {
-    height: 42px;
-    min-width: 30px;
-    font-size: 14px;
+    flex: 0 0 53px;
+    width: 53px;
+    height: 33px;
+    min-width: 53px;
+    font-size: 12px;
     padding: 0 0.1rem;
   }
 
   .nadle-page__kbd-row--actions :deep(.nadle-page__len-btn--kbd) {
-    height: 42px;
-    min-width: 2.05rem;
-    max-width: 2.85rem;
-    font-size: 0.82rem;
+    height: 33px;
+    min-width: 33px;
+    max-width: 33px;
+    font-family: "Coda Caption", var(--sa-font-mono);
+    font-size: 15px;
   }
 
   .nadle-page__kbd :deep(.nadle-page__kbd-side-action) {
-    height: 42px;
-    min-width: 52px;
-    max-width: 4.75rem;
-    font-size: 0.62rem;
-    padding: 0 0.28rem;
+    height: 33px;
+    min-width: 84px;
+    max-width: 85px;
+    font-size: 10px;
+    padding: 0 0.22rem;
+  }
+
+  .nadle-page__kbd-row--actions :deep(.nadle-page__kbd-side-action:last-child) {
+    font-family: "Climate Crisis", var(--sa-font-display);
+    font-size: 10px;
   }
 }
 
