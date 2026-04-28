@@ -8,7 +8,9 @@ import type {
 } from 'mediasoup-client/types'
 import { onUnmounted, shallowRef } from 'vue'
 import {
-  getSimulcastEncodingsForPreset,
+  CALL_VIDEO_MAX_FRAMERATE,
+  CALL_VIDEO_TARGET_BITRATE_BPS,
+  clampCallVideoBitrate,
   getSingleLayerEncodingsForPreset,
   type VideoPublishTier,
 } from '../media/videoQualityPreset'
@@ -77,8 +79,7 @@ export type PendingProducerNotice = {
 
 export type PublishLocalMediaOptions = {
   /**
-   * Large-room mode: VP8 simulcast + receiver spatial-layer signaling.
-   * Omit or `false` for single-layer (default; best for small calls).
+   * Back-compat option. Fixed-quality calls always publish one 480p layer.
    */
   videoSimulcast?: boolean
   /** Capture/encode ladder; defaults to `balanced` for API callers that omit it. */
@@ -98,19 +99,28 @@ export type SendTransportRoomApi = {
 const CONNECT_TIMEOUT_MS = 45_000
 
 function outboundVideoGoogleStartBitrateKbps(tier: VideoPublishTier): number {
-  switch (tier) {
-    case 'economy':
-      return 400
-    case 'hd':
-      return 1200
-    case 'auto_large_room':
-      return 750
-    case 'auto_small_room':
-      return 900
-    case 'balanced':
-    default:
-      return 900
+  void tier
+  return Math.round(clampCallVideoBitrate(CALL_VIDEO_TARGET_BITRATE_BPS) / 1000)
+}
+
+type ProducerWithRtpSender = Producer & { rtpSender?: RTCRtpSender | null }
+
+async function forceOutboundVideoSenderParameters(producer: Producer): Promise<void> {
+  const sender = (producer as ProducerWithRtpSender).rtpSender
+  if (!sender) {
+    return
   }
+  const params = sender.getParameters()
+  const first = params.encodings?.[0] ?? {}
+  params.encodings = [
+    {
+      ...first,
+      maxBitrate: clampCallVideoBitrate(CALL_VIDEO_TARGET_BITRATE_BPS),
+      maxFramerate: CALL_VIDEO_MAX_FRAMERATE,
+      scaleResolutionDownBy: 1,
+    },
+  ]
+  await sender.setParameters(params)
 }
 
 /** Mild Opus cap — stable voice, not aggressive throttling. */
@@ -231,7 +241,7 @@ export function useSendTransport() {
     if (import.meta.env.DEV) {
       console.log('[call-qa:publish] publishLocalMedia', {
         trackKinds: stream.getTracks().map((t) => t.kind),
-        videoSimulcast: options?.videoSimulcast === true,
+        videoSimulcast: false,
         videoPublishTier: options?.videoPublishTier,
       })
     }
@@ -240,7 +250,7 @@ export function useSendTransport() {
       throw new Error('Send transport required')
     }
     lastOutboundVideoPublish = {
-      videoSimulcast: options?.videoSimulcast === true,
+      videoSimulcast: false,
       videoPublishTier: options?.videoPublishTier ?? 'balanced',
     }
     for (const track of stream.getTracks()) {
@@ -248,11 +258,9 @@ export function useSendTransport() {
         continue
       }
       if (track.kind === 'video') {
-        const useSimulcast = options?.videoSimulcast === true
+        const useSimulcast = false
         const tier = options?.videoPublishTier ?? 'balanced'
-        const encodings = useSimulcast
-          ? getSimulcastEncodingsForPreset(tier)
-          : getSingleLayerEncodingsForPreset(tier)
+        const encodings = getSingleLayerEncodingsForPreset(tier)
         if (import.meta.env.DEV) {
           console.log('[produce] video outbound', {
             trackId: track.id,
@@ -273,6 +281,7 @@ export function useSendTransport() {
             videoGoogleStartBitrate: outboundVideoGoogleStartBitrateKbps(tier),
           },
         })
+        await forceOutboundVideoSenderParameters(producer)
         if (import.meta.env.DEV) {
           console.log('[produce] PRODUCER CREATED', producer.id, producer.kind)
         }
@@ -312,9 +321,7 @@ export function useSendTransport() {
       throw new Error('Send transport required to recreate video producer')
     }
     const { videoSimulcast, videoPublishTier } = lastOutboundVideoPublish
-    const encodings = videoSimulcast
-      ? getSimulcastEncodingsForPreset(videoPublishTier)
-      : getSingleLayerEncodingsForPreset(videoPublishTier)
+    const encodings = getSingleLayerEncodingsForPreset(videoPublishTier)
     if (import.meta.env.DEV) {
       console.log('[produce] recreate outbound video producer', { trackId: track.id, videoPublishTier, videoSimulcast })
     }
@@ -325,6 +332,7 @@ export function useSendTransport() {
         videoGoogleStartBitrate: outboundVideoGoogleStartBitrateKbps(videoPublishTier),
       },
     })
+    await forceOutboundVideoSenderParameters(producer)
     outboundVideoProducer.value = producer
     return producer
   }
@@ -346,6 +354,7 @@ export function useSendTransport() {
           console.log('[produce] replaceOutboundVideoTrack', { producerId: p.id, trackId: track.id })
         }
         await p.replaceTrack({ track })
+        await forceOutboundVideoSenderParameters(p)
         ensureDisplayCaptureVideoTrackEnabled(track)
         if (import.meta.env.DEV) {
           console.log('[produce] replaceTrack applied', p.id)

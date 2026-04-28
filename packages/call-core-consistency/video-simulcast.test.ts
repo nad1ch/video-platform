@@ -6,14 +6,14 @@ import {
 } from '../call-core/src/media/videoSimulcast'
 
 describe('shouldUseVideoSimulcastForRoom', () => {
-  it('uses threshold constant', () => {
-    expect(VIDEO_SIMULCAST_MIN_PEERS_IN_ROOM).toBe(6)
+  it('keeps the compatibility threshold unreachable', () => {
+    expect(VIDEO_SIMULCAST_MIN_PEERS_IN_ROOM).toBe(Number.POSITIVE_INFINITY)
   })
 
-  it('is false below threshold and true at or above', () => {
+  it('always disables simulcast regardless of peer count', () => {
     expect(shouldUseVideoSimulcastForRoom(5)).toBe(false)
-    expect(shouldUseVideoSimulcastForRoom(6)).toBe(true)
-    expect(shouldUseVideoSimulcastForRoom(100)).toBe(true)
+    expect(shouldUseVideoSimulcastForRoom(6)).toBe(false)
+    expect(shouldUseVideoSimulcastForRoom(100)).toBe(false)
   })
 
   it('is false for non-positive peer counts', () => {

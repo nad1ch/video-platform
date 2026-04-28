@@ -170,8 +170,7 @@ export type RemotePeerStream = { peerId: string; stream: MediaStream }
 
 export type SetupReceivePathOptions = {
   /**
-   * When true, send `set-consumer-preferred-layers` for remote video (required if publishers use simulcast).
-   * Must match `publishLocalMedia(..., { videoSimulcast })` policy for this session.
+   * Back-compat option. Fixed-quality calls keep spatial-layer signaling disabled.
    */
   enableVideoSpatialLayerSignaling?: boolean
 }
@@ -266,7 +265,7 @@ export function useRemoteMedia() {
   const activeSpeakerPeerId = shallowRef<string | null>(null)
   /** App Web Audio dominant remote; merged into layer ranking with SFU {@link activeSpeakerPeerId}. */
   const uiActiveSpeakerPeerIdForPreferredLayers = shallowRef<string | null>(null)
-  /** Last time a peer was active speaker; keeps layer priority briefly after speech stops. */
+  /** Retained only for compatibility with older layer-selection helpers. */
   const recentSpeakerAtByPeerId = new Map<string, number>()
   /** Last preferred layers sent per recv video consumer (skip duplicate signaling). */
   const lastSentPreferredLayersByConsumerId = new Map<string, SimulcastPreferredLayers>()
@@ -288,7 +287,7 @@ export function useRemoteMedia() {
   let signalingRoom: SendTransportRoomApi | null = null
   let preferredLayersDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let speakerLingerTimer: ReturnType<typeof setTimeout> | null = null
-  /** Set per `setupReceivePath` — avoids spatial-layer WS traffic when everyone publishes single-layer. */
+  /** Fixed-quality calls never send spatial-layer WS traffic. */
   const videoSpatialLayerSignalingEnabled = shallowRef(false)
   let unsubscribeNewProducer: (() => void) | null = null
   let unsubscribeProducerSync: (() => void) | null = null
@@ -329,8 +328,7 @@ export function useRemoteMedia() {
   }
 
   /**
-   * Reserved for future UI; transport BWE polling is disabled (quality-first baseline).
-   * Layer choice uses pin / speaker / visibility only — no dynamic bandwidth cap.
+   * Reserved for future UI; transport BWE polling is disabled and does not affect video quality.
    */
   const networkQualityFromStats = shallowRef<NetworkQualityClass>('good')
   const networkQualityOverride = shallowRef<'auto' | NetworkQualityClass>('auto')
@@ -460,12 +458,12 @@ export function useRemoteMedia() {
     if (signalingRoom === null) {
       return
     }
-    const rows = await collectInboundVideoDebugStats()
-    updatePlaybackRenderFpsPressureFromInboundRows(rows)
-
     if (!videoSpatialLayerSignalingEnabled.value) {
       return
     }
+    const rows = await collectInboundVideoDebugStats()
+    updatePlaybackRenderFpsPressureFromInboundRows(rows)
+
     const slim: VideoInboundStatsRow[] = rows.map((r) => ({
       framesDecoded: r.framesDecoded,
       framesDropped: r.framesDropped,
@@ -847,7 +845,7 @@ export function useRemoteMedia() {
         })
       }
 
-      // Audio must never be paused; video quality follows simulcast spatial layers (no consumer.pause).
+      // Audio must never be paused; fixed-quality video does not use consumer.pause.
       await consumer.resume()
 
       if (import.meta.env.DEV) {
@@ -863,7 +861,6 @@ export function useRemoteMedia() {
       if (consumer.kind === 'video') {
         syncPeerVideoMetadataFromInfo(info)
         void logInboundVideoDebug(consumer, peerId)
-        // Apply target spatial layer immediately — default consumer layer can sit on low simulcast until debounce fires.
         flushPreferredLayersToServer()
         schedulePreferredLayersUpdate()
       }
@@ -1050,7 +1047,8 @@ export function useRemoteMedia() {
     existing: RemoteProducerInfo[],
     pathOptions?: SetupReceivePathOptions,
   ): Promise<void> {
-    videoSpatialLayerSignalingEnabled.value = pathOptions?.enableVideoSpatialLayerSignaling === true
+    void pathOptions
+    videoSpatialLayerSignalingEnabled.value = false
     signalingRoom = room
     await ensureRecvTransport(device, room)
 

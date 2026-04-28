@@ -16,7 +16,6 @@ import {
   resolveOutgoingVideoPublishTier,
   type VideoPublishTier,
 } from './media/videoQualityPreset'
-import { shouldUseVideoSimulcastForRoom } from './media/videoSimulcast'
 import { useActiveSpeaker, type ActiveSpeakerTile } from './audio/useActiveSpeaker'
 import { useSendTransport } from './transport/useSendTransport'
 import { buildRequestProducerSyncPayload } from './media/recoveryCoordinator'
@@ -646,7 +645,7 @@ export function useCallEngine(options?: CallEngineOptions) {
 
     const existing = lastRoomState.value?.existingProducers ?? []
     const peerCount = lastRoomState.value?.peers.length ?? 0
-    const videoSimulcast = shouldUseVideoSimulcastForRoom(peerCount)
+    const videoSimulcast = false
     lastWirePeerCount.value = peerCount
     lastWireVideoSimulcast.value = videoSimulcast
 
@@ -676,7 +675,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     })
 
     await setupReceivePath(d, roomApi, existing, {
-      enableVideoSpatialLayerSignaling: videoSimulcast,
+      enableVideoSpatialLayerSignaling: false,
     })
 
     unsubActiveSpeaker?.()
@@ -889,8 +888,7 @@ export function useCallEngine(options?: CallEngineOptions) {
 
   /**
    * UI highlight: derived from local Web Audio analysis of remote tile streams
-   * (dominant talker with hysteresis). The same id is mirrored into recv preferred-layer ranking
-   * so perceived speaker gets high simulcast before SFU `active-speaker` catches up.
+   * (dominant talker with hysteresis). Fixed-quality video does not use this for quality changes.
    */
   const activeSpeakerTileInputs = computed<ActiveSpeakerTile[]>(() =>
     tiles.value.map((t) => ({
@@ -1303,12 +1301,12 @@ export function useCallEngine(options?: CallEngineOptions) {
     wsStatus,
     callDebugSnapshot,
     receiveQualityPressure,
-    /** SFU `active-speaker` id (simulcast policy); differs from UI {@link activeSpeakerPeerId} from Web Audio. */
+    /** SFU `active-speaker` id; differs from UI {@link activeSpeakerPeerId} from Web Audio. */
     serverActiveSpeakerPeerId,
     receiveDeviceProfile,
     playbackRenderFpsPressureByPeerId,
     refreshInboundVideoDebugStats: collectInboundVideoDebugStats,
-    /** Remote simulcast helper: `useRemoteMedia` maps this to `set-consumer-preferred-layers` (consumers stay open). */
+    /** Remote viewport signal retained for UI/debug compatibility; fixed-quality video ignores it. */
     setPeerVisible,
     callPresenceMessages,
     setRemoteListenVolume,

@@ -12,8 +12,13 @@ export const VIDEO_QUALITY_PRESETS: VideoQualityPreset[] = ['economy', 'balanced
 
 /** Inclusive: <= this many active camera publishers → high small-room profile. */
 export const ACTIVE_CAMERA_SMALL_ROOM_MAX = 4
+export const CALL_VIDEO_WIDTH = 854
+export const CALL_VIDEO_HEIGHT = 480
 export const CALL_VIDEO_MIN_FRAMERATE = 12
-export const CALL_VIDEO_MAX_FRAMERATE = 24
+export const CALL_VIDEO_MAX_FRAMERATE = 20
+export const CALL_VIDEO_TARGET_BITRATE_BPS = 600_000
+export const CALL_VIDEO_MIN_BITRATE_BPS = 500_000
+export const CALL_VIDEO_MAX_BITRATE_BPS = 700_000
 
 export function isVideoQualityPreset(v: string): v is VideoQualityPreset {
   return v === 'economy' || v === 'balanced' || v === 'hd'
@@ -23,62 +28,60 @@ function clampCallVideoFramerate(fps: number): number {
   return Math.min(CALL_VIDEO_MAX_FRAMERATE, Math.max(CALL_VIDEO_MIN_FRAMERATE, Math.round(fps)))
 }
 
+export function clampCallVideoBitrate(bps: number): number {
+  return Math.min(CALL_VIDEO_MAX_BITRATE_BPS, Math.max(CALL_VIDEO_MIN_BITRATE_BPS, Math.round(bps)))
+}
+
+export const FIXED_CALL_VIDEO_ENCODING: RtpEncodingParameters = {
+  maxBitrate: clampCallVideoBitrate(CALL_VIDEO_TARGET_BITRATE_BPS),
+  maxFramerate: CALL_VIDEO_MAX_FRAMERATE,
+  scaleResolutionDownBy: 1,
+} as const
+
 /**
- * Main large-room (Mafia / 6–12) capture: **960×540** @ 24 fps — strong balance of clarity vs CPU and uplink.
- * Paired with {@link AUTO_LARGE_ROOM_SIMULCAST}: “720-class” *feel* on tile without 720p-for-all cost.
+ * Fixed call camera capture: every participant publishes exactly 854×480 with a 20 fps cap.
  */
 export const VIDEO_PRESET_MAFIA: MediaTrackConstraints = {
-  width: { ideal: 960, max: 960 },
-  height: { ideal: 540, max: 540 },
-  frameRate: { ideal: 24, max: 24 },
+  width: { exact: CALL_VIDEO_WIDTH },
+  height: { exact: CALL_VIDEO_HEIGHT },
+  frameRate: { max: CALL_VIDEO_MAX_FRAMERATE },
 } as const
 
 /**
- * Weaker devices / last-resort camera hint. Not auto-selected by `resolveOutgoingVideoPublishTier` (export for
- * admin or future gating), but kept as the single place for the numbers.
+ * Back-compat export; fixed-quality calls intentionally use the same capture constraints for every tier.
  */
 export const VIDEO_PRESET_FALLBACK: MediaTrackConstraints = {
-  width: { ideal: 640, max: 640 },
-  height: { ideal: 360, max: 360 },
-  frameRate: { ideal: 20, max: 20 },
+  ...VIDEO_PRESET_MAFIA,
 } as const
 
 /**
- * Numeric view of `VIDEO_PRESET_MAFIA` for call sites that read `WIDTH_IDEAL` / `FPS_MAX` (send transport, tests).
- * Single-room **normal** should not *encode* 360p as the only layer — that is the **R0** simulcast rung + receive
- * degradation, not the default capture target.
+ * Numeric view of the fixed capture target for call sites that read `WIDTH_IDEAL` / `FPS_MAX`.
  */
 export const AUTO_LARGE_ROOM_VIDEO_CAPTURE = {
-  WIDTH_IDEAL: 960,
-  HEIGHT_IDEAL: 540,
-  WIDTH_MAX: 960,
-  HEIGHT_MAX: 540,
+  WIDTH_IDEAL: CALL_VIDEO_WIDTH,
+  HEIGHT_IDEAL: CALL_VIDEO_HEIGHT,
+  WIDTH_MAX: CALL_VIDEO_WIDTH,
+  HEIGHT_MAX: CALL_VIDEO_HEIGHT,
   FPS_IDEAL: CALL_VIDEO_MAX_FRAMERATE,
   FPS_MAX: CALL_VIDEO_MAX_FRAMERATE,
 } as const
 
-/** Small-room capture: 720p ideal; fps cap follows large-room (24) for a consistent feel when switching tiers. */
+/** Back-compat export; small rooms use the same fixed 480p capture as every other room. */
 export const AUTO_SMALL_ROOM_VIDEO_CAPTURE = {
-  WIDTH_IDEAL: 1280,
-  HEIGHT_IDEAL: 720,
-  WIDTH_MAX: 1920,
-  HEIGHT_MAX: 1080,
+  WIDTH_IDEAL: CALL_VIDEO_WIDTH,
+  HEIGHT_IDEAL: CALL_VIDEO_HEIGHT,
+  WIDTH_MAX: CALL_VIDEO_WIDTH,
+  HEIGHT_MAX: CALL_VIDEO_HEIGHT,
 } as const
 
 /**
- * `auto_large_room` VP8 simulcast ladder (r0 / r1 / r2) — mediasoup `maxBitrate` caps; CC can send less.
- * - **low** (~320p-class @12fps): pressure / off-tile; low, but still watchable in large grids.
- * - **medium** (x2 of 960x540 -> 480x270, ~20fps): main UX rung for {@link MAX_MEDIUM_STREAMS} visible peers.
- * - **high** (540p @22fps, <=1Mbps): active speaker / host; {@link MAX_HIGH_STREAMS} slots.
- * Single-layer (no simulcast): one encoding capped like **high** (no 2M+ bloat).
+ * Back-compat shape for older imports. All entries are the same fixed 480p layer; publishing uses one encoding only.
  */
 export const AUTO_LARGE_ROOM_SIMULCAST = {
-  low: { scaleResolutionDownBy: 3, maxBitrate: 500_000, maxFramerate: 14 },
-  medium: { scaleResolutionDownBy: 2, maxBitrate: 700_000, maxFramerate: 20 },
-  high: { scaleResolutionDownBy: 1, maxBitrate: 1_000_000, maxFramerate: 22 },
+  low: { ...FIXED_CALL_VIDEO_ENCODING },
+  medium: { ...FIXED_CALL_VIDEO_ENCODING },
+  high: { ...FIXED_CALL_VIDEO_ENCODING },
 } as const
-
-const AUTO_LARGE_SINGLE_LAYER_MAX_BITRATE_BPS = AUTO_LARGE_ROOM_SIMULCAST.high.maxBitrate
 
 export type ProducerKindList = { peerId: string; kind: string }[]
 
@@ -113,127 +116,37 @@ export type ResolveOutgoingVideoPublishTierInput = {
 }
 
 /**
- * Single source of truth for outbound capture/encode tier at initial publish and reconnect.
- * Does not react to mid-call participant count changes (stable; avoids republish loops).
+ * Single source of truth for outbound capture/encode tier.
+ * Fixed-quality calls intentionally ignore manual presets and participant counts.
  */
 export function resolveOutgoingVideoPublishTier(input: ResolveOutgoingVideoPublishTierInput): VideoPublishTier {
-  if (input.allowManualQuality && input.manualExplicit) {
-    return input.manualPreset
-  }
-  if (input.activeCameraPublishersAtWire <= ACTIVE_CAMERA_SMALL_ROOM_MAX) {
-    return 'auto_small_room'
-  }
+  void input
   return 'auto_large_room'
 }
 
 /** @deprecated Use `resolveOutgoingVideoPublishTier` — kept for narrow call sites that only map explicit preset. */
 export function resolveVideoPublishTier(preset: VideoQualityPreset, explicit: boolean): VideoPublishTier {
-  if (!explicit) {
-    return 'auto_large_room'
-  }
-  return preset
+  void preset
+  void explicit
+  return 'auto_large_room'
 }
 
-/** Capture constraints per tier (keeps CPU/encode predictable). */
+/** Fixed capture constraints for every tier. */
 export function getCallVideoConstraints(tier: VideoPublishTier): MediaTrackConstraints {
-  switch (tier) {
-    case 'auto_large_room':
-      return { ...VIDEO_PRESET_MAFIA }
-    case 'auto_small_room':
-      return {
-        width: { ideal: AUTO_SMALL_ROOM_VIDEO_CAPTURE.WIDTH_IDEAL, max: AUTO_SMALL_ROOM_VIDEO_CAPTURE.WIDTH_MAX },
-        height: { ideal: AUTO_SMALL_ROOM_VIDEO_CAPTURE.HEIGHT_IDEAL, max: AUTO_SMALL_ROOM_VIDEO_CAPTURE.HEIGHT_MAX },
-        frameRate: { ideal: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL, max: AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_MAX },
-      }
-    case 'economy':
-      return {
-        width: { ideal: 640, max: 854 },
-        height: { ideal: 360, max: 480 },
-        frameRate: { ideal: 24, max: 30 },
-      }
-    case 'hd':
-      return {
-        width: { ideal: 1920, max: 1920 },
-        height: { ideal: 1080, max: 1080 },
-        frameRate: { ideal: 30, max: 30 },
-      }
-    case 'balanced':
-    default:
-      return {
-        width: { ideal: 1280, max: 1920 },
-        height: { ideal: 720, max: 1080 },
-        frameRate: { ideal: 30, max: 30 },
-      }
-  }
+  void tier
+  return { ...VIDEO_PRESET_MAFIA }
 }
 
 /**
- * Outbound VP8 single encoding (used when this publish does not enable simulcast — see send transport).
- * Tier still follows the same capture profiles as `getCallVideoConstraints`.
+ * Outbound VP8 single encoding. Every tier maps to the same fixed 480p / 20 fps / 600 kbps layer.
  */
 export function getSingleLayerEncodingsForPreset(tier: VideoPublishTier): RtpEncodingParameters[] {
-  switch (tier) {
-    case 'auto_large_room':
-      return [
-        {
-          maxBitrate: AUTO_LARGE_SINGLE_LAYER_MAX_BITRATE_BPS,
-          maxFramerate: clampCallVideoFramerate(AUTO_LARGE_ROOM_SIMULCAST.high.maxFramerate),
-        },
-      ]
-    case 'auto_small_room':
-      return [{ maxBitrate: 2_800_000, maxFramerate: clampCallVideoFramerate(AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL) }]
-    case 'economy':
-      return [{ maxBitrate: 600_000, maxFramerate: clampCallVideoFramerate(24) }]
-    case 'hd':
-      return [{ maxBitrate: 4_000_000, maxFramerate: clampCallVideoFramerate(30) }]
-    case 'balanced':
-    default:
-      return [{ maxBitrate: 2_800_000, maxFramerate: clampCallVideoFramerate(30) }]
-  }
+  void tier
+  return [{ ...FIXED_CALL_VIDEO_ENCODING, maxFramerate: clampCallVideoFramerate(CALL_VIDEO_MAX_FRAMERATE) }]
 }
 
-/** Outbound VP8 simulcast (large rooms). */
+/** Back-compat API: simulcast is disabled, so callers still receive exactly one fixed encoding. */
 export function getSimulcastEncodingsForPreset(tier: VideoPublishTier): RtpEncodingParameters[] {
-  const fpsLarge = clampCallVideoFramerate(AUTO_LARGE_ROOM_VIDEO_CAPTURE.FPS_IDEAL)
-  const fps =
-    tier === 'auto_large_room' || tier === 'auto_small_room'
-      ? fpsLarge
-      : tier === 'economy'
-        ? clampCallVideoFramerate(24)
-        : clampCallVideoFramerate(30)
-  switch (tier) {
-    case 'auto_large_room': {
-      const s = AUTO_LARGE_ROOM_SIMULCAST
-      return [
-        { rid: 'r0', ...s.low },
-        { rid: 'r1', ...s.medium },
-        { rid: 'r2', ...s.high },
-      ]
-    }
-    case 'auto_small_room':
-      return [
-        { rid: 'r0', maxBitrate: 280_000, scaleResolutionDownBy: 4, maxFramerate: fps },
-        { rid: 'r1', maxBitrate: 800_000, scaleResolutionDownBy: 2, maxFramerate: fps },
-        { rid: 'r2', maxBitrate: 3_200_000, scaleResolutionDownBy: 1, maxFramerate: fps },
-      ]
-    case 'economy':
-      return [
-        { rid: 'r0', maxBitrate: 120_000, scaleResolutionDownBy: 4, maxFramerate: fps },
-        { rid: 'r1', maxBitrate: 320_000, scaleResolutionDownBy: 2, maxFramerate: fps },
-        { rid: 'r2', maxBitrate: 650_000, scaleResolutionDownBy: 1, maxFramerate: fps },
-      ]
-    case 'hd':
-      return [
-        { rid: 'r0', maxBitrate: 350_000, scaleResolutionDownBy: 4, maxFramerate: fps },
-        { rid: 'r1', maxBitrate: 1_200_000, scaleResolutionDownBy: 2, maxFramerate: fps },
-        { rid: 'r2', maxBitrate: 4_500_000, scaleResolutionDownBy: 1, maxFramerate: fps },
-      ]
-    case 'balanced':
-    default:
-      return [
-        { rid: 'r0', maxBitrate: 280_000, scaleResolutionDownBy: 4, maxFramerate: fps },
-        { rid: 'r1', maxBitrate: 800_000, scaleResolutionDownBy: 2, maxFramerate: fps },
-        { rid: 'r2', maxBitrate: 3_200_000, scaleResolutionDownBy: 1, maxFramerate: fps },
-      ]
-  }
+  void tier
+  return getSingleLayerEncodingsForPreset('auto_large_room')
 }

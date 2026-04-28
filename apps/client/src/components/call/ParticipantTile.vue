@@ -33,7 +33,7 @@ const emit = defineEmits<{
   'mafia-force-camera-off': [peerId: string]
   /** Mafia: local UI override for eliminated background on this peer. */
   'mafia-set-elimination-background': [payload: { peerId: string; background: MafiaEliminationBackground }]
-  /** Mafia: tile intersects viewport (for `setPeerVisible` / simulcast layers). */
+    /** Mafia: tile intersects viewport. */
   'mafia-viewport-layers': [visible: boolean]
   /** Remote `<video>` `waiting`: fast playback stall signal for adaptive FPS (CallPage). */
   'remote-playback-stall': [payload: { peerId: string; stalling: boolean }]
@@ -85,7 +85,7 @@ const props = withDefaults(
     /** Mafia: host, round started — show persistent 💀/❤️ life toggle (top-right). */
     mafiaHostShowLifeToggle?: boolean
     /**
-     * Call / Mafia: track tile intersection with the viewport; parent maps to `setPeerVisible` for simulcast.
+     * Call / Mafia: track tile intersection with the viewport.
      * Remotes only.
      */
     mafiaLayerViewportObserve?: boolean

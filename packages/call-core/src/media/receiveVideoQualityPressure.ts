@@ -1,5 +1,5 @@
 /**
- * Local-only receive-side video pressure: downgrades *preferred* simulcast layers (never audio / never pause).
+ * Local-only receive-side video stats. Fixed-quality calls do not downgrade preferred layers.
  */
 
 import type { SimulcastPreferredLayers } from './adaptiveVideoPreferredLayers'
@@ -15,23 +15,6 @@ export type VideoInboundStatsRow = {
 }
 
 export type PeerRecvLayerCategory = 'active' | 'pinned' | 'visible' | 'off'
-
-function clampDown(
-  a: SimulcastPreferredLayers,
-  cap: SimulcastPreferredLayers,
-): SimulcastPreferredLayers {
-  return {
-    spatialLayer: (Math.min(a.spatialLayer, cap.spatialLayer) as 0 | 1 | 2),
-    temporalLayer: (Math.min(a.temporalLayer, cap.temporalLayer) as 0 | 1 | 2),
-  }
-}
-
-function constrainVisibleSoftly(): SimulcastPreferredLayers {
-  return {
-    spatialLayer: 1,
-    temporalLayer: 0,
-  }
-}
 
 /**
  * Per-user category for layer caps. `visible` = on-screen (default when key missing).
@@ -58,8 +41,7 @@ export function peerRecvLayerCategory(
 }
 
 /**
- * Further reduces {@link base} when receive path is under pressure.
- * In `normal`, avoid LOW entirely so healthy clients do not get unnecessary low-quality tiles.
+ * Fixed-quality calls do not apply receive pressure to layers.
  */
 export function applyReceiveQualityPressureToLayers(
   base: Map<string, SimulcastPreferredLayers>,
@@ -71,42 +53,9 @@ export function applyReceiveQualityPressureToLayers(
     peerVisibility: ReadonlyMap<string, boolean>
   },
 ): Map<string, SimulcastPreferredLayers> {
-  if (pressure === 'normal') {
-    const out = new Map<string, SimulcastPreferredLayers>()
-    for (const [peerId, layers] of base) {
-      out.set(
-        peerId,
-        layers.spatialLayer === 0
-          ? { spatialLayer: 1, temporalLayer: Math.max(1, layers.temporalLayer) as 1 | 2 }
-          : layers,
-      )
-    }
-    return out
-  }
-
-  const out = new Map<string, SimulcastPreferredLayers>()
-
-  for (const [peerId, layers] of base) {
-    const cat = peerRecvLayerCategory(peerId, input)
-    if (pressure === 'constrained') {
-      if (cat === 'active' || cat === 'pinned') {
-        out.set(peerId, clampDown(layers, { spatialLayer: 2, temporalLayer: 1 }))
-      } else if (cat === 'visible') {
-        out.set(peerId, constrainVisibleSoftly())
-      } else {
-        out.set(peerId, clampDown(layers, { spatialLayer: 0, temporalLayer: 0 }))
-      }
-    } else {
-      // critical: never drop **active** or **pinned** to spatial 0 (LOW); others fall back to R0.
-      if (cat === 'active' || cat === 'pinned') {
-        out.set(peerId, clampDown(layers, { spatialLayer: 1, temporalLayer: 1 }))
-      } else {
-        out.set(peerId, clampDown(layers, { spatialLayer: 0, temporalLayer: 0 }))
-      }
-    }
-  }
-
-  return out
+  void pressure
+  void input
+  return new Map(base)
 }
 
 const MIN_FRAMES_WARMUP = 24

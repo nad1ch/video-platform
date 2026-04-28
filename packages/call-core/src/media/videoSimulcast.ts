@@ -2,23 +2,22 @@ import type { RtpEncodingParameters } from 'mediasoup-client/types'
 import { getSimulcastEncodingsForPreset, getSingleLayerEncodingsForPreset } from './videoQualityPreset'
 
 /**
- * When the room already has at least this many peers (including you), new publishes use VP8
- * **simulcast** and receivers enable `set-consumer-preferred-layers`. Below the threshold,
- * **single-layer** video stays default (smooth 1:1 / small calls).
+ * Simulcast is disabled for fixed-quality calls. The constant remains for compatibility only.
  */
-export const VIDEO_SIMULCAST_MIN_PEERS_IN_ROOM = 6
+export const VIDEO_SIMULCAST_MIN_PEERS_IN_ROOM = Number.POSITIVE_INFINITY
 
 export function shouldUseVideoSimulcastForRoom(peerCount: number): boolean {
-  return peerCount >= VIDEO_SIMULCAST_MIN_PEERS_IN_ROOM
+  void peerCount
+  return false
 }
 
 /** Implicit multi-user auto tier (back-compat export for callers that need a static reference). */
 export const VP8_SINGLE_LAYER_ENCODING: RtpEncodingParameters[] = getSingleLayerEncodingsForPreset('auto_large_room')
 
-/** Implicit multi-user simulcast ladder. */
+/** Back-compat export; simulcast is disabled and this contains one fixed 480p layer. */
 export const VP8_SIMULCAST_ENCODINGS: RtpEncodingParameters[] = getSimulcastEncodingsForPreset('auto_large_room')
 
-/** Maps UI grid tier → mediasoup simulcast spatialLayer (unused in-app; real policy is in `useRemoteMedia`). */
+/** Back-compat helper; fixed-quality receive path does not request spatial layers. */
 export function spatialLayerForGridSizeTier(tier: 'sm' | 'md' | 'lg'): number {
   if (tier === 'sm') {
     return 0

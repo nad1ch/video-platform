@@ -15,7 +15,6 @@ import type { CallEngineRole } from 'call-core'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  applyFpsRenderPressure,
   buildCallParticipantMap,
   buildDisplayNameUiMap,
   getAudioAnalysisAudioContext,
@@ -23,7 +22,6 @@ import {
   resolvePeerDisplayNameForUi,
   useCallOrchestrator,
   VIDEO_QUALITY_PRESETS,
-  type FpsRenderPressure,
   type InboundVideoDebugRow,
   type VideoQualityPreset,
 } from 'call-core'
@@ -41,7 +39,6 @@ import CallRoomPopover from './CallRoomPopover.vue'
 import CallControlsDock from './CallControlsDock.vue'
 import CallChatPanel from './CallChatPanel.vue'
 import { useCallChatPanel } from './useCallChatPanel'
-import { computeAllowedRemotePlaybackPeerIds } from './videoPlaybackBudgetPolicy'
 import { computeCallVideoGridLayout } from './callVideoGridLayout'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -160,7 +157,6 @@ const {
   toggleScreenShare,
   sendSignalingMessage,
   subscribeSignalingMessage,
-  setPeerVisible,
   receiveDeviceProfile,
   serverActiveSpeakerPeerId,
   playbackRenderFpsPressureByPeerId,
@@ -417,13 +413,8 @@ function remoteListenMutedHandler(peerId: string) {
   return h
 }
 
-/** Deduplicated tile IntersectionObserver → `setPeerVisible` (viewport ordering for simulcast slots; consumers stay open). */
+/** Deduplicated tile IntersectionObserver; fixed-quality calls keep all remote videos active. */
 const callTileViewportVisibleByPeer = shallowRef(new Map<string, boolean>())
-
-/** Delay before pausing off-screen remote `<video>` (ms); within 800–1500 band to limit flapping. */
-const REMOTE_VIDEO_SUPPRESS_DELAY_MS = 1200
-/** Phase 3: visible but outside soft playback budget — longer delay to avoid flapping (1500–2500 band). */
-const REMOTE_VIDEO_BUDGET_SUPPRESS_DELAY_MS = 1500
 
 const remoteVideoSuppressDelayTimerByPeer = new Map<string, ReturnType<typeof setTimeout>>()
 /** Why a pending suppress timer was scheduled — reschedule if offscreen vs budget flips. */
@@ -465,107 +456,11 @@ function clearRemoteVideoSuppressTimer(peerId: string): void {
 }
 
 function reconcileRemoteVideoPlaybackSuppression(): void {
-  const prof = receiveDeviceProfile.value
-  const allow = prof.allowRenderSuppression
-  const uiSpeaker = activeSpeakerPeerId.value
-  const srvSpeaker = serverActiveSpeakerPeerId.value
-  const viewport = callTileViewportVisibleByPeer.value
-
-  if (!allow) {
-    for (const pid of [...remoteVideoSuppressDelayTimerByPeer.keys()]) {
-      clearRemoteVideoSuppressTimer(pid)
-    }
-    for (const pid of [...remoteVideoPlaybackSuppressed.value.keys()]) {
-      bumpRemotePlaybackSuppressed(pid, false, 'profile-off')
-    }
-    return
+  for (const pid of [...remoteVideoSuppressDelayTimerByPeer.keys()]) {
+    clearRemoteVideoSuppressTimer(pid)
   }
-
-  const remoteWithVideo = tiles.value
-    .filter((t) => !t.isLocal && t.videoEnabled)
-    .map((t) => t.peerId)
-  const remoteIds = new Set(remoteWithVideo)
-
-  const allowed = computeAllowedRemotePlaybackPeerIds({
-    remotePeerIdsWithVideo: remoteWithVideo,
-    maxActiveRemoteVideos: prof.maxActiveRemoteVideos,
-    enableVisiblePlaybackBudget: allow,
-    fullPowerUnlock: isFullPowerMode.value,
-    serverActiveSpeakerPeerId: srvSpeaker,
-    uiActiveSpeakerPeerId: uiSpeaker,
-    viewportVisibleByPeerId: viewport,
-  })
-
-  for (const peerId of remoteIds) {
-    const isSpeaker = peerId === uiSpeaker || peerId === srvSpeaker
-    if (isSpeaker) {
-      clearRemoteVideoSuppressTimer(peerId)
-      bumpRemotePlaybackSuppressed(peerId, false, 'active-speaker')
-      continue
-    }
-
-    const off = viewport.get(peerId) === false
-    const outsideBudget = !allowed.has(peerId)
-    const shouldSuppress = off || outsideBudget
-
-    if (!shouldSuppress) {
-      clearRemoteVideoSuppressTimer(peerId)
-      bumpRemotePlaybackSuppressed(peerId, false, 'budget-allowed')
-      continue
-    }
-
-    if (remoteVideoPlaybackSuppressed.value.get(peerId) === true) {
-      continue
-    }
-
-    const kind: 'offscreen' | 'outside-budget' = off ? 'offscreen' : 'outside-budget'
-    const delay = kind === 'offscreen' ? REMOTE_VIDEO_SUPPRESS_DELAY_MS : REMOTE_VIDEO_BUDGET_SUPPRESS_DELAY_MS
-    const existingKind = remoteVideoSuppressPendingKind.get(peerId)
-    if (remoteVideoSuppressDelayTimerByPeer.has(peerId) && existingKind !== kind) {
-      clearRemoteVideoSuppressTimer(peerId)
-    }
-    if (remoteVideoSuppressDelayTimerByPeer.has(peerId) && remoteVideoSuppressPendingKind.get(peerId) === kind) {
-      continue
-    }
-
-    remoteVideoSuppressPendingKind.set(peerId, kind)
-    const timer = window.setTimeout(() => {
-      remoteVideoSuppressDelayTimerByPeer.delete(peerId)
-      remoteVideoSuppressPendingKind.delete(peerId)
-      const stillRemote = tiles.value.some((x) => x.peerId === peerId && !x.isLocal && x.videoEnabled)
-      const stillAllow = receiveDeviceProfile.value.allowRenderSuppression
-      const stillSpeaker =
-        peerId === activeSpeakerPeerId.value || peerId === serverActiveSpeakerPeerId.value
-      if (!stillAllow || !stillRemote || stillSpeaker) {
-        return
-      }
-      const vp = callTileViewportVisibleByPeer.value
-      const stillOff = vp.get(peerId) === false
-      const p = receiveDeviceProfile.value
-      const rw = tiles.value.filter((t) => !t.isLocal && t.videoEnabled).map((t) => t.peerId)
-      const stillAllowed = computeAllowedRemotePlaybackPeerIds({
-        remotePeerIdsWithVideo: rw,
-        maxActiveRemoteVideos: p.maxActiveRemoteVideos,
-        enableVisiblePlaybackBudget: p.allowRenderSuppression,
-        fullPowerUnlock: isFullPowerMode.value,
-        serverActiveSpeakerPeerId: serverActiveSpeakerPeerId.value,
-        uiActiveSpeakerPeerId: activeSpeakerPeerId.value,
-        viewportVisibleByPeerId: vp,
-      })
-      if (stillOff) {
-        bumpRemotePlaybackSuppressed(peerId, true, 'offscreen-after-delay')
-      } else if (p.allowRenderSuppression && !stillAllowed.has(peerId)) {
-        bumpRemotePlaybackSuppressed(peerId, true, 'outside-budget-after-delay')
-      }
-    }, delay)
-    remoteVideoSuppressDelayTimerByPeer.set(peerId, timer)
-  }
-
   for (const pid of [...remoteVideoPlaybackSuppressed.value.keys()]) {
-    if (!remoteIds.has(pid)) {
-      clearRemoteVideoSuppressTimer(pid)
-      bumpRemotePlaybackSuppressed(pid, false, 'peer-left')
-    }
+    bumpRemotePlaybackSuppressed(pid, false, 'fixed-quality')
   }
 }
 
@@ -593,47 +488,8 @@ function videoPlaybackSuppressedForPeer(peerId: string): boolean {
  * Simulcast slots handle normal load; RVFC/pulse throttling only kicks in for bad, non-priority tiles.
  */
 function remoteVideoTargetPlaybackFpsForPeer(peerId: string): number | undefined {
-  if (!receiveDeviceProfile.value.allowRenderSuppression) {
-    return undefined
-  }
-  /** Mid / weak-desktop: keep simulcast + budget; drop presentation FPS cap (often over-triggers). */
-  if (receiveDeviceProfile.value.profile === 'constrained') {
-    return undefined
-  }
-  if (videoPlaybackSuppressedForPeer(peerId)) {
-    return undefined
-  }
-
-  const pressure: FpsRenderPressure =
-    playbackRenderFpsPressureByPeerId.value.get(peerId) ?? 'good'
-
-  if (pressure !== 'bad') {
-    return undefined
-  }
-
-  const isSpeaker =
-    peerId === activeSpeakerPeerId.value || peerId === serverActiveSpeakerPeerId.value
-  if (isSpeaker) {
-    return undefined
-  }
-
-  const prof = receiveDeviceProfile.value
-  const remoteWithVideo = tiles.value
-    .filter((t) => !t.isLocal && t.videoEnabled)
-    .map((t) => t.peerId)
-  const allowed = computeAllowedRemotePlaybackPeerIds({
-    remotePeerIdsWithVideo: remoteWithVideo,
-    maxActiveRemoteVideos: prof.maxActiveRemoteVideos,
-    enableVisiblePlaybackBudget: prof.allowRenderSuppression,
-    fullPowerUnlock: isFullPowerMode.value,
-    serverActiveSpeakerPeerId: serverActiveSpeakerPeerId.value,
-    uiActiveSpeakerPeerId: activeSpeakerPeerId.value,
-    viewportVisibleByPeerId: callTileViewportVisibleByPeer.value,
-  })
-  if (allowed.has(peerId)) {
-    return undefined
-  }
-  return applyFpsRenderPressure(8, pressure)
+  void peerId
+  return undefined
 }
 
 function onCallTileViewportForLayers(peerId: string, visible: boolean): void {
@@ -652,13 +508,12 @@ function onCallTileViewportForLayers(peerId: string, visible: boolean): void {
   nextMap.set(id, visible)
   callTileViewportVisibleByPeer.value = nextMap
   if (import.meta.env.DEV) {
-    callPageLog.info('[call-qa:viewport-layers] setPeerVisible (remote tile IO)', {
+    callPageLog.info('[call-qa:viewport] remote tile IO', {
       peerId: id,
       visible,
       isLocalSelf: id === selfPeerId.value,
     })
   }
-  setPeerVisible(id, visible)
 }
 
 watch(

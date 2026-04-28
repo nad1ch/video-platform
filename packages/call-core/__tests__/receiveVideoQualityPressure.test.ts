@@ -5,7 +5,7 @@ import {
 } from '../src/media/receiveVideoQualityPressure'
 
 describe('applyReceiveQualityPressureToLayers', () => {
-  it('treats uiActiveSpeakerPeerId as active tier when SFU id is null', () => {
+  it('does not downgrade uiActiveSpeakerPeerId under critical pressure', () => {
     const b = new Map([['u', { spatialLayer: 2, temporalLayer: 2 }]])
     const u = applyReceiveQualityPressureToLayers(b, 'critical', {
       activeSpeakerPeerId: null,
@@ -13,10 +13,10 @@ describe('applyReceiveQualityPressureToLayers', () => {
       pinnedPeerId: null,
       peerVisibility: new Map(),
     })
-    expect(u.get('u')).toEqual({ spatialLayer: 1, temporalLayer: 1 })
+    expect(u.get('u')).toEqual({ spatialLayer: 2, temporalLayer: 2 })
   })
 
-  it('normal keeps high/medium and promotes low to medium', () => {
+  it('normal returns layers unchanged', () => {
     const b = new Map([
       ['a', { spatialLayer: 2, temporalLayer: 2 }],
       ['b', { spatialLayer: 0, temporalLayer: 0 }],
@@ -28,11 +28,11 @@ describe('applyReceiveQualityPressureToLayers', () => {
       peerVisibility: new Map(),
     })
     expect(u.get('a')).toEqual({ spatialLayer: 2, temporalLayer: 2 })
-    expect(u.get('b')).toEqual({ spatialLayer: 1, temporalLayer: 1 })
+    expect(u.get('b')).toEqual({ spatialLayer: 0, temporalLayer: 0 })
     expect(u.get('c')).toEqual({ spatialLayer: 1, temporalLayer: 1 })
   })
 
-  it('constrained soft-downgrades visible peers to medium spatial with low temporal', () => {
+  it('constrained returns layers unchanged', () => {
     const b = new Map([
       ['hi', { spatialLayer: 2, temporalLayer: 2 }],
       ['lo', { spatialLayer: 0, temporalLayer: 0 }],
@@ -45,11 +45,11 @@ describe('applyReceiveQualityPressureToLayers', () => {
         ['lo', true],
       ]),
     })
-    expect(u.get('hi')).toEqual({ spatialLayer: 1, temporalLayer: 0 })
-    expect(u.get('lo')).toEqual({ spatialLayer: 1, temporalLayer: 0 })
+    expect(u.get('hi')).toEqual({ spatialLayer: 2, temporalLayer: 2 })
+    expect(u.get('lo')).toEqual({ spatialLayer: 0, temporalLayer: 0 })
   })
 
-  it('critical: active to medium, others to low', () => {
+  it('critical returns layers unchanged', () => {
     const b = new Map([
       ['a', { spatialLayer: 2, temporalLayer: 2 }],
       ['b', { spatialLayer: 1, temporalLayer: 1 }],
@@ -59,11 +59,11 @@ describe('applyReceiveQualityPressureToLayers', () => {
       pinnedPeerId: null,
       peerVisibility: new Map([['b', true]]),
     })
-    expect(u.get('a')).toEqual({ spatialLayer: 1, temporalLayer: 1 })
-    expect(u.get('b')).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(u.get('a')).toEqual({ spatialLayer: 2, temporalLayer: 2 })
+    expect(u.get('b')).toEqual({ spatialLayer: 1, temporalLayer: 1 })
   })
 
-  it('critical: pinned stays at least medium (not low)', () => {
+  it('critical does not treat pinned peers specially', () => {
     const b = new Map([
       ['p', { spatialLayer: 2, temporalLayer: 2 }],
       ['v', { spatialLayer: 1, temporalLayer: 1 }],
@@ -76,8 +76,8 @@ describe('applyReceiveQualityPressureToLayers', () => {
         ['v', true],
       ]),
     })
-    expect(u.get('p')).toEqual({ spatialLayer: 1, temporalLayer: 1 })
-    expect(u.get('v')).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(u.get('p')).toEqual({ spatialLayer: 2, temporalLayer: 2 })
+    expect(u.get('v')).toEqual({ spatialLayer: 1, temporalLayer: 1 })
   })
 })
 

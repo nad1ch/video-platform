@@ -6,7 +6,7 @@ import {
 } from '../src/media/adaptiveVideoPreferredLayers'
 
 describe('assignAdaptivePreferredLayersByPeerId', () => {
-  it('gives 1–2 remotes all high slot (simulcast spatial 2, temporal 2)', () => {
+  it('gives all remotes the same single fixed layer', () => {
     const a = 'p-a'
     const b = 'p-b'
     const m = assignAdaptivePreferredLayersByPeerId({
@@ -15,11 +15,11 @@ describe('assignAdaptivePreferredLayersByPeerId', () => {
       pinnedPeerId: null,
       peerVisibility: new Map(),
     })
-    expect(m.get(a)).toEqual({ spatialLayer: 2, temporalLayer: 2 })
-    expect(m.get(b)).toEqual({ spatialLayer: 2, temporalLayer: 2 })
+    expect(m.get(a)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(m.get(b)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
   })
 
-  it('orders active speaker first, then other visible, then slot ladder', () => {
+  it('does not prioritize active speaker or visible peers', () => {
     const low = 'z-last'
     const midA = 'm-a'
     const midB = 'm-b'
@@ -37,14 +37,13 @@ describe('assignAdaptivePreferredLayersByPeerId', () => {
       pinnedPeerId: null,
       peerVisibility: vis,
     })
-    // Order: act, then m-a, m-b, low (all visible, sorted)
-    expect(m.get(act)).toEqual({ spatialLayer: 2, temporalLayer: 2 })
-    expect(m.get(midA)).toEqual({ spatialLayer: 2, temporalLayer: 2 })
-    expect(m.get(midB)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
-    expect(m.get(low)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
+    expect(m.get(act)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(m.get(midA)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(m.get(midB)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(m.get(low)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
   })
 
-  it('reserves first MAX_HIGH then MAX_MEDIUM', () => {
+  it('does not reserve high or medium slots', () => {
     const peers: string[] = []
     for (let i = 0; i < MAX_HIGH_STREAMS + MAX_MEDIUM_STREAMS + 2; i += 1) {
       peers.push(`peer-${i.toString().padStart(2, '0')}`)
@@ -55,18 +54,12 @@ describe('assignAdaptivePreferredLayersByPeerId', () => {
       pinnedPeerId: null,
       peerVisibility: new Map(),
     })
-    for (let i = 0; i < MAX_HIGH_STREAMS; i += 1) {
-      expect(m.get(peers[i])).toEqual({ spatialLayer: 2, temporalLayer: 2 })
-    }
-    for (let i = MAX_HIGH_STREAMS; i < MAX_HIGH_STREAMS + MAX_MEDIUM_STREAMS; i += 1) {
-      expect(m.get(peers[i])).toEqual({ spatialLayer: 1, temporalLayer: 1 })
-    }
-    for (let i = MAX_HIGH_STREAMS + MAX_MEDIUM_STREAMS; i < peers.length; i += 1) {
+    for (let i = 0; i < peers.length; i += 1) {
       expect(m.get(peers[i])).toEqual({ spatialLayer: 0, temporalLayer: 0 })
     }
   })
 
-  it('respects custom layerSlots (mobile-style 1 high, 3 medium)', () => {
+  it('ignores custom layerSlots', () => {
     const act = 'active-1'
     const b = 'p-b'
     const c = 'p-c'
@@ -85,14 +78,14 @@ describe('assignAdaptivePreferredLayersByPeerId', () => {
       ]),
       layerSlots: { maxHighStreams: 1, maxMediumStreams: 3 },
     })
-    expect(m.get(act)).toEqual({ spatialLayer: 2, temporalLayer: 2 })
-    expect(m.get(b)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
-    expect(m.get(c)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
-    expect(m.get(d)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
+    expect(m.get(act)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(m.get(b)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(m.get(c)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(m.get(d)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
     expect(m.get(e)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
   })
 
-  it('orders ui VAD speaker before SFU id when both differ (single high slot)', () => {
+  it('does not boost UI VAD speaker over SFU speaker', () => {
     const ui = 'vad-ahead'
     const sfu = 'sfu-late'
     const other = 'z-other'
@@ -108,12 +101,12 @@ describe('assignAdaptivePreferredLayersByPeerId', () => {
       ]),
       layerSlots: { maxHighStreams: 1, maxMediumStreams: 1 },
     })
-    expect(m.get(ui)).toEqual({ spatialLayer: 2, temporalLayer: 2 })
-    expect(m.get(sfu)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
+    expect(m.get(ui)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(m.get(sfu)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
     expect(m.get(other)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
   })
 
-  it('keeps recent speaker ahead of regular visible peers', () => {
+  it('does not boost recent speaker ahead of regular visible peers', () => {
     const recent = 'recent-speaker'
     const visible = 'visible-peer'
     const m = assignAdaptivePreferredLayersByPeerId({
@@ -128,11 +121,11 @@ describe('assignAdaptivePreferredLayersByPeerId', () => {
       ]),
       layerSlots: { maxHighStreams: 1, maxMediumStreams: 1 },
     })
-    expect(m.get(recent)).toEqual({ spatialLayer: 2, temporalLayer: 2 })
-    expect(m.get(visible)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
+    expect(m.get(recent)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(m.get(visible)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
   })
 
-  it('places pinned after active, visible before off-screen', () => {
+  it('does not boost pinned or visible peers over off-screen peers', () => {
     const active = 'a-s'
     const pinned = 'p-in'
     const vis1 = 'v1'
@@ -148,10 +141,9 @@ describe('assignAdaptivePreferredLayersByPeerId', () => {
         [pinned, true],
       ]),
     })
-    // Order: active, pinned, v1, off
-    expect(m.get(active)).toEqual({ spatialLayer: 2, temporalLayer: 2 })
-    expect(m.get(pinned)).toEqual({ spatialLayer: 2, temporalLayer: 2 })
-    expect(m.get(vis1)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
-    expect(m.get(off)).toEqual({ spatialLayer: 1, temporalLayer: 1 })
+    expect(m.get(active)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(m.get(pinned)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(m.get(vis1)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
+    expect(m.get(off)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
   })
 })
