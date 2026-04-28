@@ -19,6 +19,7 @@ export type RemoteProducerInfo = {
 export type RoomPeerInfo = {
   peerId: string
   displayName: string
+  userId?: string
   avatarUrl?: string
   audioMuted?: boolean
 }
@@ -31,7 +32,7 @@ export type RoomStatePayload = {
 
 type ServerMessage =
   | { type: 'room-state'; payload: RoomStatePayload }
-  | { type: 'peer-joined'; payload: { peerId: string; displayName: string; avatarUrl?: string } }
+  | { type: 'peer-joined'; payload: { peerId: string; displayName: string; userId?: string; avatarUrl?: string } }
   | { type: 'peer-left'; payload: { peerId: string } }
   | { type: 'peer-display-name'; payload: { peerId: string; displayName: string } }
   | {
@@ -113,13 +114,16 @@ function parseRoomPeerList(raw: unknown): RoomPeerInfo[] | null {
       continue
     }
     if (p && typeof p === 'object') {
-      const o = p as { peerId?: unknown; displayName?: unknown; avatarUrl?: unknown }
+      const o = p as { peerId?: unknown; displayName?: unknown; userId?: unknown; avatarUrl?: unknown }
       if (typeof o.peerId === 'string') {
         const raw =
           typeof o.displayName === 'string' ? normalizeDisplayName(o.displayName) : ''
         const dn =
           raw.length > 0 ? raw.slice(0, 64) : guestDisplayNameForPeerId(o.peerId)
         const row: RoomPeerInfo = { peerId: o.peerId, displayName: dn }
+        if (typeof o.userId === 'string' && o.userId.trim().length > 0) {
+          row.userId = o.userId.trim().slice(0, 128)
+        }
         if (typeof o.avatarUrl === 'string' && o.avatarUrl.trim().length > 0) {
           row.avatarUrl = o.avatarUrl.trim().slice(0, 2048)
         }
@@ -201,9 +205,12 @@ function parseServerMessage(data: unknown): ServerMessage | null {
     const displayName =
       raw.length > 0 ? raw.slice(0, 64) : guestDisplayNameForPeerId(payload.peerId)
     const avatarRaw = payload.avatarUrl
-    const out: { type: 'peer-joined'; payload: { peerId: string; displayName: string; avatarUrl?: string } } = {
+    const out: { type: 'peer-joined'; payload: { peerId: string; displayName: string; userId?: string; avatarUrl?: string } } = {
       type: 'peer-joined',
       payload: { peerId: payload.peerId, displayName },
+    }
+    if (typeof payload.userId === 'string' && payload.userId.trim().length > 0) {
+      out.payload.userId = payload.userId.trim().slice(0, 128)
     }
     if (typeof avatarRaw === 'string' && avatarRaw.trim().length > 0) {
       out.payload.avatarUrl = avatarRaw.trim().slice(0, 2048)
@@ -386,12 +393,15 @@ export function useRoomConnection(wsUrl?: string) {
       return
     }
     if (message.type === 'peer-joined') {
-      const { peerId, displayName, avatarUrl } = message.payload
+      const { peerId, displayName, userId, avatarUrl } = message.payload
       if (!peers.value.includes(peerId)) {
         peers.value = [...peers.value, peerId]
       }
       if (lastRoomState.value && !lastRoomState.value.peers.some((p) => p.peerId === peerId)) {
         const entry: RoomPeerInfo = { peerId, displayName }
+        if (typeof userId === 'string' && userId.length > 0) {
+          entry.userId = userId
+        }
         if (typeof avatarUrl === 'string' && avatarUrl.length > 0) {
           entry.avatarUrl = avatarUrl
         }
@@ -518,19 +528,23 @@ export function useRoomConnection(wsUrl?: string) {
     ws.send(JSON.stringify(obj))
   }
 
-  function joinRoom(roomId: string, peerId: string, displayName?: string, avatarUrl?: string): void {
+  function joinRoom(roomId: string, peerId: string, displayName?: string, avatarUrl?: string, userId?: string): void {
     const ws = wsRef.value
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not open; await connect() before joinRoom()')
     }
     const trimmed = typeof displayName === 'string' ? normalizeDisplayName(displayName) : undefined
-    const payload: { roomId: string; peerId: string; displayName?: string; avatarUrl?: string } = { roomId, peerId }
+    const payload: { roomId: string; peerId: string; displayName?: string; avatarUrl?: string; userId?: string } = { roomId, peerId }
     if (trimmed !== undefined && trimmed.length > 0) {
       payload.displayName = trimmed.slice(0, 64)
     }
     const av = typeof avatarUrl === 'string' ? avatarUrl.trim() : ''
     if (av.length > 0) {
       payload.avatarUrl = av.slice(0, 2048)
+    }
+    const uid = typeof userId === 'string' ? userId.trim() : ''
+    if (uid.length > 0) {
+      payload.userId = uid.slice(0, 128)
     }
     ws.send(JSON.stringify({ type: 'join-room', payload }))
   }
