@@ -1,18 +1,26 @@
 import { defineStore } from 'pinia'
-import { computed, nextTick, ref, shallowRef } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { useCallSessionStore } from 'call-core'
 import { createLogger } from '@/utils/logger'
 import { buildMafiaRoleDeck, MafiaPlayerCountError } from '@/utils/mafiaGameRoleDeck'
 import type {
+  BackgroundItem,
   MafiaHostInteractionMode,
+  MafiaEliminationBackground,
+  MafiaBackgroundItem,
   MafiaLastNightResult,
   MafiaModeUpdatePayload,
   MafiaNightActionKey,
   MafiaNightActions,
   MafiaPhase,
+  MafiaPlayerLifeState,
+  MafiaPlayerLifeStateSnapshotPayload,
+  MafiaPlayerOverlayState,
   MafiaPlayersUpdatePayload,
   MafiaReshufflePayload,
   MafiaRole,
+  MafiaSettingsUpdatePayload,
+  MafiaPageBackgroundSettings,
   MafiaPlayerKickPayload,
   MafiaPlayerRevivePayload,
   MafiaTimerStartPayload,
@@ -32,6 +40,31 @@ const mafiaGameLog = createLogger('mafia-game')
 const NIGHT_ACTION_ROLES: MafiaNightActionKey[] = ['mafia', 'doctor', 'sheriff', 'don']
 
 const MAFIA_ROLES: ReadonlySet<MafiaRole> = new Set(['mafia', 'don', 'sheriff', 'doctor', 'civilian'])
+const MAFIA_ELIMINATION_BACKGROUNDS: ReadonlySet<MafiaEliminationBackground> = new Set([
+  'dark',
+  'red',
+  'violet',
+  'gray',
+])
+const MAFIA_PRESET_BACKGROUND_ITEMS = Object.freeze(
+  [...MAFIA_ELIMINATION_BACKGROUNDS].map((background) => ({
+    id: `preset-${background}`,
+    url: `preset:${background}`,
+    type: 'preset' as const,
+  })),
+) satisfies readonly MafiaBackgroundItem[]
+const MAFIA_CUSTOM_BACKGROUND_MAX_URL_LENGTH = 7_000_000
+const MAFIA_BACKGROUND_STORAGE_PREFIX = 'streamassist_mafia_dead_backgrounds'
+const MAFIA_PAGE_BACKGROUND_STORAGE_PREFIX = 'streamassist_mafia_page_backgrounds'
+const MAFIA_BACKGROUND_STORAGE_KEY = `${MAFIA_BACKGROUND_STORAGE_PREFIX}:global`
+const MAFIA_PAGE_BACKGROUND_STORAGE_KEY = `${MAFIA_PAGE_BACKGROUND_STORAGE_PREFIX}:global`
+const MAFIA_HOST_SESSION_STORAGE_KEY = 'streamassist_mafia_host_session_id'
+const MAFIA_DEFAULT_PAGE_BACKGROUND_ID = 'default-page'
+const MAFIA_PAGE_BACKGROUND_ITEMS = Object.freeze([
+  { id: MAFIA_DEFAULT_PAGE_BACKGROUND_ID, url: 'default', type: 'default' as const },
+  { id: 'preset-page-violet', url: 'preset:violet', type: 'preset' as const },
+  { id: 'preset-page-night', url: 'preset:night', type: 'preset' as const },
+]) satisfies readonly BackgroundItem[]
 
 /** Preset round lengths (30s / 60s / 90s). */
 export const MAFIA_TIMER_PRESET_MS = [30_000, 60_000, 90_000] as const
@@ -40,6 +73,30 @@ const MAFIA_TIMER_MIN_MS = 30_000
 const MAFIA_TIMER_MAX_MS = 7_200_000
 
 const TIMER_STOP_SENTINEL: MafiaTimerStopPayload = Object.freeze({})
+
+function createMafiaHostSessionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `mafia-session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function readMafiaHostSessionId(): string {
+  if (typeof window === 'undefined') {
+    return createMafiaHostSessionId()
+  }
+  try {
+    const existing = window.sessionStorage.getItem(MAFIA_HOST_SESSION_STORAGE_KEY)
+    if (existing && existing.trim().length > 0) {
+      return existing.trim()
+    }
+    const next = createMafiaHostSessionId()
+    window.sessionStorage.setItem(MAFIA_HOST_SESSION_STORAGE_KEY, next)
+    return next
+  } catch {
+    return createMafiaHostSessionId()
+  }
+}
 
 export const useMafiaGameStore = defineStore('mafiaGame', () => {
   const callSession = useCallSessionStore()
@@ -55,17 +112,36 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   const numberingOrder = ref<string[]>([])
 
   const roleByPeerId = shallowRef<Record<string, MafiaRole>>({})
-  const aliveByPeerId = shallowRef<Record<string, boolean>>({})
+  const playerOverlayStateByPeerId = shallowRef<Record<string, MafiaPlayerOverlayState>>({})
 
-  /** Mafia “ведучий” — from signaling `mafia:host-updated` (one per room). */
+  /** Mafia “ведучий” — stable user id from signaling; peer id is only an online hint. */
   const mafiaHostPeerId = ref<string | null>(null)
+  const mafiaHostUserId = ref<string | null>(null)
+  const mafiaHostSessionId = ref<string | null>(null)
+  const localMafiaSessionId = ref(readMafiaHostSessionId())
+  const localMafiaUserId = ref<string | null>(null)
 
   const isMafiaHost = computed(() => {
-    const h = mafiaHostPeerId.value
-    if (h == null || h === '') {
+    const hostPeerId = mafiaHostPeerId.value
+    const hostUserId = mafiaHostUserId.value
+    const hostSessionId = mafiaHostSessionId.value
+    const localUserId = localMafiaUserId.value
+    const localSessionId = localMafiaSessionId.value
+    const localPeerId = callSession.selfPeerId
+    if (
+      hostPeerId == null ||
+      hostPeerId === '' ||
+      hostUserId == null ||
+      hostUserId === '' ||
+      hostSessionId == null ||
+      hostSessionId === '' ||
+      localUserId == null ||
+      localUserId === '' ||
+      localSessionId === ''
+    ) {
       return false
     }
-    return callSession.selfPeerId === h
+    return localUserId === hostUserId && localSessionId === hostSessionId && localPeerId === hostPeerId
   })
 
   /** For host: set after a successful `reshuffleGame`; `useMafiaHostSignaling` sends WS then clears. */
@@ -96,6 +172,8 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   /** For host: after `swapSeatsByPeerId`; signaling sends `mafia:players-update` then clears. */
   const playersUpdateBroadcastPayload = ref<MafiaPlayersUpdatePayload | null>(null)
   const modeUpdateBroadcastPayload = ref<MafiaModeUpdatePayload | null>(null)
+  const settingsUpdateBroadcastPayload = ref<MafiaSettingsUpdatePayload | null>(null)
+  const pageBackgroundSettingsBroadcastPayload = ref<MafiaPageBackgroundSettings | null>(null)
 
   /** Shared round timer; `remaining = duration - (Date.now() - startedAt)` on each client. */
   const mafiaTimer = ref<MafiaTimerState | null>(null)
@@ -110,13 +188,31 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   const kickBroadcastPayload = ref<MafiaPlayerKickPayload | null>(null)
   const reviveBroadcastPayload = ref<MafiaPlayerRevivePayload | null>(null)
 
-  function setMafiaHostFromSignaling(peerId: string | null): void {
+  function setLocalMafiaUserId(userId: string | null): void {
+    localMafiaUserId.value = typeof userId === 'string' && userId.trim().length > 0 ? userId.trim() : null
+  }
+
+  function setMafiaHostFromSignaling(peerId: string | null, userId?: string | null, sessionId?: string | null): void {
     mafiaHostPeerId.value = peerId
+    mafiaHostUserId.value = typeof userId === 'string' && userId.length > 0 ? userId : null
+    mafiaHostSessionId.value = typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : null
+    hydratePersistedBackgroundSettingsForHost()
+    if (isMafiaHost.value) {
+      hydratePersistedPageBackgroundSettings()
+      emitPageBackgroundSettingsUpdate()
+    }
   }
 
   /** Host: night-action assignment vs building speaking-order queue (tile click). */
   const hostInteractionMode = ref<MafiaHostInteractionMode>('night')
   const oldMafiaMode = ref(true)
+  const deadBackgrounds = ref<MafiaBackgroundItem[]>([...MAFIA_PRESET_BACKGROUND_ITEMS])
+  const activeBackgroundId = ref<string | null>(null)
+  const pageBackgrounds = ref<BackgroundItem[]>([...MAFIA_PAGE_BACKGROUND_ITEMS])
+  const selectedPageBackgroundId = ref<string | null>(null)
+  const forcedPageBackgroundId = ref<string | null>(null)
+  const defaultEliminationBackground = ref<MafiaEliminationBackground>('dark')
+  const eliminationBackgroundByPeerId = shallowRef<Record<string, MafiaEliminationBackground>>({})
 
   /** Shared speaking queue (1-based seat #s); order preserved; host edits, others receive via signaling. */
   const speakingQueue = ref<number[]>([])
@@ -174,7 +270,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     numberingOrder.value = next
   }
 
-  /** Remove role/alive state for peer ids that are no longer in the call. */
+  /** Remove role/background state for peer ids that are no longer in the call. */
   function pruneGameStateToPeers(engineOrder: string[]): void {
     const s = new Set<string>()
     for (const id of engineOrder) {
@@ -189,13 +285,13 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       }
     }
     roleByPeerId.value = r
-    const a = { ...aliveByPeerId.value }
-    for (const k of Object.keys(a)) {
+    const bg = { ...eliminationBackgroundByPeerId.value }
+    for (const k of Object.keys(bg)) {
       if (!s.has(k)) {
-        delete a[k]
+        delete bg[k]
       }
     }
-    aliveByPeerId.value = a
+    eliminationBackgroundByPeerId.value = bg
   }
 
   /** Drop night-action seat refs outside 1..maxSeat. */
@@ -298,12 +394,481 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     }
   }
 
+  function normalizeEliminationBackground(value: MafiaEliminationBackground): MafiaEliminationBackground {
+    return MAFIA_ELIMINATION_BACKGROUNDS.has(value) ? value : 'dark'
+  }
+
+  function normalizeLifeState(value: unknown): MafiaPlayerLifeState {
+    return value === 'dead' || value === 'ghost' ? value : 'alive'
+  }
+
+  function lifeStateForPeer(peerId: string): MafiaPlayerLifeState {
+    if (typeof peerId !== 'string' || peerId.length < 1) {
+      return 'alive'
+    }
+    return playerOverlayStateByPeerId.value[peerId]?.lifeState ?? 'alive'
+  }
+
+  function setPeerLifeState(peerId: string, lifeState: MafiaPlayerLifeState): void {
+    if (typeof peerId !== 'string' || peerId.length < 1) {
+      return
+    }
+    if (lifeStateForPeer(peerId) === lifeState) {
+      return
+    }
+    if (lifeState === 'alive') {
+      if (playerOverlayStateByPeerId.value[peerId] == null) {
+        return
+      }
+      const next = { ...playerOverlayStateByPeerId.value }
+      delete next[peerId]
+      playerOverlayStateByPeerId.value = next
+      return
+    }
+    playerOverlayStateByPeerId.value = {
+      ...playerOverlayStateByPeerId.value,
+      [peerId]: { lifeState },
+    }
+  }
+
+  function setDefaultEliminationBackground(value: MafiaEliminationBackground): void {
+    if (!isMafiaHost.value) {
+      return
+    }
+    const next = normalizeEliminationBackground(value)
+    setActiveDeadBackgroundId(`preset-${next}`)
+  }
+
+  function normalizeDeadBackgroundUrl(value: string | null): string | null {
+    if (value == null) {
+      return null
+    }
+    const next = value.trim()
+    if (next.length < 1) {
+      return null
+    }
+    if (next.length > MAFIA_CUSTOM_BACKGROUND_MAX_URL_LENGTH) {
+      return null
+    }
+    return next
+  }
+
+  function normalizePageBackgroundItems(items: BackgroundItem[]): BackgroundItem[] {
+    const out: BackgroundItem[] = [...MAFIA_PAGE_BACKGROUND_ITEMS]
+    const seen = new Set(out.map((item) => item.id))
+    for (const item of items) {
+      if (!item || item.type !== 'custom') {
+        continue
+      }
+      if (typeof item.id !== 'string' || item.id.length < 1 || seen.has(item.id)) {
+        continue
+      }
+      const url = normalizeDeadBackgroundUrl(item.url)
+      if (url == null) {
+        continue
+      }
+      seen.add(item.id)
+      out.push({ id: item.id, url, type: 'custom' })
+    }
+    return out
+  }
+
+  function pageBackgroundExists(backgroundId: string | null, items = pageBackgrounds.value): boolean {
+    return backgroundId != null && items.some((item) => item.id === backgroundId)
+  }
+
+  function pageBackgroundSettingsStorageKey(): string | null {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    return MAFIA_PAGE_BACKGROUND_STORAGE_KEY
+  }
+
+  function legacyRoomPageBackgroundSettingsStorageKey(): string | null {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    const roomId = String(callSession.roomId ?? '').trim() || 'demo'
+    return `${MAFIA_PAGE_BACKGROUND_STORAGE_PREFIX}:${roomId}`
+  }
+
+  function persistPageBackgroundSettingsForCurrentRoom(): void {
+    const key = pageBackgroundSettingsStorageKey()
+    if (key == null) {
+      return
+    }
+    try {
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          v: 1,
+          backgrounds: pageBackgrounds.value,
+          selectedBackgroundId: selectedPageBackgroundId.value,
+        }),
+      )
+    } catch (err) {
+      mafiaGameLog.info('page background settings persist failed', { err })
+    }
+  }
+
+  function readPersistedPageBackgroundSettings(): Pick<MafiaPageBackgroundSettings, 'backgrounds' | 'selectedBackgroundId'> | null {
+    const key = pageBackgroundSettingsStorageKey()
+    if (key == null) {
+      return null
+    }
+    try {
+      const legacyKey = legacyRoomPageBackgroundSettingsStorageKey()
+      const globalRaw = window.localStorage.getItem(key)
+      const legacyRaw = legacyKey != null ? window.localStorage.getItem(legacyKey) : null
+      const raw = globalRaw ?? legacyRaw
+      if (!raw) {
+        return null
+      }
+      if (globalRaw == null && legacyRaw != null) {
+        window.localStorage.setItem(key, legacyRaw)
+      }
+      const parsed = JSON.parse(raw) as { backgrounds?: unknown; selectedBackgroundId?: unknown }
+      if (!Array.isArray(parsed.backgrounds)) {
+        return null
+      }
+      return {
+        backgrounds: parsed.backgrounds as BackgroundItem[],
+        selectedBackgroundId: typeof parsed.selectedBackgroundId === 'string' ? parsed.selectedBackgroundId : null,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  function hydratePersistedPageBackgroundSettings(): void {
+    const persisted = readPersistedPageBackgroundSettings()
+    if (persisted == null) {
+      return
+    }
+    const items = normalizePageBackgroundItems(persisted.backgrounds)
+    pageBackgrounds.value = items
+    selectedPageBackgroundId.value = pageBackgroundExists(persisted.selectedBackgroundId, items)
+      ? persisted.selectedBackgroundId
+      : null
+  }
+
+  function pageBackgroundSettingsSnapshot(): MafiaPageBackgroundSettings {
+    return {
+      backgrounds: [...pageBackgrounds.value],
+      selectedBackgroundId: selectedPageBackgroundId.value,
+      forcedBackgroundId: forcedPageBackgroundId.value,
+    }
+  }
+
+  function emitPageBackgroundSettingsUpdate(): void {
+    persistPageBackgroundSettingsForCurrentRoom()
+    pageBackgroundSettingsBroadcastPayload.value = pageBackgroundSettingsSnapshot()
+  }
+
+  hydratePersistedPageBackgroundSettings()
+
+  watch(
+    () => callSession.roomId,
+    () => {
+      forcedPageBackgroundId.value = null
+      hydratePersistedPageBackgroundSettings()
+    },
+  )
+
+  function normalizeBackgroundItems(items: MafiaBackgroundItem[]): MafiaBackgroundItem[] {
+    const out: MafiaBackgroundItem[] = [...MAFIA_PRESET_BACKGROUND_ITEMS]
+    const seen = new Set(out.map((item) => item.id))
+    for (const item of items) {
+      if (!item || item.type !== 'custom') {
+        continue
+      }
+      if (typeof item.id !== 'string' || item.id.length < 1 || seen.has(item.id)) {
+        continue
+      }
+      const url = normalizeDeadBackgroundUrl(item.url)
+      if (url == null) {
+        continue
+      }
+      seen.add(item.id)
+      out.push({ id: item.id, url, type: 'custom' })
+    }
+    return out
+  }
+
+  function backgroundSettingsStorageKey(): string | null {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    return MAFIA_BACKGROUND_STORAGE_KEY
+  }
+
+  function legacyRoomBackgroundSettingsStorageKey(): string | null {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    const roomId = String(callSession.roomId ?? '').trim() || 'demo'
+    return `${MAFIA_BACKGROUND_STORAGE_PREFIX}:${roomId}`
+  }
+
+  function persistBackgroundSettingsForCurrentRoom(): void {
+    const key = backgroundSettingsStorageKey()
+    if (key == null) {
+      return
+    }
+    try {
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          v: 1,
+          deadBackgrounds: deadBackgrounds.value,
+          activeBackgroundId: activeBackgroundId.value,
+        }),
+      )
+    } catch (err) {
+      mafiaGameLog.info('dead background settings persist failed', { err })
+    }
+  }
+
+  function readPersistedBackgroundSettings(): MafiaSettingsUpdatePayload | null {
+    const key = backgroundSettingsStorageKey()
+    if (key == null) {
+      return null
+    }
+    try {
+      const legacyKey = legacyRoomBackgroundSettingsStorageKey()
+      const globalRaw = window.localStorage.getItem(key)
+      const legacyRaw = legacyKey != null ? window.localStorage.getItem(legacyKey) : null
+      const raw = globalRaw ?? legacyRaw
+      if (!raw) {
+        return null
+      }
+      if (globalRaw == null && legacyRaw != null) {
+        window.localStorage.setItem(key, legacyRaw)
+      }
+      const parsed = JSON.parse(raw) as {
+        deadBackgrounds?: unknown
+        activeBackgroundId?: unknown
+      }
+      if (!Array.isArray(parsed.deadBackgrounds)) {
+        return null
+      }
+      return {
+        deadBackgrounds: parsed.deadBackgrounds as MafiaBackgroundItem[],
+        activeBackgroundId: typeof parsed.activeBackgroundId === 'string' ? parsed.activeBackgroundId : null,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  function hydratePersistedBackgroundSettingsForHost(): void {
+    if (!isMafiaHost.value) {
+      return
+    }
+    const persisted = readPersistedBackgroundSettings()
+    if (persisted == null) {
+      return
+    }
+    const items = normalizeBackgroundItems(persisted.deadBackgrounds)
+    deadBackgrounds.value = items
+    activeBackgroundId.value = backgroundExists(persisted.activeBackgroundId, items)
+      ? persisted.activeBackgroundId
+      : null
+    defaultEliminationBackground.value = activePresetBackground()
+    emitSettingsUpdate()
+  }
+
+  function backgroundExists(backgroundId: string | null, items = deadBackgrounds.value): boolean {
+    return backgroundId != null && items.some((item) => item.id === backgroundId)
+  }
+
+  function activePresetBackground(): MafiaEliminationBackground {
+    const item = deadBackgrounds.value.find((background) => background.id === activeBackgroundId.value)
+    if (item?.type !== 'preset') {
+      return 'dark'
+    }
+    const raw = item.url.startsWith('preset:') ? item.url.slice('preset:'.length) : item.id.replace(/^preset-/, '')
+    return normalizeEliminationBackground(raw as MafiaEliminationBackground)
+  }
+
+  function emitSettingsUpdate(): void {
+    persistBackgroundSettingsForCurrentRoom()
+    settingsUpdateBroadcastPayload.value = {
+      deadBackgrounds: [...deadBackgrounds.value],
+      activeBackgroundId: activeBackgroundId.value,
+    }
+  }
+
+  function setActiveDeadBackgroundId(backgroundId: string | null): void {
+    if (!isMafiaHost.value) {
+      return
+    }
+    const next = backgroundExists(backgroundId) ? backgroundId : null
+    activeBackgroundId.value = next
+    defaultEliminationBackground.value = activePresetBackground()
+    emitSettingsUpdate()
+  }
+
+  function addCustomDeadBackground(url: string): MafiaBackgroundItem | null {
+    if (!isMafiaHost.value) {
+      return null
+    }
+    const normalizedUrl = normalizeDeadBackgroundUrl(url)
+    if (normalizedUrl == null) {
+      return null
+    }
+    const item: MafiaBackgroundItem = {
+      id: `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      url: normalizedUrl,
+      type: 'custom',
+    }
+    deadBackgrounds.value = normalizeBackgroundItems([...deadBackgrounds.value, item])
+    activeBackgroundId.value = item.id
+    defaultEliminationBackground.value = activePresetBackground()
+    emitSettingsUpdate()
+    return item
+  }
+
+  function deleteCustomDeadBackground(backgroundId: string): void {
+    if (!isMafiaHost.value) {
+      return
+    }
+    const item = deadBackgrounds.value.find((background) => background.id === backgroundId)
+    if (item?.type !== 'custom') {
+      return
+    }
+    deadBackgrounds.value = normalizeBackgroundItems(
+      deadBackgrounds.value.filter((background) => background.id !== backgroundId),
+    )
+    if (activeBackgroundId.value === backgroundId) {
+      activeBackgroundId.value = null
+    }
+    defaultEliminationBackground.value = activePresetBackground()
+    emitSettingsUpdate()
+  }
+
+  function activeDeadBackgroundUrl(): string | null {
+    const item = deadBackgrounds.value.find((background) => background.id === activeBackgroundId.value)
+    return item?.type === 'custom' ? item.url : null
+  }
+
+  function selectPageBackground(backgroundId: string | null, allowAnyParticipant = false): void {
+    const next = pageBackgroundExists(backgroundId) ? backgroundId : null
+    selectedPageBackgroundId.value = next
+    persistPageBackgroundSettingsForCurrentRoom()
+    if (forcedPageBackgroundId.value != null && (allowAnyParticipant || isMafiaHost.value)) {
+      forcedPageBackgroundId.value = next ?? MAFIA_DEFAULT_PAGE_BACKGROUND_ID
+      emitPageBackgroundSettingsUpdate()
+    }
+  }
+
+  function addCustomPageBackground(url: string, allowAnyParticipant = false): BackgroundItem | null {
+    const normalizedUrl = normalizeDeadBackgroundUrl(url)
+    if (normalizedUrl == null) {
+      return null
+    }
+    const item: BackgroundItem = {
+      id: `page-custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      url: normalizedUrl,
+      type: 'custom',
+    }
+    pageBackgrounds.value = normalizePageBackgroundItems([...pageBackgrounds.value, item])
+    selectedPageBackgroundId.value = item.id
+    persistPageBackgroundSettingsForCurrentRoom()
+    if (forcedPageBackgroundId.value != null && (allowAnyParticipant || isMafiaHost.value)) {
+      forcedPageBackgroundId.value = item.id
+      emitPageBackgroundSettingsUpdate()
+    }
+    return item
+  }
+
+  function deleteCustomPageBackground(backgroundId: string, allowAnyParticipant = false): void {
+    const item = pageBackgrounds.value.find((background) => background.id === backgroundId)
+    if (item?.type !== 'custom') {
+      return
+    }
+    pageBackgrounds.value = normalizePageBackgroundItems(
+      pageBackgrounds.value.filter((background) => background.id !== backgroundId),
+    )
+    if (selectedPageBackgroundId.value === backgroundId) {
+      selectedPageBackgroundId.value = null
+    }
+    if (forcedPageBackgroundId.value === backgroundId) {
+      forcedPageBackgroundId.value = null
+      if (allowAnyParticipant || isMafiaHost.value) {
+        emitPageBackgroundSettingsUpdate()
+      }
+    }
+    persistPageBackgroundSettingsForCurrentRoom()
+  }
+
+  function setPageBackgroundForcedForRoom(enabled: boolean, allowAnyParticipant = false): void {
+    if (!allowAnyParticipant && !isMafiaHost.value) {
+      return
+    }
+    forcedPageBackgroundId.value = enabled
+      ? pageBackgroundExists(selectedPageBackgroundId.value)
+        ? selectedPageBackgroundId.value
+        : MAFIA_DEFAULT_PAGE_BACKGROUND_ID
+      : null
+    emitPageBackgroundSettingsUpdate()
+  }
+
+  function applyMafiaPageBackgroundSettingsFromSignaling(payload: MafiaPageBackgroundSettings): void {
+    const items = normalizePageBackgroundItems(payload.backgrounds)
+    pageBackgrounds.value = normalizePageBackgroundItems([...pageBackgrounds.value, ...items])
+    forcedPageBackgroundId.value = pageBackgroundExists(payload.forcedBackgroundId, pageBackgrounds.value)
+      ? payload.forcedBackgroundId
+      : null
+    if (!pageBackgroundExists(selectedPageBackgroundId.value, pageBackgrounds.value)) {
+      selectedPageBackgroundId.value = null
+    }
+  }
+
+  function resolvedPageBackgroundItem(): BackgroundItem {
+    const resolvedId = forcedPageBackgroundId.value ?? selectedPageBackgroundId.value ?? MAFIA_DEFAULT_PAGE_BACKGROUND_ID
+    return pageBackgrounds.value.find((background) => background.id === resolvedId) ?? MAFIA_PAGE_BACKGROUND_ITEMS[0]!
+  }
+
+  function setPeerEliminationBackground(peerId: string, value: MafiaEliminationBackground): void {
+    if (typeof peerId !== 'string' || peerId.length < 1) {
+      return
+    }
+    eliminationBackgroundByPeerId.value = {
+      ...eliminationBackgroundByPeerId.value,
+      [peerId]: normalizeEliminationBackground(value),
+    }
+  }
+
+  function clearPeerEliminationBackground(peerId: string): void {
+    if (typeof peerId !== 'string' || peerId.length < 1) {
+      return
+    }
+    if (eliminationBackgroundByPeerId.value[peerId] == null) {
+      return
+    }
+    const next = { ...eliminationBackgroundByPeerId.value }
+    delete next[peerId]
+    eliminationBackgroundByPeerId.value = next
+  }
+
+  function eliminationBackgroundForPeer(peerId: string): MafiaEliminationBackground {
+    return eliminationBackgroundByPeerId.value[peerId] ?? defaultEliminationBackground.value
+  }
+
   function applyMafiaModeFromSignaling(payload: MafiaModeUpdatePayload): void {
     const nextOld = payload.mode === 'old'
     oldMafiaMode.value = nextOld
     if (nextOld && !isMafiaHost.value) {
       mafiaTimer.value = null
     }
+  }
+
+  function applyMafiaSettingsUpdateFromSignaling(payload: MafiaSettingsUpdatePayload): void {
+    const items = normalizeBackgroundItems(payload.deadBackgrounds)
+    deadBackgrounds.value = items
+    activeBackgroundId.value = backgroundExists(payload.activeBackgroundId, items) ? payload.activeBackgroundId : null
+    defaultEliminationBackground.value = activePresetBackground()
   }
 
   function setSeatSwapSelectionPeerId(peerId: string | null): void {
@@ -410,11 +975,8 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     numberingOrder.value = [...payload.order]
     if (payload.clearRoles === true) {
       roleByPeerId.value = {}
-      const nextAlive: Record<string, boolean> = {}
-      for (const id of payload.order) {
-        nextAlive[id] = true
-      }
-      aliveByPeerId.value = nextAlive
+      playerOverlayStateByPeerId.value = {}
+      eliminationBackgroundByPeerId.value = {}
     }
     if (typeof payload.oldMafiaMode === 'boolean') {
       oldMafiaMode.value = payload.oldMafiaMode
@@ -442,6 +1004,14 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
   function clearModeUpdateBroadcastPayload(): void {
     modeUpdateBroadcastPayload.value = null
+  }
+
+  function clearSettingsUpdateBroadcastPayload(): void {
+    settingsUpdateBroadcastPayload.value = null
+  }
+
+  function clearPageBackgroundSettingsBroadcastPayload(): void {
+    pageBackgroundSettingsBroadcastPayload.value = null
   }
 
   /**
@@ -590,11 +1160,8 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     beginMafiaReshuffleApply()
     numberingOrder.value = order
     roleByPeerId.value = r
-    const a: Record<string, boolean> = {}
-    for (const id of order) {
-      a[id] = true
-    }
-    aliveByPeerId.value = a
+    playerOverlayStateByPeerId.value = {}
+    eliminationBackgroundByPeerId.value = {}
     phase.value = 'night'
     nightActions.value = {}
     activeNightActionRole.value = 'mafia'
@@ -618,11 +1185,8 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       const shuffledIds = fisherYatesShuffle([...ids])
       numberingOrder.value = shuffledIds
       roleByPeerId.value = {}
-      const nextAlive: Record<string, boolean> = {}
-      for (const id of shuffledIds) {
-        nextAlive[id] = true
-      }
-      aliveByPeerId.value = nextAlive
+      playerOverlayStateByPeerId.value = {}
+      eliminationBackgroundByPeerId.value = {}
       phase.value = 'night'
       nightActions.value = {}
       activeNightActionRole.value = 'mafia'
@@ -665,11 +1229,8 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     }
     roleByPeerId.value = r
 
-    const a: Record<string, boolean> = {}
-    for (const id of shuffledIds) {
-      a[id] = true
-    }
-    aliveByPeerId.value = a
+    playerOverlayStateByPeerId.value = {}
+    eliminationBackgroundByPeerId.value = {}
 
     phase.value = 'night'
     nightActions.value = {}
@@ -705,13 +1266,16 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       phase.value === null &&
       numberingOrder.value.length === 0 &&
       Object.keys(roleByPeerId.value).length === 0 &&
-      Object.keys(aliveByPeerId.value).length === 0 &&
+      Object.keys(playerOverlayStateByPeerId.value).length === 0 &&
       nightActionsCleared(nightActions.value) &&
       activeNightActionRole.value === 'mafia' &&
       speakingQueue.value.length === 0 &&
       hostInteractionMode.value === 'night' &&
       hostSeatSwapSelectionPeerId.value === null &&
       playersUpdateBroadcastPayload.value === null &&
+      settingsUpdateBroadcastPayload.value === null &&
+      pageBackgroundSettingsBroadcastPayload.value === null &&
+      forcedPageBackgroundId.value === null &&
       mafiaTimer.value === null &&
       timerStartBroadcastPayload.value === null &&
       timerStopBroadcastPayload.value === null &&
@@ -723,13 +1287,17 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     }
     numberingOrder.value = []
     roleByPeerId.value = {}
-    aliveByPeerId.value = {}
+    playerOverlayStateByPeerId.value = {}
+    eliminationBackgroundByPeerId.value = {}
     nightActions.value = {}
     activeNightActionRole.value = 'mafia'
     speakingQueue.value = []
     hostInteractionMode.value = 'night'
     hostSeatSwapSelectionPeerId.value = null
     playersUpdateBroadcastPayload.value = null
+    settingsUpdateBroadcastPayload.value = null
+    pageBackgroundSettingsBroadcastPayload.value = null
+    forcedPageBackgroundId.value = null
     mafiaTimer.value = null
     timerStartBroadcastPayload.value = null
     timerStopBroadcastPayload.value = null
@@ -742,6 +1310,8 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   function fullReset(): void {
     clearWhenLeavingMafiaRoute()
     mafiaHostPeerId.value = null
+    mafiaHostUserId.value = null
+    mafiaHostSessionId.value = null
   }
 
   /**
@@ -805,17 +1375,12 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     mafiaTimer.value = null
   }
 
-  /**
-   * UI: show elimination placeholder only when a round is active and this peer was kicked / marked dead.
-   */
+  /** UI: show elimination placeholder only while Mafia life state is dead. */
   function isMafiaPeerEliminated(peerId: string): boolean {
-    if (phase.value == null) {
-      return false
-    }
-    return aliveByPeerId.value[peerId] === false
+    return lifeStateForPeer(peerId) === 'dead'
   }
 
-  type KickResult = { ok: true } | { ok: false; reason: 'not-host' | 'bad-peer' | 'self' | 'no-game' | 'already' }
+  type KickResult = { ok: true } | { ok: false; reason: 'not-host' | 'bad-peer' | 'self' | 'already' }
 
   /**
    * Host: mark a remote player dead and broadcast; tiles hide video for everyone.
@@ -831,17 +1396,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     if (typeof peerId !== 'string' || peerId.length < 1) {
       return { ok: false, reason: 'bad-peer' }
     }
-    if (phase.value == null) {
-      return { ok: false, reason: 'no-game' }
-    }
-    const players = useMafiaPlayersStore()
-    if (!players.joinOrder.includes(peerId)) {
-      return { ok: false, reason: 'bad-peer' }
-    }
-    if (aliveByPeerId.value[peerId] === false) {
+    if (lifeStateForPeer(peerId) === 'dead') {
       return { ok: false, reason: 'already' }
     }
-    aliveByPeerId.value = { ...aliveByPeerId.value, [peerId]: false }
+    setPeerLifeState(peerId, 'dead')
     kickBroadcastPayload.value = { peerId }
     mafiaGameLog.info('player kicked', { peerId })
     return { ok: true }
@@ -851,14 +1409,32 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     if (!payload || typeof payload.peerId !== 'string' || payload.peerId.length < 1) {
       return
     }
-    aliveByPeerId.value = { ...aliveByPeerId.value, [payload.peerId]: false }
+    setPeerLifeState(payload.peerId, 'dead')
   }
 
   function applyMafiaReviveFromSignaling(payload: MafiaPlayerRevivePayload): void {
     if (!payload || typeof payload.peerId !== 'string' || payload.peerId.length < 1) {
       return
     }
-    aliveByPeerId.value = { ...aliveByPeerId.value, [payload.peerId]: true }
+    setPeerLifeState(payload.peerId, 'ghost')
+    clearPeerEliminationBackground(payload.peerId)
+  }
+
+  function applyMafiaPlayerLifeStateSnapshotFromSignaling(payload: MafiaPlayerLifeStateSnapshotPayload): void {
+    if (!payload || !payload.states || typeof payload.states !== 'object') {
+      return
+    }
+    const next: Record<string, MafiaPlayerOverlayState> = {}
+    for (const [peerId, rawState] of Object.entries(payload.states)) {
+      if (typeof peerId !== 'string' || peerId.length < 1) {
+        continue
+      }
+      const lifeState = normalizeLifeState(rawState)
+      if (lifeState !== 'alive') {
+        next[peerId] = { lifeState }
+      }
+    }
+    playerOverlayStateByPeerId.value = next
   }
 
   function clearKickBroadcastPayload(): void {
@@ -869,10 +1445,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     reviveBroadcastPayload.value = null
   }
 
-  type ReviveResult = { ok: true } | { ok: false; reason: 'not-host' | 'bad-peer' | 'no-game' | 'not-dead' | 'self' }
+  type ReviveResult = { ok: true } | { ok: false; reason: 'not-host' | 'bad-peer' | 'not-dead' | 'self' }
 
   /**
-   * Host: mark a remote player alive again; broadcast to room.
+   * Host: soft-revive a remote player; camera state is not changed.
    */
   function revivePlayer(peerId: string): ReviveResult {
     if (!isMafiaHost.value) {
@@ -885,25 +1461,19 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     if (typeof peerId !== 'string' || peerId.length < 1) {
       return { ok: false, reason: 'bad-peer' }
     }
-    if (phase.value == null) {
-      return { ok: false, reason: 'no-game' }
-    }
-    const players = useMafiaPlayersStore()
-    if (!players.joinOrder.includes(peerId)) {
-      return { ok: false, reason: 'bad-peer' }
-    }
-    if (aliveByPeerId.value[peerId] !== false) {
+    if (lifeStateForPeer(peerId) !== 'dead') {
       return { ok: false, reason: 'not-dead' }
     }
-    aliveByPeerId.value = { ...aliveByPeerId.value, [peerId]: true }
+    setPeerLifeState(peerId, 'ghost')
+    clearPeerEliminationBackground(peerId)
     reviveBroadcastPayload.value = { peerId }
-    mafiaGameLog.info('player revived', { peerId })
+    mafiaGameLog.info('player soft revived', { peerId })
     return { ok: true }
   }
 
-  /** Host: kill if alive, revive if dead (tile 💀 / ❤️). */
+  /** Host: kill if alive/ghost, soft-revive if dead (camera state remains independent). */
   function hostToggleMafiaPlayerLife(peerId: string): KickResult | ReviveResult {
-    if (aliveByPeerId.value[peerId] === false) {
+    if (lifeStateForPeer(peerId) === 'dead') {
       return revivePlayer(peerId)
     }
     return kickPlayer(peerId)
@@ -936,6 +1506,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     phase,
     oldMafiaMode,
     modeUpdateBroadcastPayload,
+    settingsUpdateBroadcastPayload,
     nightActions,
     lastNightResult,
     activeNightActionRole,
@@ -944,9 +1515,22 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     numberingOrder,
     numberingKey,
     roleByPeerId,
-    aliveByPeerId,
+    playerOverlayStateByPeerId,
+    deadBackgrounds,
+    activeBackgroundId,
+    pageBackgrounds,
+    selectedPageBackgroundId,
+    forcedPageBackgroundId,
+    pageBackgroundSettingsBroadcastPayload,
+    defaultEliminationBackground,
+    eliminationBackgroundByPeerId,
     mafiaHostPeerId,
+    mafiaHostUserId,
+    mafiaHostSessionId,
+    localMafiaSessionId,
+    localMafiaUserId,
     isMafiaHost,
+    setLocalMafiaUserId,
     setMafiaHostFromSignaling,
     getDisplayNumberingOrder,
     reconcileNumberingWithEngine,
@@ -960,7 +1544,22 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     setNightAction,
     setHostInteractionMode,
     setOldMafiaMode,
+    setActiveDeadBackgroundId,
+    addCustomDeadBackground,
+    deleteCustomDeadBackground,
+    activeDeadBackgroundUrl,
+    selectPageBackground,
+    addCustomPageBackground,
+    deleteCustomPageBackground,
+    setPageBackgroundForcedForRoom,
+    applyMafiaPageBackgroundSettingsFromSignaling,
+    resolvedPageBackgroundItem,
+    setDefaultEliminationBackground,
+    setPeerEliminationBackground,
+    clearPeerEliminationBackground,
+    eliminationBackgroundForPeer,
     applyMafiaModeFromSignaling,
+    applyMafiaSettingsUpdateFromSignaling,
     addSpeakingSeatIfNew,
     removeSpeakingSeat,
     clearSpeakingQueue,
@@ -982,6 +1581,8 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     applyMafiaPlayersUpdateFromSignaling,
     clearPlayersUpdateBroadcastPayload,
     clearModeUpdateBroadcastPayload,
+    clearSettingsUpdateBroadcastPayload,
+    clearPageBackgroundSettingsBroadcastPayload,
     mafiaTimer,
     startTimer,
     stopTimer,
@@ -998,8 +1599,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     reviveBroadcastPayload,
     revivePlayer,
     applyMafiaReviveFromSignaling,
+    applyMafiaPlayerLifeStateSnapshotFromSignaling,
     clearReviveBroadcastPayload,
     hostToggleMafiaPlayerLife,
     isMafiaPeerEliminated,
+    lifeStateForPeer,
   }
 })

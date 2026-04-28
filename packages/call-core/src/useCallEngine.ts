@@ -60,6 +60,8 @@ export type CallEngineOptions = {
    * Http(s) profile URL mirrored in `join-room` for other participants; also used as local tile `avatarUrl` SSOT.
    */
   joinAvatarUrl?: Ref<string | undefined> | ComputedRef<string | undefined>
+  /** Stable authenticated user id mirrored in `join-room` for room-level authority features. */
+  joinUserId?: Ref<string | undefined> | ComputedRef<string | undefined>
 }
 
 /**
@@ -157,6 +159,17 @@ function readJoinAvatarUrl(options: CallEngineOptions | undefined): string {
     const v = (r as Ref<string | undefined>).value
     if (typeof v === 'string' && v.trim().length > 0) {
       return v.trim().slice(0, 2048)
+    }
+  }
+  return ''
+}
+
+function readJoinUserId(options: CallEngineOptions | undefined): string {
+  const r = options?.joinUserId
+  if (r && typeof r === 'object' && 'value' in r) {
+    const v = (r as Ref<string | undefined>).value
+    if (typeof v === 'string' && v.trim().length > 0) {
+      return v.trim().slice(0, 128)
     }
   }
   return ''
@@ -748,7 +761,7 @@ export function useCallEngine(options?: CallEngineOptions) {
 
       await roomConnect()
       const p = callJoinRoomPayload()
-      joinRoom(p.roomId, p.peerId, p.displayName, p.avatarUrl)
+      joinRoom(p.roomId, p.peerId, p.displayName, p.avatarUrl, readJoinUserId(options))
       await waitForCondition(() => lastRoomState.value != null, 15_000)
 
       await wireCallMediaAfterRoomState()
@@ -1131,7 +1144,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     try {
       await roomConnect()
       const p = callJoinRoomPayload()
-      joinRoom(p.roomId, p.peerId, p.displayName, p.avatarUrl)
+      joinRoom(p.roomId, p.peerId, p.displayName, p.avatarUrl, readJoinUserId(options))
       await waitForCondition(() => lastRoomState.value != null, 15_000)
 
       await wireCallMediaAfterRoomState()

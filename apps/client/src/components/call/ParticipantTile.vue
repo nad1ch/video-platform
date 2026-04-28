@@ -12,7 +12,7 @@ import {
 import { useI18n } from 'vue-i18n'
 import { normalizeDisplayName } from 'call-core'
 import { createLogger } from '@/utils/logger'
-import type { MafiaRole } from '@/utils/mafiaGameTypes'
+import type { MafiaEliminationBackground, MafiaPlayerLifeState, MafiaRole } from '@/utils/mafiaGameTypes'
 import MafiaEliminationMark from '../mafia/MafiaEliminationMark.vue'
 import StreamAudio from '../StreamAudio.vue'
 import StreamVideo from '../StreamVideo.vue'
@@ -31,6 +31,8 @@ const emit = defineEmits<{
   'mafia-toggle-life': [peerId: string]
   /** Mafia host: ask a remote peer to turn camera off. */
   'mafia-force-camera-off': [peerId: string]
+  /** Mafia: local UI override for eliminated background on this peer. */
+  'mafia-set-elimination-background': [payload: { peerId: string; background: MafiaEliminationBackground }]
   /** Mafia: tile intersects viewport (for `setPeerVisible` / simulcast layers). */
   'mafia-viewport-layers': [visible: boolean]
   /** Remote `<video>` `waiting`: fast playback stall signal for adaptive FPS (CallPage). */
@@ -75,9 +77,11 @@ const props = withDefaults(
     mafiaVisibleRole?: MafiaRole
     /** Mafia stream capture: hide per-tile menu and name editing. */
     streamViewMode?: boolean
-    /** Mafia: host marked this peer dead — hide WebRTC video and show elimination art. */
-    mafiaEliminated?: boolean
+    /** Mafia overlay life state; independent from camera/video state. */
+    mafiaLifeState?: MafiaPlayerLifeState
     mafiaEliminationKind?: MafiaEliminationAvatarKind
+    mafiaEliminationBackground?: MafiaEliminationBackground
+    mafiaDeadBackgroundUrl?: string | null
     /** Mafia: host, round started — show persistent 💀/❤️ life toggle (top-right). */
     mafiaHostShowLifeToggle?: boolean
     /**
@@ -94,14 +98,23 @@ const props = withDefaults(
   }>(),
   {
     streamViewMode: false,
-    mafiaEliminated: false,
+    mafiaLifeState: 'alive',
     mafiaEliminationKind: 'skull',
+    mafiaEliminationBackground: 'dark',
+    mafiaDeadBackgroundUrl: null,
     mafiaHostShowLifeToggle: false,
     mafiaLayerViewportObserve: false,
     videoPlaybackSuppressed: false,
     rowSpeaking: false,
   },
 )
+
+const MAFIA_ELIMINATION_BACKGROUND_OPTIONS = Object.freeze([
+  'dark',
+  'red',
+  'violet',
+  'gray',
+] as const satisfies readonly MafiaEliminationBackground[])
 
 const menuOpen = ref(false)
 const menuRoot = ref<HTMLElement | null>(null)
@@ -310,9 +323,30 @@ const showVideo = computed(() => {
   return props.videoEnabled && hasLiveVideoTrack.value
 })
 
+const mafiaIsDead = computed(() => props.mafiaLifeState === 'dead')
+const mafiaDeadBackgroundUrl = computed(() => {
+  const value = props.mafiaDeadBackgroundUrl
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : ''
+})
+const mafiaHasCustomDeadBackground = computed(() => mafiaIsDead.value && mafiaDeadBackgroundUrl.value.length > 0)
+
 /** Mafia: dim + grayscale the frame while still rendering the stream. */
 const mafiaDeadShade = computed(
-  () => !props.isLocal && !props.streamViewMode && Boolean(props.mafiaEliminated),
+  () => !props.isLocal && !props.streamViewMode && mafiaIsDead.value,
+)
+
+const mafiaEliminationBackgroundClass = computed(() =>
+  mafiaIsDead.value
+    ? mafiaHasCustomDeadBackground.value
+      ? 'tile--mafia-elim-bg-custom'
+      : `tile--mafia-elim-bg-${props.mafiaEliminationBackground}`
+    : '',
+)
+
+const mafiaDeadBackgroundStyle = computed(() =>
+  mafiaHasCustomDeadBackground.value
+    ? { '--mafia-dead-background-image': `url(${JSON.stringify(mafiaDeadBackgroundUrl.value)})` }
+    : undefined,
 )
 
 const resolvedAvatarUrl = computed(() => {
@@ -321,12 +355,25 @@ const resolvedAvatarUrl = computed(() => {
 })
 
 /** Video-off filler: OAuth avatar when provided, else initials (below). Elimination art takes priority. */
-const showMafiaElimination = computed(() => Boolean(props.mafiaEliminated) && !showVideo.value)
+const showCustomMafiaDeadBackgroundOnly = computed(() =>
+  mafiaHasCustomDeadBackground.value && !showVideo.value,
+)
+const showMafiaElimination = computed(
+  () => mafiaIsDead.value && !showCustomMafiaDeadBackgroundOnly.value && !showVideo.value,
+)
 const showAvatar = computed(
-  () => !showMafiaElimination.value && !showVideo.value && resolvedAvatarUrl.value !== '',
+  () =>
+    !showCustomMafiaDeadBackgroundOnly.value &&
+    !showMafiaElimination.value &&
+    !showVideo.value &&
+    resolvedAvatarUrl.value !== '',
 )
 const showInitialsFallback = computed(
-  () => !showMafiaElimination.value && !showVideo.value && resolvedAvatarUrl.value === '',
+  () =>
+    !showCustomMafiaDeadBackgroundOnly.value &&
+    !showMafiaElimination.value &&
+    !showVideo.value &&
+    resolvedAvatarUrl.value === '',
 )
 
 const volumePercentUi = computed(() =>
@@ -352,7 +399,7 @@ const streamVideoMemoDeps = computed(() => [
   Boolean(props.videoFillCover),
   props.isLocal,
   props.videoPresentation,
-  props.mafiaEliminated,
+  props.mafiaLifeState,
   Boolean(props.videoPlaybackSuppressed),
   props.videoTargetPlaybackFps ?? null,
 ])
@@ -379,7 +426,7 @@ let mafiaKillAnimTimer: ReturnType<typeof setTimeout> | undefined
 let mafiaReviveAnimTimer: ReturnType<typeof setTimeout> | undefined
 
 watch(
-  () => props.mafiaEliminated,
+  () => mafiaIsDead.value,
   (next, prev) => {
     if (props.isLocal || props.streamViewMode) {
       return
@@ -414,7 +461,18 @@ function onMafiaHostLifeClick(): void {
   if (id.length < 1) {
     return
   }
-  emit('mafia-force-camera-off', id)
+  emit('mafia-toggle-life', id)
+  if (!mafiaIsDead.value) {
+    emit('mafia-force-camera-off', id)
+  }
+}
+
+function setMafiaEliminationBackground(background: MafiaEliminationBackground): void {
+  const id = typeof props.peerId === 'string' ? props.peerId.trim() : ''
+  if (id.length < 1) {
+    return
+  }
+  emit('mafia-set-elimination-background', { peerId: id, background })
 }
 
 onBeforeUnmount(() => {
@@ -543,6 +601,7 @@ if (import.meta.env.DEV) {
     :data-video-presentation="videoPresentation"
     :class="[
       `tile--${sizeTier}`,
+      mafiaEliminationBackgroundClass,
       {
         'is-speaking': isSpeaking,
         'tile--speaking': isSpeaking,
@@ -551,6 +610,7 @@ if (import.meta.env.DEV) {
         'tile--mafia-revive-glow': mafiaReviveAnim,
       },
     ]"
+    :style="mafiaDeadBackgroundStyle"
   >
     <div class="tile-media">
       <!-- v-memo: label/speaking zoom/etc. must not re-patch WebRTC elements when only metadata changes. -->
@@ -789,13 +849,14 @@ if (import.meta.env.DEV) {
           v-if="mafiaHostShowLifeToggle"
           type="button"
           class="tile-menu__life"
+          :class="{ 'tile-menu__life--revive': mafiaIsDead }"
           data-no-mafia-tile-host
-          :title="t('mafiaPage.forceCameraOffTitle')"
-          :aria-label="t('mafiaPage.forceCameraOffTitle')"
+          :title="mafiaIsDead ? t('mafiaPage.hostTileReviveTitle') : t('mafiaPage.hostTileEliminateTitle')"
+          :aria-label="mafiaIsDead ? t('mafiaPage.hostTileReviveTitle') : t('mafiaPage.hostTileEliminateTitle')"
           @click.stop="onMafiaHostLifeClick"
         >
           <span class="tile-menu__life-ico" aria-hidden="true">{{
-            mafiaEliminated ? '❤️' : '💀'
+            mafiaIsDead ? '👤' : '💀'
           }}</span>
         </button>
         <div ref="menuRoot" class="tile-menu-hoverable tile-menu-hoverable--remote">
@@ -850,6 +911,21 @@ if (import.meta.env.DEV) {
                 />
                 <span>{{ t('callPage.listenMuteLocal') }}</span>
               </label>
+              <div v-if="mafiaIsDead" class="tile-menu__row tile-menu__row--mafia-bg">
+                <span class="tile-menu__label">{{ t('mafiaPage.eliminationBackgroundLabel') }}</span>
+                <div class="tile-menu__swatches" role="group" :aria-label="t('mafiaPage.eliminationBackgroundLabel')">
+                  <button
+                    v-for="bg in MAFIA_ELIMINATION_BACKGROUND_OPTIONS"
+                    :key="bg"
+                    type="button"
+                    class="tile-menu__swatch"
+                    :class="[`tile-menu__swatch--${bg}`, { 'tile-menu__swatch--active': mafiaEliminationBackground === bg }]"
+                    :aria-label="t(`mafiaPage.eliminationBackground.${bg}`)"
+                    :aria-pressed="mafiaEliminationBackground === bg"
+                    @click="setMafiaEliminationBackground(bg)"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -914,10 +990,24 @@ if (import.meta.env.DEV) {
 
 @keyframes mafia-tile-kill {
   0% {
-    filter: none;
+    box-shadow: inset 0 0 0 0 rgb(239 68 68 / 0);
+  }
+  45% {
+    box-shadow:
+      inset 0 0 0 1px rgb(239 68 68 / 0.32),
+      0 0 16px rgb(127 29 29 / 0.24);
   }
   100% {
-    filter: brightness(0.7);
+    box-shadow: inset 0 0 0 0 rgb(239 68 68 / 0);
+  }
+}
+
+@keyframes mafia-dead-background-in {
+  from {
+    opacity: 0.82;
+  }
+  to {
+    opacity: 1;
   }
 }
 
@@ -995,6 +1085,30 @@ if (import.meta.env.DEV) {
   transition: filter 0.32s ease;
 }
 
+.tile--mafia-elim-bg-red .tile-video-wrap,
+.tile--mafia-elim-bg-red .tile-placeholder {
+  background: radial-gradient(circle at 50% 34%, rgb(127 29 29 / 0.9), rgb(24 8 12) 66%, #050205);
+  animation: mafia-dead-background-in 0.22s ease-out both;
+}
+
+.tile--mafia-elim-bg-violet .tile-video-wrap,
+.tile--mafia-elim-bg-violet .tile-placeholder {
+  background: radial-gradient(circle at 50% 32%, rgb(88 28 135 / 0.88), rgb(24 12 45) 62%, #07030f);
+  animation: mafia-dead-background-in 0.22s ease-out both;
+}
+
+.tile--mafia-elim-bg-gray .tile-video-wrap,
+.tile--mafia-elim-bg-gray .tile-placeholder {
+  background: radial-gradient(circle at 50% 32%, rgb(71 85 105 / 0.86), rgb(17 24 39) 62%, #030712);
+  animation: mafia-dead-background-in 0.22s ease-out both;
+}
+
+.tile--mafia-elim-bg-custom .tile-video-wrap,
+.tile--mafia-elim-bg-custom .tile-placeholder {
+  background: var(--mafia-dead-background-image) center / cover no-repeat #050205;
+  animation: mafia-dead-background-in 0.22s ease-out both;
+}
+
 .tile-dead-veneer {
   position: absolute;
   inset: 0;
@@ -1003,6 +1117,24 @@ if (import.meta.env.DEV) {
   pointer-events: none;
   background: linear-gradient(180deg, rgb(0 0 0 / 0.35) 0%, rgb(0 0 0 / 0.6) 100%);
   transition: opacity 0.32s ease;
+}
+
+.tile--mafia-elim-bg-red .tile-dead-veneer {
+  background:
+    radial-gradient(circle at 50% 34%, rgb(220 38 38 / 0.34), transparent 58%),
+    linear-gradient(180deg, rgb(31 0 0 / 0.45), rgb(0 0 0 / 0.7));
+}
+
+.tile--mafia-elim-bg-violet .tile-dead-veneer {
+  background:
+    radial-gradient(circle at 50% 34%, rgb(168 85 247 / 0.3), transparent 58%),
+    linear-gradient(180deg, rgb(20 8 45 / 0.5), rgb(0 0 0 / 0.72));
+}
+
+.tile--mafia-elim-bg-gray .tile-dead-veneer {
+  background:
+    radial-gradient(circle at 50% 34%, rgb(148 163 184 / 0.2), transparent 58%),
+    linear-gradient(180deg, rgb(15 23 42 / 0.55), rgb(0 0 0 / 0.72));
 }
 
 .tile-video-clip {
@@ -1240,6 +1372,14 @@ if (import.meta.env.DEV) {
   transform: scale(1.05);
 }
 
+.tile-menu__life--revive {
+  background: rgb(34 197 94 / 0.24);
+  color: #dcfce7;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.18),
+    0 0 10px rgb(34 197 94 / 0.22);
+}
+
 .tile-menu__life-ico {
   display: block;
   width: 24px;
@@ -1247,6 +1387,14 @@ if (import.meta.env.DEV) {
   font-size: 0;
   line-height: 1;
   opacity: 0;
+}
+
+.tile-menu__life--revive .tile-menu__life-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  opacity: 1;
 }
 
 /** Wraps the ⋯ menu only; fade on desktop until tile hover. */
@@ -1374,6 +1522,54 @@ if (import.meta.env.DEV) {
   height: 1rem;
   accent-color: #5865f2;
   cursor: pointer;
+}
+
+.tile-menu__row--mafia-bg {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+  margin-bottom: 0;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgb(0 0 0 / 0.35);
+}
+
+.tile-menu__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.tile-menu__swatch {
+  width: 1.55rem;
+  height: 1.55rem;
+  padding: 0;
+  border: 2px solid rgb(255 255 255 / 0.16);
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+
+.tile-menu__swatch--dark {
+  background: linear-gradient(135deg, #030712, #2b2d31);
+}
+
+.tile-menu__swatch--red {
+  background: linear-gradient(135deg, #450a0a, #dc2626);
+}
+
+.tile-menu__swatch--violet {
+  background: linear-gradient(135deg, #2e1065, #8b5cf6);
+}
+
+.tile-menu__swatch--gray {
+  background: linear-gradient(135deg, #0f172a, #94a3b8);
+}
+
+.tile-menu__swatch--active,
+.tile-menu__swatch:focus-visible {
+  border-color: rgb(255 255 255 / 0.9);
+  outline: none;
 }
 
 .tile-placeholder {

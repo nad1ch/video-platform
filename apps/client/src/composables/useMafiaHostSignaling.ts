@@ -5,15 +5,21 @@ import { useCallSessionStore, type WsStatus } from 'call-core'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
 import type {
   MafiaPlayerKickPayload,
+  MafiaPlayerLifeState,
+  MafiaPlayerLifeStateSnapshotPayload,
+  MafiaPageBackgroundSettings,
   MafiaPlayerRevivePayload,
   MafiaPlayersUpdatePayload,
   MafiaModeUpdatePayload,
   MafiaReshufflePayload,
+  MafiaSettingsUpdatePayload,
   MafiaTimerStartPayload,
   MafiaTimerStopPayload,
 } from '@/utils/mafiaGameTypes'
 
-function parseMafiaHostUpdated(data: unknown): { hostPeerId: string | null } | null {
+function parseMafiaHostUpdated(
+  data: unknown,
+): { hostPeerId: string | null; hostUserId: string | null; hostSessionId: string | null } | null {
   if (!data || typeof data !== 'object') {
     return null
   }
@@ -26,11 +32,13 @@ function parseMafiaHostUpdated(data: unknown): { hostPeerId: string | null } | n
     return null
   }
   const h = (p as { hostPeerId?: unknown }).hostPeerId
-  if (h === null) {
-    return { hostPeerId: null }
-  }
-  if (typeof h === 'string' && h.length > 0) {
-    return { hostPeerId: h }
+  const u = (p as { hostUserId?: unknown }).hostUserId
+  const s = (p as { hostSessionId?: unknown }).hostSessionId
+  const hostPeerId = typeof h === 'string' && h.length > 0 ? h : null
+  const hostUserId = typeof u === 'string' && u.length > 0 ? u : null
+  const hostSessionId = typeof s === 'string' && s.length > 0 ? s : null
+  if (h === null || hostPeerId != null || hostUserId != null || hostSessionId != null) {
+    return { hostPeerId, hostUserId, hostSessionId }
   }
   return null
 }
@@ -171,6 +179,91 @@ function parseMafiaModeUpdate(data: unknown): MafiaModeUpdatePayload | null {
   return mode === 'old' || mode === 'new' ? { mode } : null
 }
 
+function parseMafiaSettingsUpdate(data: unknown): MafiaSettingsUpdatePayload | null {
+  if (!data || typeof data !== 'object') {
+    return null
+  }
+  const o = data as { type?: unknown; payload?: unknown }
+  if (o.type !== 'mafia:settings-update') {
+    return null
+  }
+  const p = o.payload
+  if (!p || typeof p !== 'object') {
+    return null
+  }
+  const rawBackgrounds = (p as { deadBackgrounds?: unknown }).deadBackgrounds
+  if (!Array.isArray(rawBackgrounds)) {
+    return null
+  }
+  const deadBackgrounds: MafiaSettingsUpdatePayload['deadBackgrounds'] = []
+  for (const raw of rawBackgrounds) {
+    if (!raw || typeof raw !== 'object') {
+      continue
+    }
+    const item = raw as { id?: unknown; url?: unknown; type?: unknown }
+    if (typeof item.id !== 'string' || item.id.length < 1) {
+      continue
+    }
+    if (typeof item.url !== 'string' || item.url.length < 1 || item.url.length > 7_000_000) {
+      continue
+    }
+    if (item.type !== 'preset' && item.type !== 'custom') {
+      continue
+    }
+    deadBackgrounds.push({ id: item.id, url: item.url, type: item.type })
+  }
+  const activeBackgroundId = (p as { activeBackgroundId?: unknown }).activeBackgroundId
+  return {
+    deadBackgrounds,
+    activeBackgroundId: typeof activeBackgroundId === 'string' ? activeBackgroundId : null,
+  }
+}
+
+function parseBackgroundItem(raw: unknown): MafiaPageBackgroundSettings['backgrounds'][number] | null {
+  if (!raw || typeof raw !== 'object') {
+    return null
+  }
+  const item = raw as { id?: unknown; url?: unknown; type?: unknown }
+  if (typeof item.id !== 'string' || item.id.length < 1) {
+    return null
+  }
+  if (typeof item.url !== 'string' || item.url.length < 1 || item.url.length > 7_000_000) {
+    return null
+  }
+  if (item.type !== 'default' && item.type !== 'preset' && item.type !== 'custom') {
+    return null
+  }
+  return { id: item.id, url: item.url, type: item.type }
+}
+
+function parseMafiaPageBackgroundSettings(data: unknown): MafiaPageBackgroundSettings | null {
+  if (!data || typeof data !== 'object') {
+    return null
+  }
+  const o = data as { type?: unknown; payload?: unknown }
+  if (o.type !== 'mafia:page-background-settings') {
+    return null
+  }
+  const p = o.payload
+  if (!p || typeof p !== 'object') {
+    return null
+  }
+  const rawBackgrounds = (p as { backgrounds?: unknown }).backgrounds
+  if (!Array.isArray(rawBackgrounds)) {
+    return null
+  }
+  const backgrounds = rawBackgrounds
+    .map(parseBackgroundItem)
+    .filter((item): item is MafiaPageBackgroundSettings['backgrounds'][number] => item != null)
+  const selectedBackgroundId = (p as { selectedBackgroundId?: unknown }).selectedBackgroundId
+  const forcedBackgroundId = (p as { forcedBackgroundId?: unknown }).forcedBackgroundId
+  return {
+    backgrounds,
+    selectedBackgroundId: typeof selectedBackgroundId === 'string' ? selectedBackgroundId : null,
+    forcedBackgroundId: typeof forcedBackgroundId === 'string' ? forcedBackgroundId : null,
+  }
+}
+
 function parseMafiaTimerStart(data: unknown): MafiaTimerStartPayload | null {
   if (!data || typeof data !== 'object') {
     return null
@@ -251,6 +344,34 @@ function parseMafiaPlayerRevive(data: unknown): MafiaPlayerRevivePayload | null 
   return { peerId: id }
 }
 
+function parseMafiaPlayerLifeStateSnapshot(data: unknown): MafiaPlayerLifeStateSnapshotPayload | null {
+  if (!data || typeof data !== 'object') {
+    return null
+  }
+  const o = data as { type?: unknown; payload?: unknown }
+  if (o.type !== 'mafia:player-life-state') {
+    return null
+  }
+  const p = o.payload
+  if (!p || typeof p !== 'object') {
+    return null
+  }
+  const states = (p as { states?: unknown }).states
+  if (!states || typeof states !== 'object' || Array.isArray(states)) {
+    return null
+  }
+  const out: Record<string, MafiaPlayerLifeState> = {}
+  for (const [peerId, state] of Object.entries(states as Record<string, unknown>)) {
+    if (typeof peerId !== 'string' || peerId.length < 1) {
+      continue
+    }
+    if (state === 'dead' || state === 'ghost' || state === 'alive') {
+      out[peerId] = state
+    }
+  }
+  return { states: out }
+}
+
 /**
  * Mafia “ведучий” — one per signaling room, via `mafia:claim-host` / `mafia:host-updated` on the call WebSocket.
  * Shared `speakingQueue` is sent by the host as `mafia:queue-update` and applied for all clients (including host echo).
@@ -263,6 +384,10 @@ export function useMafiaHostSignaling(
   const mafia = useMafiaGameStore()
   const {
     mafiaHostPeerId,
+    mafiaHostUserId,
+    mafiaHostSessionId,
+    localMafiaSessionId,
+    localMafiaUserId,
     speakingQueue,
     isMafiaHost,
     reshuffleBroadcastPayload,
@@ -273,6 +398,8 @@ export function useMafiaHostSignaling(
     kickBroadcastPayload,
     reviveBroadcastPayload,
     modeUpdateBroadcastPayload,
+    settingsUpdateBroadcastPayload,
+    pageBackgroundSettingsBroadcastPayload,
   } = storeToRefs(mafia)
   const session = useCallSessionStore()
   const { inCall, selfPeerId } = storeToRefs(session)
@@ -283,7 +410,7 @@ export function useMafiaHostSignaling(
   const off = subscribeSignalingMessage((data) => {
     const hostParsed = parseMafiaHostUpdated(data)
     if (hostParsed) {
-      mafia.setMafiaHostFromSignaling(hostParsed.hostPeerId)
+      mafia.setMafiaHostFromSignaling(hostParsed.hostPeerId, hostParsed.hostUserId, hostParsed.hostSessionId)
     }
     const queueParsed = parseMafiaQueueUpdate(data)
     if (queueParsed) {
@@ -309,6 +436,14 @@ export function useMafiaHostSignaling(
     if (modeParsed) {
       mafia.applyMafiaModeFromSignaling(modeParsed)
     }
+    const settingsParsed = parseMafiaSettingsUpdate(data)
+    if (settingsParsed && !isMafiaHost.value) {
+      mafia.applyMafiaSettingsUpdateFromSignaling(settingsParsed)
+    }
+    const pageBackgroundParsed = parseMafiaPageBackgroundSettings(data)
+    if (pageBackgroundParsed && !isMafiaHost.value) {
+      mafia.applyMafiaPageBackgroundSettingsFromSignaling(pageBackgroundParsed)
+    }
     const timerParsed = parseMafiaTimerStart(data)
     if (timerParsed) {
       mafia.applyMafiaTimerFromSignaling(timerParsed)
@@ -324,14 +459,18 @@ export function useMafiaHostSignaling(
     if (reviveParsed) {
       mafia.applyMafiaReviveFromSignaling(reviveParsed)
     }
+    const lifeStateParsed = parseMafiaPlayerLifeStateSnapshot(data)
+    if (lifeStateParsed) {
+      mafia.applyMafiaPlayerLifeStateSnapshotFromSignaling(lifeStateParsed)
+    }
   })
   onBeforeUnmount(off)
 
   watch(
-    [inCall, mafiaHostPeerId, selfPeerId, wsStatus],
+    [inCall, mafiaHostPeerId, mafiaHostUserId, mafiaHostSessionId, localMafiaSessionId, localMafiaUserId, selfPeerId, wsStatus],
     () => {
       if (!inCall.value) {
-        mafia.setMafiaHostFromSignaling(null)
+        mafia.setMafiaHostFromSignaling(null, null, null)
         return
       }
       if (wsStatus.value !== 'open') {
@@ -341,10 +480,15 @@ export function useMafiaHostSignaling(
       if (typeof sid !== 'string' || sid.length === 0) {
         return
       }
-      if (mafiaHostPeerId.value != null) {
+      const localUserId = localMafiaUserId.value
+      const localSessionId = localMafiaSessionId.value
+      if (typeof localUserId !== 'string' || localUserId.length === 0 || localSessionId.length === 0) {
         return
       }
-      sendSignalingMessage({ type: 'mafia:claim-host', payload: {} })
+      if (mafiaHostUserId.value != null && mafiaHostUserId.value !== localUserId) {
+        return
+      }
+      sendSignalingMessage({ type: 'mafia:claim-host', payload: { sessionId: localSessionId } })
     },
     { immediate: true },
   )
@@ -437,6 +581,54 @@ export function useMafiaHostSignaling(
       }
       sendSignalingMessage({ type: 'mafia:mode-update', payload: p })
       mafia.clearModeUpdateBroadcastPayload()
+    },
+    { flush: 'post' },
+  )
+
+  watch(
+    settingsUpdateBroadcastPayload,
+    (p) => {
+      if (p == null) {
+        return
+      }
+      if (!inCall.value) {
+        mafia.clearSettingsUpdateBroadcastPayload()
+        return
+      }
+      if (wsStatus.value !== 'open') {
+        mafia.clearSettingsUpdateBroadcastPayload()
+        return
+      }
+      if (!isMafiaHost.value) {
+        mafia.clearSettingsUpdateBroadcastPayload()
+        return
+      }
+      sendSignalingMessage({ type: 'mafia:settings-update', payload: p })
+      mafia.clearSettingsUpdateBroadcastPayload()
+    },
+    { flush: 'post' },
+  )
+
+  watch(
+    pageBackgroundSettingsBroadcastPayload,
+    (p) => {
+      if (p == null) {
+        return
+      }
+      if (!inCall.value) {
+        mafia.clearPageBackgroundSettingsBroadcastPayload()
+        return
+      }
+      if (wsStatus.value !== 'open') {
+        mafia.clearPageBackgroundSettingsBroadcastPayload()
+        return
+      }
+      if (!isMafiaHost.value) {
+        mafia.clearPageBackgroundSettingsBroadcastPayload()
+        return
+      }
+      sendSignalingMessage({ type: 'mafia:page-background-settings', payload: p })
+      mafia.clearPageBackgroundSettingsBroadcastPayload()
     },
     { flush: 'post' },
   )

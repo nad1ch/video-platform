@@ -5,12 +5,15 @@ export class Peer {
   readonly id: string
   readonly socket: WebSocket
   readonly roomId: string
+  readonly userId: string
   /** Shown to other participants (from join-room / update-display-name). */
   displayName: string
   /** HTTPS profile URL from join-room (opaque to SFU). */
   avatarUrl: string
   /** UI metadata: true when this peer has locally muted their outbound mic. */
   audioMuted = false
+  /** Mafia tab/session identity; set by `mafia:claim-host`. */
+  mafiaSessionId = ''
 
   private readonly transports = new Map<string, WebRtcTransport>()
   private readonly producers = new Map<string, Producer>()
@@ -18,10 +21,11 @@ export class Peer {
   /** Outbound video semantic (`replaceTrack` does not change id). */
   private readonly videoProducerSourceById = new Map<string, 'camera' | 'screen'>()
 
-  constructor(id: string, socket: WebSocket, roomId: string, displayName: string, avatarUrl = '') {
+  constructor(id: string, socket: WebSocket, roomId: string, displayName: string, avatarUrl = '', userId = '') {
     this.id = id
     this.socket = socket
     this.roomId = roomId
+    this.userId = userId
     this.displayName = displayName
     this.avatarUrl = avatarUrl
   }

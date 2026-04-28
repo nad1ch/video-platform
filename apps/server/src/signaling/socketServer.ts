@@ -14,13 +14,17 @@ import {
   handleDisconnect,
   handleJoinRoom,
   handleMafiaClaimHost,
+  handleMafiaTransferHost,
   handleMafiaQueueUpdate,
   handleMafiaReshuffle,
   handleMafiaPlayersUpdate,
   handleMafiaModeUpdate,
+  handleMafiaSettingsUpdate,
+  handleMafiaPageBackgroundSettings,
   handleMafiaTimerStart,
   handleMafiaTimerStop,
   handleMafiaPlayerKick,
+  handleMafiaPlayerRevive,
   handleMafiaForceCameraOff,
   handleMafiaForceMuteAll,
   handleProduce,
@@ -120,8 +124,8 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'join-room': {
-              const { roomId, peerId, displayName, avatarUrl } = parsed.data.payload
-              await handleJoinRoom(socket, roomId, peerId, displayName, avatarUrl, deps)
+              const { roomId, peerId, displayName, avatarUrl, userId } = parsed.data.payload
+              await handleJoinRoom(socket, roomId, peerId, displayName, avatarUrl, userId, deps)
               break
             }
             case 'update-display-name': {
@@ -193,7 +197,11 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'mafia:claim-host': {
-              handleMafiaClaimHost(socket, deps)
+              handleMafiaClaimHost(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:transfer-host': {
+              handleMafiaTransferHost(socket, parsed.data.payload, deps)
               break
             }
             case 'mafia:queue-update': {
@@ -212,6 +220,14 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               handleMafiaModeUpdate(socket, parsed.data.payload, deps)
               break
             }
+            case 'mafia:settings-update': {
+              handleMafiaSettingsUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:page-background-settings': {
+              handleMafiaPageBackgroundSettings(socket, parsed.data.payload, deps)
+              break
+            }
             case 'mafia:timer-start': {
               handleMafiaTimerStart(socket, parsed.data.payload, deps)
               break
@@ -222,6 +238,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'mafia:player-kick': {
               handleMafiaPlayerKick(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:player-revive': {
+              handleMafiaPlayerRevive(socket, parsed.data.payload, deps)
               break
             }
             case 'mafia:force-camera-off': {

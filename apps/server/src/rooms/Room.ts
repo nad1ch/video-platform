@@ -3,6 +3,30 @@ import type { Peer } from '../peers/Peer'
 import { createRouter } from '../mediasoup/createRouter'
 import type { PooledWorker } from '../mediasoup/mediasoupWorkerTypes'
 
+export type MafiaPlayerLifeState = 'alive' | 'dead' | 'ghost'
+export type MafiaEliminationBackground = 'dark' | 'red' | 'violet' | 'gray'
+export type MafiaBackgroundItem = {
+  id: string
+  url: string
+  type: 'preset' | 'custom'
+}
+export type MafiaPageBackgroundItem = {
+  id: string
+  url: string
+  type: 'default' | 'preset' | 'custom'
+}
+
+const MAFIA_PRESET_BACKGROUND_ITEMS: MafiaBackgroundItem[] = ['dark', 'red', 'violet', 'gray'].map((background) => ({
+  id: `preset-${background}`,
+  url: `preset:${background}`,
+  type: 'preset',
+}))
+const MAFIA_PAGE_BACKGROUND_ITEMS: MafiaPageBackgroundItem[] = [
+  { id: 'default-page', url: 'default', type: 'default' },
+  { id: 'preset-page-violet', url: 'preset:violet', type: 'preset' },
+  { id: 'preset-page-night', url: 'preset:night', type: 'preset' },
+]
+
 function envNumber(name: string, fallback: number): number {
   const raw = process.env[name]?.trim()
   if (!raw) {
@@ -24,13 +48,23 @@ export class Room {
   /** Last `peerId` sent in `active-speaker` (null = last send was clear). `undefined` = nothing sent yet. */
   private lastBroadcastSpeakerPeerId: string | null | undefined = undefined
   private silenceClearTimer: ReturnType<typeof setTimeout> | null = null
-  /** Mafia “ведучий” — at most one per room; reassigned when they leave. */
+  /** Mafia “ведучий” — stable auth user id; not derived from transient peer lifecycle. */
+  private mafiaHostUserId: string | null = null
+  /** Active Mafia host tab/session id; stable across reload in the same tab. */
+  private mafiaHostSessionId: string | null = null
+  /** Active Mafia host peer id; prevents duplicated tabs with copied sessionStorage from also being active. */
   private mafiaHostPeerId: string | null = null
   /** Shared Mafia speaking queue (1-based seat indices); host authorizes updates via signaling. */
   private mafiaSpeakingQueue: number[] = []
   /** Shared Mafia round timer; host `mafia:timer-start`, clients derive remaining from wall clock. */
   private mafiaTimer: { startedAt: number; duration: number } | null = null
   private mafiaMode: 'old' | 'new' = 'old'
+  private mafiaDeadBackgrounds: MafiaBackgroundItem[] = [...MAFIA_PRESET_BACKGROUND_ITEMS]
+  private mafiaActiveBackgroundId: string | null = null
+  private mafiaPageBackgrounds: MafiaPageBackgroundItem[] = [...MAFIA_PAGE_BACKGROUND_ITEMS]
+  private mafiaForcedPageBackgroundId: string | null = null
+  /** Mafia overlay state only. Missing peer id means alive. */
+  private mafiaPlayerLifeStateByPeerId = new Map<string, Exclude<MafiaPlayerLifeState, 'alive'>>()
 
   private constructor(id: string, router: Router, pooledWorker: PooledWorker) {
     this.id = id
@@ -187,12 +221,39 @@ export class Room {
     return [...this.peers.values()]
   }
 
+  getMafiaHostUserId(): string | null {
+    return this.mafiaHostUserId
+  }
+
+  setMafiaHostUserId(id: string | null): void {
+    this.mafiaHostUserId = id
+  }
+
+  getMafiaHostSessionId(): string | null {
+    return this.mafiaHostSessionId
+  }
+
+  setMafiaHostSessionId(id: string | null): void {
+    this.mafiaHostSessionId = id
+  }
+
   getMafiaHostPeerId(): string | null {
     return this.mafiaHostPeerId
   }
 
   setMafiaHostPeerId(id: string | null): void {
     this.mafiaHostPeerId = id
+  }
+
+  getFirstMafiaSessionIdForUser(userId: string): string | null {
+    return this.getPeers().find((peer) => peer.userId === userId && peer.mafiaSessionId.length > 0)?.mafiaSessionId ?? null
+  }
+
+  getFirstMafiaPeerIdForUserSession(userId: string, sessionId: string | null): string | null {
+    if (sessionId == null) {
+      return null
+    }
+    return this.getPeers().find((peer) => peer.userId === userId && peer.mafiaSessionId === sessionId)?.id ?? null
   }
 
   getMafiaSpeakingQueue(): number[] {
@@ -223,5 +284,47 @@ export class Room {
     if (mode === 'old') {
       this.mafiaTimer = null
     }
+  }
+
+  getMafiaPlayerLifeStateSnapshot(): Record<string, MafiaPlayerLifeState> {
+    return Object.fromEntries(this.mafiaPlayerLifeStateByPeerId.entries())
+  }
+
+  setMafiaPlayerLifeState(peerId: string, lifeState: MafiaPlayerLifeState): void {
+    if (lifeState === 'alive') {
+      this.mafiaPlayerLifeStateByPeerId.delete(peerId)
+      return
+    }
+    this.mafiaPlayerLifeStateByPeerId.set(peerId, lifeState)
+  }
+
+  clearMafiaPlayerLifeStates(): void {
+    this.mafiaPlayerLifeStateByPeerId.clear()
+  }
+
+  getMafiaDeadBackgrounds(): MafiaBackgroundItem[] {
+    return this.mafiaDeadBackgrounds.map((item) => ({ ...item }))
+  }
+
+  getMafiaActiveBackgroundId(): string | null {
+    return this.mafiaActiveBackgroundId
+  }
+
+  setMafiaDeadBackgroundSettings(backgrounds: MafiaBackgroundItem[], activeBackgroundId: string | null): void {
+    this.mafiaDeadBackgrounds = backgrounds.map((item) => ({ ...item }))
+    this.mafiaActiveBackgroundId = activeBackgroundId
+  }
+
+  getMafiaPageBackgrounds(): MafiaPageBackgroundItem[] {
+    return this.mafiaPageBackgrounds.map((item) => ({ ...item }))
+  }
+
+  getMafiaForcedPageBackgroundId(): string | null {
+    return this.mafiaForcedPageBackgroundId
+  }
+
+  setMafiaPageBackgroundSettings(backgrounds: MafiaPageBackgroundItem[], forcedBackgroundId: string | null): void {
+    this.mafiaPageBackgrounds = backgrounds.map((item) => ({ ...item }))
+    this.mafiaForcedPageBackgroundId = forcedBackgroundId
   }
 }
