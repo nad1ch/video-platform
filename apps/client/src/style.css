@@ -87,6 +87,12 @@ body {
   touch-action: manipulation;
 }
 
+*,
+*::before,
+*::after {
+  touch-action: manipulation;
+}
+
 html::-webkit-scrollbar {
   width: 10px;
   height: 10px;

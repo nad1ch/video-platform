@@ -988,33 +988,102 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
   .app-landing-header__bar {
     grid-template-columns: auto minmax(0, 1fr);
-    gap: 0.55rem;
-    padding: 0.55rem 0.7rem;
+    gap: 0.4rem;
+    min-height: 3.5rem;
+    padding: 0.45rem 0.55rem;
+    border-radius: 999px;
+  }
+
+  .app-landing-header--compact .app-landing-header__bar {
+    min-height: 3.5rem;
+  }
+
+  .app-landing-header__brand {
+    width: 2.45rem;
+    height: 2.45rem;
+  }
+
+  .app-landing-header__logo {
+    width: 2.1rem;
+    height: 2.1rem;
+  }
+
+  .app-landing-header__brand-extra,
+  .app-landing-header__center {
+    display: none;
   }
 
   .app-landing-header__actions {
-    grid-column: 1 / -1;
-    justify-content: space-between;
-    width: 100%;
+    grid-column: 2;
+    justify-self: end;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    width: auto;
+    max-width: 100%;
+    margin-right: 0;
   }
 
   .app-landing-header__title {
-    font-size: 1.1rem;
+    display: none;
+  }
+
+  .app-landing-header__help {
+    width: 1.95rem;
+    height: 1.95rem;
+  }
+
+  .app-landing-header__coin {
+    min-height: 2rem;
+    padding-left: 0.28rem;
+    margin-right: 0;
+    transform: none;
+  }
+
+  .app-landing-header__coin-icon {
+    width: 2rem;
+    height: 2rem;
+    margin: -0.1rem -0.1rem -0.1rem 0;
+  }
+
+  .app-landing-header__coin-label {
+    display: none;
   }
 
   .app-landing-header__auth {
-    min-width: min(12rem, 56vw);
+    min-width: 0;
+    min-height: 2rem;
+  }
+
+  .app-landing-header__auth-buttons {
+    min-height: 2rem;
+    padding: 0.12rem 0.18rem;
   }
 
   .app-landing-header__auth--profile {
     min-width: 0;
   }
 
-  .app-landing-header__coin-label {
-    max-width: 5.4rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .app-landing-header__auth-link {
+    min-height: 1.72rem;
+    padding-inline: 0.56rem;
+    font-size: 0.72rem;
+  }
+
+  .app-landing-header__user {
+    max-width: min(9rem, 46vw);
+    min-height: 2rem;
+    padding: 0 0.45rem 0 0.38rem;
+    gap: 0.34rem;
+  }
+
+  .app-landing-header__avatar {
+    width: 1.55rem;
+    height: 1.55rem;
+  }
+
+  .app-landing-header__user-name {
+    max-width: 100%;
+    font-size: 0.76rem;
   }
 }
 
