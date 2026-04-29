@@ -109,6 +109,7 @@ const authRouteLogin = { path: '/auth', query: { redirect: '/app', mode: 'login'
 const callRoute = { name: 'call' } as const
 const economyComingSoonRoute = { name: 'home', query: { comingSoon: 'economy' } } satisfies RouteLocationRaw
 const mafiaRoute = { name: 'mafia' } satisfies RouteLocationRaw
+const checkersRoute = { name: 'checkers', params: { roomId: 'lobby' } } satisfies RouteLocationRaw
 const landingFeedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
 const landingPageLoading = ref(true)
 const landingCanvasElement = ref<HTMLElement | null>(null)
@@ -337,11 +338,11 @@ const landingGameCards = computed<LandingGameCard[]>(() => [
     tone: 'slate',
   },
   {
-    id: 'hot-seat',
-    title: t('home.gameMic'),
-    to: { name: 'home', query: { comingSoon: 'hot-seat' } },
+    id: 'checkers',
+    title: 'Шашки',
+    to: checkersRoute,
     image: whoTakeShitIcon,
-    ariaLabel: t('home.openHotSeat'),
+    ariaLabel: 'Відкрити Шашки',
     tone: 'amber',
   },
 ])

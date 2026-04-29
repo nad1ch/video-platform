@@ -79,6 +79,7 @@ const isEatRoute = computed(() => route.path.startsWith('/app/eat'))
 const isHomeRoute = computed(() => route.name === 'home')
 const isCallRoute = computed(() => route.name === 'call')
 const isMafiaRoute = computed(() => route.name === 'mafia')
+const isCheckersRoute = computed(() => route.name === 'checkers')
 const isCoinHubRoute = computed(() => route.name === 'coin-hub')
 const isNadrawRoute = computed(() => route.name === 'nadraw-show')
 const isAdminRoute = computed(() => String(route.name ?? '').startsWith('admin-'))
@@ -835,7 +836,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
             </Teleport>
           </div>
         </template>
-        <template v-if="isCallRoute || isMafiaRoute" #center>
+        <template v-if="isCallRoute || isMafiaRoute || isCheckersRoute" #center>
           <div :id="CALL_ROOM_DROPDOWN_HOST_ID" class="app-shell-call-room-anchor">
             <button
               type="button"
@@ -846,7 +847,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
               :aria-controls="CALL_ROOM_POPOVER_PANEL_ID"
               @click.stop="callRoomHeaderJoin.toggleRoomPopover()"
             >
-              {{ isMafiaRoute ? 'room' : t('callPage.headerJoinRoom') }}
+              {{ isMafiaRoute || isCheckersRoute ? 'room' : t('callPage.headerJoinRoom') }}
             </button>
           </div>
         </template>

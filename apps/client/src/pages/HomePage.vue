@@ -18,7 +18,7 @@ import spyImageWebp from '@/assets/landing/spy.webp'
 import whoTakeShitImage from '@/assets/landing/who-take-shit.png'
 import { useAuth } from '@/composables/useAuth'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
-import { loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
+import { loadCheckersPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
 import { prefetchRoute } from '@/utils/routePrefetch'
 
 type AppGameCard = {
@@ -52,6 +52,7 @@ const defaultNadleStreamer =
 
 const callRoute = { name: 'call' } satisfies RouteLocationRaw
 const mafiaRoute = { name: 'mafia' } satisfies RouteLocationRaw
+const checkersRoute = { name: 'checkers', params: { roomId: 'lobby' } } satisfies RouteLocationRaw
 const economyComingSoonRoute = { name: 'home', query: { comingSoon: 'economy' } } satisfies RouteLocationRaw
 
 const nadleRoute = computed<RouteLocationRaw>(() => ({
@@ -66,6 +67,7 @@ const nadrawRoute = computed<RouteLocationRaw>(() => ({
 
 const prefetchMafia = () => prefetchRoute(loadMafiaPage)
 const prefetchNadle = () => prefetchRoute(loadNadleStreamPage)
+const prefetchCheckers = () => prefetchRoute(loadCheckersPage)
 
 const gameCards = computed<AppGameCard[]>(() => [
   {
@@ -126,17 +128,13 @@ const gameCards = computed<AppGameCard[]>(() => [
     },
   },
   {
-    id: 'hot-seat',
-    title: t('home.gameMic'),
+    id: 'checkers',
+    title: 'Шашки',
+    to: checkersRoute,
     image: whoTakeShitImage,
-    ariaLabel: t('home.openHotSeat'),
+    ariaLabel: 'Відкрити Шашки',
     tone: 'amber',
-    comingSoon: {
-      eyebrow: t('home.comingSoonEyebrow'),
-      title: t('home.gameMicComingSoonTitle'),
-      description: t('home.gameMicComingSoonDesc'),
-      status: t('home.comingSoonStatus'),
-    },
+    prefetch: prefetchCheckers,
   },
 ])
 

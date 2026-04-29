@@ -11,6 +11,8 @@ import { getCallVideoConstraints } from './videoQualityPreset'
 export type UseLocalMediaOptions = {
   /** Defaults to `auto_large_room` when omitted. */
   getVideoPublishTier?: () => VideoPublishTier
+  /** Defaults to `audio-video`; `audio-only` reuses the same audio path without camera capture. */
+  mediaMode?: () => 'audio-video' | 'audio-only'
 }
 
 export type CallMediaDeviceOption = {
@@ -69,6 +71,8 @@ async function getUserMediaWithDeviceIdExactThenIdeal(
 
 export function useLocalMedia(options?: UseLocalMediaOptions) {
   const resolveTier = (): VideoPublishTier => options?.getVideoPublishTier?.() ?? 'auto_large_room'
+  const resolveMediaMode = (): 'audio-video' | 'audio-only' =>
+    options?.mediaMode?.() === 'audio-only' ? 'audio-only' : 'audio-video'
   const localStream = shallowRef<MediaStream | null>(null)
   /** Microphone and camera start off until the user turns them on. */
   const micEnabled = ref(false)
@@ -125,6 +129,22 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
       console.log('[local] starting media')
     }
     stopLocalMedia()
+    const mediaMode = resolveMediaMode()
+    if (mediaMode === 'audio-only') {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { ...DEFAULT_CALL_AUDIO_CONSTRAINTS },
+        video: false,
+      })
+      localStream.value = stream
+      for (const t of stream.getAudioTracks()) {
+        t.enabled = false
+      }
+      micEnabled.value = false
+      camEnabled.value = false
+      localPlayRev.value += 1
+      await refreshMediaDevices()
+      return stream
+    }
     const tier = resolveTier()
     const devices = await safeEnumerateDevices()
     const preferred = selectPreferredVideoInputDeviceId(devices, readPreferredVideoInputDeviceId())

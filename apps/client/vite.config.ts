@@ -83,6 +83,10 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      '/checkers-ws': {
+        target: devWsProxyTarget,
+        ws: true,
+      },
       '/app/nadle-ws': {
         target: devWsProxyTarget,
         ws: true,
@@ -97,6 +101,11 @@ export default defineConfig({
         target: devWsProxyTarget,
         ws: true,
         changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/app/, ''),
+      },
+      '/app/checkers-ws': {
+        target: devWsProxyTarget,
+        ws: true,
         rewrite: (p) => p.replace(/^\/app/, ''),
       },
     },

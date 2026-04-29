@@ -10,7 +10,7 @@ import { useAuth } from '@/composables/useAuth'
 import { registerEatFirstRouterGuards } from '@/eat-first/router.js'
 import { installRouteNavLoadingGuards, releaseRouteNavLoading } from '@/routeNavLoading'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
-import { loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
+import { loadCheckersPage, loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
 
 /** Twitch login slug for `/nadle` → `/nadle/:streamer` redirect and default home link. */
 const DEFAULT_NADLE_STREAMER =
@@ -105,6 +105,12 @@ export const router = createRouter({
           component: () => import('./pages/NadrawShowPage.vue'),
         },
         {
+          path: 'checkers/:roomId',
+          name: 'checkers',
+          meta: { appTitle: 'Шашки', footerContext: 'home', footer: false },
+          component: loadCheckersPage,
+        },
+        {
           path: 'eat',
           name: 'eat',
           meta: { footerContext: 'eat' },
@@ -154,7 +160,7 @@ export const router = createRouter({
         },
         /**
          * Short URL: `/app/:streamer` (legacy). Static segments above take precedence:
-         * `call`, `mafia`, `nadle`, `nadle/:streamer`, `nadraw-show/:streamer`, `eat`, `coin-hub`, `admin` are reserved — a streamer slug matching
+         * `call`, `mafia`, `nadle`, `nadle/:streamer`, `nadraw-show/:streamer`, `checkers/:roomId`, `eat`, `coin-hub`, `admin` are reserved — a streamer slug matching
          * those first segments cannot use this short path (e.g. `/app/call` is the Call page, not nadle for "call").
          */
         {

@@ -61,6 +61,10 @@ const props = withDefaults(
     remoteListenVolume?: number
     /** Local-only remote listen mute */
     remoteListenMuted?: boolean
+    /** Existing call-core RMS level for this remote peer. */
+    remoteAudioLevel?: number
+    /** True when another remote is currently louder and this one should be ducked. */
+    remoteVoiceDucked?: boolean
     /** “Raise hand” from signaling (call room). */
     raiseHand?: boolean
     /** Passed to StreamVideo `fill-cover`; CallPage sets false so grid video uses contain (no crop). */
@@ -617,11 +621,21 @@ if (import.meta.env.DEV) {
       <StreamAudio
         v-if="!isLocal && audioSplitStream"
         class="tile-audio"
-        v-memo="[audioSplitStream, playRev ?? 0, remoteListenVolume ?? 1, remoteListenMuted ?? false]"
+        v-memo="[
+          audioSplitStream,
+          playRev ?? 0,
+          remoteListenVolume ?? 1,
+          remoteListenMuted ?? false,
+          remoteAudioLevel ?? 0,
+          remoteVoiceDucked ?? false,
+        ]"
         :stream="audioSplitStream"
         :play-rev="playRev"
         :listen-volume="remoteListenVolume ?? 1"
         :listen-muted="remoteListenMuted ?? false"
+        :audio-level="remoteAudioLevel ?? 0"
+        :voice-ducked="remoteVoiceDucked ?? false"
+        audio-processing
       />
       <div
         v-if="showVideo"

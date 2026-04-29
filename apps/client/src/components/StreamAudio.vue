@@ -19,15 +19,28 @@ const props = withDefaults(
     listenVolume?: number
     /** Local-only mute for this stream (does not affect remote sender). */
     listenMuted?: boolean
+    /** Existing call-core RMS level for this remote peer. */
+    audioLevel?: number
+    /** True when another peer is the dominant speaker and this stream should be ducked. */
+    voiceDucked?: boolean
+    /** Enables gain-node ducking and noise gate without changing stream routing. */
+    audioProcessing?: boolean
   }>(),
   {
     playRev: 0,
     listenVolume: 1,
     listenMuted: false,
+    audioLevel: 0,
+    voiceDucked: false,
+    audioProcessing: false,
   },
 )
 
 const el = ref<HTMLAudioElement | null>(null)
+const NOISE_GATE_OPEN = 0.05
+const NOISE_GATE_CLOSE = 0.02
+const DUCKED_GAIN = 0.68
+const GAIN_LERP = 0.25
 
 /** One-shot gesture retry after autoplay policy blocks play() */
 let playUnlockHandler: (() => void) | null = null
@@ -36,10 +49,16 @@ let sourceNode: MediaStreamAudioSourceNode | null = null
 let gainNode: GainNode | null = null
 let usingWebAudio = false
 let bindGeneration = 0
+let gateOpen = true
+let smoothGainRaf = 0
+let currentGain = 1
 
 function shouldUseWebAudioPlayback(): boolean {
   if (props.listenMuted) {
     return false
+  }
+  if (props.audioProcessing) {
+    return true
   }
   const raw = Number(props.listenVolume ?? 1)
   return Number.isFinite(raw) && raw > 1
@@ -64,6 +83,7 @@ function clearPlayUnlock(): void {
 }
 
 function teardownWebAudio(): void {
+  stopSmoothGainLoop()
   try {
     sourceNode?.disconnect()
   } catch {
@@ -79,14 +99,76 @@ function teardownWebAudio(): void {
   usingWebAudio = false
 }
 
+function updateNoiseGate(): void {
+  if (!props.audioProcessing) {
+    gateOpen = true
+    return
+  }
+  const level = Number(props.audioLevel ?? 0)
+  if (!Number.isFinite(level)) {
+    gateOpen = true
+    return
+  }
+  if (gateOpen && level <= NOISE_GATE_CLOSE) {
+    gateOpen = false
+  } else if (!gateOpen && level >= NOISE_GATE_OPEN) {
+    gateOpen = true
+  }
+}
+
+function targetGain(): number {
+  const muted = Boolean(props.listenMuted)
+  const raw = Number(props.listenVolume ?? 1)
+  const base = muted ? 0 : Math.min(2, Math.max(0, Number.isFinite(raw) ? raw : 1))
+  if (!props.audioProcessing) {
+    return base
+  }
+  updateNoiseGate()
+  if (!gateOpen) {
+    return 0
+  }
+  return base * (props.voiceDucked ? DUCKED_GAIN : 1)
+}
+
+function stopSmoothGainLoop(): void {
+  if (smoothGainRaf !== 0) {
+    cancelAnimationFrame(smoothGainRaf)
+    smoothGainRaf = 0
+  }
+}
+
+function stepSmoothGain(): void {
+  if (!gainNode || !usingWebAudio) {
+    smoothGainRaf = 0
+    return
+  }
+  const nextTarget = targetGain()
+  currentGain += (nextTarget - currentGain) * GAIN_LERP
+  if (Math.abs(nextTarget - currentGain) < 0.001) {
+    currentGain = nextTarget
+  }
+  gainNode.gain.value = currentGain
+  smoothGainRaf = requestAnimationFrame(stepSmoothGain)
+}
+
+function startSmoothGainLoop(): void {
+  if (smoothGainRaf !== 0) {
+    return
+  }
+  smoothGainRaf = requestAnimationFrame(stepSmoothGain)
+}
+
 function applyGain(): void {
   if (!gainNode) {
     return
   }
-  const muted = Boolean(props.listenMuted)
-  const raw = Number(props.listenVolume ?? 1)
-  const g = muted ? 0 : Math.min(2, Math.max(0, Number.isFinite(raw) ? raw : 1))
-  gainNode.gain.value = g
+  if (props.audioProcessing) {
+    startSmoothGainLoop()
+    return
+  }
+  stopSmoothGainLoop()
+  currentGain = targetGain()
+  gainNode.gain.value = currentGain
 }
 
 function applyElementVolume(): void {
@@ -171,6 +253,8 @@ async function bindAudioGraph(): Promise<void> {
     sourceNode.connect(gainNode)
     gainNode.connect(ctx.destination)
     usingWebAudio = true
+    currentGain = targetGain()
+    gainNode.gain.value = currentGain
     applyGain()
 
     if (isAudioPlaybackUnlocked()) {
@@ -249,7 +333,7 @@ watch(
 )
 
 watch(
-  () => [props.listenVolume ?? 1, props.listenMuted ?? false] as const,
+  () => [props.listenVolume ?? 1, props.listenMuted ?? false, props.audioProcessing] as const,
   () => {
     const s = props.stream
     if (s && s.getAudioTracks().length > 0) {
@@ -262,6 +346,16 @@ watch(
     }
     applyGain()
     applyElementVolume()
+  },
+  { flush: 'post' },
+)
+
+watch(
+  () => [props.audioLevel ?? 0, props.voiceDucked ?? false] as const,
+  () => {
+    if (usingWebAudio && props.audioProcessing) {
+      startSmoothGainLoop()
+    }
   },
   { flush: 'post' },
 )

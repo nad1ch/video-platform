@@ -49,6 +49,8 @@ export function useActiveSpeaker(
   inCall: Ref<boolean>,
 ) {
   const activeSpeakerPeerId = shallowRef<string | null>(null)
+  const dominantSpeakerPeerId = shallowRef<string | null>(null)
+  const audioLevelsByPeerId = shallowRef<Record<string, number>>({})
   const ctx = getAudioAnalysisAudioContext()
   const nodes = new Map<string, PeerNode>()
   let raf = 0
@@ -90,6 +92,8 @@ export function useActiveSpeaker(
         teardownPeer(id)
       }
       activeSpeakerPeerId.value = null
+      dominantSpeakerPeerId.value = null
+      audioLevelsByPeerId.value = {}
       return
     }
 
@@ -146,6 +150,7 @@ export function useActiveSpeaker(
       for (const [peerId, { analyser }] of nodes) {
         levels.set(peerId, rmsTimeDomain(analyser))
       }
+      audioLevelsByPeerId.value = Object.fromEntries(levels)
 
       let bestId: string | null = null
       let bestLevel = 0
@@ -155,6 +160,8 @@ export function useActiveSpeaker(
           bestId = peerId
         }
       }
+      dominantSpeakerPeerId.value =
+        bestId !== null && bestLevel >= SPEAK_ON ? bestId : null
 
       const cur = activeSpeakerPeerId.value
       const curLevel = cur !== null ? (levels.get(cur) ?? 0) : 0
@@ -255,7 +262,9 @@ export function useActiveSpeaker(
     for (const id of [...nodes.keys()]) {
       teardownPeer(id)
     }
+    dominantSpeakerPeerId.value = null
+    audioLevelsByPeerId.value = {}
   })
 
-  return { activeSpeakerPeerId }
+  return { activeSpeakerPeerId, dominantSpeakerPeerId, audioLevelsByPeerId }
 }

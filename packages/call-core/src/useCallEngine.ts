@@ -61,6 +61,8 @@ export type CallEngineOptions = {
   joinAvatarUrl?: Ref<string | undefined> | ComputedRef<string | undefined>
   /** Stable authenticated user id mirrored in `join-room` for room-level authority features. */
   joinUserId?: Ref<string | undefined> | ComputedRef<string | undefined>
+  /** Defaults to `audio-video`; Checkers uses `audio-only` to reuse voice without camera capture. */
+  mediaMode?: Ref<'audio-video' | 'audio-only'> | ComputedRef<'audio-video' | 'audio-only'>
 }
 
 /**
@@ -174,6 +176,14 @@ function readJoinUserId(options: CallEngineOptions | undefined): string {
   return ''
 }
 
+function readMediaMode(options: CallEngineOptions | undefined): 'audio-video' | 'audio-only' {
+  const r = options?.mediaMode
+  if (r && typeof r === 'object' && 'value' in r) {
+    return (r as Ref<'audio-video' | 'audio-only'>).value === 'audio-only' ? 'audio-only' : 'audio-video'
+  }
+  return 'audio-video'
+}
+
 export function useCallEngine(options?: CallEngineOptions) {
   if (getActivePinia() === undefined) {
     throw new Error(
@@ -235,6 +245,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     swapLocalVideoInput,
   } = useLocalMedia({
     getVideoPublishTier: () => wirePublishTier.value,
+    mediaMode: () => readMediaMode(options),
   })
 
   /** When `getSettings().deviceId` is empty (some drivers), keep menu highlight on last explicit pick. */
@@ -898,7 +909,10 @@ export function useCallEngine(options?: CallEngineOptions) {
       excludeFromLevelAnalysis: t.isLocal,
     })),
   )
-  const { activeSpeakerPeerId } = useActiveSpeaker(activeSpeakerTileInputs, inCall)
+  const { activeSpeakerPeerId, dominantSpeakerPeerId, audioLevelsByPeerId } = useActiveSpeaker(
+    activeSpeakerTileInputs,
+    inCall,
+  )
 
   watch(
     activeSpeakerPeerId,
@@ -917,7 +931,9 @@ export function useCallEngine(options?: CallEngineOptions) {
     publishSimulcast: lastWireVideoSimulcast.value,
     effectiveActiveSpeakerPeerId: activeSpeakerPeerId.value ?? serverActiveSpeakerPeerId.value,
     activeSpeakerPeerId: activeSpeakerPeerId.value,
+    dominantSpeakerPeerId: dominantSpeakerPeerId.value,
     serverActiveSpeakerPeerId: serverActiveSpeakerPeerId.value,
+    audioLevelsByPeerId: audioLevelsByPeerId.value,
     receiveQualityPressure: receiveQualityPressure.value,
     receiveDeviceProfile: receiveDeviceProfile.value.profile,
     receiveAdaptiveMaxHigh: receiveDeviceProfile.value.maxHighStreams,
@@ -1284,6 +1300,8 @@ export function useCallEngine(options?: CallEngineOptions) {
     sizeTier,
     gridModifier,
     activeSpeakerPeerId,
+    dominantSpeakerPeerId,
+    audioLevelsByPeerId,
     localAudioSourceStream,
     networkQuality,
     setNetworkQualityOverride,

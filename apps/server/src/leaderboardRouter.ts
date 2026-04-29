@@ -6,6 +6,8 @@ import { readSessionFromCookie } from './auth/session/sessionJwt'
 
 /** Matches `MAX_ATTEMPTS` in client `nadleLogic` / solo board rows. */
 const SOLO_MAX_ATTEMPTS = 6
+const CHECKERS_ELO_INITIAL = 1200
+const CHECKERS_ELO_K = 20
 
 /** `GameRound.winnerUserId` when a solo round ends in a loss (player exhausted attempts). Not a real user id. */
 const NADLE_SOLO_LOSS_PLACEHOLDER_WINNER = '__nadle_solo_loss__'
@@ -19,6 +21,12 @@ type ParticipantRow = {
   userId: string
   isWinner: boolean
   roundCreatedAt: Date
+}
+
+export type CheckersEloSnapshot = {
+  rating: number
+  wins: number
+  losses: number
 }
 
 /** Resolve `?streamerId=` or Twitch login `?streamer=` to an active Streamer id. */
@@ -255,6 +263,113 @@ async function ratingLeaderboardForStreamer(streamerId: string): Promise<
   }))
 }
 
+async function computeCheckersEloSnapshots(): Promise<Map<string, CheckersEloSnapshot>> {
+  const rounds = await prisma.gameRound.findMany({
+    where: { streamerId: null },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    include: { results: true },
+  })
+  const snapshots = new Map<string, CheckersEloSnapshot>()
+
+  function ensure(userId: string): CheckersEloSnapshot {
+    let row = snapshots.get(userId)
+    if (!row) {
+      row = { rating: CHECKERS_ELO_INITIAL, wins: 0, losses: 0 }
+      snapshots.set(userId, row)
+    }
+    return row
+  }
+
+  for (const round of rounds) {
+    const results = round.results.filter((result) => result.userId.length > 0)
+    const winner = results.find((result) => result.isWinner)
+    const loser = results.find((result) => !result.isWinner && result.userId !== winner?.userId)
+    if (!winner || !loser) {
+      continue
+    }
+    const winnerRow = ensure(winner.userId)
+    const loserRow = ensure(loser.userId)
+    const winnerExpected = 1 / (1 + 10 ** ((loserRow.rating - winnerRow.rating) / 400))
+    const loserExpected = 1 / (1 + 10 ** ((winnerRow.rating - loserRow.rating) / 400))
+    winnerRow.rating = Math.round(winnerRow.rating + CHECKERS_ELO_K * (1 - winnerExpected))
+    loserRow.rating = Math.round(loserRow.rating + CHECKERS_ELO_K * (0 - loserExpected))
+    winnerRow.wins += 1
+    loserRow.losses += 1
+  }
+
+  return snapshots
+}
+
+export async function checkersRatingsForUsers(userIds: string[]): Promise<Map<string, number>> {
+  const snapshots = await computeCheckersEloSnapshots()
+  const out = new Map<string, number>()
+  for (const userId of userIds) {
+    out.set(userId, snapshots.get(userId)?.rating ?? CHECKERS_ELO_INITIAL)
+  }
+  return out
+}
+
+export async function recordCheckersMatchResult(input: {
+  player1UserId: string
+  player2UserId: string
+  winnerUserId: string
+}): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const round = await tx.gameRound.create({
+      data: {
+        streamerId: null,
+        winnerUserId: input.winnerUserId,
+      },
+    })
+    await tx.gameResult.createMany({
+      data: [
+        {
+          roundId: round.id,
+          userId: input.player1UserId,
+          attempts: 1,
+          isWinner: input.player1UserId === input.winnerUserId,
+        },
+        {
+          roundId: round.id,
+          userId: input.player2UserId,
+          attempts: 1,
+          isWinner: input.player2UserId === input.winnerUserId,
+        },
+      ],
+    })
+  })
+}
+
+async function checkersRatingLeaderboard(): Promise<
+  Array<{
+    rank: number
+    userId: string
+    displayName: string
+    avatarUrl: string | null
+    rating: number
+    wins: number
+    losses: number
+  }>
+> {
+  const snapshots = await computeCheckersEloSnapshots()
+  const displayMap = await buildParticipantDisplayMap([...snapshots.keys()])
+  return [...snapshots.entries()]
+    .map(([userId, snapshot]) => ({
+      userId,
+      displayName: displayMap.get(userId)?.displayName ?? 'Player',
+      avatarUrl: displayMap.get(userId)?.avatarUrl ?? null,
+      rating: snapshot.rating,
+      wins: snapshot.wins,
+      losses: snapshot.losses,
+    }))
+    .sort(
+      (a, b) =>
+        b.rating - a.rating || b.wins - a.wins || a.displayName.localeCompare(b.displayName),
+    )
+    .slice(0, 100)
+    .map((row, index) => ({ ...row, rank: index + 1 }))
+}
+
 export function mountLeaderboardRoutes(app: Express): void {
   /**
    * Records a solo nadle result for any signed-in user with a linked `User` row.
@@ -415,13 +530,18 @@ export function mountLeaderboardRoutes(app: Express): void {
     }
   })
 
-  /** Rating: +1 per win, −1 per loss (wins − (gamesPlayed − wins)). */
+  /** Rating: Nadle legacy score, or Checkers ELO with `?game=checkers`. */
   app.get('/api/leaderboard/rating', async (req: Request, res: Response) => {
     if (!isDatabaseConfigured()) {
       res.json({ entries: [] })
       return
     }
     try {
+      if (req.query.game === 'checkers') {
+        const entries = await checkersRatingLeaderboard()
+        res.json({ entries })
+        return
+      }
       const scope = await resolveStreamerScopeFromQuery(req)
       if (!scope) {
         res.json({ entries: [] })

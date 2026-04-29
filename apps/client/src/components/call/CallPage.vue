@@ -131,6 +131,8 @@ const {
   tiles,
   sizeTier,
   activeSpeakerPeerId,
+  dominantSpeakerPeerId,
+  audioLevelsByPeerId,
   localAudioSourceStream,
   micEnabled,
   camEnabled,
@@ -1329,6 +1331,15 @@ function isTileRowSpeaking(row: (typeof orderedGridRows.value)[number]): boolean
   return pid === activeSpeakerPeerId.value || pid === serverActiveSpeakerPeerId.value
 }
 
+function remoteAudioLevelForPeer(peerId: string): number {
+  return audioLevelsByPeerId.value[peerId] ?? 0
+}
+
+function isRemoteVoiceDucked(peerId: string): boolean {
+  const dominant = dominantSpeakerPeerId.value
+  return dominant !== null && dominant !== peerId
+}
+
 /** User gesture: keep shared analysis AudioContext un-suspended so VAD + local RMS work after join. */
 function resumeCallAudioAnalysisFromGesture(): void {
   void getAudioAnalysisAudioContext().resume().catch(() => {})
@@ -1850,6 +1861,8 @@ watch(joining, (j) => {
                 :row-speaking="isTileRowSpeaking(row)"
                 :remote-listen-volume="row.tile.remoteListenVolume"
                 :remote-listen-muted="row.tile.remoteListenMuted"
+                :remote-audio-level="remoteAudioLevelForPeer(row.tile.peerId)"
+                :remote-voice-ducked="isRemoteVoiceDucked(row.tile.peerId)"
                 :raise-hand="Boolean(row.tile.handRaised)"
                 :video-presentation="row.tile.videoPresentation"
                 :avatar-url="row.tile.avatarUrl ?? ''"

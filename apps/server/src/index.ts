@@ -20,6 +20,8 @@ import { mountEatFirstRoutes } from './eatFirst/router'
 import { attachNadrawShowSocketServer } from './nadraw-show/nadrawSocket'
 import { mountNadrawShowRoutes } from './nadraw-show/nadrawRouter'
 import { mountCoinHubRoutes } from './coinHub/coinHubRouter'
+import { attachCheckersSocketServer } from './checkers/checkersSocket'
+import { mountCheckersMatchmakingRoutes } from './checkers/checkersMatchmaking'
 
 async function bootstrap(): Promise<void> {
   let shuttingDown = false
@@ -71,11 +73,13 @@ async function bootstrap(): Promise<void> {
   const wssNadle = new WebSocketServer({ noServer: true })
   const wssEatFirst = new WebSocketServer({ noServer: true })
   const wssNadrawShow = new WebSocketServer({ noServer: true })
+  const wssCheckers = new WebSocketServer({ noServer: true })
 
   attachSocketServer(wssSignaling, roomManager)
   attachNadleSocketServer(wssNadle)
   attachEatFirstSocketServer(wssEatFirst)
   attachNadrawShowSocketServer(wssNadrawShow)
+  attachCheckersSocketServer(wssCheckers)
 
   server.on('upgrade', (request, socket, head) => {
     const host = request.headers.host ?? 'localhost'
@@ -102,6 +106,13 @@ async function bootstrap(): Promise<void> {
       return
     }
 
+    if (pathname === '/checkers-ws') {
+      wssCheckers.handleUpgrade(request, socket, head, (ws) => {
+        wssCheckers.emit('connection', ws, request)
+      })
+      return
+    }
+
     if (pathname === '/ws' || pathname === '/') {
       wssSignaling.handleUpgrade(request, socket, head, (ws) => {
         wssSignaling.emit('connection', ws, request)
@@ -120,6 +131,7 @@ async function bootstrap(): Promise<void> {
   mountEatFirstRoutes(app)
   mountNadrawShowRoutes(app)
   mountCoinHubRoutes(app)
+  mountCheckersMatchmakingRoutes(app)
 
   app.get('/health', (_req, res) => {
     res.json({
@@ -171,13 +183,15 @@ async function bootstrap(): Promise<void> {
 
     closeWss(wssEatFirst, 'eat-first', () => {
       closeWss(wssNadrawShow, 'nadraw-show', () => {
-        closeWss(wssNadle, 'nadle', () => {
-          closeWss(wssSignaling, 'signaling', () => {
-            server.close((httpErr) => {
-              if (httpErr) {
-                console.error('HTTP server close error', httpErr)
-              }
-              process.exit(0)
+        closeWss(wssCheckers, 'checkers', () => {
+          closeWss(wssNadle, 'nadle', () => {
+            closeWss(wssSignaling, 'signaling', () => {
+              server.close((httpErr) => {
+                if (httpErr) {
+                  console.error('HTTP server close error', httpErr)
+                }
+                process.exit(0)
+              })
             })
           })
         })
