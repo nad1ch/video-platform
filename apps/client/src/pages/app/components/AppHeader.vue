@@ -1034,9 +1034,11 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
   .app-landing-header__coin {
     min-height: 2rem;
-    padding-left: 0.28rem;
+    padding-left: 0.5rem;
     margin-right: 0;
     transform: none;
+    gap: 0.22rem;
+    font-size: 0.72rem;
   }
 
   .app-landing-header__coin-icon {
@@ -1046,7 +1048,11 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   }
 
   .app-landing-header__coin-label {
-    display: none;
+    display: inline-block;
+    max-width: 3.8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .app-landing-header__auth {

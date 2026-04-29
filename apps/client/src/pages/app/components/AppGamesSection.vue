@@ -512,6 +512,7 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
   position: absolute;
   top: 0.75rem;
   right: 0.85rem;
+  z-index: 3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -523,6 +524,8 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
   color: rgba(255, 255, 255, 0.86);
   cursor: pointer;
   font: inherit;
+  pointer-events: auto;
+  touch-action: manipulation;
   transition:
     background 0.16s ease,
     border-color 0.16s ease,
