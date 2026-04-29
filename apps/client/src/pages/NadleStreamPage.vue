@@ -437,13 +437,33 @@ onUnmounted(() => {
 
         <AppCard class="nadle-page__stack nadle-page__stack--game">
           <div class="nadle-page__game" :style="{ '--nadle-len': String(wordLength) }">
-            <NadleLocalBoardGrid
-              :round-id="localRoundId"
-              :word-length="wordLength"
-              :max-attempts="NADLE_MAX_ATTEMPTS"
-              :rows="nadleGridRows"
-              @focus-input="focusNadleGuessInput"
-            />
+            <div class="nadle-page__guess-focus-anchor">
+              <NadleLocalBoardGrid
+                :round-id="localRoundId"
+                :word-length="wordLength"
+                :max-attempts="NADLE_MAX_ATTEMPTS"
+                :rows="nadleGridRows"
+                @focus-input="focusNadleGuessInput"
+              />
+
+              <form class="nadle-page__sr-form" @submit.prevent="submitGuess">
+                <label class="nadle-page__sr-only" :for="guessFieldId">{{ t('nadleUi.guessLabel') }}</label>
+                <input
+                  :id="guessFieldId"
+                  ref="guessInputEl"
+                  v-model="guessInput"
+                  class="nadle-page__native-guess-input"
+                  type="text"
+                  inputmode="text"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  :disabled="localBoardLocked"
+                  autocomplete="off"
+                  lang="uk"
+                  @input="clampGuessSrInput"
+                />
+              </form>
+            </div>
 
             <div
               v-if="gameStatus === 'won'"
@@ -495,24 +515,6 @@ onUnmounted(() => {
               @enter="submitGuess"
               @set-word-length="setWordLength"
             />
-
-            <form class="nadle-page__sr-form" @submit.prevent="submitGuess">
-              <label class="nadle-page__sr-only" :for="guessFieldId">{{ t('nadleUi.guessLabel') }}</label>
-              <input
-                :id="guessFieldId"
-                ref="guessInputEl"
-                v-model="guessInput"
-                class="nadle-page__sr-only"
-                type="text"
-                inputmode="text"
-                autocapitalize="off"
-                spellcheck="false"
-                :disabled="localBoardLocked"
-                autocomplete="off"
-                lang="uk"
-                @input="clampGuessSrInput"
-              />
-            </form>
 
           </div>
         </AppCard>
@@ -1524,6 +1526,11 @@ onUnmounted(() => {
   margin-inline: auto;
 }
 
+.nadle-page__guess-focus-anchor {
+  position: relative;
+  width: 100%;
+}
+
 .nadle-page__celebrate {
   position: relative;
   overflow: hidden;
@@ -1629,10 +1636,30 @@ onUnmounted(() => {
 }
 
 .nadle-page__sr-form {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
   margin: 0;
   padding: 0;
-  height: 0;
-  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  transform: translateX(-50%);
+}
+
+.nadle-page__native-guess-input {
+  position: absolute;
+  inset: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+  caret-color: transparent;
+  background: transparent;
+  color: transparent;
+  pointer-events: none;
 }
 
 .nadle-page__others {
