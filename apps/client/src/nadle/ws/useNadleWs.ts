@@ -31,6 +31,8 @@ export function useNadleWs(options: {
   wsStatus: Ref<NadleWsConnectionState>
   ircRelayStatus: Ref<NadleIrcRelayState>
   connectWs: () => void
+  sendGuess: (word: string, gameId?: string) => boolean
+  requestNextWord: () => boolean
   prepareNadleWsMount: () => void
   disposeNadleWs: () => void
 } {
@@ -60,6 +62,22 @@ export function useNadleWs(options: {
       clearTimeout(nadleWsReconnectTimer)
       nadleWsReconnectTimer = null
     }
+  }
+
+  function sendJson(obj: unknown): boolean {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return false
+    }
+    ws.send(JSON.stringify(obj))
+    return true
+  }
+
+  function sendGuess(word: string, gameId?: string): boolean {
+    return sendJson({ type: NadleWs.clientGuess, word, gameId })
+  }
+
+  function requestNextWord(): boolean {
+    return sendJson({ type: NadleWs.clientNextWord })
   }
 
   function scheduleNadleWsReconnect(): void {
@@ -247,6 +265,8 @@ export function useNadleWs(options: {
     wsStatus,
     ircRelayStatus,
     connectWs,
+    sendGuess,
+    requestNextWord,
     prepareNadleWsMount,
     disposeNadleWs,
   }

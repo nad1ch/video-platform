@@ -30,6 +30,7 @@ const WS = {
   session: 'nadraw:session',
   twitchChat: 'nadraw:twitch-chat',
   guessFeedback: 'nadraw:guess-feedback',
+  history: 'nadraw:history',
   draw: 'nadraw:draw',
   canvasClear: 'nadraw:canvas-clear',
   error: 'nadraw:error',
@@ -75,6 +76,22 @@ export type RemoteDrawPayload = {
   op?: NadrawDrawOp
   x2?: number
   y2?: number
+}
+
+type NadrawHistoryEvent =
+  | { kind: 'chat'; userId: string; displayName: string; text: string }
+  | {
+      kind: 'feedback'
+      feedbackKind: NadrawGuessFeedbackPayload['kind']
+      userId: string
+      displayName: string
+      text: string
+      heat?: NadrawGuessFeedbackPayload['heat']
+    }
+
+type NadrawHistoryPayload = {
+  drawOps?: RemoteDrawPayload[]
+  chatEvents?: NadrawHistoryEvent[]
 }
 
 function randomPeerId(): string {
@@ -238,6 +255,22 @@ export function useNadrawShowOrchestrator(options: {
     }
   }
 
+  function applyHistory(payload: NadrawHistoryPayload): void {
+    chatLines.value = []
+    lineUid = 0
+    for (const event of payload.chatEvents ?? []) {
+      if (event.kind === 'chat') {
+        pushLine({ userId: event.userId, displayName: event.displayName, text: event.text })
+      } else {
+        appendFeedback({ ...event, kind: event.feedbackKind })
+      }
+    }
+    onCanvasClearHook?.()
+    for (const op of payload.drawOps ?? []) {
+      onRemoteDrawHook?.(op)
+    }
+  }
+
   function clearReconnect(): void {
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
@@ -373,6 +406,10 @@ export function useNadrawShowOrchestrator(options: {
       }
       if (o.type === WS.guessFeedback && o.payload && typeof o.payload === 'object') {
         appendFeedback(o.payload as NadrawGuessFeedbackPayload)
+        return
+      }
+      if (o.type === WS.history && o.payload && typeof o.payload === 'object') {
+        applyHistory(o.payload as NadrawHistoryPayload)
         return
       }
       if (o.type === WS.canvasClear) {

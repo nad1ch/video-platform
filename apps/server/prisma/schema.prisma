@@ -23,6 +23,8 @@ model Streamer {
   gameRounds          GameRound[]
   userStreamerStats   UserStreamerStats[]
   nadrawPrompts       NadrawPrompt[]
+  nadleLiveGame       NadleLiveGame?
+  nadrawLiveRoom      NadrawLiveRoom?
 
   @@index([ownerId])
 }
@@ -196,4 +198,24 @@ model EatFirstVote {
 
   @@unique([gameId, voterSlotId])
   @@index([gameId])
+}
+
+model NadleLiveGame {
+  streamerId String   @id
+  streamer   Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+  state      Json     @default("{}")
+  updatedAt  DateTime @updatedAt
+}
+
+model CheckersLiveRoom {
+  roomId    String   @id
+  state     Json     @default("{}")
+  updatedAt DateTime @updatedAt
+}
+
+model NadrawLiveRoom {
+  streamerId String   @id
+  streamer   Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+  state      Json     @default("{}")
+  updatedAt  DateTime @updatedAt
 }

@@ -16,10 +16,19 @@ import { readStorageJson, writeStorageJson } from '@/utils/storageJson.js'
 
 const NADLE_WORD_LEN_KEY = 'streamassist_nadle_word_len'
 const NADLE_LOCAL_STATS_KEY = 'streamassist_nadle_local_stats'
+const NADLE_LOCAL_ROUND_KEY = 'streamassist_nadle_local_round'
 
 export const NADLE_DICTIONARY_ERROR_TEXT = 'Слова немає в словнику.'
 
 type LocalWinStats = { won: number; lost: number }
+type PersistedLocalRound = {
+  schemaVersion: 1
+  wordLength: WordLength
+  secretWord: string
+  localGuesses: LocalGuessRow[]
+  gameStatus: 'playing' | 'won' | 'lost'
+  guessInput: string
+}
 
 function loadWordLength(scope: string): WordLength {
   try {
@@ -64,6 +73,45 @@ function persistLocalStats(scope: string, s: LocalWinStats): void {
   )
 }
 
+function loadLocalRound(scope: string): PersistedLocalRound | null {
+  const o = readStorageJson(
+    typeof localStorage !== 'undefined' ? localStorage : null,
+    `${NADLE_LOCAL_ROUND_KEY}:${scope}`,
+    null,
+  ) as Partial<PersistedLocalRound> | null
+  if (!o || o.schemaVersion !== 1) {
+    return null
+  }
+  if (o.wordLength !== 5 && o.wordLength !== 6 && o.wordLength !== 7) {
+    return null
+  }
+  if (typeof o.secretWord !== 'string' || wordGraphemeCount(o.secretWord) !== o.wordLength) {
+    return null
+  }
+  if (o.gameStatus !== 'playing' && o.gameStatus !== 'won' && o.gameStatus !== 'lost') {
+    return null
+  }
+  if (!Array.isArray(o.localGuesses)) {
+    return null
+  }
+  return {
+    schemaVersion: 1,
+    wordLength: o.wordLength,
+    secretWord: o.secretWord,
+    localGuesses: o.localGuesses,
+    gameStatus: o.gameStatus,
+    guessInput: typeof o.guessInput === 'string' ? o.guessInput : '',
+  }
+}
+
+function persistLocalRound(scope: string, round: PersistedLocalRound): void {
+  writeStorageJson(
+    typeof localStorage !== 'undefined' ? localStorage : null,
+    `${NADLE_LOCAL_ROUND_KEY}:${scope}`,
+    round,
+  )
+}
+
 export type UseNadleStateOptions = {
   storageScope: ComputedRef<string>
   lastError: Ref<string | null>
@@ -93,14 +141,38 @@ export function useNadleState(options: UseNadleStateOptions) {
 
   function hydrateScope(scope: string): void {
     const len = loadWordLength(scope)
+    const savedRound = loadLocalRound(scope)
     wordLength.value = len
-    secretWord.value = randomWord(len)
-    localGuesses.value = []
-    guessInput.value = ''
-    gameStatus.value = 'playing'
     localStats.value = loadLocalStats(scope)
+    if (savedRound) {
+      wordLength.value = savedRound.wordLength
+      secretWord.value = savedRound.secretWord
+      localGuesses.value = savedRound.localGuesses
+      guessInput.value = savedRound.guessInput
+      gameStatus.value = savedRound.gameStatus
+    } else {
+      secretWord.value = randomWord(len)
+      localGuesses.value = []
+      guessInput.value = ''
+      gameStatus.value = 'playing'
+    }
     localRoundId.value += 1
   }
+
+  watch(
+    [wordLength, secretWord, localGuesses, gameStatus, guessInput],
+    () => {
+      persistLocalRound(storageScope.value, {
+        schemaVersion: 1,
+        wordLength: wordLength.value,
+        secretWord: secretWord.value,
+        localGuesses: localGuesses.value,
+        gameStatus: gameStatus.value,
+        guessInput: guessInput.value,
+      })
+    },
+    { deep: true },
+  )
 
   const localBoardLocked = computed(
     () => gameStatus.value !== 'playing' || localGuesses.value.length >= MAX_ATTEMPTS,

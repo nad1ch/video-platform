@@ -4,15 +4,21 @@ import {
   chooseCheckersBotMove,
   getCheckersState,
   restartCheckersRoom,
+  setCheckersState,
   timeoutCheckersRoomTurn,
   type CheckersBotDifficulty,
 } from './checkersGameStore'
+import {
+  loadCheckersLiveRoom,
+  persistCheckersLiveRoom,
+  type PersistedCheckersRoomMeta,
+} from './checkersLiveRoomPersistence'
 import { CheckersWs } from './wsProtocol'
 
 type CheckersMode = 'friend' | 'bot' | 'local'
 type CheckersRole = 'player1' | 'player2' | 'spectator'
 
-type RoomMeta = {
+export type RoomMeta = {
   mode: CheckersMode
   player1?: string
   player2?: string
@@ -27,6 +33,8 @@ const clientBySocket = new WeakMap<WebSocket, string>()
 const botTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const CHECKERS_JSON_PING_MS = 25_000
 let checkersJsonPingTimer: ReturnType<typeof setInterval> | null = null
+const hydratedRooms = new Set<string>()
+const hydrationByRoom = new Map<string, Promise<void>>()
 
 type ClientMsg =
   | { type: typeof CheckersWs.join; roomId: string; clientId: string; botDifficulty?: CheckersBotDifficulty }
@@ -174,6 +182,58 @@ function metaForRoom(roomId: string): RoomMeta {
   return meta
 }
 
+function persistedMeta(meta: RoomMeta): PersistedCheckersRoomMeta {
+  return {
+    mode: meta.mode,
+    player1: meta.player1,
+    player2: meta.player2,
+    rematchAccepted: [...meta.rematchAccepted],
+    lastMove: meta.lastMove,
+    botDifficulty: meta.botDifficulty,
+  }
+}
+
+function applyPersistedMeta(roomId: string, meta: PersistedCheckersRoomMeta): void {
+  roomMeta.set(roomId, {
+    mode: meta.mode,
+    player1: meta.player1,
+    player2: meta.player2,
+    rematchAccepted: new Set(meta.rematchAccepted),
+    lastMove: meta.lastMove,
+    botDifficulty: meta.botDifficulty,
+  })
+}
+
+function persistRoomSnapshot(roomId: string): void {
+  persistCheckersLiveRoom(roomId, {
+    state: getCheckersState(roomId),
+    meta: persistedMeta(metaForRoom(roomId)),
+  })
+}
+
+async function hydrateCheckersLiveRoom(roomId: string): Promise<void> {
+  if (hydratedRooms.has(roomId)) {
+    return
+  }
+  const existing = hydrationByRoom.get(roomId)
+  if (existing) {
+    await existing
+    return
+  }
+  const pending = (async () => {
+    const snapshot = await loadCheckersLiveRoom(roomId)
+    if (snapshot) {
+      setCheckersState(roomId, snapshot.state)
+      applyPersistedMeta(roomId, snapshot.meta)
+    }
+    hydratedRooms.add(roomId)
+  })().finally(() => {
+    hydrationByRoom.delete(roomId)
+  })
+  hydrationByRoom.set(roomId, pending)
+  await pending
+}
+
 export function reserveCheckersMatchRoom(roomId: string, player1ClientId: string, player2ClientId: string): void {
   const meta = metaForRoom(roomId)
   meta.mode = 'friend'
@@ -181,6 +241,7 @@ export function reserveCheckersMatchRoom(roomId: string, player1ClientId: string
   meta.player2 = player2ClientId
   meta.rematchAccepted.clear()
   meta.lastMove = null
+  persistRoomSnapshot(roomId)
 }
 
 function roleForClient(roomId: string, clientId: string | null): CheckersRole {
@@ -366,6 +427,7 @@ function restartRoomForRematch(roomId: string): void {
   meta.rematchAccepted.clear()
   meta.lastMove = null
   restartCheckersRoom(roomId)
+  persistRoomSnapshot(roomId)
 }
 
 function scheduleAutoRematch(roomId: string): void {
@@ -414,6 +476,7 @@ function scheduleBotMove(roomId: string): void {
     const result = applyCheckersRoomMove(roomId, move, getCheckersState(roomId).revision)
     if (result.ok) {
       meta.lastMove = { from: move.from, to: move.to }
+      persistRoomSnapshot(roomId)
       broadcastUpdate(roomId)
       scheduleAutoRematch(roomId)
       scheduleBotMove(roomId)
@@ -435,6 +498,7 @@ function setRoomMode(roomId: string, mode: CheckersMode, clientId: string | null
   } else if (meta.player2 === 'bot') {
     delete meta.player2
   }
+  persistRoomSnapshot(roomId)
 }
 
 function acceptRematch(ws: WebSocket, roomId: string): void {
@@ -453,6 +517,8 @@ function acceptRematch(ws: WebSocket, roomId: string): void {
   const player2Ready = meta.player2 ? meta.rematchAccepted.has(meta.player2) : false
   if (player1Ready && player2Ready) {
     restartRoomForRematch(roomId)
+  } else {
+    persistRoomSnapshot(roomId)
   }
   broadcastUpdate(roomId)
   scheduleBotMove(roomId)
@@ -471,16 +537,20 @@ export function attachCheckersSocketServer(wss: WebSocketServer): void {
       }
 
       if (msg.type === CheckersWs.join) {
-        unregisterClient(roomId, ws)
-        roomId = msg.roomId
-        clientBySocket.set(ws, msg.clientId)
-        if (msg.botDifficulty) {
-          metaForRoom(msg.roomId).botDifficulty = msg.botDifficulty
-        }
-        registerClient(roomId, ws)
-        assignRole(roomId, msg.clientId)
-        sendState(ws, roomId)
-        scheduleBotMove(roomId)
+        void (async () => {
+          await hydrateCheckersLiveRoom(msg.roomId)
+          unregisterClient(roomId, ws)
+          roomId = msg.roomId
+          clientBySocket.set(ws, msg.clientId)
+          if (msg.botDifficulty) {
+            metaForRoom(msg.roomId).botDifficulty = msg.botDifficulty
+          }
+          registerClient(roomId, ws)
+          assignRole(roomId, msg.clientId)
+          persistRoomSnapshot(roomId)
+          sendState(ws, roomId)
+          scheduleBotMove(roomId)
+        })()
         return
       }
 
@@ -501,6 +571,7 @@ export function attachCheckersSocketServer(wss: WebSocketServer): void {
         clearAutoRematch(targetRoomId)
         metaForRoom(targetRoomId).rematchAccepted.clear()
         metaForRoom(targetRoomId).lastMove = null
+        persistRoomSnapshot(targetRoomId)
         broadcastUpdate(targetRoomId)
         scheduleBotMove(targetRoomId)
         return
@@ -528,6 +599,7 @@ export function attachCheckersSocketServer(wss: WebSocketServer): void {
         }
         timeoutCheckersRoomTurn(targetRoomId, msg.revision)
         metaForRoom(targetRoomId).lastMove = null
+        persistRoomSnapshot(targetRoomId)
         broadcastUpdate(targetRoomId)
         scheduleAutoRematch(targetRoomId)
         scheduleBotMove(targetRoomId)
@@ -542,6 +614,7 @@ export function attachCheckersSocketServer(wss: WebSocketServer): void {
       const result = applyCheckersRoomMove(targetRoomId, { from: msg.from, to: msg.to }, msg.revision)
       if (result.ok) {
         metaForRoom(targetRoomId).lastMove = { from: msg.from, to: msg.to }
+        persistRoomSnapshot(targetRoomId)
         broadcastUpdate(targetRoomId)
         scheduleAutoRematch(targetRoomId)
         scheduleBotMove(targetRoomId)

@@ -7,7 +7,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import NadleGlobalLeaderboardTable from '@/components/nadle/NadleGlobalLeaderboardTable.vue'
 import TwitchRelayChatPanel from '@/components/twitch/TwitchRelayChatPanel.vue'
-import NadleLocalBoardGrid from '@/components/nadle/NadleLocalBoardGrid.vue'
+import NadleLocalBoardGrid, { type NadleLocalBoardCell } from '@/components/nadle/NadleLocalBoardGrid.vue'
 import NadleOnScreenKeyboard from '@/components/nadle/NadleOnScreenKeyboard.vue'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import { useNadleGlobalLeaderboard } from '@/composables/useNadleGlobalLeaderboard'
@@ -117,11 +117,13 @@ const {
 
 const {
   gameState,
-  leaderboard,
   chatLines,
+  sessionUser,
   wsStatus,
   ircRelayStatus,
   connectWs,
+  sendGuess: sendNadleWsGuess,
+  requestNextWord: requestNadleNextWord,
   prepareNadleWsMount,
   disposeNadleWs,
 } = useNadleWs({
@@ -153,7 +155,6 @@ const {
   localStats,
   secretPeekVisible,
   guessInput,
-  localBoardLocked,
   nadleGridRows,
   kbdKeyFeedbackModifier,
   kbdAppendLetter,
@@ -230,6 +231,103 @@ const chatTargetWordLength = computed(() => {
   return wordLength.value
 })
 
+const serverPlayer = computed(() => {
+  const uid = sessionUser.value?.id
+  if (!uid) {
+    return null
+  }
+  return gameState.value?.players.find((player) => player.userId === uid) ?? null
+})
+
+const useServerBoard = computed(() => Boolean(sessionUser.value && gameState.value))
+
+const activeWordLength = computed((): 5 | 6 | 7 => {
+  const len = gameState.value?.wordLength
+  return useServerBoard.value && (len === 5 || len === 6 || len === 7) ? len : wordLength.value
+})
+
+const serverGameStatus = computed<'playing' | 'won' | 'lost'>(() => {
+  const player = serverPlayer.value
+  if (player?.guessed) {
+    return 'won'
+  }
+  if ((player?.rows.length ?? 0) >= NADLE_MAX_ATTEMPTS) {
+    return 'lost'
+  }
+  return 'playing'
+})
+
+const displayGameStatus = computed(() => (useServerBoard.value ? serverGameStatus.value : gameStatus.value))
+const displayBoardLocked = computed(
+  () => displayGameStatus.value !== 'playing' || (serverPlayer.value?.rows.length ?? localGuesses.value.length) >= NADLE_MAX_ATTEMPTS,
+)
+
+const serverRoundKey = ref(0)
+watch(
+  () => gameState.value?.gameId,
+  (gameId, prev) => {
+    if (gameId && gameId !== prev) {
+      serverRoundKey.value += 1
+      guessInput.value = ''
+    }
+  },
+)
+
+watch(
+  () => gameState.value?.wordLength,
+  (len) => {
+    if (typeof len === 'number' && (len === 5 || len === 6 || len === 7)) {
+      wordLength.value = len
+    }
+  },
+  { immediate: true },
+)
+
+const activeRoundId = computed(() => (useServerBoard.value ? serverRoundKey.value : localRoundId.value))
+
+const displayGridRows = computed((): NadleLocalBoardCell[][] => {
+  if (!useServerBoard.value) {
+    return nadleGridRows.value
+  }
+  const len = activeWordLength.value
+  const submitted = serverPlayer.value?.rows ?? []
+  const canType = displayGameStatus.value === 'playing' && submitted.length < NADLE_MAX_ATTEMPTS
+  const draftChars = canType ? [...normalizeWord(guessInput.value)].slice(0, len) : []
+  const rows: NadleLocalBoardCell[][] = []
+  for (let r = 0; r < NADLE_MAX_ATTEMPTS; r += 1) {
+    const cells: NadleLocalBoardCell[] = []
+    const row = submitted[r]
+    if (row) {
+      const letters = [...row.guess]
+      for (let c = 0; c < len; c += 1) {
+        cells.push({
+          letter: letters[c] ?? '',
+          feedback: row.feedback[c] ?? null,
+          locked: true,
+          rowIndex: r,
+          colIndex: c,
+        })
+      }
+    } else if (r === submitted.length && canType) {
+      for (let c = 0; c < len; c += 1) {
+        cells.push({
+          letter: draftChars[c] ?? '',
+          feedback: null,
+          locked: false,
+          rowIndex: r,
+          colIndex: c,
+        })
+      }
+    } else {
+      for (let c = 0; c < len; c += 1) {
+        cells.push({ letter: '', feedback: null, locked: false, rowIndex: r, colIndex: c })
+      }
+    }
+    rows.push(cells)
+  }
+  return rows
+})
+
 watch(
   () => effectiveNadleSlug.value || 'default',
   async (scope) => {
@@ -270,8 +368,59 @@ async function postSoloRoundToLeaderboard(result: 'win' | 'lose'): Promise<void>
   }
 }
 
+function submitActiveGuess(): void {
+  if (!useServerBoard.value) {
+    submitGuess()
+    return
+  }
+  lastError.value = null
+  if (displayBoardLocked.value) {
+    return
+  }
+  const guess = normalizeWord(guessInput.value)
+  if (wordGraphemeCount(guess) !== activeWordLength.value) {
+    return
+  }
+  if (!sendNadleWsGuess(guess, gameState.value?.gameId)) {
+    lastError.value = 'WebSocket is not connected.'
+    return
+  }
+  guessInput.value = ''
+}
+
+function appendActiveLetter(ch: string): void {
+  if (displayBoardLocked.value) {
+    return
+  }
+  kbdAppendLetter(ch)
+}
+
+function backspaceActiveGuess(): void {
+  if (displayBoardLocked.value) {
+    return
+  }
+  kbdBackspace()
+}
+
+function newActiveRound(): void {
+  if (!useServerBoard.value) {
+    newRoundSameLength()
+    return
+  }
+  if (!requestNadleNextWord()) {
+    lastError.value = 'WebSocket is not connected.'
+  }
+}
+
+function setActiveWordLength(len: 5 | 6 | 7): void {
+  if (useServerBoard.value) {
+    return
+  }
+  setWordLength(len)
+}
+
 function onWindowKeydown(e: KeyboardEvent): void {
-  if (localBoardLocked.value) {
+  if (displayBoardLocked.value) {
     return
   }
   const el = e.target
@@ -295,30 +444,20 @@ function onWindowKeydown(e: KeyboardEvent): void {
   }
   if (e.key === 'Backspace') {
     e.preventDefault()
-    kbdBackspace()
+    backspaceActiveGuess()
     return
   }
   if (e.key === 'Enter') {
     e.preventDefault()
-    submitGuess()
+    submitActiveGuess()
     return
   }
   if (e.key.length === 1 && /\p{Script=Cyrillic}/u.test(e.key)) {
     e.preventDefault()
-    kbdAppendLetter(normalizeWord(e.key))
+    appendActiveLetter(normalizeWord(e.key))
     return
   }
 }
-
-/** WS оновлює стан сервера для майбутнього мультиплеєра; локальна гра їх не читає. */
-watch(
-  [gameState, leaderboard],
-  ([gs, lb]) => {
-    void gs
-    void lb
-  },
-  { deep: true },
-)
 
 watch(gameStatus, (next, prev) => {
   if (prev !== 'playing') {
@@ -347,7 +486,7 @@ function scrollNadleChatIntoView(): void {
 }
 
 function focusNadleGuessInput(): void {
-  if (localBoardLocked.value) {
+  if (displayBoardLocked.value) {
     return
   }
   guessInputEl.value?.focus({ preventScroll: true })
@@ -376,7 +515,7 @@ onUnmounted(() => {
     <AppContainer
       wide
       flush
-      :class="['nadle-page', `nadle-page--len${wordLength}`]"
+      :class="['nadle-page', `nadle-page--len${activeWordLength}`]"
     >
       <p
         v-if="topBanner"
@@ -417,7 +556,7 @@ onUnmounted(() => {
           </div>
 
           <div
-            v-if="gameStatus === 'playing' && isAdmin"
+            v-if="displayGameStatus === 'playing' && isAdmin"
             class="nadle-page__side-tools"
             :aria-label="t('nadleUi.streamToolsAria')"
           >
@@ -436,17 +575,17 @@ onUnmounted(() => {
         </AppCard>
 
         <AppCard class="nadle-page__stack nadle-page__stack--game">
-          <div class="nadle-page__game" :style="{ '--nadle-len': String(wordLength) }">
+          <div class="nadle-page__game" :style="{ '--nadle-len': String(activeWordLength) }">
             <div class="nadle-page__guess-focus-anchor">
               <NadleLocalBoardGrid
-                :round-id="localRoundId"
-                :word-length="wordLength"
+                :round-id="activeRoundId"
+                :word-length="activeWordLength"
                 :max-attempts="NADLE_MAX_ATTEMPTS"
-                :rows="nadleGridRows"
+                :rows="displayGridRows"
                 @focus-input="focusNadleGuessInput"
               />
 
-              <form class="nadle-page__sr-form" @submit.prevent="submitGuess">
+              <form class="nadle-page__sr-form" @submit.prevent="submitActiveGuess">
                 <label class="nadle-page__sr-only" :for="guessFieldId">{{ t('nadleUi.guessLabel') }}</label>
                 <input
                   :id="guessFieldId"
@@ -457,7 +596,7 @@ onUnmounted(() => {
                   inputmode="text"
                   autocapitalize="off"
                   spellcheck="false"
-                  :disabled="localBoardLocked"
+                  :disabled="displayBoardLocked"
                   autocomplete="off"
                   lang="uk"
                   @input="clampGuessSrInput"
@@ -466,54 +605,54 @@ onUnmounted(() => {
             </div>
 
             <div
-              v-if="gameStatus === 'won'"
-              :key="`win-${localRoundId}`"
+              v-if="displayGameStatus === 'won'"
+              :key="`win-${activeRoundId}`"
               class="nadle-page__game-panel-width nadle-page__celebrate"
               aria-live="polite"
             >
               <div class="nadle-page__confetti" aria-hidden="true">
                 <span
                   v-for="n in CONFETTI_PIECES"
-                  :key="`cf-${localRoundId}-${n}`"
+                  :key="`cf-${activeRoundId}-${n}`"
                   class="nadle-page__confetti-bit"
                   :style="confettiStyle(n)"
                 />
               </div>
               <p class="nadle-page__celebrate-title">{{ t('nadleUi.celebrateTitle') }}</p>
-              <AppButton variant="primary" type="button" class="nadle-page__celebrate-btn" @click="newRoundSameLength">
+              <AppButton variant="primary" type="button" class="nadle-page__celebrate-btn" @click="newActiveRound">
                 {{ t('nadleUi.newWord') }}
               </AppButton>
             </div>
 
             <div
-              v-else-if="gameStatus === 'lost'"
+              v-else-if="displayGameStatus === 'lost'"
               class="nadle-page__game-panel-width nadle-page__end-panel nadle-page__end-panel--lost"
             >
               <p class="nadle-page__end-panel-text">
                 {{ t('nadleUi.lostWasWord') }} <strong class="nadle-page__secret">{{ secretWord }}</strong>
               </p>
-              <AppButton variant="primary" type="button" @click="newRoundSameLength">{{
+              <AppButton variant="primary" type="button" @click="newActiveRound">{{
                 t('nadleUi.newWord')
               }}</AppButton>
             </div>
 
             <NadleOnScreenKeyboard
-              v-if="gameStatus === 'playing'"
-              :word-length="wordLength"
+              v-if="displayGameStatus === 'playing'"
+              :word-length="activeWordLength"
               :row1="KBD_ROW1"
               :row2="KBD_ROW2"
               :row3="KBD_ROW3"
               :word-length-options="WORD_LENGTH_OPTIONS"
-              :keys-disabled="localBoardLocked"
-              :enter-disabled="localBoardLocked || wordGraphemeCount(normalizeWord(guessInput)) !== wordLength"
+              :keys-disabled="displayBoardLocked"
+              :enter-disabled="displayBoardLocked || wordGraphemeCount(normalizeWord(guessInput)) !== activeWordLength"
               :letter-class="kbdKeyFeedbackModifier"
               :screen-keyboard-aria="t('nadleUi.screenKeyboardAria')"
               :kbd-toolbar-aria="t('nadleUi.kbdToolbarAria')"
               :enter-label="t('nadleUi.enter')"
-              @letter="kbdAppendLetter"
-              @backspace="kbdBackspace"
-              @enter="submitGuess"
-              @set-word-length="setWordLength"
+              @letter="appendActiveLetter"
+              @backspace="backspaceActiveGuess"
+              @enter="submitActiveGuess"
+              @set-word-length="setActiveWordLength"
             />
 
           </div>

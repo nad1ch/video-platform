@@ -3,18 +3,47 @@ import type { Game, GameStatePayload, GuessRow, LeaderboardEntry, PlayerState, S
 import type { PersistNadleRoundInput } from './persistRound'
 import { computeFeedback, generateWord, isValidGuessShape, normalizeWord, wordGraphemeCount } from './nadleLogic'
 import { setStreamerActiveGame } from '../streamerActiveGame'
+import { loadNadleLiveGame, persistNadleLiveGame } from './liveGamePersistence'
 
 const MAX_ATTEMPTS_PER_ROUND = 6
 
 const stores = new Map<string, Store>()
+const hydratedStores = new Set<string>()
+const hydrationByStreamer = new Map<string, Promise<void>>()
 
 function storeFor(streamerId: string): Store {
   let s = stores.get(streamerId)
   if (!s) {
     s = createStore()
     stores.set(streamerId, s)
+    persistNadleLiveGame(streamerId, s)
   }
   return s
+}
+
+export async function hydrateNadleLiveGame(streamerId: string): Promise<void> {
+  if (hydratedStores.has(streamerId)) {
+    return
+  }
+  const existing = hydrationByStreamer.get(streamerId)
+  if (existing) {
+    await existing
+    return
+  }
+  const pending = (async () => {
+    const persisted = await loadNadleLiveGame(streamerId)
+    if (persisted) {
+      stores.set(streamerId, persisted)
+    } else if (!stores.has(streamerId)) {
+      stores.set(streamerId, createStore())
+      persistNadleLiveGame(streamerId, stores.get(streamerId)!)
+    }
+    hydratedStores.add(streamerId)
+  })().finally(() => {
+    hydrationByStreamer.delete(streamerId)
+  })
+  hydrationByStreamer.set(streamerId, pending)
+  await pending
 }
 
 function newGame(): Game {
@@ -152,6 +181,8 @@ export function submitGuess(
     p.guessedAt = Date.now()
   }
 
+  persistNadleLiveGame(streamerId, store)
+
   return {
     ok: true,
     gameId: game.id,
@@ -171,6 +202,7 @@ export function adminStartNewGame(streamerId: string): { gameId: string; wordLen
   }
   stores.set(streamerId, next)
   setStreamerActiveGame(streamerId, 'nadle')
+  persistNadleLiveGame(streamerId, next)
   const g = next.currentGame
   return {
     gameId: g.id,
