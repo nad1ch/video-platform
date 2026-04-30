@@ -403,6 +403,10 @@ function scheduleBotMove(roomId: string): void {
   const timer = setTimeout(() => {
     botTimers.delete(roomId)
     const meta = metaForRoom(roomId)
+    const state = getCheckersState(roomId)
+    if (meta.mode !== 'bot' || state.turn !== 'player2' || state.winner) {
+      return
+    }
     const move = chooseCheckersBotMove(roomId, meta.botDifficulty)
     if (!move) {
       return
