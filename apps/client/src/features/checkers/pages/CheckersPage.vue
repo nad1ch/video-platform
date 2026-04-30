@@ -19,10 +19,11 @@ import AppContainer from '@/components/ui/AppContainer.vue'
 import AppLandingFooter from '@/pages/app/components/AppFooter.vue'
 import { persistLocale, LOCALE_OPTIONS } from '@/eat-first/i18n'
 import { getLegalMoves, getValidMove } from '../core/checkersEngine'
-import type { CheckersPosition } from '../core/types'
+import type { CheckersPlayer, CheckersPosition } from '../core/types'
 import { useCheckersOrchestrator } from '../orchestrator/useCheckersOrchestrator'
 import { readCheckersClientId, type CheckersBotDifficulty, type CheckersMode } from '../ws/checkersWs'
 import CheckersBoard from '../ui/CheckersBoard.vue'
+import CheckersEndGameOverlay from '../ui/CheckersEndGameOverlay.vue'
 import { useI18n } from 'vue-i18n'
 import {
   CALL_ROOM_DROPDOWN_HOST_ID,
@@ -61,6 +62,8 @@ const remoteListenVolume = ref(1)
 const remoteListenMuted = ref(false)
 const audioControlsOpen = ref(false)
 const audioControlsRoot = ref<HTMLElement | null>(null)
+const hasStartedCurrentGame = ref(false)
+const pendingModeChange = ref<CheckersMode | null>(null)
 const rematchCountdown = ref(5)
 const ratingDelta = ref<number | null>(null)
 type MatchmakingState = 'idle' | 'searching' | 'matched'
@@ -122,10 +125,33 @@ const turnTimerLabel = computed(() => {
 const boardFlipped = computed(() => checkers.myRole.value === 'player2')
 const isCheckersPlayer = computed(() => checkers.myRole.value === 'player1' || checkers.myRole.value === 'player2')
 const isCheckersSpectator = computed(() => !isCheckersPlayer.value)
+type EndGameWinner = CheckersPlayer | 'you' | 'opponent'
 const winnerLabel = computed(() => {
   const winner = checkers.displayState.value.winner
   if (!winner) return ''
   return winner === 'player1' ? 'Player 1 wins' : 'Player 2 wins'
+})
+const isEndGameOverlayVisible = computed(() => Boolean(checkers.displayState.value.winner))
+const isStartOverlayVisible = computed(() =>
+  matchmakingState.value === 'idle' &&
+    !hasStartedCurrentGame.value &&
+    !checkers.displayState.value.winner,
+)
+const startGameButtonLabel = computed(() =>
+  checkers.mode.value === 'friend' ? 'Почати пошук противника' : 'Почати гру',
+)
+const isActiveGame = computed(() => Boolean(hasStartedCurrentGame.value && !checkers.displayState.value.winner))
+const pendingModeLabel = computed(() => {
+  if (pendingModeChange.value === 'bot') return 'гру проти бота'
+  if (pendingModeChange.value === 'friend') return 'гру з противником'
+  if (pendingModeChange.value === 'local') return '2 гравці на одному екрані'
+  return 'інший режим'
+})
+const endGameWinner = computed<EndGameWinner | null>(() => {
+  const winner = checkers.displayState.value.winner
+  if (!winner) return null
+  if (checkers.mode.value === 'local' || isCheckersSpectator.value) return winner
+  return winner === checkers.myRole.value ? 'you' : 'opponent'
 })
 const checkersVoiceRoomId = computed(() => {
   const room = checkers.roomId.value.trim()
@@ -158,13 +184,6 @@ const localMicSpeaking = useLocalTileSpeakingVisual(
 const micButtonLabel = computed(() => {
   if (isCheckersSpectator.value) return 'Spectators can only listen'
   return isMicActive.value ? 'Mute microphone' : 'Turn microphone on'
-})
-const canRequestRematch = computed(() =>
-  Boolean(checkers.displayState.value.winner && isCheckersPlayer.value && checkers.mode.value === 'friend'),
-)
-const rematchStatusLabel = computed(() => {
-  if (!checkers.rematchRequestedByMe.value) return ''
-  return checkers.rematchRequestedByOpponent.value ? 'Суперник готовий' : 'Очікуємо суперника...'
 })
 const shouldShowAutoRematchCountdown = computed(() =>
   Boolean(
@@ -231,6 +250,7 @@ function stopRematchCountdown(): void {
 }
 
 function flashYourTurn(): void {
+  if (isStartOverlayVisible.value) return
   if (!checkers.canMoveCurrentTurn.value) return
   showYourTurn.value = true
   if (yourTurnTimer) clearTimeout(yourTurnTimer)
@@ -243,7 +263,7 @@ function flashYourTurn(): void {
 function restartTurnTimer(): void {
   stopTurnTimer()
   turnSecondsLeft.value = TURN_SECONDS
-  if (checkers.displayState.value.winner) return
+  if (checkers.displayState.value.winner || isStartOverlayVisible.value) return
   turnTimer = setInterval(() => {
     turnSecondsLeft.value = Math.max(0, turnSecondsLeft.value - 1)
     if (turnSecondsLeft.value === 0) {
@@ -254,13 +274,18 @@ function restartTurnTimer(): void {
 }
 
 watch(
-  () => `${checkers.displayState.value.turn}:${checkers.displayState.value.revision}:${checkers.mode.value}:${checkers.myRole.value}`,
+  () =>
+    `${checkers.displayState.value.turn}:${checkers.displayState.value.revision}:${checkers.mode.value}:${checkers.myRole.value}:${isStartOverlayVisible.value}`,
   () => {
     restartTurnTimer()
     flashYourTurn()
   },
   { immediate: true },
 )
+
+watch(roomId, () => {
+  hasStartedCurrentGame.value = false
+})
 
 onUnmounted(() => {
   stopTurnTimer()
@@ -363,13 +388,41 @@ watch(
 
 function setGameMode(mode: CheckersMode): void {
   if (matchmakingState.value !== 'idle') return
+  if (mode === checkers.mode.value) return
+  if (isActiveGame.value) {
+    pendingModeChange.value = mode
+    return
+  }
+  applyGameModeChange(mode)
+}
+
+function applyGameModeChange(mode: CheckersMode): void {
+  pendingModeChange.value = null
+  hasStartedCurrentGame.value = false
+  showYourTurn.value = false
+  stopTurnTimer()
+  checkers.restartGame()
   checkers.setMode(mode)
 }
 
-function requestRematch(): void {
-  if (!canRequestRematch.value) return
-  stopRematchCountdown()
-  checkers.requestRematch()
+function confirmModeChange(): void {
+  const mode = pendingModeChange.value
+  if (!mode) return
+  applyGameModeChange(mode)
+}
+
+function cancelModeChange(): void {
+  pendingModeChange.value = null
+}
+
+function startCurrentGame(): void {
+  hasStartedCurrentGame.value = true
+  if (checkers.mode.value === 'friend') {
+    void findMatch()
+    return
+  }
+  restartTurnTimer()
+  flashYourTurn()
 }
 
 function difficultyForRating(rating: number): CheckersBotDifficulty {
@@ -431,6 +484,9 @@ function cancelMatchmaking(): void {
   matchmakingAbort?.abort()
   matchmakingAbort = null
   matchmakingState.value = 'idle'
+  if (checkers.mode.value === 'friend') {
+    hasStartedCurrentGame.value = false
+  }
   void apiFetch('/api/matchmaking/leave', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -466,6 +522,7 @@ async function findMatch(): Promise<void> {
         matchRedirectTimer = setTimeout(() => {
           matchRedirectTimer = null
           void router.push({ name: 'checkers', params: { roomId: matchRoomId } }).finally(() => {
+            hasStartedCurrentGame.value = true
             matchmakingState.value = 'idle'
           })
         }, 850)
@@ -478,6 +535,9 @@ async function findMatch(): Promise<void> {
   } catch (err) {
     if (!(err instanceof DOMException && err.name === 'AbortError')) {
       matchmakingError.value = 'Не вдалося знайти гру. Спробуй ще раз.'
+      if (checkers.mode.value === 'friend') {
+        hasStartedCurrentGame.value = false
+      }
     }
   } finally {
     if (matchmakingAbort === abort) {
@@ -627,7 +687,7 @@ function playUiTone(kind: 'select' | 'move' | 'capture'): void {
 }
 
 function handleCellClick(pos: CheckersPosition): void {
-  if (matchmakingState.value !== 'idle') {
+  if (matchmakingState.value !== 'idle' || isStartOverlayVisible.value) {
     return
   }
   const current = checkers.state.value
@@ -763,39 +823,44 @@ function handleCellClick(pos: CheckersPosition): void {
                 :flipped="boardFlipped"
                 @cell-click="handleCellClick"
               />
-              <div
-                v-if="winnerLabel"
-                class="checkers-win-overlay"
-                role="status"
-                aria-live="polite"
-              >
-                <div class="checkers-confetti" aria-hidden="true">
-                  <span v-for="n in 22" :key="n" :style="{ '--i': n, '--x': `${(n * 37) % 100}%` }" />
-                </div>
-                <div class="checkers-win-modal">
-                  <p>{{ winnerLabel }}</p>
-                  <span
-                    v-if="ratingDelta !== null"
-                    class="checkers-rating-delta"
-                    :class="{ 'checkers-rating-delta--down': ratingDelta < 0 }"
-                  >
-                    {{ ratingDelta > 0 ? `+${ratingDelta}` : ratingDelta }}
-                  </span>
-                  <span v-if="shouldShowAutoRematchCountdown" class="checkers-auto-rematch">
-                    Реванш через <strong :key="rematchCountdown">{{ rematchCountdown }}</strong>...
-                  </span>
+              <Transition name="checkers-start-game">
+                <div
+                  v-if="isStartOverlayVisible"
+                  class="checkers-start-game-overlay"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="checkers-start-game-title"
+                >
                   <button
-                    v-if="canRequestRematch"
+                    id="checkers-start-game-title"
                     type="button"
-                    class="checkers-rematch-button"
-                    :disabled="checkers.rematchRequestedByMe.value"
-                    @click="requestRematch"
+                    class="checkers-start-game-button"
+                    @click="startCurrentGame"
                   >
-                    {{ checkers.rematchRequestedByMe.value ? 'Реванш надіслано' : 'Реванш' }}
+                    {{ startGameButtonLabel }}
                   </button>
-                  <span v-if="rematchStatusLabel" class="checkers-rematch-status">{{ rematchStatusLabel }}</span>
                 </div>
-              </div>
+              </Transition>
+              <CheckersEndGameOverlay
+                :winner="endGameWinner"
+                :mode="checkers.mode.value"
+                :is-visible="isEndGameOverlayVisible"
+                @rematch="checkers.restartGame()"
+                @play-bot="setGameMode('bot')"
+                @play-friend="setGameMode('friend')"
+                @play-local="setGameMode('local')"
+              >
+                <span
+                  v-if="ratingDelta !== null"
+                  class="checkers-rating-delta"
+                  :class="{ 'checkers-rating-delta--down': ratingDelta < 0 }"
+                >
+                  {{ ratingDelta > 0 ? `+${ratingDelta}` : ratingDelta }}
+                </span>
+                <span v-if="shouldShowAutoRematchCountdown" class="checkers-auto-rematch">
+                  Реванш через <strong :key="rematchCountdown">{{ rematchCountdown }}</strong>...
+                </span>
+              </CheckersEndGameOverlay>
             </div>
             <div class="checkers-controls">
               <div class="checkers-controls__actions" aria-hidden="true" />
@@ -869,6 +934,34 @@ function handleCellClick(pos: CheckersPosition): void {
           >
             Скасувати
           </button>
+        </div>
+      </div>
+    </Transition>
+    <Transition name="checkers-mode-confirm">
+      <div
+        v-if="pendingModeChange"
+        class="checkers-mode-confirm-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="checkers-mode-confirm-title"
+      >
+        <div class="checkers-mode-confirm-card">
+          <p id="checkers-mode-confirm-title" class="checkers-mode-confirm-title">Змінити режим гри?</p>
+          <p class="checkers-mode-confirm-copy">
+            Поточна партія буде скинута. Після переходу на {{ pendingModeLabel }} білі знову ходитимуть першими.
+          </p>
+          <div class="checkers-mode-confirm-actions">
+            <button type="button" class="checkers-mode-confirm-button" @click="cancelModeChange">
+              Залишитись
+            </button>
+            <button
+              type="button"
+              class="checkers-mode-confirm-button checkers-mode-confirm-button--danger"
+              @click="confirmModeChange"
+            >
+              Змінити режим
+            </button>
+          </div>
         </div>
       </div>
     </Transition>
@@ -1214,51 +1307,49 @@ function handleCellClick(pos: CheckersPosition): void {
   text-shadow: 0 0 12px rgba(255, 255, 255, 0.32);
 }
 
-.checkers-win-overlay {
+.checkers-start-game-overlay {
   position: absolute;
   inset: 0;
-  z-index: 4;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
   border-radius: 1rem;
-  background: rgba(0, 0, 0, 0.5);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.28);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
 }
 
-.checkers-win-modal {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  gap: var(--sa-space-3);
-  justify-items: center;
-  padding: var(--sa-space-5);
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(18, 8, 34, 0.9);
-  box-shadow: 0 16px 44px rgba(3, 1, 9, 0.4);
-}
-
-.checkers-win-modal p {
-  margin: 0;
-  font-family: "Climate Crisis", var(--sa-font-display);
-  font-size: clamp(1.25rem, 3vw, 2rem);
-  color: #fff;
-}
-
-.checkers-rematch-button {
-  min-height: 2.35rem;
-  padding: 0 var(--sa-space-4);
-  border: 1px solid rgba(216, 180, 254, 0.5);
+.checkers-start-game-button {
+  min-height: 3rem;
+  padding: 0 var(--sa-space-5);
+  border: 1px solid rgba(216, 180, 254, 0.58);
   border-radius: 999px;
-  background: rgba(126, 34, 206, 0.82);
+  background: rgba(126, 34, 206, 0.9);
   color: #fff;
   cursor: pointer;
   font-family: "Marmelad", var(--sa-font-main);
-  font-weight: 700;
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.32);
+  font-size: 1rem;
+  font-weight: 800;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 24px rgba(168, 85, 247, 0.38);
+}
+
+.checkers-start-game-button:hover,
+.checkers-start-game-button:focus-visible {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(146, 82, 206, 0.94);
+}
+
+.checkers-start-game-enter-active,
+.checkers-start-game-leave-active {
+  transition: opacity 0.18s ease-out;
+}
+
+.checkers-start-game-enter-from,
+.checkers-start-game-leave-to {
+  opacity: 0;
 }
 
 .checkers-auto-rematch {
@@ -1316,41 +1407,6 @@ function handleCellClick(pos: CheckersPosition): void {
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
-  }
-}
-
-.checkers-rematch-button:disabled {
-  cursor: wait;
-  opacity: 0.72;
-}
-
-.checkers-rematch-status {
-  color: rgba(245, 243, 255, 0.78);
-  font-family: "Marmelad", var(--sa-font-main);
-  font-size: 0.85rem;
-}
-
-.checkers-confetti {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.checkers-confetti span {
-  position: absolute;
-  left: var(--x);
-  top: -12px;
-  width: 7px;
-  height: 12px;
-  border-radius: 2px;
-  background: hsl(calc(var(--i) * 31) 80% 62%);
-  animation: checkers-confetti-fall 1.7s ease-out calc((var(--i) % 8) * 0.08s) infinite;
-}
-
-@keyframes checkers-confetti-fall {
-  to {
-    transform: translate3d(calc((var(--i) % 7 - 3) * 18px), 520px, 0) rotate(620deg);
-    opacity: 0;
   }
 }
 
@@ -1706,6 +1762,82 @@ function handleCellClick(pos: CheckersPosition): void {
 
 .checkers-matchmaking-enter-from,
 .checkers-matchmaking-leave-to {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
+.checkers-mode-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12041;
+  display: grid;
+  place-items: center;
+  padding: var(--sa-space-4);
+  background: rgba(8, 4, 18, 0.54);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.checkers-mode-confirm-card {
+  width: min(24rem, 92vw);
+  padding: var(--sa-space-5);
+  border: 1px solid rgba(216, 180, 254, 0.42);
+  border-radius: 24px;
+  background: rgba(22, 9, 38, 0.92);
+  color: #fff;
+  text-align: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 20px 60px rgba(0, 0, 0, 0.44);
+}
+
+.checkers-mode-confirm-title {
+  margin: 0;
+  font-family: "Climate Crisis", var(--sa-font-display);
+  font-size: clamp(1.05rem, 3vw, 1.55rem);
+}
+
+.checkers-mode-confirm-copy {
+  margin: var(--sa-space-3) 0 0;
+  color: rgba(245, 243, 255, 0.78);
+  font-size: 0.9rem;
+}
+
+.checkers-mode-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sa-space-2);
+  margin-top: var(--sa-space-4);
+}
+
+.checkers-mode-confirm-button {
+  min-height: 2.35rem;
+  min-width: 8rem;
+  padding: 0 var(--sa-space-4);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.checkers-mode-confirm-button--danger {
+  border-color: rgba(216, 180, 254, 0.58);
+  background: rgba(126, 34, 206, 0.9);
+}
+
+.checkers-mode-confirm-enter-active,
+.checkers-mode-confirm-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.checkers-mode-confirm-enter-from,
+.checkers-mode-confirm-leave-to {
   opacity: 0;
   transform: scale(0.98);
 }
