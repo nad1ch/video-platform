@@ -31,6 +31,12 @@ export function getCheckersState(roomId: string): CheckersState {
   return normalized
 }
 
+export function setCheckersState(roomId: string, state: CheckersState): CheckersState {
+  const normalized = normalizeCheckersState(state)
+  rooms.set(roomId, normalized)
+  return normalized
+}
+
 export function applyCheckersRoomMove(
   roomId: string,
   move: Pick<CheckersMove, 'from' | 'to'>,

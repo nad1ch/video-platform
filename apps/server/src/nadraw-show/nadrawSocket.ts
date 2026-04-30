@@ -4,20 +4,34 @@ import type { WebSocketServer } from 'ws'
 import { readSessionFromCookie } from '../auth/session/sessionJwt'
 import { canUserControlNadrawRoom } from './nadrawAccess'
 import {
+  getNadrawRoomSnapshot,
   getNadrawStatePayload,
   hostAckNextRound,
   hostClearNadrawRound,
   hostStartNadrawRound,
+  restoreNadrawRoomSnapshot,
   setNadrawCanvasClearListener,
   setNadrawFeedbackListener,
   setNadrawStateListener,
 } from './nadrawGameStore'
 import { NadrawWs } from './wsProtocol'
+import {
+  loadNadrawLiveRoom,
+  persistNadrawLiveRoom,
+  type PersistedNadrawChatEvent,
+  type PersistedNadrawDraw,
+} from './nadrawLiveRoomPersistence'
 
 const clientsByStreamer = new Map<string, Set<WebSocket>>()
 const clientMeta = new Map<WebSocket, { streamerId: string; isStreamer: boolean }>()
+const drawHistoryByStreamer = new Map<string, PersistedNadrawDraw[]>()
+const chatHistoryByStreamer = new Map<string, PersistedNadrawChatEvent[]>()
+const hydratedStreamers = new Set<string>()
+const hydrationByStreamer = new Map<string, Promise<void>>()
 
 const NADRAW_JSON_PING_MS = 25_000
+const NADRAW_DRAW_HISTORY_LIMIT = 1200
+const NADRAW_CHAT_HISTORY_LIMIT = 200
 let nadrawJsonPingTimer: ReturnType<typeof setInterval> | null = null
 
 function pingAllNadrawClients(): void {
@@ -36,6 +50,66 @@ function ensureNadrawJsonPingTimer(): void {
   if (typeof nadrawJsonPingTimer.unref === 'function') {
     nadrawJsonPingTimer.unref()
   }
+}
+
+function persistNadrawSnapshot(streamerId: string): void {
+  persistNadrawLiveRoom(streamerId, {
+    room: getNadrawRoomSnapshot(streamerId),
+    drawOps: drawHistoryByStreamer.get(streamerId) ?? [],
+    chatEvents: chatHistoryByStreamer.get(streamerId) ?? [],
+  })
+}
+
+async function hydrateNadrawLiveRoom(streamerId: string): Promise<void> {
+  if (hydratedStreamers.has(streamerId)) {
+    return
+  }
+  const existing = hydrationByStreamer.get(streamerId)
+  if (existing) {
+    await existing
+    return
+  }
+  const pending = (async () => {
+    const snapshot = await loadNadrawLiveRoom(streamerId)
+    if (snapshot) {
+      restoreNadrawRoomSnapshot(streamerId, snapshot.room)
+      drawHistoryByStreamer.set(streamerId, snapshot.drawOps.slice(-NADRAW_DRAW_HISTORY_LIMIT))
+      chatHistoryByStreamer.set(streamerId, snapshot.chatEvents.slice(-NADRAW_CHAT_HISTORY_LIMIT))
+    }
+    hydratedStreamers.add(streamerId)
+  })().finally(() => {
+    hydrationByStreamer.delete(streamerId)
+  })
+  hydrationByStreamer.set(streamerId, pending)
+  await pending
+}
+
+function pushDrawHistory(streamerId: string, payload: PersistedNadrawDraw): void {
+  drawHistoryByStreamer.set(streamerId, [...(drawHistoryByStreamer.get(streamerId) ?? []), payload].slice(-NADRAW_DRAW_HISTORY_LIMIT))
+  persistNadrawSnapshot(streamerId)
+}
+
+function clearDrawHistory(streamerId: string): void {
+  drawHistoryByStreamer.set(streamerId, [])
+  persistNadrawSnapshot(streamerId)
+}
+
+function pushChatHistory(streamerId: string, payload: PersistedNadrawChatEvent): void {
+  chatHistoryByStreamer.set(
+    streamerId,
+    [...(chatHistoryByStreamer.get(streamerId) ?? []), payload].slice(-NADRAW_CHAT_HISTORY_LIMIT),
+  )
+  persistNadrawSnapshot(streamerId)
+}
+
+function sendNadrawHistory(ws: WebSocket, streamerId: string): void {
+  safeSend(ws, {
+    type: NadrawWs.history,
+    payload: {
+      drawOps: drawHistoryByStreamer.get(streamerId) ?? [],
+      chatEvents: chatHistoryByStreamer.get(streamerId) ?? [],
+    },
+  })
 }
 
 function clientSet(streamerId: string): Set<WebSocket> {
@@ -95,6 +169,7 @@ export function broadcastNadrawState(streamerId: string): void {
 }
 
 export function broadcastNadrawCanvasClear(streamerId: string): void {
+  clearDrawHistory(streamerId)
   const set = clientsByStreamer.get(streamerId)
   if (!set) {
     return
@@ -130,6 +205,7 @@ export function broadcastNadrawDraw(
     y2?: number
   },
 ): void {
+  pushDrawHistory(streamerId, payload)
   const set = clientsByStreamer.get(streamerId)
   if (!set) {
     return
@@ -150,6 +226,7 @@ export function broadcastNadrawTwitchChat(
   streamerId: string,
   payload: { userId: string; displayName: string; text: string },
 ): void {
+  pushChatHistory(streamerId, { kind: 'chat', ...payload })
   const set = clientsByStreamer.get(streamerId)
   if (!set) {
     return
@@ -176,6 +253,14 @@ export function broadcastNadrawGuessFeedback(
     heat?: 'cold' | 'warm' | 'hot'
   },
 ): void {
+  pushChatHistory(streamerId, {
+    kind: 'feedback',
+    userId: payload.userId,
+    displayName: payload.displayName,
+    text: payload.text,
+    feedbackKind: payload.kind,
+    heat: payload.heat,
+  })
   const set = clientsByStreamer.get(streamerId)
   if (!set) {
     return
@@ -193,6 +278,7 @@ export function broadcastNadrawGuessFeedback(
 }
 
 setNadrawStateListener((streamerId) => {
+  persistNadrawSnapshot(streamerId)
   broadcastNadrawState(streamerId)
 })
 
@@ -374,6 +460,7 @@ export function attachNadrawShowSocketServer(wss: WebSocketServer): void {
     }
 
     void (async () => {
+      await hydrateNadrawLiveRoom(streamerId)
       const session = readSessionFromCookie(req.headers.cookie)
       const isStreamer = session != null && (await canUserControlNadrawRoom(session, streamerId))
 
@@ -387,6 +474,7 @@ export function attachNadrawShowSocketServer(wss: WebSocketServer): void {
         type: NadrawWs.state,
         payload: getNadrawStatePayload(streamerId, isStreamer),
       })
+      sendNadrawHistory(ws, streamerId)
 
       ws.on('message', (buf) => {
         void (async () => {

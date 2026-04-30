@@ -48,6 +48,8 @@ type Room = {
   letterTimer: ReturnType<typeof setTimeout> | null
 }
 
+export type NadrawRoomSnapshot = Omit<Room, 'unlockTimer' | 'roundTimer' | 'letterTimer'>
+
 const rooms = new Map<string, Room>()
 
 type StateListener = (streamerId: string) => void
@@ -284,6 +286,66 @@ function getOrCreateRoom(streamerId: string): Room {
     rooms.set(streamerId, r)
   }
   return r
+}
+
+export function getNadrawRoomSnapshot(streamerId: string): NadrawRoomSnapshot {
+  const room = getOrCreateRoom(streamerId)
+  return {
+    streamerId: room.streamerId,
+    phase: room.phase,
+    currentWord: room.currentWord,
+    revealed: [...room.revealed],
+    winnerUserId: room.winnerUserId,
+    winnerDisplayName: room.winnerDisplayName,
+    startedAt: room.startedAt,
+    unlockAt: room.unlockAt,
+    endsAt: room.endsAt,
+    sessionPlannedRounds: room.sessionPlannedRounds,
+    sessionCompletedRounds: room.sessionCompletedRounds,
+    sessionWordSource: room.sessionWordSource,
+    sessionRoundDurationSec: room.sessionRoundDurationSec,
+    breakHadWinner: room.breakHadWinner,
+    breakWinnerDisplayName: room.breakWinnerDisplayName,
+    breakSessionFinished: room.breakSessionFinished,
+    nextRoundWordDraft: room.nextRoundWordDraft,
+    roundId: room.roundId,
+  }
+}
+
+export function restoreNadrawRoomSnapshot(streamerId: string, snapshot: NadrawRoomSnapshot): void {
+  const room = getOrCreateRoom(streamerId)
+  clearAllTimers(room)
+  Object.assign(room, {
+    ...snapshot,
+    revealed: [...snapshot.revealed],
+    unlockTimer: null,
+    roundTimer: null,
+    letterTimer: null,
+  })
+  setStreamerActiveGame(streamerId, room.phase === 'idle' ? null : 'nadraw-show')
+  if (room.phase === 'drawing_locked') {
+    if (room.endsAt > 0 && Date.now() >= room.endsAt) {
+      room.phase = 'revealed'
+      void enterBetweenRounds(streamerId, room)
+      return
+    }
+    if (room.unlockAt > 0 && Date.now() >= room.unlockAt) {
+      applyUnlock(streamerId, room)
+    } else {
+      armUnlock(streamerId, room)
+    }
+    armRoundMax(streamerId, room)
+    return
+  }
+  if (room.phase === 'drawing_active') {
+    if (room.endsAt > 0 && Date.now() >= room.endsAt) {
+      room.phase = 'revealed'
+      void enterBetweenRounds(streamerId, room)
+      return
+    }
+    scheduleEndgameHintLetter(streamerId, room)
+    armRoundMax(streamerId, room)
+  }
 }
 
 async function pickWord(

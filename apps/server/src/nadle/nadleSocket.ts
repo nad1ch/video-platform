@@ -7,6 +7,7 @@ import {
   buildNadleRoundPersistencePayload,
   getGameStatePayload,
   getLeaderboardPayload,
+  hydrateNadleLiveGame,
   submitGuess,
 } from './gameStore'
 import { persistNadleRound } from './persistRound'
@@ -224,25 +225,29 @@ export function attachNadleSocketServer(wss: WebSocketServer): void {
       console.log('[nadle-ws] client tab', { streamerId, peerId: tabPeerId.slice(0, 12) })
     }
 
-    registerClient(streamerId, ws)
     const session = readSessionFromCookie(req.headers.cookie)
 
-    safeSend(ws, { type: NadleWs.state, payload: getGameStatePayload(streamerId) })
-    safeSend(ws, { type: NadleWs.leaderboard, payload: getLeaderboardPayload(streamerId) })
-    safeSend(ws, {
-      type: NadleWs.session,
-      payload: {
-        user: session
-          ? {
-              id: session.id,
-              display_name: session.display_name,
-              profile_image_url: session.profile_image_url,
-            }
-          : null,
-        isAdmin: session ? isAdminTwitchUserId(session.id) : false,
-        adminRouteConfigured: isAdminConfigured(),
-      },
-    })
+    void (async () => {
+      await hydrateNadleLiveGame(streamerId)
+      registerClient(streamerId, ws)
+
+      safeSend(ws, { type: NadleWs.state, payload: getGameStatePayload(streamerId) })
+      safeSend(ws, { type: NadleWs.leaderboard, payload: getLeaderboardPayload(streamerId) })
+      safeSend(ws, {
+        type: NadleWs.session,
+        payload: {
+          user: session
+            ? {
+                id: session.id,
+                display_name: session.display_name,
+                profile_image_url: session.profile_image_url,
+              }
+            : null,
+          isAdmin: session ? isAdminTwitchUserId(session.id) : false,
+          adminRouteConfigured: isAdminConfigured(),
+        },
+      })
+    })()
 
     ws.on('message', (buf) => {
       const raw = buf.toString()

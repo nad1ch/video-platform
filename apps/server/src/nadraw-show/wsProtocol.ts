@@ -6,6 +6,7 @@ export const NadrawWs = {
   session: 'nadraw:session',
   twitchChat: 'nadraw:twitch-chat',
   guessFeedback: 'nadraw:guess-feedback',
+  history: 'nadraw:history',
   draw: 'nadraw:draw',
   canvasClear: 'nadraw:canvas-clear',
   error: 'nadraw:error',

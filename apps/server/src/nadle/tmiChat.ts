@@ -4,6 +4,7 @@ import {
   buildNadleRoundPersistencePayload,
   getCurrentGameId,
   getCurrentWordLength,
+  hydrateNadleLiveGame,
   submitGuess,
 } from './gameStore'
 import { persistNadleRound } from './persistRound'
@@ -112,80 +113,83 @@ async function wireClient(h: Holder): Promise<void> {
     if (self) {
       return
     }
-    const userId = tags['user-id']
-    if (!userId) {
-      return
-    }
-    const displayName = displayNameFromTags(tags)
-    const text = message.trim()
-    if (getStreamerActiveGame(streamerId) === 'nadraw-show') {
-      ingestNadrawTwitchLine({ streamerId, userId, displayName, text })
-      return
-    }
-    const wordLen = getCurrentWordLength(streamerId)
-    const normalized = normalizeWord(text)
-    const looksLikeGuess = isValidGuessShape(normalized, wordLen)
-
-    if (!looksLikeGuess) {
-      broadcastTwitchChatLine(streamerId, {
-        userId,
-        displayName,
-        text,
-        validGuess: false,
-      })
-      return
-    }
-
-    const bypassGuessCooldown = isAdminTwitchUserId(userId)
-    if (!bypassGuessCooldown && !tryConsumeTwitchGuessThrottle(streamerId, userId)) {
-      broadcastTwitchChatLine(streamerId, {
-        userId,
-        displayName,
-        text,
-        validGuess: false,
-        rateLimited: true,
-        cooldownMs: readTwitchChatGuessCooldownMs(),
-      })
-      return
-    }
-
-    const result = submitGuess(streamerId, userId, displayName, text, getCurrentGameId(streamerId))
-    if (!result.ok) {
-      broadcastTwitchChatLine(streamerId, {
-        userId,
-        displayName,
-        text,
-        validGuess: false,
-      })
-      return
-    }
-
-    broadcastTwitchChatLine(streamerId, {
-      userId,
-      displayName,
-      text,
-      validGuess: true,
-      guessFeedback: result.feedback,
-    })
-
-    broadcastUserGuess(streamerId, {
-      gameId: result.gameId,
-      userId: result.userId,
-      displayName: result.displayName,
-      guess: result.guess,
-      feedback: result.feedback,
-      word: result.guess,
-      result: result.feedback,
-      attempts: result.attempts,
-      guessed: result.guessed,
-    })
-
-    if (result.guessed) {
-      const payload = buildNadleRoundPersistencePayload(streamerId, result.userId)
-      if (payload) {
-        void persistNadleRound(payload)
+    void (async () => {
+      await hydrateNadleLiveGame(streamerId)
+      const userId = tags['user-id']
+      if (!userId) {
+        return
       }
-    }
+      const displayName = displayNameFromTags(tags)
+      const text = message.trim()
+      if (getStreamerActiveGame(streamerId) === 'nadraw-show') {
+        ingestNadrawTwitchLine({ streamerId, userId, displayName, text })
+        return
+      }
+      const wordLen = getCurrentWordLength(streamerId)
+      const normalized = normalizeWord(text)
+      const looksLikeGuess = isValidGuessShape(normalized, wordLen)
+
+      if (!looksLikeGuess) {
+        broadcastTwitchChatLine(streamerId, {
+          userId,
+          displayName,
+          text,
+          validGuess: false,
+        })
+        return
+      }
+
+      const bypassGuessCooldown = isAdminTwitchUserId(userId)
+      if (!bypassGuessCooldown && !tryConsumeTwitchGuessThrottle(streamerId, userId)) {
+        broadcastTwitchChatLine(streamerId, {
+          userId,
+          displayName,
+          text,
+          validGuess: false,
+          rateLimited: true,
+          cooldownMs: readTwitchChatGuessCooldownMs(),
+        })
+        return
+      }
+
+      const result = submitGuess(streamerId, userId, displayName, text, getCurrentGameId(streamerId))
+      if (!result.ok) {
+        broadcastTwitchChatLine(streamerId, {
+          userId,
+          displayName,
+          text,
+          validGuess: false,
+        })
+        return
+      }
+
+      broadcastTwitchChatLine(streamerId, {
+        userId,
+        displayName,
+        text,
+        validGuess: true,
+        guessFeedback: result.feedback,
+      })
+
+      broadcastUserGuess(streamerId, {
+        gameId: result.gameId,
+        userId: result.userId,
+        displayName: result.displayName,
+        guess: result.guess,
+        feedback: result.feedback,
+        word: result.guess,
+        result: result.feedback,
+        attempts: result.attempts,
+        guessed: result.guessed,
+      })
+
+      if (result.guessed) {
+        const payload = buildNadleRoundPersistencePayload(streamerId, result.userId)
+        if (payload) {
+          void persistNadleRound(payload)
+        }
+      }
+    })()
   })
 
   c.on('connecting', (addr, port) => {
