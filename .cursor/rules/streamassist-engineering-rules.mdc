@@ -1,0 +1,770 @@
+---
+description: StreamAssist repository architecture, realtime, WebRTC, security, performance, and Cursor workflow rules
+alwaysApply: true
+---
+
+# StreamAssist Engineering Rules
+
+These rules are the project-specific source of truth for AI-assisted work in StreamAssist. They apply to every task in this repository.
+
+## 1. Project Mental Model
+
+StreamAssist is a realtime interactive streaming platform:
+
+- Frontend: Vue 3 + Vite in `apps/client`.
+- Backend: Node.js / Express in `apps/server`.
+- Realtime: WebSocket endpoints for call signaling and games.
+- Media: mediasoup / WebRTC through `packages/call-core`.
+- Product surfaces: Call, Mafia, Nadle, Nadraw Show, Checkers, Eat First, Coin Hub, overlays, OBS/viewer modes, Twitch chat integrations.
+
+Current architecture has three client organization styles:
+
+- Newer isolated slices in `apps/client/src/features/*`, currently `checkers` and `nadraw-show`.
+- A large domain sub-app in `apps/client/src/eat-first`.
+- Historical page/module domains such as `apps/client/src/nadle`, `apps/client/src/pages/NadleStreamPage.vue`, `apps/client/src/pages/MafiaPage.vue`, and shared `apps/client/src/components/call`.
+
+Treat these as current architecture, not as permission to add more mixed layouts. New product work should default to isolated feature modules unless it intentionally extends an existing domain.
+
+## 2. Complete Runtime Flow
+
+Client startup:
+
+- `apps/client/src/main.ts` preloads i18n, initializes `call-core` audio unlock, SEO metadata, analytics, Pinia, i18n, router, then mounts `App.vue`.
+- `apps/client/src/App.vue` owns the global loader, runs `useAuth().refresh()` on mount, preloads landing clouds for visual routes, and renders `RouterView`.
+- `apps/client/src/router.ts` defines the app shell under `/app`, route redirects, auth/admin guards, Eat First route guards, route-loading release behavior, and scroll behavior.
+- `apps/client/src/layouts/AppShellLayout.vue` is the shell around `/app/*` routes.
+
+Feature mounting:
+
+- `/app/call` mounts `apps/client/src/components/call/CallPage.vue`.
+- `/app/mafia` mounts `apps/client/src/pages/MafiaPage.vue`, which composes `CallPage.vue` with Mafia UI.
+- `/app/nadle/:streamer` mounts `apps/client/src/pages/NadleStreamPage.vue`.
+- `/app/nadraw-show/:streamer` mounts `apps/client/src/pages/NadrawShowPage.vue`.
+- `/app/checkers/:roomId` mounts `apps/client/src/features/checkers/pages/CheckersPage.vue`.
+- `/app/eat` mounts `apps/client/src/pages/EatFirstPage.vue`.
+- `/app/admin/*` mounts `apps/client/src/admin/ui/*`.
+
+Backend startup:
+
+- `apps/server/src/index.ts` loads env, creates Express, CORS, cookie parser, JSON parser, mediasoup worker pool, `RoomManager`, five WebSocket servers, HTTP routes, `/health`, Twitch ingest, and shutdown handling.
+- WebSocket upgrade paths are centralized in `apps/server/src/index.ts`: `/ws` or `/` for call signaling, `/nadle-ws`, `/eat-first-ws`, `/nadraw-show-ws`, and `/checkers-ws`.
+
+Call join flow:
+
+- `CallPage.vue` calls `useCallOrchestrator()` from `call-core`.
+- `packages/call-core/src/useCallOrchestrator.ts` delegates to `useCallEngine`.
+- `useCallEngine` opens signaling via `useRoomConnection`, sends `join-room`, waits for `room-state`, loads mediasoup `Device`, sets up receive path, then publishes local media only for `participant` role.
+- Server signaling is handled by `apps/server/src/signaling/socketServer.ts` and `apps/server/src/signaling/messageHandlers.ts`.
+
+State storage:
+
+- Client auth state: `apps/client/src/composables/useAuth.ts`.
+- Client call session state: `packages/call-core/src/stores/callSession.ts`.
+- Client app stores: `apps/client/src/stores/*`.
+- Eat First overlay session: `apps/client/src/eat-first/stores/eatOverlayMediasoupSession.js`.
+- Server durable state: Prisma via `apps/server/src/prisma.ts`.
+- Server ephemeral realtime state: `RoomManager`, `Room`, `Peer`, game socket maps, game stores.
+
+## 3. Core Principles
+
+- Preserve behavior unless the task explicitly asks for behavior changes.
+- Prefer minimal, atomic diffs.
+- Read related files and existing tests before editing.
+- Reuse existing helpers, composables, stores, services, protocol constants, and packages.
+- Do not invent APIs, message shapes, route contracts, or storage keys.
+- Do not create duplicate sources of truth.
+- Do not change WebRTC, mediasoup, reconnect, screen share, or teardown behavior unless explicitly requested.
+- Do not hide behavior changes inside refactors.
+- Prefer deleting duplicated code over layering more compatibility code.
+- Keep UI strings, docs, comments, and test data in Ukrainian or English only; no Russian text.
+
+## 4. Feature Architecture
+
+Recommended feature template for new games or product modules:
+
+```text
+apps/client/src/features/<feature>/
+  core/          # pure rules, types, deterministic helpers
+  api/ or ws/    # transport wrapper and protocol constants
+  orchestrator/  # use<Feature>Orchestrator()
+  components/ or ui/
+  pages/
+```
+
+Rules:
+
+- Pure game rules belong in `core/` or `packages/*-core`, not in pages.
+- Pages compose feature modules and render prepared state/actions.
+- Components stay presentational unless they are explicitly feature containers.
+- Shared UI belongs in `apps/client/src/components/ui` only when it is domain-agnostic.
+- Shared call/media logic belongs in `packages/call-core`.
+- Server game logic belongs beside its backend domain under `apps/server/src/<domain>`.
+- New overlays should be isolated as feature/domain overlay layers, not mixed into call transport code.
+
+Current feature review:
+
+- Checkers: well-isolated engine/WS/orchestrator, but `CheckersPage.vue` is large and also wires `call-core` voice. Risk: medium-high.
+- Nadraw Show: good orchestrator and feature folder; shares streamer context patterns with Nadle. Risk: medium.
+- Eat First: deliberate sub-app in `eat-first`; JS-heavy, overlay/media path separate from main `CallPage`. Risk: medium.
+- Nadle: historical page/module layout with a large page and composables. Risk: medium.
+- Mafia: thin `MafiaPage.vue`, but heavy shared `CallPage.vue` integration. Risk: high.
+- Coin Hub: clearer store/API/component boundary. Risk: low-medium.
+
+## 5. Folder / Module Boundaries
+
+Do:
+
+- Import app-wide auth from `apps/client/src/composables/useAuth.ts`.
+- Import API helpers from `apps/client/src/utils/apiFetch.ts`, `apiUrl.ts`, and `apiUrlPure.ts`.
+- Import call APIs from `call-core` public exports.
+- Keep `eat-first/index.ts` as a narrow public barrel for shell/pages.
+- Use deep paths inside `eat-first` to avoid cycles.
+- Keep server protocol constants beside their domain protocol files.
+
+Do not:
+
+- Import from another feature's internals for convenience.
+- Expand barrels with internal-only exports.
+- Import from a domain barrel inside that same domain when it can create cycles.
+- Move game logic into `components/`.
+- Move transport logic into overlays or UI components.
+- Add app-wide stores for state that belongs only to one feature.
+
+Needs verification before copying:
+
+- Nadraw/Nadle shared streamer loading patterns.
+- Eat First overlay mediasoup integration parity with main call flow.
+- Any future migration from historical `pages/` layout to `features/`.
+
+## 6. Orchestrator Pattern
+
+Use `use<Feature>Orchestrator()` when a feature has WebSockets, timers, reconnects, server state, auth/role branching, host/viewer/player modes, overlays, or non-trivial derived state.
+
+Current examples:
+
+- `packages/call-core/src/useCallOrchestrator.ts`
+- `apps/client/src/features/checkers/orchestrator/useCheckersOrchestrator.ts`
+- `apps/client/src/features/nadraw-show/orchestrator/useNadrawShowOrchestrator.ts`
+- `apps/client/src/eat-first/composables/control/useControlOrchestrator.js`
+
+Rules:
+
+- Pages should not own business logic.
+- Orchestrators own side effects, cleanup, timers, reconnects, and stale socket guards.
+- Orchestrators expose prepared state and actions.
+- UI should not rebuild protocol maps, participant maps, or fallback chains.
+- One trigger must cause one side effect.
+- Every async action needs a pending/disposed/socket/room/revision/role guard.
+
+## 7. Single Source of Truth Rules
+
+Auth/user:
+
+- SSOT: client `useAuth.ts`; server `apps/server/src/auth/*`, `session/sessionJwt.ts`, `session/me.ts`.
+- Duplicate risks: manual role parsing, direct cookie/session parsing in feature code.
+- Rule: UI uses `useAuth`; server authority uses signed httpOnly cookie and `resolvePrismaUserIdFromSession`.
+- Cleanup candidate: repeated `isDatabaseConfigured()` helpers.
+- Risk: high.
+
+Streamer context:
+
+- SSOT: server `nadle/streamerApiRouter.ts`, `auth/resolvePrismaUserFromSession.ts`, `nadraw-show/nadrawAccess.ts`; client `useNadleStreamerRoom`.
+- Duplicate risks: Twitch username normalization and shared Nadle/Nadraw streamer lookup.
+- Rule: resolve streamer ownership on the server.
+- Cleanup candidate: shared username normalization helper.
+- Risk: medium.
+
+Rooms:
+
+- SSOT: call rooms in `RoomManager`, `Room`, `Peer`; game rooms in each game store/socket.
+- Duplicate risks: client-provided room IDs and local room state.
+- Rule: server owns room membership and role authority.
+- Cleanup candidate: protocol-level room validation tests.
+- Risk: high.
+
+Call/media state:
+
+- SSOT: `packages/call-core`.
+- Duplicate risks: Eat First overlay direct call-engine integration and feature-level media assumptions.
+- Rule: do not duplicate produce/consume/reconnect/teardown/screen-share logic.
+- Cleanup candidate: document Eat First overlay media invariants.
+- Risk: high.
+
+Participants/display names:
+
+- SSOT: `call-core` helpers `buildCallParticipantMap`, `resolvePeerDisplayNameForUi`, `buildDisplayNameUiMap`, `normalizeDisplayName`.
+- Duplicate risks: ad hoc display-name fallback chains.
+- Rule: new UI must use call-core display helpers.
+- Cleanup candidate: audit all user-visible call labels.
+- Risk: medium.
+
+Screen share:
+
+- SSOT: `packages/call-core/src/screenShare/useCallScreenShare.ts`.
+- Duplicate risks: separate start/stop/ended handling.
+- Rule: never bypass screen-share serialization.
+- Cleanup candidate: none without explicit task.
+- Risk: high.
+
+Remote audio/video tracks:
+
+- SSOT: `useRemoteMedia.ts`, `StreamVideo.vue`, `StreamAudio.vue`, `ParticipantTile.vue`.
+- Duplicate risks: clearing `srcObject`, remounting video, treating UI suppression as transport teardown.
+- Rule: keep media element identity stable.
+- Cleanup candidate: verify playback suppression runtime wiring.
+- Risk: high.
+
+Game state:
+
+- Checkers: `features/checkers/core`, `packages/checkers-core`, server `checkersGameStore.ts`.
+- Nadle: `packages/nadle-core`, client `nadle/`, server `nadle/gameStore.ts`.
+- Nadraw: `features/nadraw-show`, server `nadrawGameStore.ts`.
+- Eat First: client `eat-first/`, server `eatFirst/service.ts` and `snapshot.ts`.
+- Mafia: `stores/mafiaGame.ts`, `stores/mafiaPlayers.ts`, server `Room` Mafia state.
+- Rule: client may derive UI state, but server/game core owns authoritative rules.
+- Risk: medium-high.
+
+Leaderboard:
+
+- SSOT: `apps/server/src/leaderboardRouter.ts`.
+- Duplicate risks: client-posted results and repeated display/rating derivation.
+- Rule: server must validate authenticated user, streamer scope, attempts, result, and game-specific authority.
+- Cleanup candidate: contract/integration tests for writes.
+- Risk: high.
+
+Overlays:
+
+- SSOT: Eat First overlay components/composables; Mafia overlay components; call media state from call-core.
+- Duplicate risks: overlay-specific media maps and display names.
+- Rule: overlays consume prepared state; they must not own media transport.
+- Risk: medium-high.
+
+Roles:
+
+- SSOT: server auth/session/ownership checks, call `CallEngineRole`, Mafia host state in `Room`, Checkers roles in `checkersSocket.ts`.
+- Duplicate risks: trusting client mode/role flags.
+- Rule: client role flags are UI hints only; server decides authority.
+- Risk: high.
+
+WebSocket connection state:
+
+- SSOT: each orchestrator/socket client owns its own status and reconnect timer.
+- Duplicate risks: reconnect loops, stale sockets, duplicate subscriptions.
+- Rule: close previous sockets, ignore stale sockets, clear timers on dispose.
+- Risk: high.
+
+## 8. Reuse Before Creating New Code
+
+Search before adding:
+
+- `packages/call-core/src`
+- `apps/client/src/composables`
+- `apps/client/src/utils`
+- `apps/client/src/stores`
+- `apps/client/src/eat-first`
+- `apps/server/src/*/wsProtocol.ts`
+- `packages/*-consistency`
+
+Known helpers to reuse:
+
+- API: `apiFetch.ts`, `apiUrl.ts`, `apiUrlPure.ts`.
+- Storage: `storageJson.js`, `callTileLocalDisplayNames.ts`, `remoteListeningPrefs`.
+- Logging: `createLogger`.
+- Auth: `useAuth`, server session helpers.
+- Call participants: `call-core` participant/display-name helpers.
+- Mafia room namespace: `useMafiaMediaRoom.ts`.
+- WS ping: `replyJsonPingIfNeeded`.
+- Pure game logic: `nadle-core`, `checkers-core`, `call-core`.
+
+Known duplication risks:
+
+- `components/call/ParticipantTile.vue` and `eat-first/components/ParticipantTile.vue`.
+- Repeated server `isDatabaseConfigured()`.
+- Repeated `safeSend`, JSON ping, and client registry patterns.
+- Twitch username normalization.
+- Eat First WS string literals without a protocol constants file.
+- Playback policy tests vs possible dormant runtime wiring.
+
+## 9. Atomic Component Rules
+
+Presentational components:
+
+- Props in, events out.
+- No direct WebSocket/API/storage/router ownership.
+- No business rules.
+- No media transport changes.
+
+Feature components:
+
+- May render domain-specific UI.
+- May hold local UI state.
+- Should call composables/orchestrators for side effects.
+
+Move logic to composables/orchestrators when it has:
+
+- Server state.
+- Timers or reconnects.
+- Role/permission decisions.
+- Derived maps reused in multiple places.
+- Storage/API/WebSocket access.
+- Cleanup requirements.
+
+Avoid over-splitting:
+
+- Do not extract one-off markup if it creates prop drilling.
+- Do not create shared components before reuse is real.
+- Keep coupled template/CSS together when extraction does not reduce risk.
+
+## 10. Realtime / WebSocket Rules
+
+Endpoints:
+
+- `/ws` or `/`: call signaling and Mafia messages; server `signaling/socketServer.ts`, `signaling/messageHandlers.ts`; client `call-core/signaling/useRoomConnection.ts`.
+- `/nadle-ws`: Nadle state/chat/leaderboard/session; server `nadle/nadleSocket.ts`; client `nadle/ws/useNadleWs.ts`; protocol `nadle/wsProtocol.ts` and client mirror types.
+- `/eat-first-ws`: Eat First snapshots; server `eatFirst/broadcast.ts`; client `eat-first/services/eatFirstSync.js`; protocol strings are local and need extra care.
+- `/nadraw-show-ws`: Nadraw state/session/draw/chat/host actions; server `nadraw-show/nadrawSocket.ts`; client `useNadrawShowOrchestrator.ts`; protocol `nadraw-show/wsProtocol.ts`.
+- `/checkers-ws`: Checkers realtime; server `checkers/checkersSocket.ts`; client `features/checkers/ws/checkersWs.ts`; protocol `checkers/wsProtocol.ts`.
+
+Protocol rules:
+
+- Do not change message shapes unless explicitly requested.
+- Add protocol constants beside the domain protocol.
+- Keep client senders and server handlers aligned in the same task.
+- Validate incoming messages. Main signaling uses Zod; game sockets use local parsers. Missing validation is a risk and must be called out.
+- Keep JSON ping/pong behavior aligned with `replyJsonPingIfNeeded`.
+- Do not reuse one socket for multiple rooms unless the existing client explicitly supports it.
+- On reconnect, close stale sockets and ignore old callbacks.
+- On disconnect, unregister clients, clear timers where applicable, and prune room state.
+
+Race risks:
+
+- Early `new-producer` before receive listener setup.
+- Duplicate `producer-sync`.
+- Multiple reconnect timers.
+- Stale sockets receiving late messages.
+- Room/streamer changes while async auth or snapshot fetch is in flight.
+- Bot/rematch timers in Checkers.
+- Long-poll matchmaking response cleanup.
+
+## 11. WebRTC / call-core Rules
+
+Source-of-truth files:
+
+- Public API: `packages/call-core/src/index.ts`, `useCallOrchestrator.ts`.
+- Engine: `useCallEngine.ts`.
+- Signaling: `signaling/useRoomConnection.ts`.
+- Device: `media/useMediasoupDevice.ts`.
+- Send path: `transport/useSendTransport.ts`.
+- Receive path: `media/useRemoteMedia.ts`.
+- Screen share: `screenShare/useCallScreenShare.ts`.
+- Reconnect policy: `reconnectOrchestrationPolicy.ts`.
+- Session: `stores/callSession.ts`.
+- UI integration: `CallPage.vue`, `ParticipantTile.vue`, `StreamVideo.vue`, `StreamAudio.vue`.
+
+Join flow:
+
+1. Connect WebSocket.
+2. Send `join-room`.
+3. Wait for `room-state`.
+4. Load mediasoup `Device`.
+5. Set up receive transport and consume existing/missed producers.
+6. Subscribe active speaker and producer messages.
+7. For `participant`, create send transport and publish local tracks.
+8. For `viewer`, skip send transport and publish.
+9. Request soft producer sync.
+10. Start keepalive and audio playback unlock.
+
+Publish flow:
+
+- Get local media in `useLocalMedia`.
+- Create send transport in `useSendTransport`.
+- Produce audio/video.
+- Use serialized `replaceOutboundVideoTrack` for camera/screen changes.
+- Use `set-outbound-video-paused` for camera-off semantics where existing flow does so.
+
+Remote consume flow:
+
+- Create recv transport.
+- Merge `existingProducers` with buffered `new-producer`.
+- Use `recvApplySerialQueue`.
+- Deduplicate consume lifecycle.
+- Upsert remote tracks into peer streams.
+- Bump play revisions on track/source changes.
+
+Screen share flow:
+
+- Start/stop through `useCallScreenShare`.
+- Keep operations serialized.
+- Notify producer video source changes.
+- Restore camera track or null track according to existing state.
+- Do not bypass `ended` handling.
+
+Reconnect/focus rules:
+
+- Preserve backoff and max reconnect behavior.
+- Preserve visibility/focus policy: visible with open socket requests soft resync; visible with closed socket reconnects; focus alone does not reconnect dead sockets.
+- Do not change `teardownMedia` ordering casually.
+
+Current important facts:
+
+- Simulcast/spatial-layer signaling appears disabled in the current wire path; needs verification before enabling.
+- `videoPlaybackBudgetPolicy.ts` is pure and tested, but runtime usage needs verification.
+- `playbackSuppressed` pauses the element only; it must not stop consumers.
+
+## 12. Backend Authority / Security Rules
+
+Server authority:
+
+- Never trust client-provided `userId`, `streamerId`, `roomId`, role, host flag, result, or score without server validation.
+- Signed session cookie is the auth source; client auth state is not authority.
+- Ownership checks must happen on the server.
+- Admin/host checks must use `resolveUserRole`, DB role, or domain-specific ownership helpers.
+
+Observed risks and required handling:
+
+- P1: `/api/wins` records signed-in Nadle solo results from client-provided `streamerId`, `result`, and `attempts`. Impact: a signed-in user may over-report results if client flow is bypassed. Minimal fix direction: bind writes to server-known round/game completion or add idempotency/anti-abuse checks in `leaderboardRouter.ts`.
+- P1: Checkers matchmaking result accepts winner role from a participant for a matched room. It checks submitter membership and idempotency, but server-authoritative final board verification needs verification. Files: `checkersMatchmaking.ts`, `checkersSocket.ts`, `leaderboardRouter.ts`.
+- P1: Call `join-room` accepts optional `userId`, display name, and avatar from client. Impact: identity spoofing in call UI if not tied to session. Minimal fix direction: server-authenticated identity for trusted identity surfaces; keep current as display metadata unless explicitly hardened. Files: `messageHandlers.ts`, `Peer.ts`, `CallPage.vue`.
+- P1: Mafia host authority is server-side in `Room`, but any host-transfer/session behavior is high risk. Files: `Room.ts`, `messageHandlers.ts`, Mafia stores/components.
+- P2: Eat First player actions (`hand`, `ready`, `claim`, `vote`) rely on player/device identifiers rather than signed users. This may be intentional for public viewer participation; needs verification before hardening. Files: `eatFirst/router.ts`, `eatFirst/service.ts`.
+- P2: Nadle and Nadraw WebSockets scope by query `streamerId`. Host/admin actions are guarded, but connection fan-out can subscribe by streamer ID. Treat as public read unless product requires private rooms.
+- P2: Rate limiting exists for Twitch guesses, but HTTP mutation endpoints and game WebSockets need verification for abuse controls.
+- P2: Repeated DB configuration helpers and duplicated validation increase drift risk.
+
+Rules:
+
+- Security fixes must be minimal and targeted.
+- Do not add auth requirements to public viewer flows without product approval.
+- Separate public read access from host/admin mutation authority.
+- Do not log secrets, tokens, cookies, OAuth codes, or private media URLs.
+- Keep OAuth redirects sanitized through existing helpers.
+
+## 13. Performance Rules
+
+Hotspots:
+
+- `CallPage.vue`: large shared Call/Mafia file, many computed/watch paths, grid/layout logic.
+- `ParticipantTile.vue`: video/audio split, menu, Mafia state, viewport observation.
+- `StreamVideo.vue`: play lifecycle, `srcObject`, stall detection, RVFC/interval pacing.
+- `useRemoteMedia.ts`: consumer lifecycle and receive pressure.
+- Eat First overlay media/video layers.
+- Landing/background visual effects.
+- Mafia OBS/viewer mode.
+
+Rules:
+
+- Keep `<video>` DOM identity stable by `peerId`; do not key by `playRev`.
+- Do not clear `srcObject` except in established cleanup paths.
+- Do not treat UI playback suppression as transport teardown.
+- Avoid O(N*M) participant/role/media mapping.
+- Build maps in computed helpers, not templates.
+- Use `shallowRef` for `MediaStream`, `Map`, `Set`, and mutable browser/media objects.
+- Keep props stable for 8-12 camera grids.
+- Avoid watchers that stringify or clone large structures on every media tick.
+- Keep CSS animations and full-screen effects bounded and respect reduced motion.
+- Profile before changing media performance logic.
+
+Minimal safe optimization directions:
+
+- Verify playback budget runtime wiring before changing policy.
+- Extract pure ranking/mapping helpers before touching media transport.
+- Separate media rendering from labels/menus/role badges where it reduces rerenders.
+- Add targeted tests for pure policies before UI changes.
+
+## 14. Product Feature Architecture Rules
+
+New Twitch game:
+
+- Put pure rules in `features/<game>/core` or `packages/<game>-core`.
+- Put WebSocket/API wrapper in `features/<game>/ws` or `api`.
+- Put host/player/viewer logic in `use<Game>Orchestrator`.
+- Add server domain folder with protocol constants and handlers.
+- Add consistency tests for pure rules/protocol helpers.
+
+Coin economy/rewards:
+
+- Follow Coin Hub pattern: API service/store/composables/components with server authority.
+- Never trust client reward amounts or cooldown state.
+
+OBS/viewer mode:
+
+- Treat viewer mode as receive-only where media is involved.
+- Hide controls in UI, but enforce authority on server.
+- Keep overlay routes lightweight and stable for browser sources.
+
+Streamer control panels:
+
+- Use server ownership checks.
+- Minimize click count, but do not merge host authority with viewer UI state.
+
+Twitch chat input:
+
+- Use existing ingest routing through `streamerActiveGame.ts`, `tmiChat.ts`, Nadle/Nadraw ingest.
+- Add per-user throttle for guess-shaped input.
+- Do not process chat commands in client-only code.
+
+## 15. Refactor Safety Checklist
+
+Before editing:
+
+- Inspect `git diff`.
+- Read directly related files.
+- Identify the source of truth.
+- Search for existing helpers/tests.
+- Decide whether behavior must remain identical.
+
+During editing:
+
+- Keep the diff narrow.
+- Do not touch unrelated user changes.
+- Preserve protocols, route names, query params, storage keys, and fallback semantics.
+- Preserve WebRTC ordering and cleanup.
+- Add comments only for invariants.
+
+After editing:
+
+- Run the narrowest relevant check first.
+- Stop on test/lint/build failure and explain it.
+- Do not continue stacking refactors on a failing state.
+
+## 16. PR Review Checklist
+
+Reject or question:
+
+- New cross-domain imports.
+- Page-owned business logic that belongs in an orchestrator.
+- Duplicated API/storage/protocol/display-name/media logic.
+- New WS message strings without protocol constants.
+- New media transport logic outside `call-core`.
+- Timers without cleanup.
+- Reconnect loops without single-flight guards.
+- UI role checks used as server authority.
+- Client-provided results or rewards without server validation.
+- Video remounts caused by unstable keys.
+- Magic numbers without named constants.
+- Raw `localStorage`/`sessionStorage` when helper exists.
+- Refactors that change behavior without saying so.
+
+## 17. QA Checklist
+
+Call/realtime manual QA:
+
+- Two tabs in same room.
+- Join/leave/rejoin.
+- Refresh while in room.
+- WebSocket reconnect.
+- Tab background/foreground and focus restore.
+- 8-12 cameras.
+- Camera off -> screen share -> stop share.
+- Screen share start/stop with camera initially on and off.
+- Mic mute/unmute.
+- Device switch.
+- Remote playback stall/recovery.
+- Mafia participant mode.
+- Mafia OBS/viewer mode.
+- Overlay mode.
+- Viewer vs participant role.
+
+Game/product QA:
+
+- Nadle streamer route, web guess, Twitch chat guess, leaderboard.
+- Nadraw host start/clear/ack/draw, viewer state, Twitch chat sync.
+- Checkers bot/friend/local modes, rematch, timeout, matchmaking.
+- Eat First join/control/admin/overlay modes.
+- Coin Hub claim/spin/open case.
+- Auth login/logout, admin guard, Eat First staff guard.
+
+## 18. Testing Strategy
+
+Existing commands:
+
+- `npm run test:nadle`: Nadle consistency.
+- `npm run test:eat-first`: Eat First consistency.
+- `npm run test:client`: client/shared pure logic consistency.
+- `npm run test:call`: call-core consistency and call-core tests.
+- `npm run test:ci`: all consistency suites.
+- `npm run ci`: tests, lint, and client build.
+
+Use:
+
+- `npm run test:nadle` for Nadle/core/Twitch guess logic.
+- `npm run test:eat-first` for Eat First pure route/SEO/theme/overlay logic.
+- `npm run test:client` for client pure/shared logic, Checkers engine, Mafia helpers, Coin Hub, call UI policies.
+- `npm run test:call` for call-core, media policies, reconnect, signaling helpers.
+- `npm run build -w client` when touching client integration.
+- `npm run lint` before finalizing broad client/server changes.
+
+Coverage gaps:
+
+- Server has no first-class test script; needs verification before claiming server coverage.
+- WebSocket protocol integration tests are limited or missing.
+- Component-level tests for `CallPage`, `ParticipantTile`, and `StreamVideo` are limited or missing.
+- Playwright/e2e is not currently established; best first tests are router/auth guards, not WebRTC.
+
+Do not over-test:
+
+- Browser-specific WebRTC internals with brittle unit tests.
+- Visual animation details without stable selectors.
+- Large e2e flows before small route/auth smoke tests exist.
+
+## 19. Risk Map
+
+call-core:
+
+- Depends on: Call, Mafia, Checkers voice, Eat First overlay media.
+- Breaks: join, publish, consume, screen share, reconnect, audio unlock.
+- Check together: `useCallEngine`, `useRoomConnection`, `useRemoteMedia`, `useSendTransport`, server signaling.
+- QA: full call/reconnect/screen-share matrix.
+- Separate PR required for protocol or sequencing changes.
+
+CallPage:
+
+- Depends on: call-core, Mafia stores, auth, display-name helpers, tiles.
+- Breaks: call UI, Mafia viewer mode, video performance.
+- Check together: `ParticipantTile`, `StreamVideo`, Mafia stores.
+- Separate PR for large decomposition.
+
+StreamVideo:
+
+- Depends on: media stream identity, playback suppression, RVFC/interval pacing.
+- Breaks: black tiles, autoplay, stalls, CPU.
+- Check together: `ParticipantTile`, `CallPage`, call-core play revisions.
+
+WebSocket protocols:
+
+- Depends on: matching client/server message shapes.
+- Breaks: games, call signaling, reconnect, overlays.
+- Check together: protocol constants, client sender, server parser, broadcaster.
+- Separate PR for protocol changes.
+
+Auth:
+
+- Depends on: signed cookie, OAuth, `useAuth`, guards.
+- Breaks: login, admin, host controls, Coin Hub.
+- Check together: `oauthRouter`, `session/*`, `useAuth`, router guards.
+
+Streamer context:
+
+- Depends on: DB streamer rows, Twitch IDs, `useNadleStreamerRoom`.
+- Breaks: Nadle, Nadraw, Twitch ingest, leaderboards.
+- Check together: streamer API, auth session mapping, Nadraw access.
+
+Leaderboard:
+
+- Depends on: Prisma, authenticated users, game result writes.
+- Breaks: wins, streaks, ratings, Checkers ELO.
+- Check together: `leaderboardRouter`, game stores, matchmaking.
+
+Nadle:
+
+- Depends on: `nadle-core`, `NadleStreamPage`, `useNadleWs`, server `nadle/*`, Twitch ingest.
+- Breaks: guesses, rounds, leaderboard, chat sync.
+
+Nadraw:
+
+- Depends on: `useNadrawShowOrchestrator`, server `nadraw-show/*`, Twitch ingest.
+- Breaks: host controls, canvas, prompt DB, viewer secrecy.
+
+Checkers:
+
+- Depends on: `checkers-core`, client orchestrator/WS, server socket/store, optional call voice.
+- Breaks: moves, roles, rematch, bot timers, matchmaking.
+
+Eat First:
+
+- Depends on: `eat-first` sub-app, server `eatFirst/*`, overlay media.
+- Breaks: staff controls, public join, snapshots, OBS overlays.
+
+Mafia:
+
+- Depends on: `CallPage`, Mafia stores, server `Room` host state.
+- Breaks: host lock, role state, OBS view, force mute/camera.
+
+Backend signaling/mediasoup:
+
+- Depends on: `RoomManager`, `Room`, `Peer`, mediasoup worker pool.
+- Breaks: all call media and Mafia signaling.
+- Separate PR for worker, transport, produce/consume, or ICE changes.
+
+Nginx/Cloudflare assumptions:
+
+- Depends on: JSON ping every 25s, WS ping, production `wss://`, upgrade routing.
+- Breaks: idle sockets, reconnect, deployed signaling.
+- Needs verification with deployment config.
+
+## 20. Anti-Patterns
+
+- A second mediasoup/WebRTC stack outside `call-core`.
+- Page-level socket state machines.
+- Cross-domain imports for convenience.
+- Duplicated display-name fallback chains.
+- Duplicated storage parsing.
+- Client-only authority for host/admin/result/reward.
+- Hidden protocol changes.
+- Broad rewrites of realtime files.
+- Watchers as implicit state machines without cleanup.
+- Video keys based on stream revisions.
+- Clearing media streams to solve UI problems.
+- Adding abstractions before duplication is real.
+- Russian-language text in product, docs, comments, or tests.
+
+## 21. Cursor Workflow For This Project
+
+For every task:
+
+1. Restate scope and whether behavior changes are intended.
+2. Inspect current diff and avoid unrelated changes.
+3. Read directly related files and tests.
+4. Search for existing helpers before writing new code.
+5. Identify SSOT and risk level.
+6. Make the smallest safe change.
+7. Run narrow validation.
+8. Report checks run and any residual risk.
+
+For call/realtime tasks:
+
+- Start with pure helpers/tests where possible.
+- Explain preserved ordering and cleanup invariants.
+- Do not change transport sequencing without explicit approval.
+
+For security tasks:
+
+- Separate public viewer behavior from authenticated mutation authority.
+- Do not silently lock down public flows without product confirmation.
+
+For refactors:
+
+- Structure-only means no user-visible behavior changes.
+- If a contract must change, say so before editing.
+
+## 22. Future Task Prompt Templates
+
+Feature implementation:
+
+```text
+Implement <feature> using existing StreamAssist boundaries. First identify SSOT files, existing helpers, protocol/state owners, tests, and risks. Keep pages thin, put business logic in a use<Feature>Orchestrator(), reuse existing auth/API/storage/logging helpers, and avoid cross-domain imports. Do not change runtime behavior outside the requested scope.
+```
+
+Call/WebRTC change:
+
+```text
+Touch call-core only as needed. Map the current join/publish/consume/screen-share/reconnect flow first. Preserve transport ordering, recv serialization, replaceTrack serialization, screen-share cleanup, visibility/focus behavior, and teardown order. Add or update focused call-core tests before broader integration work.
+```
+
+WebSocket protocol change:
+
+```text
+List the endpoint, protocol constants, client senders, server parsers, handlers, broadcasters, reconnect behavior, and validation. Change client and server in the same task, keep message shapes explicit, add tests where possible, and document migration/backward-compatibility risk.
+```
+
+Security review/fix:
+
+```text
+Identify the server authority for user, streamer, room, host, result, or reward state. Do not trust client-provided role/user/result fields. Preserve public viewer flows unless the task asks to restrict them. Provide P0-P3 risks, exploit scenario, impact, and minimal fix direction.
+```
+
+Performance change:
+
+```text
+Profile or reason from the current render/media path first. Preserve video element identity, avoid media transport changes for UI optimizations, use stable keys/props, avoid O(N*M) maps, and validate with 8-12 cameras plus OBS/viewer mode when relevant.
+```

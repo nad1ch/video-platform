@@ -1,0 +1,414 @@
+---
+description: AI Superpower Workflow for disciplined Cursor task execution in StreamAssist
+alwaysApply: true
+---
+
+# AI Superpower Workflow
+
+AI is not a chat assistant for "write code". In this repository, AI must operate as a controlled engineering system:
+
+Researcher -> Debugger -> Architect -> Implementer -> Reviewer -> QA assistant
+
+The user is the tech lead. The AI must understand the flow first, find the source of truth, confirm root cause for bugs, make the minimal safe change, preserve architecture, explain risks, run relevant checks, and provide QA notes.
+
+This rule complements `.cursor/rules/streamassist-engineering-rules.mdc`. Do not duplicate that file; follow it for StreamAssist-specific architecture, realtime, WebRTC, backend authority, performance, and risk rules.
+
+## 1. Branch First
+
+For every implementation task:
+
+- Check the current branch.
+- Check working tree status.
+- Never overwrite, discard, or revert user changes unless explicitly asked.
+- If unrelated changes exist, report them and avoid touching them.
+- Create a new logical git branch before editing code.
+
+Do not create a branch for pure read-only analysis unless files will be created or updated.
+
+Branch naming format:
+
+```text
+<type>/<short-task-name>
+```
+
+Allowed types:
+
+- `fix`
+- `feat`
+- `perf`
+- `refactor`
+- `test`
+- `docs`
+- `chore`
+
+Rules:
+
+- English only.
+- kebab-case.
+- Short and specific.
+- No generic names like `fix/bug`, `update`, or `changes`.
+
+Examples:
+
+- `fix/mafia-host-session-lock`
+- `fix/call-video-remount`
+- `feat/checkers-rematch`
+- `perf/call-video-tile-stability`
+- `refactor/eat-first-overlay-state`
+- `test/checkers-ws-flow`
+- `docs/streamassist-rules`
+- `chore/cursor-superpower-workflow`
+
+If a task ID exists:
+
+```text
+<type>/<TASK-ID>/<short-task-name>
+```
+
+Examples:
+
+- `fix/SA-123/mafia-host-session-lock`
+- `feat/SA-124/checkers-rematch`
+- `perf/SA-125/call-video-tile-stability`
+
+## 2. Read-Only Discovery Before Coding
+
+Before editing code, inspect the relevant flow and output:
+
+- Current branch.
+- Proposed new branch.
+- Working tree status summary.
+- Task scope.
+- Source-of-truth files.
+- Files likely to change.
+- Files to inspect but not change.
+- Existing helpers, composables, stores, services, and components to reuse.
+- API, WebSocket, storage, media, or protocol contracts affected.
+- Risks.
+- Minimal fix or implementation plan.
+
+Do not start editing before this is clear.
+
+## 3. No Code Before Root Cause For Bugs
+
+For bug tasks:
+
+- Trace the execution flow first.
+- Identify the exact broken condition.
+- Identify where state, data, or side effect breaks.
+- Explain why the bug happens.
+- Explain what can break if changed.
+- Only then implement the minimal fix.
+
+Required bug output before implementation:
+
+```text
+Root cause:
+Why it happens:
+Exact broken condition:
+Exact flow:
+What can break:
+Minimal fix:
+Files to change:
+QA checklist:
+```
+
+If root cause is not confirmed, say:
+
+```text
+Root cause is not confirmed yet. Need to inspect these files first...
+```
+
+## 4. Minimal Diff Only
+
+Make the smallest safe change.
+
+Forbidden:
+
+- Broad rewrites.
+- Refactor for beauty.
+- Unrelated file changes.
+- Duplicate logic.
+- New source of truth.
+- Invented APIs.
+- Silent API, WebSocket, storage, or protocol contract changes.
+- Mixing refactor with behavior change.
+- Changing architecture without an explicit task.
+
+Allowed:
+
+- Isolated fixes.
+- Small targeted changes.
+- Deleting duplication.
+- Reusing existing helpers.
+- Adding guards, reset logic, and cleanup.
+- Moving logic to the correct existing layer when clearly needed.
+
+## 5. Reuse Before Creating
+
+Before creating new code, search for existing:
+
+- Helpers.
+- Composables.
+- Stores.
+- Services.
+- API clients.
+- Storage abstractions.
+- Protocol constants.
+- Feature core logic.
+- UI components.
+- Tests.
+
+If something already exists, reuse it. If reuse is not possible, explain why.
+
+Do not duplicate:
+
+- Parsing.
+- Mapping.
+- `roomId` or `streamerId` normalization.
+- Display-name fallback logic.
+- WebSocket message strings.
+- Screen-share logic.
+- Media lifecycle.
+- Storage access.
+- Game rules.
+- Leaderboard logic.
+
+## 6. Feature Isolation
+
+New feature logic must live inside the correct feature boundary.
+
+Preferred structure for new isolated features:
+
+```text
+features/<feature>/
+  core/
+  api/ or ws/
+  orchestrator/
+  components/
+  pages/
+  types/
+  constants/
+```
+
+Do not migrate old feature structure unless the task explicitly asks for migration.
+
+Do not import another feature's internals just for convenience. Extract shared logic only when reuse is real and stable.
+
+## 7. Orchestrator Owns Logic
+
+Pages should be thin.
+
+Pages should:
+
+- Call `use<Feature>Orchestrator()`.
+- Render prepared state and actions.
+- Stay as layout and route glue.
+
+Pages should not:
+
+- Own WebSocket lifecycle.
+- Own business rules.
+- Own role or access logic.
+- Own complex timers.
+- Duplicate derived state.
+- Build fallback chains.
+- Directly control media lifecycle.
+
+Orchestrators and composables should own:
+
+- Side effects.
+- WebSocket lifecycle.
+- Timers.
+- Cleanup.
+- Role and access logic.
+- Derived state.
+- Pending and error state.
+- Prepared UI state and actions.
+
+Rule:
+
+- One feature flow -> one orchestrator owner.
+- One trigger -> one side effect.
+
+## 8. StreamAssist-Specific High-Risk Rules
+
+Respect existing StreamAssist architecture:
+
+- `packages/call-core` is the source of truth for WebRTC/media behavior.
+- Do not create a second media stack.
+- Do not duplicate producer, consumer, screen-share, reconnect, or recovery logic in feature UI.
+- Do not remount video elements unless explicitly required.
+- Keep video tile keys stable, preferably by `peerId`.
+- Treat WebRTC, mediasoup, screen share, reconnect, recovery, and playback budget as high-risk.
+- Feature overlays can use call state, but must not own media transport lifecycle.
+
+## 9. Realtime / WebSocket Rules
+
+For WebSocket/realtime tasks, identify:
+
+- Endpoint.
+- Message types.
+- Client sender.
+- Client receiver.
+- Server handler.
+- Broadcast path.
+- Room scope.
+- Auth/session usage.
+- Reconnect logic.
+- Cleanup.
+- Heartbeat or ping-pong.
+- Validation.
+- Stale socket protection.
+
+Rules:
+
+- Use protocol constants where available.
+- Do not scatter message string literals.
+- Guard repeated calls.
+- Clear timers, listeners, and sockets.
+- Ignore stale async responses.
+- Do not trust client-provided IDs blindly.
+- One user action must not trigger duplicate side effects.
+
+## 10. Backend Authority / Security Rules
+
+Server must be authority for:
+
+- User/session.
+- Room access.
+- Streamer ownership.
+- Host ownership.
+- Game results.
+- Leaderboard writes.
+- Rewards/coins.
+- Rate limits.
+- Anti-spam and anti-bot controls.
+
+Do not trust client-provided:
+
+- `userId`
+- `roomId`
+- `streamerId`
+- `role`
+- `host status`
+- `leaderboard result`
+- `game result`
+- `coin/reward values`
+
+For security-sensitive changes, output:
+
+```text
+Risk:
+Exploit scenario:
+Impact:
+Minimal fix direction:
+Files involved:
+Priority:
+```
+
+## 11. Performance Rules
+
+Performance-sensitive areas:
+
+- `CallPage`.
+- `StreamVideo`.
+- Video tiles.
+- Overlays.
+- Participant maps.
+- Watchers.
+- Computed values.
+- Large reactive objects.
+- WebRTC playback budget.
+- OBS/viewer mode.
+- 8-12 camera rooms.
+
+Rules:
+
+- Avoid video remounts.
+- Use stable keys and props.
+- Avoid object/array recreation in templates.
+- Avoid O(N*M) mapping.
+- Avoid heavy watchers.
+- Separate media rendering from labels, badges, and menus.
+- Avoid overlay state causing media rerenders.
+- Prefer memoized maps and computed state where useful.
+
+For performance tasks, output:
+
+```text
+Hotspot:
+Root cause:
+Why it rerenders/remounts:
+Minimal safe optimization:
+Files to inspect:
+QA checklist:
+```
+
+## 12. QA Before Done
+
+After editing, always output:
+
+- Files changed.
+- Exact diff summary.
+- Checks run.
+- Checks not run and why.
+- Manual QA checklist.
+- Risks left.
+- Confirmation that scope was respected.
+
+For call/realtime tasks, include QA for:
+
+- 2 tabs.
+- Join/leave.
+- Refresh in call.
+- Reconnect.
+- Tab switch / visibilitychange.
+- 8-12 cameras.
+- Camera off -> screen share -> stop share.
+- Repeated screen share.
+- OBS/viewer mode.
+- Host/player/viewer roles.
+- No duplicate side effects.
+
+## 13. Anti-Patterns To Forbid
+
+Forbid:
+
+- Coding before discovery.
+- Coding before root cause for bugs.
+- Broad rewrites.
+- Invented APIs.
+- Invented data.
+- Duplicated logic.
+- Duplicated side effects.
+- Cross-domain imports.
+- Page-owned business logic.
+- Changing protocols silently.
+- Direct storage access when an abstraction exists.
+- Client-authoritative security, game, or economy state.
+- Unstable video keys.
+- Video remounts as normal UI updates.
+- Touching `call-core` without confirmed need.
+- Mixing refactor and behavior change.
+- Claiming success without checks.
+
+## 14. Expected Start-Of-Task Response
+
+At the beginning of implementation tasks, respond in this style:
+
+```text
+Current branch:
+Working tree:
+Proposed branch:
+
+Scope:
+Source of truth:
+Likely files:
+Files to inspect only:
+Existing code to reuse:
+Risks:
+Minimal plan:
+```
+
+Then create the branch and proceed only within the stated scope.
