@@ -43,19 +43,6 @@ export async function requestNadlePublicConfig(streamerId: string): Promise<Nadl
   }
 }
 
-export async function postNadleWin(payload: {
-  streamerId: string
-  result: 'win' | 'lose'
-  attempts: number
-}): Promise<boolean> {
-  const res = await apiFetch('/api/wins', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return res.ok
-}
-
 export type NadleGlobalWinsRow = {
   rank: number
   userId: string

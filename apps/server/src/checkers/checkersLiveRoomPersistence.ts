@@ -1,5 +1,5 @@
 import { normalizeCheckersState, type CheckersState } from 'checkers-core'
-import { prisma } from '../prisma'
+import { isDatabaseConfigured, prisma } from '../prisma'
 import type { CheckersBotDifficulty } from './checkersGameStore'
 
 const SCHEMA_VERSION = 1
@@ -20,11 +20,6 @@ export type PersistedCheckersLiveRoom = {
 
 type Snapshot = PersistedCheckersLiveRoom & {
   schemaVersion: typeof SCHEMA_VERSION
-}
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
 }
 
 function isMode(value: unknown): value is PersistedCheckersRoomMeta['mode'] {

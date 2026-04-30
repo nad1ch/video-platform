@@ -1,6 +1,6 @@
 import { nextTick, ref, shallowRef, watch, type Ref, type ShallowRef, type WatchSource } from 'vue'
 import { sameOriginApiPrefix } from '@/utils/apiUrl'
-import type { Feedback } from '../nadleLogic'
+import type { Feedback, WordLength } from '../nadleLogic'
 import type { NadleStreamerCard } from '@/composables/useNadleStreamerRoom'
 import {
   NadleWs,
@@ -28,11 +28,12 @@ export function useNadleWs(options: {
   leaderboard: Ref<NadleLeaderboardEntry[]>
   chatLines: Ref<NadleChatLine[]>
   sessionUser: ShallowRef<NadleStreamSessionUser | null>
+  sessionIsAdmin: Ref<boolean>
   wsStatus: Ref<NadleWsConnectionState>
   ircRelayStatus: Ref<NadleIrcRelayState>
   connectWs: () => void
   sendGuess: (word: string, gameId?: string) => boolean
-  requestNextWord: () => boolean
+  requestNextWord: (wordLength?: WordLength) => boolean
   prepareNadleWsMount: () => void
   disposeNadleWs: () => void
 } {
@@ -43,6 +44,7 @@ export function useNadleWs(options: {
   const leaderboard = ref<NadleLeaderboardEntry[]>([])
   const chatLines = ref<NadleChatLine[]>([])
   const sessionUser = shallowRef<NadleStreamSessionUser | null>(null)
+  const sessionIsAdmin = ref(false)
   const wsStatus = ref<NadleWsConnectionState>('idle')
   const ircRelayStatus = ref<NadleIrcRelayState>('idle')
 
@@ -76,8 +78,8 @@ export function useNadleWs(options: {
     return sendJson({ type: NadleWs.clientGuess, word, gameId })
   }
 
-  function requestNextWord(): boolean {
-    return sendJson({ type: NadleWs.clientNextWord })
+  function requestNextWord(wordLength?: WordLength): boolean {
+    return sendJson({ type: NadleWs.clientNextWord, wordLength })
   }
 
   function scheduleNadleWsReconnect(): void {
@@ -191,8 +193,9 @@ export function useNadleWs(options: {
       } else if (t === NadleWs.newGame) {
         onNewGame()
       } else if (t === NadleWs.session && p && typeof p === 'object') {
-        const o = p as { user?: NadleStreamSessionUser | null }
+        const o = p as { user?: NadleStreamSessionUser | null; isAdmin?: unknown }
         sessionUser.value = o.user ?? null
+        sessionIsAdmin.value = o.isAdmin === true
       } else if (t === NadleWs.twitchChat && p && typeof p === 'object') {
         const raw = p as Omit<NadleChatLine, '_cid'> & { guessFeedback?: Feedback[] }
         const line: NadleChatLine = {
@@ -262,6 +265,7 @@ export function useNadleWs(options: {
     leaderboard,
     chatLines,
     sessionUser,
+    sessionIsAdmin,
     wsStatus,
     ircRelayStatus,
     connectWs,

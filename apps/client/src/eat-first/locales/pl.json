@@ -660,6 +660,7 @@
     "statusPlaying": "Gra",
     "cooldownHint": "Za szybko — poczekaj ~{seconds}s między próbami w czacie",
     "globalLeaderboard": "Ranking",
+    "wsNotConnected": "WebSocket nie jest połączony.",
     "chatMobileOpen": "Otwórz czat",
     "chatMobileClose": "Zamknij czat"
   },

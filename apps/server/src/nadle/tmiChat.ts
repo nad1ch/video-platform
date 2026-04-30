@@ -1,5 +1,5 @@
 import tmi from 'tmi.js'
-import { prisma } from '../prisma'
+import { isDatabaseConfigured, prisma } from '../prisma'
 import {
   buildNadleRoundPersistencePayload,
   getCurrentGameId,
@@ -32,11 +32,6 @@ type Holder = {
 
 const holders = new Map<string, Holder>()
 const ingestChannelByStreamer = new Map<string, string>()
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
-}
 
 export async function listActiveStreamersForIngest(): Promise<IngestRow[]> {
   if (!isDatabaseConfigured()) {

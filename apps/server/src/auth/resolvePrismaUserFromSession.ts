@@ -1,10 +1,5 @@
-import { prisma } from '../prisma'
+import { isDatabaseConfigured, prisma } from '../prisma'
 import type { SessionPayload } from './session/sessionJwt'
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
-}
 
 /**
  * Maps a signed-in session to a `User.id` in Postgres (OAuth rows use provider ids in JWT, not Prisma cuid).

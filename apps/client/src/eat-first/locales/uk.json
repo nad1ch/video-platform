@@ -660,6 +660,7 @@
     "statusPlaying": "Грає",
     "cooldownHint": "Занадто швидко — зачекай ~{seconds} с між спробами в чаті",
     "globalLeaderboard": "Лідерборд",
+    "wsNotConnected": "WebSocket не підключено.",
     "chatMobileOpen": "Відкрити чат",
     "chatMobileClose": "Закрити чат"
   },

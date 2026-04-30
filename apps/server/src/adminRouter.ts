@@ -1,12 +1,7 @@
 import type { Express, Request, Response } from 'express'
 import { Prisma } from '@prisma/client'
-import { prisma } from './prisma'
+import { isDatabaseConfigured, prisma } from './prisma'
 import { isSessionAdminFromCookie } from './auth/session/isAdminRequest'
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
-}
 
 function requireAdmin(req: Request, res: Response): boolean {
   if (!isSessionAdminFromCookie(req.headers.cookie)) {

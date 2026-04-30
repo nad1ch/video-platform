@@ -3,19 +3,25 @@ import type { WebSocket } from 'ws'
 import type { WebSocketServer } from 'ws'
 import { isAdminConfigured, isAdminTwitchUserId } from './adminConfig'
 import {
-  adminStartNewGame,
   buildNadleRoundPersistencePayload,
   getGameStatePayload,
   getLeaderboardPayload,
   hydrateNadleLiveGame,
+  startPlayerNewGame,
   submitGuess,
 } from './gameStore'
 import { persistNadleRound } from './persistRound'
-import { readSessionFromCookie } from './sessionJwt'
+import { readSessionFromCookie } from '../auth/session/sessionJwt'
 import { clearTwitchGuessThrottleForStreamer } from './tmiGuessThrottle'
 import { NadleWs } from './wsProtocol'
+import { normalizeWordLength, type NadleWordLength } from './nadleLogic'
 
 const clientsByStreamer = new Map<string, Set<WebSocket>>()
+const clientSessionBySocket = new WeakMap<WebSocket, { id: string; displayName: string; canSeeSecret: boolean }>()
+
+function canSessionControlNadle(session: { id: string; role?: string } | null): boolean {
+  return Boolean(session && (session.role === 'admin' || isAdminTwitchUserId(session.id)))
+}
 
 /** JSON ping so nginx / proxies do not close idle upstream WebSockets. */
 const NADLE_JSON_PING_MS = 25_000
@@ -97,7 +103,22 @@ function pushLeaderboard(streamerId: string): void {
 }
 
 export function broadcastGameState(streamerId: string): void {
-  broadcastNadleToStreamer(streamerId, { type: NadleWs.state, payload: getGameStatePayload(streamerId) })
+  const set = clientsByStreamer.get(streamerId)
+  if (!set) {
+    return
+  }
+  for (const ws of set) {
+    const session = clientSessionBySocket.get(ws)
+    safeSend(ws, {
+      type: NadleWs.state,
+      payload: getGameStatePayload(
+        streamerId,
+        session
+          ? { userId: session.id, displayName: session.displayName, canSeeSecret: session.canSeeSecret }
+          : undefined,
+      ),
+    })
+  }
 }
 
 export function broadcastUserGuess(streamerId: string, payload: Record<string, unknown>): void {
@@ -147,7 +168,7 @@ export function broadcastTwitchChatLine(
 
 type ClientMsg =
   | { type: typeof NadleWs.clientGuess; word: string; gameId?: string }
-  | { type: typeof NadleWs.clientNextWord }
+  | { type: typeof NadleWs.clientNextWord; wordLength?: NadleWordLength }
 
 function parseClientMsg(raw: string): ClientMsg | null {
   let data: unknown
@@ -159,7 +180,7 @@ function parseClientMsg(raw: string): ClientMsg | null {
   if (!data || typeof data !== 'object') {
     return null
   }
-  const o = data as { type?: string; word?: unknown; gameId?: unknown }
+  const o = data as { type?: string; word?: unknown; gameId?: unknown; wordLength?: unknown }
   if (o.type === NadleWs.clientGuess && typeof o.word === 'string') {
     return {
       type: NadleWs.clientGuess,
@@ -168,7 +189,7 @@ function parseClientMsg(raw: string): ClientMsg | null {
     }
   }
   if (o.type === NadleWs.clientNextWord) {
-    return { type: NadleWs.clientNextWord }
+    return { type: NadleWs.clientNextWord, wordLength: normalizeWordLength(o.wordLength) }
   }
   return null
 }
@@ -230,8 +251,24 @@ export function attachNadleSocketServer(wss: WebSocketServer): void {
     void (async () => {
       await hydrateNadleLiveGame(streamerId)
       registerClient(streamerId, ws)
+      const sessionCanSeeSecret = canSessionControlNadle(session)
+      if (session) {
+        clientSessionBySocket.set(ws, {
+          id: session.id,
+          displayName: session.display_name,
+          canSeeSecret: sessionCanSeeSecret,
+        })
+      }
 
-      safeSend(ws, { type: NadleWs.state, payload: getGameStatePayload(streamerId) })
+      safeSend(ws, {
+        type: NadleWs.state,
+        payload: getGameStatePayload(
+          streamerId,
+          session
+            ? { userId: session.id, displayName: session.display_name, canSeeSecret: sessionCanSeeSecret }
+            : undefined,
+        ),
+      })
       safeSend(ws, { type: NadleWs.leaderboard, payload: getLeaderboardPayload(streamerId) })
       safeSend(ws, {
         type: NadleWs.session,
@@ -243,7 +280,7 @@ export function attachNadleSocketServer(wss: WebSocketServer): void {
                 profile_image_url: session.profile_image_url,
               }
             : null,
-          isAdmin: session ? isAdminTwitchUserId(session.id) : false,
+          isAdmin: sessionCanSeeSecret,
           adminRouteConfigured: isAdminConfigured(),
         },
       })
@@ -300,12 +337,22 @@ export function attachNadleSocketServer(wss: WebSocketServer): void {
       }
 
       if (msg.type === NadleWs.clientNextWord) {
-        if (!session || !isAdminTwitchUserId(session.id)) {
-          safeSend(ws, { type: NadleWs.error, payload: { code: 'forbidden', message: 'Admin only' } })
+        if (!session) {
+          safeSend(ws, { type: NadleWs.error, payload: { code: 'auth_required', message: 'Login to start a new word' } })
           return
         }
-        const meta = adminStartNewGame(streamerId)
-        broadcastNewRound(streamerId, meta)
+        const meta = startPlayerNewGame(streamerId, session.id, session.display_name, msg.wordLength)
+        clearTwitchGuessThrottleForStreamer(streamerId)
+        safeSend(ws, { type: NadleWs.newGame, payload: meta })
+        safeSend(ws, {
+          type: NadleWs.state,
+          payload: getGameStatePayload(streamerId, {
+            userId: session.id,
+            displayName: session.display_name,
+            canSeeSecret: canSessionControlNadle(session),
+          }),
+        })
+        pushLeaderboard(streamerId)
       }
     })
 

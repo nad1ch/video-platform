@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { prisma } from '../prisma'
+import { isDatabaseConfigured, prisma } from '../prisma'
 import { classifyGuessHeat } from './nadrawGuess'
 import {
   buildMaskedDisplay,
@@ -90,11 +90,6 @@ function notifyState(streamerId: string): void {
 
 function emitFeedback(streamerId: string, p: Parameters<FeedbackListener>[1]): void {
   feedbackListener?.(streamerId, p)
-}
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
 }
 
 function clearUnlockTimer(room: Room): void {

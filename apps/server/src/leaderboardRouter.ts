@@ -1,21 +1,11 @@
 import type { Express, Request, Response } from 'express'
 import { Prisma } from '@prisma/client'
-import { prisma } from './prisma'
+import { isDatabaseConfigured, prisma } from './prisma'
 import { resolvePrismaUserIdFromSession } from './auth/resolvePrismaUserFromSession'
 import { readSessionFromCookie } from './auth/session/sessionJwt'
 
-/** Matches `MAX_ATTEMPTS` in client `nadleLogic` / solo board rows. */
-const SOLO_MAX_ATTEMPTS = 6
 const CHECKERS_ELO_INITIAL = 1200
 const CHECKERS_ELO_K = 20
-
-/** `GameRound.winnerUserId` when a solo round ends in a loss (player exhausted attempts). Not a real user id. */
-const NADLE_SOLO_LOSS_PLACEHOLDER_WINNER = '__nadle_solo_loss__'
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
-}
 
 type ParticipantRow = {
   userId: string
@@ -372,120 +362,11 @@ async function checkersRatingLeaderboard(): Promise<
 
 export function mountLeaderboardRoutes(app: Express): void {
   /**
-   * Records a solo nadle result for any signed-in user with a linked `User` row.
-   * Body: { streamerId, result?: 'win' | 'lose', attempts } — rating uses wins − (gamesPlayed − wins).
+   * Nadle results must be written by the server-side WebSocket round flow.
+   * Client-local solo boards cannot prove the secret word or terminal state.
    */
-  app.post('/api/wins', async (req: Request, res: Response) => {
-    if (!isDatabaseConfigured()) {
-      res.status(503).json({ error: 'database_unconfigured' })
-      return
-    }
-    const session = readSessionFromCookie(req.headers.cookie)
-    if (!session) {
-      res.status(401).json({ error: 'unauthorized' })
-      return
-    }
-    const userId = await resolvePrismaUserIdFromSession(session)
-    if (!userId) {
-      res.status(401).json({ error: 'account_not_linked' })
-      return
-    }
-    const body = req.body as { streamerId?: unknown; attempts?: unknown; result?: unknown }
-    const streamerId = typeof body.streamerId === 'string' ? body.streamerId.trim() : ''
-    const attemptsRaw = body.attempts
-    const attempts =
-      typeof attemptsRaw === 'number' && Number.isFinite(attemptsRaw)
-        ? Math.round(attemptsRaw)
-        : typeof attemptsRaw === 'string'
-          ? Number.parseInt(attemptsRaw, 10)
-          : NaN
-    const resultRaw = body.result
-    const result =
-      resultRaw === 'lose'
-        ? 'lose'
-        : resultRaw === 'win' || resultRaw === undefined
-          ? 'win'
-          : null
-    if (result === null) {
-      res.status(400).json({ error: 'invalid_body' })
-      return
-    }
-    if (!streamerId) {
-      res.status(400).json({ error: 'invalid_body' })
-      return
-    }
-    if (result === 'win') {
-      if (!Number.isFinite(attempts) || attempts < 1 || attempts > SOLO_MAX_ATTEMPTS) {
-        res.status(400).json({ error: 'invalid_body' })
-        return
-      }
-    } else if (!Number.isFinite(attempts) || attempts !== SOLO_MAX_ATTEMPTS) {
-      res.status(400).json({ error: 'invalid_body' })
-      return
-    }
-    try {
-      const streamer = await prisma.streamer.findFirst({
-        where: { id: streamerId, isActive: true },
-        select: { id: true },
-      })
-      if (!streamer) {
-        res.status(404).json({ error: 'streamer_not_found' })
-        return
-      }
-      const isWin = result === 'win'
-      await prisma.$transaction(async (tx) => {
-        if (isWin) {
-          await tx.userStreamerStats.upsert({
-            where: {
-              userId_streamerId: { userId, streamerId },
-            },
-            create: {
-              userId,
-              streamerId,
-              gamesPlayed: 1,
-              wins: 1,
-            },
-            update: {
-              gamesPlayed: { increment: 1 },
-              wins: { increment: 1 },
-            },
-          })
-        } else {
-          await tx.userStreamerStats.upsert({
-            where: {
-              userId_streamerId: { userId, streamerId },
-            },
-            create: {
-              userId,
-              streamerId,
-              gamesPlayed: 1,
-              wins: 0,
-            },
-            update: {
-              gamesPlayed: { increment: 1 },
-            },
-          })
-        }
-        const round = await tx.gameRound.create({
-          data: {
-            streamerId,
-            winnerUserId: isWin ? userId : NADLE_SOLO_LOSS_PLACEHOLDER_WINNER,
-          },
-        })
-        await tx.gameResult.create({
-          data: {
-            roundId: round.id,
-            userId,
-            attempts,
-            isWinner: isWin,
-          },
-        })
-      })
-      res.status(204).end()
-    } catch (e) {
-      console.error('[leaderboard] POST /api/wins', e)
-      res.status(500).json({ error: 'server_error' })
-    }
+  app.post('/api/wins', (_req: Request, res: Response) => {
+    res.status(410).json({ error: 'server_authority_required' })
   })
 
   app.get('/api/leaderboard/wins', async (req: Request, res: Response) => {

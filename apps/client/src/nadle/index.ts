@@ -9,7 +9,6 @@ export {
   fetchLeaderboardStreak,
   type FetchLeaderboardStreakResult,
   fetchLeaderboardWins,
-  postNadleWin,
   requestNadlePublicConfig,
   type NadleGlobalRatingRow,
   type NadleGlobalStreakRow,

@@ -14,8 +14,7 @@ import { useNadleGlobalLeaderboard } from '@/composables/useNadleGlobalLeaderboa
 import { NADLE_DICTIONARY_ERROR_TEXT, useNadleState } from '@/composables/useNadleState'
 import { useNadleStatusBanners } from '@/composables/useNadleStatusBanners'
 import { useNadleStreamerRoom } from '@/composables/useNadleStreamerRoom'
-import { postNadleWin } from '@/nadle/nadleApi'
-import type { Feedback } from '@/nadle/nadleLogic'
+import { isAllowedGuess, type Feedback } from '@/nadle/nadleLogic'
 import { useNadleWs } from '@/nadle/ws'
 import { createLogger } from '@/utils/logger'
 import { useAuth } from '@/composables/useAuth'
@@ -151,12 +150,10 @@ const {
   localGuesses,
   gameStatus,
   localRoundId,
-  soloLbPosted,
   localStats,
   secretPeekVisible,
   guessInput,
   nadleGridRows,
-  kbdKeyFeedbackModifier,
   kbdAppendLetter,
   clampGuessSrInput,
   kbdBackspace,
@@ -178,7 +175,7 @@ const { topBanner, wsStatusLabel, ircRelayBanner } = useNadleStatusBanners({
 })
 
 watch(lastError, (text) => {
-  if (text !== NADLE_DICTIONARY_ERROR_TEXT) {
+  if (!text) {
     return
   }
   showNadleToast(text)
@@ -261,6 +258,8 @@ const displayGameStatus = computed(() => (useServerBoard.value ? serverGameStatu
 const displayBoardLocked = computed(
   () => displayGameStatus.value !== 'playing' || (serverPlayer.value?.rows.length ?? localGuesses.value.length) >= NADLE_MAX_ATTEMPTS,
 )
+const canStartNewActiveRound = computed(() => !useServerBoard.value || Boolean(sessionUser.value))
+const displaySecretWord = computed(() => (useServerBoard.value ? (gameState.value?.secretWord ?? '') : secretWord.value))
 
 const serverRoundKey = ref(0)
 watch(
@@ -328,6 +327,34 @@ const displayGridRows = computed((): NadleLocalBoardCell[][] => {
   return rows
 })
 
+const FEEDBACK_RANK: Record<Feedback, number> = {
+  absent: 0,
+  present: 1,
+  correct: 2,
+}
+
+const activeKbdLetterBestFeedback = computed(() => {
+  const map = new Map<string, Feedback>()
+  for (const row of displayGridRows.value) {
+    for (const cell of row) {
+      if (!cell.letter || cell.feedback == null) {
+        continue
+      }
+      const ch = normalizeWord(cell.letter)
+      const prev = map.get(ch)
+      if (prev == null || FEEDBACK_RANK[cell.feedback] > FEEDBACK_RANK[prev]) {
+        map.set(ch, cell.feedback)
+      }
+    }
+  }
+  return map
+})
+
+function activeKbdKeyFeedbackModifier(ch: string): string | undefined {
+  const fb = activeKbdLetterBestFeedback.value.get(normalizeWord(ch))
+  return fb ? `nadle-page__kbd-key--${fb}` : undefined
+}
+
 watch(
   () => effectiveNadleSlug.value || 'default',
   async (scope) => {
@@ -339,36 +366,15 @@ watch(
   { immediate: true },
 )
 
-async function postSoloRoundToLeaderboard(result: 'win' | 'lose'): Promise<void> {
-  if (!isAuthenticated.value || soloLbPosted.value) {
-    return
-  }
-  const streamerId = streamerProfile.value?.id
-  if (typeof streamerId !== 'string' || streamerId.length === 0) {
-    return
-  }
-  const attempts = localGuesses.value.length
-  if (result === 'win') {
-    if (attempts < 1 || attempts > NADLE_MAX_ATTEMPTS) {
-      return
-    }
-  } else if (attempts !== NADLE_MAX_ATTEMPTS) {
-    return
-  }
-  soloLbPosted.value = true
-  try {
-    const ok = await postNadleWin({ streamerId, result, attempts })
-    if (!ok) {
-      soloLbPosted.value = false
-      return
-    }
-    void loadGlobalLbActive()
-  } catch {
-    soloLbPosted.value = false
-  }
-}
-
 function submitActiveGuess(): void {
+  const guess = normalizeWord(guessInput.value)
+  if (wordGraphemeCount(guess) !== activeWordLength.value) {
+    return
+  }
+  if (!isAllowedGuess(guess, activeWordLength.value)) {
+    lastError.value = NADLE_DICTIONARY_ERROR_TEXT
+    return
+  }
   if (!useServerBoard.value) {
     submitGuess()
     return
@@ -377,12 +383,8 @@ function submitActiveGuess(): void {
   if (displayBoardLocked.value) {
     return
   }
-  const guess = normalizeWord(guessInput.value)
-  if (wordGraphemeCount(guess) !== activeWordLength.value) {
-    return
-  }
   if (!sendNadleWsGuess(guess, gameState.value?.gameId)) {
-    lastError.value = 'WebSocket is not connected.'
+    lastError.value = t('nadleUi.wsNotConnected')
     return
   }
   guessInput.value = ''
@@ -407,13 +409,16 @@ function newActiveRound(): void {
     newRoundSameLength()
     return
   }
-  if (!requestNadleNextWord()) {
-    lastError.value = 'WebSocket is not connected.'
+  if (!requestNadleNextWord(activeWordLength.value)) {
+    lastError.value = t('nadleUi.wsNotConnected')
   }
 }
 
 function setActiveWordLength(len: 5 | 6 | 7): void {
   if (useServerBoard.value) {
+    if (!requestNadleNextWord(len)) {
+      lastError.value = t('nadleUi.wsNotConnected')
+    }
     return
   }
   setWordLength(len)
@@ -467,12 +472,10 @@ watch(gameStatus, (next, prev) => {
     const s = { ...localStats.value, won: localStats.value.won + 1 }
     localStats.value = s
     persistCurrentLocalStats(s)
-    void postSoloRoundToLeaderboard('win')
   } else if (next === 'lost') {
     const s = { ...localStats.value, lost: localStats.value.lost + 1 }
     localStats.value = s
     persistCurrentLocalStats(s)
-    void postSoloRoundToLeaderboard('lose')
   }
 })
 
@@ -567,7 +570,7 @@ onUnmounted(() => {
             </div>
             <Transition name="nadle-peek-word">
               <p v-if="secretPeekVisible" class="nadle-page__peek-word nadle-page__peek-word--side" aria-live="polite">
-                {{ secretWord }}
+                {{ displaySecretWord }}
               </p>
             </Transition>
           </div>
@@ -619,7 +622,13 @@ onUnmounted(() => {
                 />
               </div>
               <p class="nadle-page__celebrate-title">{{ t('nadleUi.celebrateTitle') }}</p>
-              <AppButton variant="primary" type="button" class="nadle-page__celebrate-btn" @click="newActiveRound">
+              <AppButton
+                v-if="canStartNewActiveRound"
+                variant="primary"
+                type="button"
+                class="nadle-page__celebrate-btn"
+                @click="newActiveRound"
+              >
                 {{ t('nadleUi.newWord') }}
               </AppButton>
             </div>
@@ -629,9 +638,9 @@ onUnmounted(() => {
               class="nadle-page__game-panel-width nadle-page__end-panel nadle-page__end-panel--lost"
             >
               <p class="nadle-page__end-panel-text">
-                {{ t('nadleUi.lostWasWord') }} <strong class="nadle-page__secret">{{ secretWord }}</strong>
+                {{ t('nadleUi.lostWasWord') }} <strong class="nadle-page__secret">{{ displaySecretWord }}</strong>
               </p>
-              <AppButton variant="primary" type="button" @click="newActiveRound">{{
+              <AppButton v-if="canStartNewActiveRound" variant="primary" type="button" @click="newActiveRound">{{
                 t('nadleUi.newWord')
               }}</AppButton>
             </div>
@@ -645,7 +654,7 @@ onUnmounted(() => {
               :word-length-options="WORD_LENGTH_OPTIONS"
               :keys-disabled="displayBoardLocked"
               :enter-disabled="displayBoardLocked || wordGraphemeCount(normalizeWord(guessInput)) !== activeWordLength"
-              :letter-class="kbdKeyFeedbackModifier"
+              :letter-class="activeKbdKeyFeedbackModifier"
               :screen-keyboard-aria="t('nadleUi.screenKeyboardAria')"
               :kbd-toolbar-aria="t('nadleUi.kbdToolbarAria')"
               :enter-label="t('nadleUi.enter')"
@@ -1330,6 +1339,15 @@ onUnmounted(() => {
 }
 
 @supports (width: 1cqi) {
+  .nadle-page--len5 .nadle-page__game,
+  .nadle-page--len6 .nadle-page__game,
+  .nadle-page--len7 .nadle-page__game {
+    --nadle-cell: min(
+      calc((100cqi - 2 * var(--nadle-game-edge) - (var(--nadle-len-css, 5) - 1) * var(--nadle-gap)) / var(--nadle-len-css, 5)),
+      calc((100cqh - var(--nadle-keyboard-reserve) - 2 * var(--nadle-game-edge) - 5 * var(--nadle-gap)) / 6)
+    );
+  }
+
   @media (max-width: 1200px) {
     /* Один плавний режим для всіх <=1200px, без окремого "перелому" на 960px. */
     .nadle-page--len5 .nadle-page__game {
@@ -1432,7 +1450,10 @@ onUnmounted(() => {
 }
 
 .nadle-page__stack--game {
-  justify-content: flex-start;
+  justify-content: center;
+  align-items: center;
+  padding: 8px;
+  overflow: hidden;
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.7px),
     radial-gradient(circle at 34% 58%, rgba(102, 56, 143, 0.23), transparent 30%),
@@ -1453,6 +1474,8 @@ onUnmounted(() => {
 
 .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
   min-height: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .nadle-page__grid :deep(.nadle-page__stack) {
@@ -1641,19 +1664,23 @@ onUnmounted(() => {
 }
 
 .nadle-page__game {
+  --nadle-keyboard-reserve: clamp(170px, 28cqh, 240px);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 13px;
+  justify-content: center;
+  gap: clamp(6px, 1.1cqh, 12px);
   flex: 1 1 auto;
   width: 100%;
+  height: 100%;
   max-width: 100%;
-  justify-content: flex-start;
+  max-height: 100%;
   min-height: 0;
   min-width: 0;
   box-sizing: border-box;
-  padding: 22px 57px 18px;
-  container-type: inline-size;
+  overflow: hidden;
+  padding: 0;
+  container-type: size;
   container-name: nadle-game;
 }
 
@@ -1918,6 +1945,173 @@ onUnmounted(() => {
     height: auto;
     max-height: none;
     overflow-y: auto;
+  }
+}
+
+/* Final game-card sizing: one outer 8px inset, centered content, no nested padding. */
+.nadle-page__stack--game {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  overflow: hidden;
+}
+
+.nadle-page__stack--game > .nadle-page__game,
+.nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
+  flex: 0 1 auto;
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  padding: 0;
+  overflow: visible;
+  justify-content: center;
+  container-type: inline-size;
+}
+
+@supports (width: 1cqi) {
+  .nadle-page--len5 .nadle-page__game,
+  .nadle-page--len6 .nadle-page__game,
+  .nadle-page--len7 .nadle-page__game {
+    --nadle-cell: min(
+      calc((100cqi - (var(--nadle-len-css, 5) - 1) * var(--nadle-gap)) / var(--nadle-len-css, 5)),
+      clamp(42px, 8vmin, 74px)
+    );
+  }
+}
+
+@supports not (width: 1cqi) {
+  .nadle-page--len5 .nadle-page__game,
+  .nadle-page--len6 .nadle-page__game,
+  .nadle-page--len7 .nadle-page__game {
+    --nadle-cell: min(
+      calc((100% - (var(--nadle-len-css, 5) - 1) * var(--nadle-gap)) / var(--nadle-len-css, 5)),
+      clamp(42px, 8vmin, 74px)
+    );
+  }
+}
+
+@media (min-width: 1201px) {
+  .nadle-page__grid > .nadle-page__stack--game {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .nadle-page__stack--game > .nadle-page__game,
+  .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
+    flex: 0 1 auto;
+    height: auto;
+    justify-content: center;
+  }
+
+  .nadle-page__grid :deep(.nadle-page__stack--game .nadle-page__guess-board) {
+    flex: 0 0 auto;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 1200px) {
+  .nadle-page__grid > .nadle-page__stack--game {
+    min-height: 0;
+    height: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .nadle-page__grid > .nadle-page__stack--game {
+    width: min(100%, calc(100vw - 16px));
+    min-height: 0;
+    height: auto;
+  }
+
+  .nadle-page__stack--game > .nadle-page__game,
+  .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    container-type: inline-size;
+  }
+
+  .nadle-page--len5 .nadle-page__game,
+  .nadle-page--len6 .nadle-page__game,
+  .nadle-page--len7 .nadle-page__game {
+    --nadle-cell: min(
+      calc((100vw - 32px - (var(--nadle-len-css, 5) - 1) * var(--nadle-gap)) / var(--nadle-len-css, 5)),
+      52px
+    );
+  }
+}
+
+/* Large displays: scale only typography and controls; keep layout blocks/cells unchanged. */
+@media (min-width: 1440px) {
+  .nadle-page {
+    --nadle-content-scale: clamp(1.16, 0.08vw + 1.04, 1.28);
+    font-size: clamp(1.14rem, 0.78vw, 1.42rem);
+  }
+
+  .nadle-page__leader-stack :deep(.nadle-page__global-lb-title),
+  .nadle-page__stack--chat :deep(.twitch-relay-chat__title) {
+    font-size: clamp(1.05rem, 0.82vw, 1.45rem);
+  }
+
+  .nadle-page__leader-stack :deep(.nadle-page__global-lb),
+  .nadle-page__stack--chat :deep(.twitch-relay-chat__shell),
+  .nadle-page__stack--chat :deep(.twitch-relay-chat__feed),
+  .nadle-page__side-tools,
+  .nadle-page__hint,
+  .nadle-page__channel-line {
+    font-size: clamp(0.88rem, 0.62vw, 1.12rem);
+  }
+
+  .nadle-page :deep(button),
+  .nadle-page :deep(a),
+  .nadle-page :deep(input),
+  .nadle-page :deep(select) {
+    font-size: clamp(0.98rem, 0.68vw, 1.22rem);
+  }
+
+  .nadle-page__stack--game > .nadle-page__game,
+  .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
+    transform: scale(var(--nadle-content-scale));
+    transform-origin: center;
+  }
+
+  .nadle-page__leader-stack,
+  .nadle-page__side-tools,
+  .nadle-page__stack--chat :deep(.twitch-relay-chat__shell) {
+    transform: scale(var(--nadle-content-scale));
+    transform-origin: top center;
+  }
+}
+
+@media (min-width: 2200px) {
+  .nadle-page {
+    --nadle-content-scale: clamp(1.34, 0.05vw + 1.22, 1.56);
+    font-size: clamp(1.42rem, 0.74vw, 1.96rem);
+  }
+
+  .nadle-page__leader-stack :deep(.nadle-page__global-lb-title),
+  .nadle-page__stack--chat :deep(.twitch-relay-chat__title) {
+    font-size: clamp(1.3rem, 0.7vw, 2rem);
+  }
+
+  .nadle-page__leader-stack :deep(.nadle-page__global-lb),
+  .nadle-page__stack--chat :deep(.twitch-relay-chat__shell),
+  .nadle-page__stack--chat :deep(.twitch-relay-chat__feed),
+  .nadle-page__side-tools,
+  .nadle-page__hint,
+  .nadle-page__channel-line {
+    font-size: clamp(1.02rem, 0.54vw, 1.45rem);
+  }
+
+  .nadle-page :deep(button),
+  .nadle-page :deep(a),
+  .nadle-page :deep(input),
+  .nadle-page :deep(select) {
+    font-size: clamp(1.16rem, 0.58vw, 1.56rem);
   }
 }
 </style>

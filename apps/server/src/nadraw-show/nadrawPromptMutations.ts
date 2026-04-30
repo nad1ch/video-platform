@@ -1,10 +1,5 @@
-import { prisma } from '../prisma'
+import { isDatabaseConfigured, prisma } from '../prisma'
 import { normalizeNadrawPromptKey } from './nadrawGuess'
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
-}
 
 function sanitizePromptText(raw: string): string | null {
   const t = raw.trim().replace(/\s+/g, ' ')

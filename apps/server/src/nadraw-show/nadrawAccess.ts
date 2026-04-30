@@ -1,11 +1,6 @@
-import { prisma } from '../prisma'
+import { isDatabaseConfigured, prisma } from '../prisma'
 import type { SessionPayload } from '../auth/session/sessionJwt'
 import { resolvePrismaUserIdFromSession } from '../auth/resolvePrismaUserFromSession'
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
-}
 
 /**
  * Streamer may control the room if they own the streamer row, are linked as channel Twitch id,

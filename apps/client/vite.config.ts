@@ -17,7 +17,10 @@ const devWsProxyTarget = devApiProxyTarget.startsWith('https://')
 
 function manualAppChunks(id: string): string | undefined {
   const normalizedId = id.replace(/\\/g, '/')
-  if (normalizedId.endsWith('/apps/client/src/nadle/words-uk-dictionary.generated.ts')) {
+  if (
+    normalizedId.endsWith('/apps/client/src/nadle/words-uk-dictionary.generated.ts') ||
+    normalizedId.endsWith('/packages/nadle-core/dictionary.mjs')
+  ) {
     return 'nadle-dictionary'
   }
   if (normalizedId.endsWith('/apps/client/src/routeNavLoading.ts')) {
@@ -128,6 +131,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'src'),
       // Hoisted to repo root node_modules; Vite dev resolves from apps/client and misses it without an alias.
+      'nadle-core/dictionary': path.resolve(__dirname, '../../packages/nadle-core/dictionary.mjs'),
       'nadle-core': path.resolve(__dirname, '../../packages/nadle-core/index.mjs'),
       'ui-theme': path.resolve(__dirname, '../../packages/ui-theme/src/index.css'),
       'call-core/audio': path.resolve(__dirname, '../../packages/call-core/src/audio/index.ts'),

@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client'
-import { prisma } from '../prisma'
+import { isDatabaseConfigured, prisma } from '../prisma'
 
 export type NadleRoundPlayer = {
   userId: string
@@ -11,11 +11,6 @@ export type PersistNadleRoundInput = {
   streamerId: string
   winnerUserId: string
   players: NadleRoundPlayer[]
-}
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
 }
 
 async function resolveDbUserId(

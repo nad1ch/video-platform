@@ -130,14 +130,9 @@ export function useNadleState(options: UseNadleStateOptions) {
   const localGuesses = ref<LocalGuessRow[]>([])
   const gameStatus = ref<'playing' | 'won' | 'lost'>('playing')
   const localRoundId = ref(0)
-  const soloLbPosted = ref(false)
   const localStats = ref<LocalWinStats>({ won: 0, lost: 0 })
   const secretPeekVisible = ref(false)
   const guessInput = ref('')
-
-  watch(localRoundId, () => {
-    soloLbPosted.value = false
-  })
 
   function hydrateScope(scope: string): void {
     const len = loadWordLength(scope)
@@ -280,13 +275,13 @@ export function useNadleState(options: UseNadleStateOptions) {
   }
 
   function submitGuess(): void {
-    lastError.value = null
-    if (gameStatus.value !== 'playing') {
-      return
-    }
     const guess = normalizeWord(guessInput.value)
     const len = wordLength.value
     if (wordGraphemeCount(guess) !== len) {
+      return
+    }
+    lastError.value = null
+    if (gameStatus.value !== 'playing') {
       return
     }
     if (!isAllowedGuess(guess, len)) {
@@ -349,7 +344,6 @@ export function useNadleState(options: UseNadleStateOptions) {
     localGuesses,
     gameStatus,
     localRoundId,
-    soloLbPosted,
     localStats,
     secretPeekVisible,
     guessInput,

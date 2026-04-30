@@ -1,13 +1,8 @@
 import type { Express, Request, Response } from 'express'
-import { prisma } from '../prisma'
+import { isDatabaseConfigured, prisma } from '../prisma'
 import { readSessionFromCookie } from '../auth/session/sessionJwt'
 import { canUserControlNadrawRoom } from './nadrawAccess'
 import { normalizeNadrawPromptKey } from './nadrawGuess'
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
-}
 
 function badJson(res: Response, code: string, status = 400): void {
   res.status(status).json({ error: code })

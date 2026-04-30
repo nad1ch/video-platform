@@ -1,7 +1,8 @@
-import { prisma } from '../prisma'
+import { isDatabaseConfigured, prisma } from '../prisma'
 import type { NadrawRoomSnapshot } from './nadrawGameStore'
 
 const SCHEMA_VERSION = 1
+const skippedLiveRoomStreamerIds = new Set<string>()
 
 export type PersistedNadrawDraw = {
   phase: 'start' | 'move' | 'end'
@@ -37,11 +38,6 @@ type Snapshot = PersistedNadrawLiveRoom & {
   schemaVersion: typeof SCHEMA_VERSION
 }
 
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
-}
-
 export function parseNadrawLiveRoomSnapshot(value: unknown): PersistedNadrawLiveRoom | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
@@ -64,6 +60,19 @@ export function parseNadrawLiveRoomSnapshot(value: unknown): PersistedNadrawLive
   }
 }
 
+async function canPersistLiveRoomForStreamer(streamerId: string): Promise<boolean> {
+  const streamer = await prisma.streamer.findUnique({ where: { id: streamerId }, select: { id: true } })
+  if (streamer) {
+    skippedLiveRoomStreamerIds.delete(streamerId)
+    return true
+  }
+  if (!skippedLiveRoomStreamerIds.has(streamerId)) {
+    skippedLiveRoomStreamerIds.add(streamerId)
+    console.warn('[nadraw-show] skip live room persistence: streamer row not found', { streamerId })
+  }
+  return false
+}
+
 export async function loadNadrawLiveRoom(streamerId: string): Promise<PersistedNadrawLiveRoom | null> {
   if (!isDatabaseConfigured()) {
     return null
@@ -82,12 +91,16 @@ export function persistNadrawLiveRoom(streamerId: string, snapshot: PersistedNad
     return
   }
   const state: Snapshot = { schemaVersion: SCHEMA_VERSION, ...snapshot }
-  void prisma.nadrawLiveRoom
-    .upsert({
+  void (async () => {
+    if (!(await canPersistLiveRoomForStreamer(streamerId))) {
+      return
+    }
+    await prisma.nadrawLiveRoom.upsert({
       where: { streamerId },
       create: { streamerId, state },
       update: { state },
     })
+  })()
     .catch((error) => {
       console.error('[nadraw-show] persist live room failed', { streamerId, error })
     })

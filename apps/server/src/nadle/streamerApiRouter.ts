@@ -1,11 +1,6 @@
 import type { Express, Request, Response } from 'express'
-import { prisma } from '../prisma'
+import { isDatabaseConfigured, prisma } from '../prisma'
 import { DEV_FALLBACK_STREAMER_ID } from './streamerContext'
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
-}
 
 function normalizeTwitchUsername(raw: string): string | null {
   const t = raw.trim().replace(/^#/, '').toLowerCase()

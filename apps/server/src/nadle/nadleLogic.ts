@@ -1,4 +1,12 @@
 import { computeFeedback, wordGraphemeCount } from 'nadle-core'
+import {
+  WORDS_UK_5_ALLOWED,
+  WORDS_UK_5_SECRET_POOL,
+  WORDS_UK_6_ALLOWED,
+  WORDS_UK_6_SECRET_POOL,
+  WORDS_UK_7_ALLOWED,
+  WORDS_UK_7_SECRET_POOL,
+} from 'nadle-core/dictionary'
 
 /**
  * Canonical nadle string rules for this repo. Keep client in sync:
@@ -9,11 +17,21 @@ import { computeFeedback, wordGraphemeCount } from 'nadle-core'
 
 export { wordGraphemeCount, computeFeedback }
 
-/** MVP pool; includes ґ / є-style letters — matching uses NFC + uk-UA lowercase. */
-const WORDS = ['слово', 'кава', 'вікно', 'книга', 'ґрунт', 'єнот']
+export type NadleWordLength = 5 | 6 | 7
 
-export function generateWord(): string {
-  return WORDS[Math.floor(Math.random() * WORDS.length)]!
+const PACK: Record<NadleWordLength, { allowed: Set<string>; secret: readonly string[] }> = {
+  5: { allowed: new Set(WORDS_UK_5_ALLOWED), secret: WORDS_UK_5_SECRET_POOL },
+  6: { allowed: new Set(WORDS_UK_6_ALLOWED), secret: WORDS_UK_6_SECRET_POOL },
+  7: { allowed: new Set(WORDS_UK_7_ALLOWED), secret: WORDS_UK_7_SECRET_POOL },
+}
+
+export function normalizeWordLength(raw: unknown): NadleWordLength {
+  return raw === 6 || raw === 7 ? raw : 5
+}
+
+export function generateWord(length: NadleWordLength = 5): string {
+  const pool = PACK[length].secret
+  return pool[Math.floor(Math.random() * pool.length)]!
 }
 
 /**
@@ -30,4 +48,12 @@ export function isValidGuessShape(guess: string, wordLength: number): boolean {
     return false
   }
   return /^[\p{L}]+$/u.test(g)
+}
+
+export function isAllowedGuess(word: string, length: NadleWordLength): boolean {
+  const n = normalizeWord(word)
+  if (wordGraphemeCount(n) !== length) {
+    return false
+  }
+  return PACK[length].allowed.has(n)
 }

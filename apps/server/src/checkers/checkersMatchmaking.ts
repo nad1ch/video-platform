@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from 'express'
+import { getCheckersState } from './checkersGameStore'
 import { reserveCheckersMatchRoom } from './checkersSocket'
 import { readSessionFromCookie } from '../auth/session/sessionJwt'
 import { resolvePrismaUserIdFromSession } from '../auth/resolvePrismaUserFromSession'
@@ -161,11 +162,10 @@ export function mountCheckersMatchmakingRoutes(app: Express): void {
   })
 
   app.post('/api/matchmaking/result', async (req: Request, res: Response) => {
-    const body = req.body as { roomId?: unknown; winnerRole?: unknown; revision?: unknown } | undefined
+    const body = req.body as { roomId?: unknown; revision?: unknown } | undefined
     const roomId = typeof body?.roomId === 'string' ? body.roomId.trim().slice(0, 80) : ''
-    const winnerRole = body?.winnerRole === 'player1' || body?.winnerRole === 'player2' ? body.winnerRole : null
     const revision = typeof body?.revision === 'number' && Number.isFinite(body.revision) ? Math.floor(body.revision) : 0
-    if (!roomId || !winnerRole || revision < 1) {
+    if (!roomId || revision < 1) {
       res.status(400).json({ error: 'invalid_body' })
       return
     }
@@ -179,6 +179,15 @@ export function mountCheckersMatchmakingRoutes(app: Express): void {
       res.status(403).json({ error: 'forbidden' })
       return
     }
+    const state = getCheckersState(roomId)
+    if (state.revision !== revision) {
+      res.status(409).json({ recorded: false, reason: 'stale_revision' })
+      return
+    }
+    if (state.winner !== 'player1' && state.winner !== 'player2') {
+      res.status(409).json({ recorded: false, reason: 'not_finished' })
+      return
+    }
     const resultKey = `${roomId}:${revision}`
     if (recordedResultKeys.has(resultKey)) {
       res.json({ recorded: true })
@@ -190,7 +199,7 @@ export function mountCheckersMatchmakingRoutes(app: Express): void {
       await recordCheckersMatchResult({
         player1UserId: room.player1UserId,
         player2UserId: room.player2UserId,
-        winnerUserId: winnerRole === 'player1' ? room.player1UserId : room.player2UserId,
+        winnerUserId: state.winner === 'player1' ? room.player1UserId : room.player2UserId,
       })
       const afterRatings = await checkersRatingsForUsers([room.player1UserId, room.player2UserId])
       const before = beforeRatings.get(submitterUserId) ?? 1200

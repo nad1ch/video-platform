@@ -5,6 +5,17 @@ import { eatFirstSnapshot } from './snapshot'
 
 const subs = new Map<string, Set<WebSocket>>()
 
+function removeSubscription(gameId: string, ws: WebSocket): void {
+  const set = subs.get(gameId)
+  if (!set) {
+    return
+  }
+  set.delete(ws)
+  if (set.size === 0) {
+    subs.delete(gameId)
+  }
+}
+
 function safeSend(ws: WebSocket, obj: unknown): void {
   if (ws.readyState !== 1) {
     return
@@ -28,6 +39,9 @@ export function attachEatFirstSocketServer(wss: WebSocketServer): void {
             if (!gameId) {
               return
             }
+            if (subscribedId && subscribedId !== gameId) {
+              removeSubscription(subscribedId, ws)
+            }
             subscribedId = gameId
             let set = subs.get(gameId)
             if (!set) {
@@ -47,14 +61,7 @@ export function attachEatFirstSocketServer(wss: WebSocketServer): void {
       if (!subscribedId) {
         return
       }
-      const set = subs.get(subscribedId)
-      if (!set) {
-        return
-      }
-      set.delete(ws)
-      if (set.size === 0) {
-        subs.delete(subscribedId)
-      }
+      removeSubscription(subscribedId, ws)
     })
   })
 }

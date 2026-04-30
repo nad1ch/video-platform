@@ -41,6 +41,7 @@ export type NadleGameStatePayload = {
   gameId: string
   wordLength: number
   startedAt: number
+  secretWord?: string
   players: NadleGamePlayer[]
 }
 

@@ -1,12 +1,7 @@
-import { prisma } from '../prisma'
+import { isDatabaseConfigured, prisma } from '../prisma'
 import { resolveUserRole } from './resolveUserRole'
 import type { GoogleProfileForSession } from './googleOAuth'
 import type { TwitchProfileForSession } from './twitchClient'
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
-}
 
 /**
  * Upsert OAuth user in Postgres. Failures are logged only — JWT/session must still succeed without DB.

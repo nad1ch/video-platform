@@ -660,6 +660,7 @@
     "statusPlaying": "Playing",
     "cooldownHint": "Too fast — wait ~{seconds}s between guess messages",
     "globalLeaderboard": "Leaderboard",
+    "wsNotConnected": "WebSocket is not connected.",
     "chatMobileOpen": "Open chat",
     "chatMobileClose": "Close chat"
   },

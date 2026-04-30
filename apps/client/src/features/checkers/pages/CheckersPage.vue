@@ -366,7 +366,7 @@ watch(
       ...leaderboardWins.value,
       [label]: (leaderboardWins.value[label] ?? 0) + 1,
     })
-    void submitCheckersMatchResult(winner, revision)
+    void submitCheckersMatchResult(revision)
   },
 )
 
@@ -549,7 +549,7 @@ async function findMatch(): Promise<void> {
   }
 }
 
-async function submitCheckersMatchResult(winnerRole: 'player1' | 'player2', revision: number): Promise<void> {
+async function submitCheckersMatchResult(revision: number): Promise<void> {
   const room = checkers.roomId.value.trim()
   if (!room || checkers.mode.value !== 'friend') {
     return
@@ -557,7 +557,7 @@ async function submitCheckersMatchResult(winnerRole: 'player1' | 'player2', revi
   const res = await apiFetch('/api/matchmaking/result', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ roomId: room, winnerRole, revision }),
+    body: JSON.stringify({ roomId: room, revision }),
   }).catch(() => {})
   if (!res) return
   const data = await readJsonIfOk<{ ratingDelta?: number }>(res)

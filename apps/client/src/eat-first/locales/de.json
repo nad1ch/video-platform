@@ -656,6 +656,7 @@
     "statusPlaying": "Spielt",
     "cooldownHint": "Zu schnell — ~{seconds}s zwischen Rate-Versuchen warten",
     "globalLeaderboard": "Bestenliste",
+    "wsNotConnected": "WebSocket ist nicht verbunden.",
     "chatMobileOpen": "Chat öffnen",
     "chatMobileClose": "Chat schließen"
   },

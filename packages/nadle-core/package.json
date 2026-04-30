@@ -10,6 +10,11 @@
       "types": "./index.d.ts",
       "import": "./index.mjs",
       "require": "./index.cjs"
+    },
+    "./dictionary": {
+      "types": "./dictionary.d.ts",
+      "import": "./dictionary.mjs",
+      "require": "./dictionary.cjs"
     }
   }
 }

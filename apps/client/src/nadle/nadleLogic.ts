@@ -6,7 +6,7 @@ import {
   WORDS_UK_6_SECRET_POOL,
   WORDS_UK_7_ALLOWED,
   WORDS_UK_7_SECRET_POOL,
-} from './words-uk-dictionary.generated'
+} from 'nadle-core/dictionary'
 
 export type WordLength = 5 | 6 | 7
 

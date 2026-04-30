@@ -1,17 +1,13 @@
-import { prisma } from '../prisma'
+import { isDatabaseConfigured, prisma } from '../prisma'
 import type { Game, PlayerState, Store } from './types'
 
 const SCHEMA_VERSION = 1
+const skippedLiveGameStreamerIds = new Set<string>()
 
 type PersistedNadleLiveGame = {
   schemaVersion: typeof SCHEMA_VERSION
   currentGame: Game
   players: Record<string, PlayerState>
-}
-
-function isDatabaseConfigured(): boolean {
-  const u = process.env.DATABASE_URL
-  return typeof u === 'string' && u.trim().length > 0
 }
 
 function isGame(value: unknown): value is Game {
@@ -32,13 +28,15 @@ function isPlayer(value: unknown): value is PlayerState {
     attempts?: unknown
     guessed?: unknown
     rows?: unknown
+    game?: unknown
   }
   return (
     typeof player.userId === 'string' &&
     typeof player.displayName === 'string' &&
     typeof player.attempts === 'number' &&
     typeof player.guessed === 'boolean' &&
-    Array.isArray(player.rows)
+    Array.isArray(player.rows) &&
+    (player.game === undefined || isGame(player.game))
   )
 }
 
@@ -79,6 +77,19 @@ function toSnapshot(store: Store): PersistedNadleLiveGame {
   }
 }
 
+async function canPersistLiveGameForStreamer(streamerId: string): Promise<boolean> {
+  const streamer = await prisma.streamer.findUnique({ where: { id: streamerId }, select: { id: true } })
+  if (streamer) {
+    skippedLiveGameStreamerIds.delete(streamerId)
+    return true
+  }
+  if (!skippedLiveGameStreamerIds.has(streamerId)) {
+    skippedLiveGameStreamerIds.add(streamerId)
+    console.warn('[nadle] skip live game persistence: streamer row not found', { streamerId })
+  }
+  return false
+}
+
 export async function loadNadleLiveGame(streamerId: string): Promise<Store | null> {
   if (!isDatabaseConfigured()) {
     return null
@@ -98,12 +109,16 @@ export function persistNadleLiveGame(streamerId: string, store: Store): void {
     return
   }
   const state = toSnapshot(store)
-  void prisma.nadleLiveGame
-    .upsert({
+  void (async () => {
+    if (!(await canPersistLiveGameForStreamer(streamerId))) {
+      return
+    }
+    await prisma.nadleLiveGame.upsert({
       where: { streamerId },
       create: { streamerId, state },
       update: { state },
     })
+  })()
     .catch((error) => {
       console.error('[nadle] persist live game failed', { streamerId, error })
     })

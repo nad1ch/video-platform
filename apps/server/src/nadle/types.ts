@@ -14,6 +14,7 @@ export type GuessRow = {
 export type PlayerState = {
   userId: string
   displayName: string
+  game?: Game
   attempts: number
   guessed: boolean
   guessedAt?: number
@@ -29,6 +30,7 @@ export type GameStatePayload = {
   gameId: string
   wordLength: number
   startedAt: number
+  secretWord?: string
   players: Array<{
     userId: string
     displayName: string
