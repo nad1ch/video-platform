@@ -10,6 +10,7 @@ import { attachSocketServer } from './signaling/socketServer'
 import { corsAllowedOrigins } from './auth/clientOrigin'
 import { mountGlobalAuth } from './auth/oauthRouter'
 import { mountAdminRoutes } from './adminRouter'
+import { mountClientEventRoutes } from './clientEventsRouter'
 import { mountLeaderboardRoutes } from './leaderboardRouter'
 import { mountStreamerApiRoutes } from './nadle/streamerApiRouter'
 import { mountTwitchNadleAuth } from './nadle/twitchAuthRouter'
@@ -124,6 +125,7 @@ async function bootstrap(): Promise<void> {
   })
 
   mountGlobalAuth(app)
+  mountClientEventRoutes(app)
   mountStreamerApiRoutes(app)
   mountTwitchNadleAuth(app)
   mountLeaderboardRoutes(app)

@@ -4,7 +4,7 @@ import { isDatabaseConfigured, prisma } from './prisma'
 import { isSessionAdminFromCookie } from './auth/session/isAdminRequest'
 import { resolvePrismaUserIdFromSession } from './auth/resolvePrismaUserFromSession'
 import { readSessionFromCookie } from './auth/session/sessionJwt'
-import { getUserRoles, parseSystemRoles, setUserRoles } from './auth/userRoles'
+import { getUserRoles, parseFeaturePermissions, parseSystemRoles, setUserRoles } from './auth/userRoles'
 
 async function requireAdmin(req: Request, res: Response): Promise<boolean> {
   if (!(await isSessionAdminFromCookie(req.headers.cookie))) {
@@ -49,6 +49,76 @@ async function logAdminAudit(
     })
   } catch (e) {
     console.error('[admin] audit log write failed', e)
+  }
+}
+
+const RECENT_ACTIVITY_LIMIT = 20
+const ACTIVITY_SUMMARY_EVENT_LIMIT = 1000
+const MAX_SESSION_GAP_MS = 30 * 60 * 1000
+
+type ActivitySummaryRow = {
+  sessionId: string | null
+  path: string | null
+  createdAt: Date
+}
+
+function toIso(value: Date | null | undefined): string | null {
+  return value ? value.toISOString() : null
+}
+
+function summarizeActivity(
+  eventsDesc: ActivitySummaryRow[],
+  latestErrorAt: Date | null,
+): {
+  lastSeenAt: string | null
+  totalSessions: number
+  totalTimeSpentSeconds: number
+  lastPath: string | null
+} {
+  const latestEvent = eventsDesc[0] ?? null
+  const lastSeen =
+    latestEvent && latestErrorAt
+      ? latestEvent.createdAt > latestErrorAt
+        ? latestEvent.createdAt
+        : latestErrorAt
+      : latestEvent?.createdAt ?? latestErrorAt
+  const lastPath = eventsDesc.find((event) => event.path)?.path ?? null
+  const sessionIds = new Set<string>()
+  let anonymousSessions = 0
+  let lastAnonymousAt: Date | null = null
+  let totalTimeMs = 0
+  const lastBySession = new Map<string, Date>()
+
+  for (const event of [...eventsDesc].reverse()) {
+    if (event.sessionId) {
+      sessionIds.add(event.sessionId)
+      const previous = lastBySession.get(event.sessionId)
+      if (previous) {
+        const gap = event.createdAt.getTime() - previous.getTime()
+        if (gap > 0 && gap <= MAX_SESSION_GAP_MS) {
+          totalTimeMs += gap
+        }
+      }
+      lastBySession.set(event.sessionId, event.createdAt)
+      continue
+    }
+
+    if (!lastAnonymousAt || event.createdAt.getTime() - lastAnonymousAt.getTime() > MAX_SESSION_GAP_MS) {
+      anonymousSessions += 1
+    } else {
+      const gap = event.createdAt.getTime() - lastAnonymousAt.getTime()
+      if (gap > 0) {
+        totalTimeMs += gap
+      }
+    }
+    lastAnonymousAt = event.createdAt
+  }
+
+  return {
+    lastSeenAt: toIso(lastSeen),
+    totalSessions: sessionIds.size + anonymousSessions,
+    totalTimeSpentSeconds: Math.round(totalTimeMs / 1000),
+    lastPath,
   }
 }
 
@@ -101,6 +171,7 @@ export function mountAdminRoutes(app: Express): void {
           provider: u.provider,
           role,
           roles: roleContext?.roles ?? ['USER'],
+          permissions: roleContext?.permissions ?? [],
           streamerId: roleContext?.streamerId ?? undefined,
           twitchId: u.twitchId ?? undefined,
           wins: w?.wins ?? 0,
@@ -116,6 +187,100 @@ export function mountAdminRoutes(app: Express): void {
     }
   })
 
+  app.get('/api/admin/users/:userId/activity', async (req: Request, res: Response) => {
+    if (!(await requireAdmin(req, res))) {
+      return
+    }
+    if (!isDatabaseConfigured()) {
+      res.json({
+        databaseConfigured: false,
+        summary: { lastSeenAt: null, totalSessions: 0, totalTimeSpentSeconds: 0, lastPath: null },
+        gameSummary: { nadle: { gamesPlayed: 0, wins: 0, losses: 0, lastGameAt: null } },
+        recentEvents: [],
+        recentErrors: [],
+      })
+      return
+    }
+    const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : ''
+    if (!userId) {
+      res.status(400).json({ error: 'invalid_user_id' })
+      return
+    }
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, twitchId: true },
+      })
+      if (!user) {
+        res.status(404).json({ error: 'not_found' })
+        return
+      }
+      const gameUserIds = [user.id, user.twitchId].filter((id): id is string => Boolean(id?.trim()))
+      const [recentEvents, recentErrors, summaryEvents, nadleStats, lastNadleRound] = await Promise.all([
+        prisma.userActivityEvent.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          take: RECENT_ACTIVITY_LIMIT,
+          select: { event: true, path: true, metadata: true, createdAt: true },
+        }),
+        prisma.clientErrorEvent.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          take: RECENT_ACTIVITY_LIMIT,
+          select: { message: true, path: true, source: true, metadata: true, createdAt: true },
+        }),
+        prisma.userActivityEvent.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          take: ACTIVITY_SUMMARY_EVENT_LIMIT,
+          select: { sessionId: true, path: true, createdAt: true },
+        }),
+        prisma.userStreamerStats.aggregate({
+          where: { userId },
+          _sum: { gamesPlayed: true, wins: true },
+        }),
+        prisma.gameRound.findFirst({
+          where: {
+            streamerId: { not: null },
+            results: { some: { userId: { in: gameUserIds } } },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
+        }),
+      ])
+      const wins = nadleStats._sum.wins ?? 0
+      const gamesPlayed = nadleStats._sum.gamesPlayed ?? 0
+      res.json({
+        databaseConfigured: true,
+        summary: summarizeActivity(summaryEvents, recentErrors[0]?.createdAt ?? null),
+        gameSummary: {
+          nadle: {
+            gamesPlayed,
+            wins,
+            losses: Math.max(0, gamesPlayed - wins),
+            lastGameAt: toIso(lastNadleRound?.createdAt),
+          },
+        },
+        recentEvents: recentEvents.map((event) => ({
+          event: event.event,
+          path: event.path,
+          createdAt: event.createdAt.toISOString(),
+          metadata: event.metadata ?? null,
+        })),
+        recentErrors: recentErrors.map((event) => ({
+          message: event.message,
+          path: event.path,
+          source: event.source,
+          createdAt: event.createdAt.toISOString(),
+          metadata: event.metadata ?? null,
+        })),
+      })
+    } catch (e) {
+      console.error('[admin] GET /api/admin/users/:userId/activity', e)
+      res.status(500).json({ error: 'server_error' })
+    }
+  })
+
   app.patch('/api/admin/users/:userId/role', async (req: Request, res: Response) => {
     if (!(await requireAdmin(req, res))) {
       return
@@ -125,10 +290,18 @@ export function mountAdminRoutes(app: Express): void {
       return
     }
     const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : ''
-    const body = req.body as { role?: unknown; roles?: unknown; streamerId?: unknown }
+    const body = req.body as { role?: unknown; roles?: unknown; permissions?: unknown; streamerId?: unknown }
     const nextRole = typeof body.role === 'string' ? body.role.trim() : ''
     const roles = parseSystemRoles(body.roles)
-    if (!userId || (!roles && nextRole !== 'user' && nextRole !== 'host' && nextRole !== 'admin')) {
+    const permissions = parseFeaturePermissions(body.permissions)
+    const legacyEatFirstOperator =
+      nextRole === 'host' ||
+      (Array.isArray(body.roles) && body.roles.includes('HOST')) ||
+      (Array.isArray(body.permissions) && body.permissions.includes('EAT_FIRST_OPERATOR'))
+    if (
+      !userId ||
+      (!roles && !permissions && !legacyEatFirstOperator && nextRole !== 'user' && nextRole !== 'host' && nextRole !== 'admin')
+    ) {
       res.status(400).json({ error: 'invalid_role' })
       return
     }
@@ -144,8 +317,9 @@ export function mountAdminRoutes(app: Express): void {
         (nextRole === 'admin'
           ? ['USER', 'ADMIN']
           : nextRole === 'host'
-            ? ['USER', 'HOST']
+            ? ['USER']
             : ['USER'])
+      const nextPermissions = permissions ?? (legacyEatFirstOperator ? ['EAT_FIRST_OPERATOR' as const] : [])
       if (!roles && current.roles.includes('STREAMER')) {
         nextRoles.push('STREAMER')
       }
@@ -154,6 +328,7 @@ export function mountAdminRoutes(app: Express): void {
         actorUserId,
         userId,
         roles: nextRoles,
+        permissions: nextPermissions,
         streamerId,
       })
       if (!result.ok) {
@@ -169,12 +344,16 @@ export function mountAdminRoutes(app: Express): void {
         metadata: {
           before,
           after,
+          permissionsBefore: current.permissions,
+          permissionsAfter: result.permissions,
           added: after.filter((role) => !before.includes(role)),
           removed: before.filter((role) => !after.includes(role)),
+          permissionsAdded: result.permissions.filter((permission) => !current.permissions.includes(permission)),
+          permissionsRemoved: current.permissions.filter((permission) => !result.permissions.includes(permission)),
           streamerId: result.streamerId,
         },
       })
-      res.json({ roles: result.roles, streamerId: result.streamerId })
+      res.json({ roles: result.roles, permissions: result.permissions, streamerId: result.streamerId })
     } catch (e) {
       console.error('[admin] PATCH /api/admin/users/:userId/role', e)
       res.status(500).json({ error: 'server_error' })

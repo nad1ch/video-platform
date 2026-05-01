@@ -70,8 +70,7 @@ const {
   forcedPageBackgroundId: mafiaForcedPageBackgroundId,
 } = storeToRefs(mafiaGame)
 const canEatFirstHost = computed(() => {
-  const r = auth.user.value?.role
-  return r === 'admin' || r === 'host'
+  return auth.user.value?.role === 'admin' || auth.user.value?.permissions?.includes('EAT_FIRST_OPERATOR') === true
 })
 const { theme, setTheme } = useTheme()
 
@@ -210,7 +209,7 @@ function onOnboardingDismissSave() {
 }
 
 watch(
-  [() => route.fullPath, () => auth.loaded.value, () => auth.user.value?.role],
+  [() => route.fullPath, () => auth.loaded.value, () => auth.user.value?.role, () => auth.user.value?.permissions?.join('|')],
   () => {
     if (!isEatRoute.value || !auth.loaded.value) return
     redirectAdminToControlIfAuthed(router, route, canEatFirstHost.value)

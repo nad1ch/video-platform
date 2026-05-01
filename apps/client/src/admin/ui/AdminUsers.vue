@@ -5,6 +5,7 @@ import { useAdminUsersState, type AdminUserRow } from '@/admin'
 import { useAuth } from '@/composables/useAuth'
 import { appConfirm } from '@/utils/appConfirm'
 import { apiFetch } from '@/utils/apiFetch'
+import { trackClientEvent } from '@/utils/clientAnalytics'
 
 const { t, locale } = useI18n()
 const auth = useAuth()
@@ -18,6 +19,45 @@ let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 const rolePatchingId = ref<string | null>(null)
 const rolePatchError = ref<string | null>(null)
 const detailUserId = ref<string | null>(null)
+const detailActivity = ref<AdminUserActivityPayload | null>(null)
+const detailActivityLoading = ref(false)
+const detailActivityError = ref<string | null>(null)
+let detailActivityRequestId = 0
+
+type AdminUserActivityEvent = {
+  event: string
+  path: string | null
+  createdAt: string
+  metadata: unknown
+}
+
+type AdminUserErrorEvent = {
+  message: string
+  path: string | null
+  source: string
+  createdAt: string
+  metadata: unknown
+}
+
+type AdminUserActivityPayload = {
+  databaseConfigured?: boolean
+  summary: {
+    lastSeenAt: string | null
+    totalSessions: number
+    totalTimeSpentSeconds: number
+    lastPath: string | null
+  }
+  gameSummary: {
+    nadle: {
+      gamesPlayed: number
+      wins: number
+      losses: number
+      lastGameAt: string | null
+    }
+  }
+  recentEvents: AdminUserActivityEvent[]
+  recentErrors: AdminUserErrorEvent[]
+}
 
 const detailUser = computed(() => {
   if (!detailUserId.value) return null
@@ -25,8 +65,9 @@ const detailUser = computed(() => {
 })
 
 const rating = (u: AdminUserRow) => u.wins - Math.max(0, u.gamesPlayed - u.wins)
-type EditableRole = 'HOST' | 'ADMIN' | 'STREAMER'
-const editableRoles: EditableRole[] = ['HOST', 'ADMIN', 'STREAMER']
+type EditableRole = 'ADMIN' | 'STREAMER' | 'EAT_FIRST_OPERATOR'
+type DisplayRole = 'USER' | EditableRole
+const editableRoles: EditableRole[] = ['ADMIN', 'STREAMER', 'EAT_FIRST_OPERATOR']
 
 const empty = computed(() => !loading.value && !errorKey.value && users.value.length === 0)
 
@@ -77,6 +118,15 @@ watch(users, (list) => {
   }
 })
 
+watch(detailUserId, (userId) => {
+  detailActivity.value = null
+  detailActivityError.value = null
+  detailActivityRequestId += 1
+  if (userId) {
+    void loadUserActivity(userId, detailActivityRequestId)
+  }
+})
+
 function dashText(value: string | null | undefined): string {
   const s = typeof value === 'string' ? value.trim() : ''
   return s ? s : '—'
@@ -90,7 +140,7 @@ function formatUpdated(d: Date) {
   }
 }
 
-function formatIso(iso: string | undefined): string {
+function formatIso(iso: string | null | undefined): string {
   if (!iso?.trim()) {
     return '—'
   }
@@ -98,6 +148,53 @@ function formatIso(iso: string | undefined): string {
     return formatUpdated(new Date(iso))
   } catch {
     return '—'
+  }
+}
+
+function formatDuration(seconds: number | undefined): string {
+  const total = Math.max(0, Math.round(seconds ?? 0))
+  if (total < 60) {
+    return `${total}s`
+  }
+  const minutes = Math.floor(total / 60)
+  const hours = Math.floor(minutes / 60)
+  const restMinutes = minutes % 60
+  return hours > 0 ? `${hours}h ${restMinutes}m` : `${minutes}m`
+}
+
+function formatMetadata(value: unknown): string {
+  if (!value || typeof value !== 'object') {
+    return '—'
+  }
+  try {
+    const json = JSON.stringify(value)
+    return json === '{}' ? '—' : json
+  } catch {
+    return '—'
+  }
+}
+
+async function loadUserActivity(userId: string, requestId: number): Promise<void> {
+  detailActivityLoading.value = true
+  detailActivityError.value = null
+  try {
+    const r = await apiFetch(`/api/admin/users/${encodeURIComponent(userId)}/activity`)
+    if (!r.ok) {
+      detailActivityError.value = 'Could not load activity.'
+      return
+    }
+    const data = (await r.json()) as AdminUserActivityPayload
+    if (requestId === detailActivityRequestId) {
+      detailActivity.value = data
+    }
+  } catch {
+    if (requestId === detailActivityRequestId) {
+      detailActivityError.value = 'Could not load activity.'
+    }
+  } finally {
+    if (requestId === detailActivityRequestId) {
+      detailActivityLoading.value = false
+    }
   }
 }
 
@@ -146,28 +243,34 @@ function exportCsv() {
   URL.revokeObjectURL(url)
 }
 
-function normalizedRoles(u: AdminUserRow): Set<'USER' | 'HOST' | 'ADMIN' | 'STREAMER'> {
-  const roles = new Set<'USER' | 'HOST' | 'ADMIN' | 'STREAMER'>(['USER'])
+function normalizedRoles(u: AdminUserRow): Set<DisplayRole> {
+  const roles = new Set<DisplayRole>(['USER'])
   for (const role of u.roles ?? []) {
     roles.add(role)
+  }
+  for (const permission of u.permissions ?? []) {
+    roles.add(permission)
   }
   if (u.role === 'admin') {
     roles.add('ADMIN')
   } else if (u.role === 'host') {
-    roles.add('HOST')
+    roles.add('EAT_FIRST_OPERATOR')
   }
   return roles
 }
 
-function hasSystemRole(u: AdminUserRow, role: 'USER' | 'HOST' | 'ADMIN' | 'STREAMER'): boolean {
+function hasSystemRole(u: AdminUserRow, role: DisplayRole): boolean {
   return normalizedRoles(u).has(role)
 }
 
 function displayRoles(u: AdminUserRow): string {
-  return [...normalizedRoles(u)].join(', ')
+  return [...normalizedRoles(u)].map(roleLabel).join(', ')
 }
 
-function roleLabel(role: 'USER' | EditableRole): string {
+function roleLabel(role: DisplayRole): string {
+  if (role === 'EAT_FIRST_OPERATOR') {
+    return 'Eat First operator'
+  }
   return role === 'USER' ? t('adminPanel.roleUser') : role
 }
 
@@ -177,6 +280,9 @@ function isSelfAdminRole(u: AdminUserRow, role: EditableRole): boolean {
 
 function roleToggleDisabled(u: AdminUserRow, role: EditableRole): boolean {
   if (rolePatchingId.value === u.id || isSelfAdminRole(u, role)) {
+    return true
+  }
+  if (role === 'EAT_FIRST_OPERATOR' && hasSystemRole(u, 'ADMIN')) {
     return true
   }
   if (role === 'STREAMER' && !hasSystemRole(u, 'STREAMER') && !u.streamerId && !u.twitchId) {
@@ -191,6 +297,7 @@ async function onRoleToggle(u: AdminUserRow, role: EditableRole, ev: Event) {
     input.checked = hasSystemRole(u, role)
     return
   }
+  trackClientEvent('admin_role_toggle_clicked', { targetUserId: u.id, role, enabled: input.checked })
   if (!input.checked && role === 'ADMIN' && !appConfirm(`Remove ADMIN from ${u.displayName}? They will lose admin panel access.`)) {
     input.checked = true
     return
@@ -211,18 +318,21 @@ async function onRoleToggle(u: AdminUserRow, role: EditableRole, ev: Event) {
   }
   nextRoles.add('USER')
   if (nextRoles.has('ADMIN')) {
-    nextRoles.delete('HOST')
-  }
-  if (nextRoles.has('HOST')) {
-    nextRoles.delete('ADMIN')
+    nextRoles.delete('EAT_FIRST_OPERATOR')
   }
   rolePatchError.value = null
   rolePatchingId.value = u.id
   try {
+    const roles = [...nextRoles].filter((role): role is 'USER' | 'ADMIN' | 'STREAMER' =>
+      role === 'USER' || role === 'ADMIN' || role === 'STREAMER',
+    )
+    const permissions = [...nextRoles].filter(
+      (role): role is 'EAT_FIRST_OPERATOR' => role === 'EAT_FIRST_OPERATOR',
+    )
     const r = await apiFetch(`/api/admin/users/${encodeURIComponent(u.id)}/role`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roles: [...nextRoles], ...(u.streamerId ? { streamerId: u.streamerId } : {}) }),
+      body: JSON.stringify({ roles, permissions, ...(u.streamerId ? { streamerId: u.streamerId } : {}) }),
     })
     if (!r.ok) {
       rolePatchError.value = t('adminPanel.usersRolePatchError')
@@ -583,6 +693,97 @@ onUnmounted(() => {
                   <dd class="text-slate-200">{{ formatIso(detailUser.updatedAt) }}</dd>
                 </div>
               </dl>
+              <section class="mt-6 border-t border-slate-800/80 pt-5">
+                <div class="flex items-center justify-between gap-3">
+                  <h4 class="text-sm font-semibold text-white">Activity</h4>
+                  <span v-if="detailActivityLoading" class="text-xs text-slate-500">Loading…</span>
+                </div>
+                <p v-if="detailActivityError" class="mt-2 text-xs text-rose-300">{{ detailActivityError }}</p>
+                <template v-else-if="detailActivity">
+                  <dl class="mt-3 grid grid-cols-2 gap-3 text-xs">
+                    <div class="rounded-lg border border-slate-800/80 bg-slate-900/45 p-3">
+                      <dt class="uppercase tracking-wide text-slate-500">Last seen</dt>
+                      <dd class="mt-1 text-slate-200">{{ formatIso(detailActivity.summary.lastSeenAt) }}</dd>
+                    </div>
+                    <div class="rounded-lg border border-slate-800/80 bg-slate-900/45 p-3">
+                      <dt class="uppercase tracking-wide text-slate-500">Sessions</dt>
+                      <dd class="mt-1 tabular-nums text-slate-200">{{ detailActivity.summary.totalSessions }}</dd>
+                    </div>
+                    <div class="rounded-lg border border-slate-800/80 bg-slate-900/45 p-3">
+                      <dt class="uppercase tracking-wide text-slate-500">Time spent</dt>
+                      <dd class="mt-1 tabular-nums text-slate-200">
+                        {{ formatDuration(detailActivity.summary.totalTimeSpentSeconds) }}
+                      </dd>
+                    </div>
+                    <div class="rounded-lg border border-slate-800/80 bg-slate-900/45 p-3">
+                      <dt class="uppercase tracking-wide text-slate-500">Last path</dt>
+                      <dd class="mt-1 break-all font-mono text-[11px] text-slate-200">
+                        {{ dashText(detailActivity.summary.lastPath) }}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div class="mt-5 rounded-lg border border-slate-800/80 bg-slate-900/35 p-3">
+                    <h5 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Nadle / Wordle</h5>
+                    <dl class="mt-2 grid grid-cols-4 gap-2 text-xs">
+                      <div>
+                        <dt class="text-slate-500">Played</dt>
+                        <dd class="tabular-nums text-slate-200">{{ detailActivity.gameSummary.nadle.gamesPlayed }}</dd>
+                      </div>
+                      <div>
+                        <dt class="text-slate-500">Wins</dt>
+                        <dd class="tabular-nums text-cyan-300">{{ detailActivity.gameSummary.nadle.wins }}</dd>
+                      </div>
+                      <div>
+                        <dt class="text-slate-500">Losses</dt>
+                        <dd class="tabular-nums text-slate-200">{{ detailActivity.gameSummary.nadle.losses }}</dd>
+                      </div>
+                      <div>
+                        <dt class="text-slate-500">Last</dt>
+                        <dd class="text-slate-200">{{ formatIso(detailActivity.gameSummary.nadle.lastGameAt) }}</dd>
+                      </div>
+                    </dl>
+                  </div>
+
+                  <div class="mt-5">
+                    <h5 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent activity events</h5>
+                    <p v-if="detailActivity.recentEvents.length === 0" class="mt-2 text-xs text-slate-500">No events yet.</p>
+                    <ul v-else class="mt-2 space-y-2">
+                      <li
+                        v-for="event in detailActivity.recentEvents"
+                        :key="`${event.event}-${event.createdAt}`"
+                        class="rounded-lg border border-slate-800/80 bg-slate-900/35 p-3 text-xs"
+                      >
+                        <p class="font-medium text-slate-200">{{ event.event }}</p>
+                        <p class="mt-1 break-all font-mono text-[11px] text-slate-500">{{ dashText(event.path) }}</p>
+                        <p class="mt-1 text-slate-500">{{ formatIso(event.createdAt) }}</p>
+                        <p class="mt-1 break-all font-mono text-[10px] text-slate-600">
+                          {{ formatMetadata(event.metadata) }}
+                        </p>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div class="mt-5">
+                    <h5 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent errors</h5>
+                    <p v-if="detailActivity.recentErrors.length === 0" class="mt-2 text-xs text-slate-500">No errors yet.</p>
+                    <ul v-else class="mt-2 space-y-2">
+                      <li
+                        v-for="event in detailActivity.recentErrors"
+                        :key="`${event.source}-${event.createdAt}`"
+                        class="rounded-lg border border-rose-950/70 bg-rose-950/15 p-3 text-xs"
+                      >
+                        <p class="font-medium text-rose-100">{{ event.message }}</p>
+                        <p class="mt-1 break-all font-mono text-[11px] text-slate-500">{{ dashText(event.path) }}</p>
+                        <p class="mt-1 text-slate-500">{{ event.source }} · {{ formatIso(event.createdAt) }}</p>
+                        <p class="mt-1 break-all font-mono text-[10px] text-slate-600">
+                          {{ formatMetadata(event.metadata) }}
+                        </p>
+                      </li>
+                    </ul>
+                  </div>
+                </template>
+              </section>
               <p class="mt-6 text-xs leading-relaxed text-slate-500">{{ t('adminPanel.usersDetailHint') }}</p>
             </div>
           </aside>

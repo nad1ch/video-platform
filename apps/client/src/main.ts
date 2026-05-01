@@ -9,12 +9,14 @@ import { initAudioPlaybackUnlock } from 'call-core/audio-unlock'
 import { i18n, preloadInitialLocales } from '@/eat-first/i18n'
 import { initAnalytics } from '@/eat-first/analytics/bootstrap.js'
 import { ensureMetaDescription } from '@/eat-first/constants/seo.js'
+import { initClientAnalytics } from '@/utils/clientAnalytics'
 
 async function bootstrap() {
   await preloadInitialLocales()
   initAudioPlaybackUnlock()
   ensureMetaDescription()
   initAnalytics()
+  initClientAnalytics(router)
 
   const app = createApp(App)
   const pinia = createPinia()

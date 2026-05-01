@@ -1,14 +1,17 @@
 import { prisma } from '../prisma'
 import { resolveUserStreamerContext } from './resolvePrismaUserFromSession'
-import type { SystemRole } from './session/types'
+import type { FeaturePermission, SystemRole } from './session/types'
 
-export const SYSTEM_ROLES = ['USER', 'HOST', 'ADMIN', 'STREAMER'] as const satisfies readonly SystemRole[]
+export const SYSTEM_ROLES = ['USER', 'ADMIN', 'STREAMER'] as const satisfies readonly SystemRole[]
+export const FEATURE_PERMISSIONS = ['EAT_FIRST_OPERATOR'] as const satisfies readonly FeaturePermission[]
 export type ManagedSystemRole = (typeof SYSTEM_ROLES)[number]
+export type ManagedFeaturePermission = (typeof FEATURE_PERMISSIONS)[number]
 
 const STREAMER_OWNER_ROLE = 'OWNER'
 
 export type UserRoleContext = {
   roles: ManagedSystemRole[]
+  permissions: ManagedFeaturePermission[]
   streamerId: string | null
 }
 
@@ -26,6 +29,20 @@ export function parseSystemRoles(raw: unknown): ManagedSystemRole[] | null {
   return [...roles]
 }
 
+export function parseFeaturePermissions(raw: unknown): ManagedFeaturePermission[] | null {
+  if (!Array.isArray(raw)) {
+    return null
+  }
+  const permissions = new Set<ManagedFeaturePermission>()
+  for (const value of raw) {
+    if (!FEATURE_PERMISSIONS.includes(value as ManagedFeaturePermission)) {
+      return null
+    }
+    permissions.add(value as ManagedFeaturePermission)
+  }
+  return [...permissions]
+}
+
 export async function getUserRoles(userId: string): Promise<UserRoleContext | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -36,24 +53,26 @@ export async function getUserRoles(userId: string): Promise<UserRoleContext | nu
   }
   const streamer = await resolveUserStreamerContext(userId)
   const roles: ManagedSystemRole[] = ['USER']
+  const permissions: ManagedFeaturePermission[] = []
   if (user.role === 'admin') {
     roles.push('ADMIN')
   } else if (user.role === 'host') {
-    roles.push('HOST')
+    permissions.push('EAT_FIRST_OPERATOR')
   }
   if (streamer) {
     roles.push('STREAMER')
   }
-  return { roles, streamerId: streamer?.id ?? null }
+  return { roles, permissions, streamerId: streamer?.id ?? null }
 }
 
 export async function setUserRoles(input: {
   actorUserId: string | null
   userId: string
   roles: ManagedSystemRole[]
+  permissions?: ManagedFeaturePermission[]
   streamerId?: string | null
 }): Promise<
-  | { ok: true; roles: ManagedSystemRole[]; streamerId: string | null }
+  | { ok: true; roles: ManagedSystemRole[]; permissions: ManagedFeaturePermission[]; streamerId: string | null }
   | {
       ok: false
       status: 400 | 403 | 404
@@ -69,7 +88,8 @@ export async function setUserRoles(input: {
 > {
   const wanted = new Set(input.roles)
   wanted.add('USER')
-  if (wanted.has('ADMIN') && wanted.has('HOST')) {
+  const wantedPermissions = new Set(input.permissions ?? [])
+  if (wanted.has('ADMIN') && wantedPermissions.has('EAT_FIRST_OPERATOR')) {
     return { ok: false, status: 400, error: 'invalid_role_combination' }
   }
 
@@ -94,7 +114,7 @@ export async function setUserRoles(input: {
     }
   }
 
-  const nextRole = wanted.has('ADMIN') ? 'admin' : wanted.has('HOST') ? 'host' : 'user'
+  const nextRole = wanted.has('ADMIN') ? 'admin' : wantedPermissions.has('EAT_FIRST_OPERATOR') ? 'host' : 'user'
   let targetStreamerId: string | null = null
 
   if (wanted.has('STREAMER')) {
@@ -165,5 +185,10 @@ export async function setUserRoles(input: {
   }
 
   const next = await getUserRoles(input.userId)
-  return { ok: true, roles: next?.roles ?? ['USER'], streamerId: next?.streamerId ?? null }
+  return {
+    ok: true,
+    roles: next?.roles ?? ['USER'],
+    permissions: next?.permissions ?? [],
+    streamerId: next?.streamerId ?? null,
+  }
 }

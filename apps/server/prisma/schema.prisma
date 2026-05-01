@@ -82,6 +82,8 @@ model User {
   coinHubPending     Pending?
   coinHubSpin        Spin?
   coinHubCases       CoinCase[]
+  activityEvents     UserActivityEvent[]
+  clientErrors       ClientErrorEvent[]
 
   @@unique([provider, providerUserId])
   @@index([streamerId])
@@ -114,6 +116,38 @@ model AdminAuditLog {
   @@index([targetUserId, createdAt])
   @@index([targetStreamerId, createdAt])
   @@index([action, createdAt])
+}
+
+model UserActivityEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sessionId String?
+  event     String
+  path      String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([event, createdAt])
+  @@index([createdAt])
+}
+
+model ClientErrorEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sessionId String?
+  message   String
+  stack     String?
+  path      String?
+  source    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([source, createdAt])
+  @@index([createdAt])
 }
 
 /// Smallest whole-coin unit; `amount` is non-negative.

@@ -7,20 +7,21 @@ import {
 } from '../resolvePrismaUserFromSession'
 import { readSessionFromCookie } from './sessionJwt'
 import { sessionToGlobalAuthUser, sessionToLegacyApiUser } from './globalUser'
-import type { SystemRole, UserRole } from './types'
+import type { FeaturePermission, SystemRole, UserRole } from './types'
 
 function buildSystemRoles(role: UserRole, hasStreamer: boolean): SystemRole[] {
   const roles: SystemRole[] = ['USER']
   if (role === 'admin') {
     roles.push('ADMIN')
   }
-  if (role === 'host') {
-    roles.push('HOST')
-  }
   if (hasStreamer) {
     roles.push('STREAMER')
   }
   return roles
+}
+
+function buildFeaturePermissions(dbRole: string | null): FeaturePermission[] | undefined {
+  return dbRole === 'host' ? ['EAT_FIRST_OPERATOR'] : undefined
 }
 
 /** GET /api/auth/me — global camelCase user. */
@@ -45,11 +46,13 @@ export async function handleGetApiAuthMe(req: Request, res: Response): Promise<v
       prismaUserId != null ? await resolveUserStreamerContext(prismaUserId) : null
     const nadleStreamer =
       prismaUserId != null ? await resolveNadleStreamerContextForUserId(prismaUserId) : null
+    const permissions = buildFeaturePermissions(dbRole)
     res.json({
       authenticated: true,
       user: {
         ...base,
         roles: buildSystemRoles(base.role, streamer != null),
+        ...(permissions ? { permissions } : {}),
         ...(streamer ? { streamer } : {}),
         ...(prismaUserId ? { dbUserId: prismaUserId } : {}),
         ...(nadleStreamer
