@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from 'express'
 import { prisma } from '../prisma'
 import { isValidGameId } from './slot'
-import { eatFirstSessionCanHost } from './sessionGate'
+import { eatFirstSessionCanOperate } from './sessionGate'
 import {
   eatFirstClearVotesAdmin,
   eatFirstClaimSlot,
@@ -18,7 +18,7 @@ import {
 } from './service'
 
 async function requireEatFirstHost(req: Request, res: Response): Promise<boolean> {
-  if (!(await eatFirstSessionCanHost(req.headers.cookie))) {
+  if (!(await eatFirstSessionCanOperate(req.headers.cookie))) {
     res.status(403).type('text/plain').send('Forbidden')
     return false
   }

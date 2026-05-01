@@ -1,5 +1,6 @@
 export type UserRole = 'admin' | 'user' | 'host'
-export type SystemRole = 'USER' | 'ADMIN' | 'HOST' | 'STREAMER'
+export type SystemRole = 'USER' | 'ADMIN' | 'STREAMER'
+export type FeaturePermission = 'EAT_FIRST_OPERATOR'
 
 export type AuthStreamerContext = {
   id: string
@@ -39,6 +40,7 @@ export type GlobalAuthUser = {
   provider: 'twitch' | 'google' | 'apple' | 'email' | null
   role: UserRole
   roles?: SystemRole[]
+  permissions?: FeaturePermission[]
   /** Present when the user signed in with Twitch (Helix user id). */
   twitchId?: string
   /** Backend-authoritative streamer context when this user owns a Streamer row. */

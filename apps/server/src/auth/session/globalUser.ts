@@ -24,7 +24,7 @@ function effectiveSessionRole(session: SessionPayload): UserRole {
 function meRoleFromAllowlistAndDb(allowlistRole: UserRole, dbRole: string | null | undefined): UserRole {
   if (allowlistRole === 'admin') return 'admin'
   const d = typeof dbRole === 'string' ? dbRole.trim() : ''
-  if (d === 'host') return 'host'
+  if (d === 'admin') return 'admin'
   return 'user'
 }
 

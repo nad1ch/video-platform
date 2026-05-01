@@ -1,11 +1,33 @@
 import { apiUrl } from '@/utils/apiUrl'
+import { trackClientError } from '@/utils/clientAnalytics'
+
+function shouldTrackApiError(path: string): boolean {
+  return !path.startsWith('/api/events/')
+}
 
 /**
  * Same-origin API `fetch` with `credentials: 'include'` (session cookie).
  * Pass `path` as for `apiUrl` (e.g. `/api/auth/me`). Optional `init` overrides/extends defaults.
  */
 export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(apiUrl(path), { credentials: 'include', ...init })
+  return fetch(apiUrl(path), { credentials: 'include', ...init }).then(
+    (res) => {
+      if (!res.ok && shouldTrackApiError(path)) {
+        trackClientError(
+          new Error(`API ${res.status} ${res.statusText || 'Request failed'}`),
+          { apiPath: path.split('?')[0], status: res.status, method: init?.method ?? 'GET' },
+          'apiFetch',
+        )
+      }
+      return res
+    },
+    (error: unknown) => {
+      if (shouldTrackApiError(path)) {
+        trackClientError(error, { apiPath: path.split('?')[0], method: init?.method ?? 'GET' }, 'apiFetch')
+      }
+      throw error
+    },
+  )
 }
 
 /** Alias for callers that prefer the `*Json` name; still returns `Response` (parse in caller). */

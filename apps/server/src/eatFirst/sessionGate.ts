@@ -17,8 +17,8 @@ function roleInput(s: SessionPayload) {
   }
 }
 
-/** Allowlist admin, or `User.role` is `host` / `admin` in Postgres. */
-export async function eatFirstSessionCanHost(cookieHeader: string | undefined): Promise<boolean> {
+/** Allowlist admin, or legacy `User.role = host` mapped to Eat First operator. */
+export async function eatFirstSessionCanOperate(cookieHeader: string | undefined): Promise<boolean> {
   const session = readSessionFromCookie(cookieHeader)
   if (!session) return false
   if (resolveUserRole(roleInput(session)) === 'admin') return true

@@ -3,6 +3,7 @@ import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAdminStreamersState } from '@/admin'
 import { appConfirm } from '@/utils/appConfirm'
+import { trackClientEvent } from '@/utils/clientAnalytics'
 
 const { t, locale } = useI18n()
 
@@ -24,7 +25,13 @@ async function removeStreamer(id: string) {
   if (!appConfirm('Deactivate this streamer? Existing game and leaderboard history will be kept.')) {
     return
   }
+  trackClientEvent('streamer_deactivate_clicked', { streamerId: id })
   await removeStreamerRequest(id)
+}
+
+async function onCreateStreamer() {
+  trackClientEvent('streamer_create_clicked', { ownerId: ownerId.value, slug: slug.value.trim().toLowerCase() })
+  await createStreamer()
 }
 
 onMounted(() => {
@@ -61,7 +68,7 @@ function formatUpdated() {
 
       <form
         class="mb-8 flex flex-col gap-4 rounded-xl border border-slate-800/80 bg-slate-900/50 p-4 md:flex-row md:items-end"
-        @submit.prevent="createStreamer"
+        @submit.prevent="onCreateStreamer"
       >
         <label class="flex min-w-0 flex-1 flex-col gap-1 text-sm">
           <span class="font-medium text-slate-300">{{ t('adminPanel.streamersSlugLabel') }}</span>

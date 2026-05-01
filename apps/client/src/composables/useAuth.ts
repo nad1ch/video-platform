@@ -5,7 +5,8 @@ import { createLogger } from '@/utils/logger'
 import { safeOAuthRedirectPath } from '@/utils/safeOAuthRedirectPath'
 
 /** Global auth user (GET /api/auth/me). */
-export type AppSystemRole = 'USER' | 'ADMIN' | 'HOST' | 'STREAMER'
+export type AppSystemRole = 'USER' | 'ADMIN' | 'STREAMER'
+export type AppFeaturePermission = 'EAT_FIRST_OPERATOR'
 
 export type AppStreamerContext = {
   id: string
@@ -28,9 +29,11 @@ export type AppUser = {
   displayName: string
   avatar?: string
   provider: 'twitch' | 'google' | 'apple' | 'email' | null
-  role: 'admin' | 'user' | 'host'
+  role: 'admin' | 'user'
   /** Backend-authoritative system roles from GET /api/auth/me. */
   roles?: AppSystemRole[]
+  /** Backend-authoritative feature permissions from GET /api/auth/me. */
+  permissions?: AppFeaturePermission[]
   /** Helix user id when provider is Twitch (same as `id`). */
   twitchId?: string
   /** Backend-authoritative streamer context when this user owns a Streamer row. */
@@ -48,7 +51,7 @@ let inflight: Promise<void> | null = null
 
 /** Display-only cache (no tokens). Speeds up first paint after reload; always revalidated over the network. */
 /** Bump when `AppUser` shape changes (e.g. `dbUserId`) so stale sessionStorage entries re-fetch. */
-const DISPLAY_CACHE_KEY = 'streamassist_auth_display_v3'
+const DISPLAY_CACHE_KEY = 'streamassist_auth_display_v4'
 const DISPLAY_CACHE_TTL_MS = 5 * 60 * 1000
 /** Dev-only: log Twitch numeric id once per tab session (cleared on logout). */
 const DEV_TWITCH_ID_LOG_KEY = 'streamassist_dev_twitch_id_logged'
@@ -99,9 +102,19 @@ function parseSystemRoles(raw: unknown): AppSystemRole[] | undefined {
   }
   const roles = raw.filter(
     (role): role is AppSystemRole =>
-      role === 'USER' || role === 'ADMIN' || role === 'HOST' || role === 'STREAMER',
+      role === 'USER' || role === 'ADMIN' || role === 'STREAMER',
   )
   return roles.length > 0 ? roles : undefined
+}
+
+function parseFeaturePermissions(raw: unknown): AppFeaturePermission[] | undefined {
+  if (!Array.isArray(raw)) {
+    return undefined
+  }
+  const permissions = raw.filter(
+    (permission): permission is AppFeaturePermission => permission === 'EAT_FIRST_OPERATOR',
+  )
+  return permissions.length > 0 ? permissions : undefined
 }
 
 function nullableString(raw: unknown): string | null {
@@ -163,9 +176,9 @@ function parseUser(raw: unknown): AppUser | null {
   const provider =
     p === 'twitch' || p === 'google' || p === 'apple' || p === 'email' ? p : null
   const roleRaw = u.role
-  const role =
-    roleRaw === 'admin' || roleRaw === 'user' || roleRaw === 'host' ? roleRaw : 'user'
+  const role = roleRaw === 'admin' ? 'admin' : 'user'
   const roles = parseSystemRoles(u.roles)
+  const permissions = parseFeaturePermissions(u.permissions)
   const streamer = parseStreamerContext(u.streamer)
   let twitchId: string | undefined
   if (typeof u.twitchId === 'string' && u.twitchId.length > 0) {
@@ -193,6 +206,7 @@ function parseUser(raw: unknown): AppUser | null {
     provider,
     role,
     ...(roles ? { roles } : {}),
+    ...(permissions ? { permissions } : {}),
     ...(twitchId ? { twitchId } : {}),
     ...(streamer ? { streamer } : {}),
     ...(nadleStreamerId ? { nadleStreamerId } : {}),
@@ -278,8 +292,7 @@ export function useAuth() {
   const isAdmin = computed(() => user.value?.role === 'admin')
   const isStreamer = computed(() => user.value?.roles?.includes('STREAMER') === true)
   const canEatFirstHost = computed(() => {
-    const r = user.value?.role
-    return r === 'admin' || r === 'host'
+    return user.value?.role === 'admin' || user.value?.permissions?.includes('EAT_FIRST_OPERATOR') === true
   })
 
   function loginWithTwitch(redirectPath?: string): void {

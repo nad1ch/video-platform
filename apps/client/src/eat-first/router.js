@@ -48,7 +48,7 @@ export function registerEatFirstRouterGuards(router) {
  *
  * @param {import('vue-router').Router} router
  * @param {import('vue-router').RouteLocationNormalizedLoaded} route
- * @param {boolean} canEatFirstHost — admin or host role from GET /api/auth/me
+ * @param {boolean} canEatFirstHost — admin or Eat First operator permission from GET /api/auth/me
  */
 export function redirectAdminToControlIfAuthed(router, route, canEatFirstHost) {
   if (normalizeEatView(route.query.view) !== 'admin') return
