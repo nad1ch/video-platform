@@ -1,5 +1,8 @@
 import { isDatabaseConfigured, prisma } from '../prisma'
 import type { SessionPayload } from './session/sessionJwt'
+import type { AuthStreamerContext } from './session/types'
+
+const STREAMER_OWNER_ROLE = 'OWNER'
 
 /**
  * Maps a signed-in session to a `User.id` in Postgres (OAuth rows use provider ids in JWT, not Prisma cuid).
@@ -46,34 +49,78 @@ export async function resolvePrismaUserIdFromSession(session: SessionPayload): P
   return null
 }
 
-/** Nadle room + IRC context: streamer row owned by this user or tied to the same Twitch channel. */
+export async function resolveUserStreamerContext(userId: string): Promise<AuthStreamerContext | null> {
+  if (!isDatabaseConfigured()) {
+    return null
+  }
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  })
+  if (!u) {
+    return null
+  }
+  const or: Array<
+    | { ownerId: string }
+    | { ownerMemberships: { some: { userId: string; role: string } } }
+  > = [
+    { ownerId: userId },
+    { ownerMemberships: { some: { userId, role: STREAMER_OWNER_ROLE } } },
+  ]
+  const row = await prisma.streamer.findFirst({
+    where: { isActive: true, OR: or },
+    select: {
+      id: true,
+      twitchId: true,
+      username: true,
+      displayName: true,
+      profileImageUrl: true,
+      broadcasterType: true,
+      followersCount: true,
+      currentOnline: true,
+      avgOnline7d: true,
+      isLive: true,
+      tier: true,
+    },
+    orderBy: { id: 'asc' },
+  })
+  if (!row) {
+    return null
+  }
+  return row
+}
+
+/** Nadle room + IRC context derived from the backend-owned streamer resolver. */
 export async function resolveNadleStreamerContextForUserId(
   userId: string,
 ): Promise<{ nadleStreamerId: string; nadleStreamerName: string } | null> {
   if (!isDatabaseConfigured()) {
     return null
   }
-  const u = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { twitchId: true, streamerId: true },
-  })
-  if (!u) {
-    return null
-  }
-  const or: Array<{ ownerId: string } | { twitchId: string } | { id: string }> = [{ ownerId: userId }]
-  if (typeof u.twitchId === 'string' && u.twitchId.length > 0) {
-    or.push({ twitchId: u.twitchId })
-  }
-  if (typeof u.streamerId === 'string' && u.streamerId.length > 0) {
-    or.push({ id: u.streamerId })
-  }
-  const row = await prisma.streamer.findFirst({
-    where: { isActive: true, OR: or },
-    select: { id: true, name: true },
+  const owned = await prisma.streamer.findFirst({
+    where: {
+      isActive: true,
+      OR: [
+        { ownerId: userId },
+        { ownerMemberships: { some: { userId, role: STREAMER_OWNER_ROLE } } },
+      ],
+    },
+    select: { id: true, name: true, username: true },
     orderBy: { id: 'asc' },
   })
-  if (!row) {
+  if (owned) {
+    return { nadleStreamerId: owned.id, nadleStreamerName: owned.name || owned.username }
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { streamerId: true },
+  })
+  if (!user?.streamerId) {
     return null
   }
-  return { nadleStreamerId: row.id, nadleStreamerName: row.name }
+  const assigned = await prisma.streamer.findFirst({
+    where: { id: user.streamerId, isActive: true },
+    select: { id: true, name: true, username: true },
+  })
+  return assigned ? { nadleStreamerId: assigned.id, nadleStreamerName: assigned.name || assigned.username } : null
 }

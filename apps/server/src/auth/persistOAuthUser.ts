@@ -1,17 +1,34 @@
 import { isDatabaseConfigured, prisma } from '../prisma'
+import { normalizeTwitchLogin } from '../streamerIdentity'
 import { resolveUserRole } from './resolveUserRole'
 import type { GoogleProfileForSession } from './googleOAuth'
-import type { TwitchProfileForSession } from './twitchClient'
+import type { TwitchProfileForSession, TwitchStreamStatus } from './twitchClient'
+
+const STREAMER_OWNER_ROLE = 'OWNER'
+
+export type PersistTwitchOAuthUserOptions = {
+  streamStatus?: TwitchStreamStatus | null
+}
 
 /**
  * Upsert OAuth user in Postgres. Failures are logged only — JWT/session must still succeed without DB.
  * If `DATABASE_URL` is unset, skips persistence (local dev without Postgres).
  */
-export async function persistTwitchOAuthUser(profile: TwitchProfileForSession): Promise<void> {
+export async function persistTwitchOAuthUser(
+  profile: TwitchProfileForSession,
+  options: PersistTwitchOAuthUserOptions = {},
+): Promise<void> {
   if (!isDatabaseConfigured()) {
     return
   }
   try {
+    const login = normalizeTwitchLogin(profile.login) ?? normalizeTwitchLogin(profile.display_name)
+    if (!login) {
+      throw new Error(`Invalid Twitch login for profile ${profile.id}`)
+    }
+    const displayName = profile.display_name.trim() || login
+    const profileImageUrl = profile.profile_image_url?.trim() ? profile.profile_image_url : null
+    const streamStatus = options.streamStatus ?? null
     const allowlistRole = resolveUserRole({
       provider: 'twitch',
       id: profile.id,
@@ -30,11 +47,7 @@ export async function persistTwitchOAuthUser(profile: TwitchProfileForSession): 
     if (existing?.role === 'host' && allowlistRole === 'user') {
       storedRole = 'host'
     }
-    const linkedStreamer = await prisma.streamer.findFirst({
-      where: { twitchId: profile.id, isActive: true },
-      select: { id: true },
-    })
-    await prisma.user.upsert({
+    const user = await prisma.user.upsert({
       where: {
         provider_providerUserId: {
           provider: 'twitch',
@@ -45,19 +58,76 @@ export async function persistTwitchOAuthUser(profile: TwitchProfileForSession): 
         provider: 'twitch',
         providerUserId: profile.id,
         email: null,
-        displayName: profile.display_name,
-        avatarUrl: profile.profile_image_url || null,
+        displayName,
+        avatarUrl: profileImageUrl,
         role: storedRole,
         twitchId: profile.id,
-        streamerId: linkedStreamer?.id ?? null,
         stats: { create: {} },
       },
       update: {
-        displayName: profile.display_name,
-        avatarUrl: profile.profile_image_url || null,
+        displayName,
+        avatarUrl: profileImageUrl,
         role: storedRole,
         twitchId: profile.id,
-        ...(linkedStreamer ? { streamerId: linkedStreamer.id } : {}),
+      },
+      select: { id: true },
+    })
+    const existingStreamerByTwitch = await prisma.streamer.findUnique({
+      where: { twitchId: profile.id },
+      select: { id: true },
+    })
+    const existingStreamer =
+      existingStreamerByTwitch ??
+      (await prisma.streamer.findFirst({
+        where: { OR: [{ username: login }, { name: login }] },
+        select: { id: true },
+      }))
+    const streamerData = {
+      twitchId: profile.id,
+      username: login,
+      name: login,
+      displayName,
+      profileImageUrl,
+      broadcasterType: profile.broadcaster_type || null,
+      currentOnline: streamStatus?.currentOnline ?? null,
+      isLive: streamStatus?.isLive ?? false,
+      lastSyncAt: new Date(),
+      ownerId: user.id,
+      isActive: true,
+    }
+    const streamer = existingStreamer
+      ? await prisma.streamer.update({
+          where: { id: existingStreamer.id },
+          data: streamerData,
+          select: { id: true },
+        })
+      : await prisma.streamer.create({
+          data: {
+            ...streamerData,
+            followersCount: null,
+            avgOnline7d: null,
+            tier: null,
+          },
+          select: { id: true },
+        })
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { streamerId: streamer.id },
+    })
+    await prisma.streamerMember.upsert({
+      where: {
+        userId_streamerId: {
+          userId: user.id,
+          streamerId: streamer.id,
+        },
+      },
+      create: {
+        userId: user.id,
+        streamerId: streamer.id,
+        role: STREAMER_OWNER_ROLE,
+      },
+      update: {
+        role: STREAMER_OWNER_ROLE,
       },
     })
   } catch (e) {

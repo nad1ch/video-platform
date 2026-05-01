@@ -1,4 +1,6 @@
 import { resolveUserRole } from '../resolveUserRole'
+import { resolvePrismaUserIdFromSession } from '../resolvePrismaUserFromSession'
+import { isDatabaseConfigured, prisma } from '../../prisma'
 import { readSessionFromCookie, type SessionPayload } from './sessionJwt'
 
 function roleInput(s: SessionPayload) {
@@ -16,10 +18,24 @@ function roleInput(s: SessionPayload) {
 }
 
 /** Поточна роль з allowlist (як у GET /api/auth/me), не лише поле в JWT. */
-export function isSessionAdminFromCookie(cookieHeader: string | undefined): boolean {
+export async function isSessionAdminFromCookie(cookieHeader: string | undefined): Promise<boolean> {
   const s = readSessionFromCookie(cookieHeader)
   if (!s) {
     return false
   }
-  return resolveUserRole(roleInput(s)) === 'admin'
+  if (resolveUserRole(roleInput(s)) === 'admin') {
+    return true
+  }
+  if (!isDatabaseConfigured()) {
+    return false
+  }
+  const prismaUserId = await resolvePrismaUserIdFromSession(s)
+  if (!prismaUserId) {
+    return false
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: prismaUserId },
+    select: { role: true },
+  })
+  return user?.role === 'admin'
 }

@@ -1,8 +1,27 @@
 import type { Request, Response } from 'express'
 import { prisma } from '../../prisma'
-import { resolvePrismaUserIdFromSession, resolveNadleStreamerContextForUserId } from '../resolvePrismaUserFromSession'
+import {
+  resolvePrismaUserIdFromSession,
+  resolveNadleStreamerContextForUserId,
+  resolveUserStreamerContext,
+} from '../resolvePrismaUserFromSession'
 import { readSessionFromCookie } from './sessionJwt'
 import { sessionToGlobalAuthUser, sessionToLegacyApiUser } from './globalUser'
+import type { SystemRole, UserRole } from './types'
+
+function buildSystemRoles(role: UserRole, hasStreamer: boolean): SystemRole[] {
+  const roles: SystemRole[] = ['USER']
+  if (role === 'admin') {
+    roles.push('ADMIN')
+  }
+  if (role === 'host') {
+    roles.push('HOST')
+  }
+  if (hasStreamer) {
+    roles.push('STREAMER')
+  }
+  return roles
+}
 
 /** GET /api/auth/me — global camelCase user. */
 export async function handleGetApiAuthMe(req: Request, res: Response): Promise<void> {
@@ -22,12 +41,16 @@ export async function handleGetApiAuthMe(req: Request, res: Response): Promise<v
       dbRole = row?.role ?? null
     }
     const base = sessionToGlobalAuthUser(session, dbRole)
+    const streamer =
+      prismaUserId != null ? await resolveUserStreamerContext(prismaUserId) : null
     const nadleStreamer =
       prismaUserId != null ? await resolveNadleStreamerContextForUserId(prismaUserId) : null
     res.json({
       authenticated: true,
       user: {
         ...base,
+        roles: buildSystemRoles(base.role, streamer != null),
+        ...(streamer ? { streamer } : {}),
         ...(prismaUserId ? { dbUserId: prismaUserId } : {}),
         ...(nadleStreamer
           ? {

@@ -2,18 +2,59 @@ import type { Express, Request, Response } from 'express'
 import { Prisma } from '@prisma/client'
 import { isDatabaseConfigured, prisma } from './prisma'
 import { isSessionAdminFromCookie } from './auth/session/isAdminRequest'
+import { resolvePrismaUserIdFromSession } from './auth/resolvePrismaUserFromSession'
+import { readSessionFromCookie } from './auth/session/sessionJwt'
+import { getUserRoles, parseSystemRoles, setUserRoles } from './auth/userRoles'
 
-function requireAdmin(req: Request, res: Response): boolean {
-  if (!isSessionAdminFromCookie(req.headers.cookie)) {
+async function requireAdmin(req: Request, res: Response): Promise<boolean> {
+  if (!(await isSessionAdminFromCookie(req.headers.cookie))) {
     res.status(403).json({ error: 'forbidden', message: 'Admin only' })
     return false
   }
   return true
 }
 
+async function resolveActorUserId(req: Request): Promise<string | null> {
+  const session = readSessionFromCookie(req.headers.cookie)
+  return session ? await resolvePrismaUserIdFromSession(session) : null
+}
+
+async function actorAuditId(req: Request, actorUserId: string | null): Promise<string> {
+  if (actorUserId) {
+    return actorUserId
+  }
+  const session = readSessionFromCookie(req.headers.cookie)
+  return session?.id ?? 'unknown'
+}
+
+async function logAdminAudit(
+  req: Request,
+  input: {
+    actorUserId: string | null
+    targetUserId?: string | null
+    targetStreamerId?: string | null
+    action: string
+    metadata?: Prisma.InputJsonValue
+  },
+): Promise<void> {
+  try {
+    await prisma.adminAuditLog.create({
+      data: {
+        actorUserId: await actorAuditId(req, input.actorUserId),
+        targetUserId: input.targetUserId ?? null,
+        targetStreamerId: input.targetStreamerId ?? null,
+        action: input.action,
+        metadata: input.metadata ?? Prisma.JsonNull,
+      },
+    })
+  } catch (e) {
+    console.error('[admin] audit log write failed', e)
+  }
+}
+
 export function mountAdminRoutes(app: Express): void {
   app.get('/api/admin/users', async (req: Request, res: Response) => {
-    if (!requireAdmin(req, res)) {
+    if (!(await requireAdmin(req, res))) {
       return
     }
     if (!isDatabaseConfigured()) {
@@ -45,16 +86,20 @@ export function mountAdminRoutes(app: Express): void {
           { wins: g._sum.wins ?? 0, gamesPlayed: g._sum.gamesPlayed ?? 0 },
         ]),
       )
-      const users = rows.map((u) => {
+      const roleContexts = await Promise.all(rows.map((u) => getUserRoles(u.id)))
+      const users = rows.map((u, idx) => {
         const w = statsByUser.get(u.id)
         const role =
           u.role === 'admin' ? 'admin' : u.role === 'host' ? 'host' : 'user'
+        const roleContext = roleContexts[idx]
         return {
           id: u.id,
           displayName: u.displayName,
           avatar: u.avatarUrl?.trim() ? u.avatarUrl.trim() : undefined,
           provider: u.provider,
           role,
+          roles: roleContext?.roles ?? ['USER'],
+          streamerId: roleContext?.streamerId ?? undefined,
           twitchId: u.twitchId ?? undefined,
           wins: w?.wins ?? 0,
           gamesPlayed: w?.gamesPlayed ?? 0,
@@ -68,7 +113,7 @@ export function mountAdminRoutes(app: Express): void {
   })
 
   app.patch('/api/admin/users/:userId/role', async (req: Request, res: Response) => {
-    if (!requireAdmin(req, res)) {
+    if (!(await requireAdmin(req, res))) {
       return
     }
     if (!isDatabaseConfigured()) {
@@ -76,24 +121,56 @@ export function mountAdminRoutes(app: Express): void {
       return
     }
     const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : ''
-    const body = req.body as { role?: unknown }
+    const body = req.body as { role?: unknown; roles?: unknown; streamerId?: unknown }
     const nextRole = typeof body.role === 'string' ? body.role.trim() : ''
-    if (!userId || (nextRole !== 'user' && nextRole !== 'host')) {
+    const roles = parseSystemRoles(body.roles)
+    if (!userId || (!roles && nextRole !== 'user' && nextRole !== 'host' && nextRole !== 'admin')) {
       res.status(400).json({ error: 'invalid_role' })
       return
     }
     try {
-      const row = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true } })
-      if (!row) {
+      const actorUserId = await resolveActorUserId(req)
+      const current = await getUserRoles(userId)
+      if (!current) {
         res.status(404).json({ error: 'not_found' })
         return
       }
-      if (row.role === 'admin') {
-        res.status(400).json({ error: 'cannot_change_admin_role' })
+      const nextRoles =
+        roles ??
+        (nextRole === 'admin'
+          ? ['USER', 'ADMIN']
+          : nextRole === 'host'
+            ? ['USER', 'HOST']
+            : ['USER'])
+      if (!roles && current.roles.includes('STREAMER')) {
+        nextRoles.push('STREAMER')
+      }
+      const streamerId = typeof body.streamerId === 'string' ? body.streamerId.trim() : null
+      const result = await setUserRoles({
+        actorUserId,
+        userId,
+        roles: nextRoles,
+        streamerId,
+      })
+      if (!result.ok) {
+        res.status(result.status).json({ error: result.error })
         return
       }
-      await prisma.user.update({ where: { id: userId }, data: { role: nextRole } })
-      res.status(204).end()
+      const before = current.roles
+      const after = result.roles
+      await logAdminAudit(req, {
+        actorUserId,
+        targetUserId: userId,
+        action: 'user.roles.set',
+        metadata: {
+          before,
+          after,
+          added: after.filter((role) => !before.includes(role)),
+          removed: before.filter((role) => !after.includes(role)),
+          streamerId: result.streamerId,
+        },
+      })
+      res.json({ roles: result.roles, streamerId: result.streamerId })
     } catch (e) {
       console.error('[admin] PATCH /api/admin/users/:userId/role', e)
       res.status(500).json({ error: 'server_error' })
@@ -101,7 +178,7 @@ export function mountAdminRoutes(app: Express): void {
   })
 
   app.get('/api/admin/stats', async (req: Request, res: Response) => {
-    if (!requireAdmin(req, res)) {
+    if (!(await requireAdmin(req, res))) {
       return
     }
     if (!isDatabaseConfigured()) {
@@ -185,7 +262,7 @@ export function mountAdminRoutes(app: Express): void {
   })
 
   app.get('/api/admin/streamers', async (req: Request, res: Response) => {
-    if (!requireAdmin(req, res)) {
+    if (!(await requireAdmin(req, res))) {
       return
     }
     if (!isDatabaseConfigured()) {
@@ -214,7 +291,7 @@ export function mountAdminRoutes(app: Express): void {
   })
 
   app.post('/api/admin/streamers', async (req: Request, res: Response) => {
-    if (!requireAdmin(req, res)) {
+    if (!(await requireAdmin(req, res))) {
       return
     }
     if (!isDatabaseConfigured()) {
@@ -272,6 +349,32 @@ export function mountAdminRoutes(app: Express): void {
           ownerId: true,
         },
       })
+      await prisma.user.update({
+        where: { id: owner.id },
+        data: { streamerId: streamer.id },
+      })
+      await prisma.streamerMember.upsert({
+        where: {
+          userId_streamerId: {
+            userId: owner.id,
+            streamerId: streamer.id,
+          },
+        },
+        create: { userId: owner.id, streamerId: streamer.id, role: 'OWNER' },
+        update: { role: 'OWNER' },
+      })
+      await logAdminAudit(req, {
+        actorUserId: await resolveActorUserId(req),
+        targetUserId: owner.id,
+        targetStreamerId: streamer.id,
+        action: 'streamer.create',
+        metadata: {
+          name,
+          username: streamer.username,
+          twitchId: streamer.twitchId,
+          ownerId: owner.id,
+        },
+      })
       res.status(201).json(streamer)
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
@@ -284,7 +387,7 @@ export function mountAdminRoutes(app: Express): void {
   })
 
   app.delete('/api/admin/streamers/:id', async (req: Request, res: Response) => {
-    if (!requireAdmin(req, res)) {
+    if (!(await requireAdmin(req, res))) {
       return
     }
     if (!isDatabaseConfigured()) {
@@ -297,7 +400,23 @@ export function mountAdminRoutes(app: Express): void {
       return
     }
     try {
-      await prisma.streamer.delete({ where: { id } })
+      const streamer = await prisma.streamer.update({
+        where: { id },
+        data: { isActive: false },
+        select: { id: true, name: true, username: true, twitchId: true, ownerId: true, isActive: true },
+      })
+      await logAdminAudit(req, {
+        actorUserId: await resolveActorUserId(req),
+        targetUserId: streamer.ownerId,
+        targetStreamerId: streamer.id,
+        action: 'streamer.deactivate',
+        metadata: {
+          name: streamer.name,
+          username: streamer.username,
+          twitchId: streamer.twitchId,
+          isActive: streamer.isActive,
+        },
+      })
       res.status(204).end()
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
