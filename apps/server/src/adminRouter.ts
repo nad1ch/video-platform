@@ -73,6 +73,8 @@ export function mountAdminRoutes(app: Express): void {
             provider: true,
             role: true,
             twitchId: true,
+            createdAt: true,
+            updatedAt: true,
           },
         }),
         prisma.userStreamerStats.groupBy({
@@ -103,6 +105,8 @@ export function mountAdminRoutes(app: Express): void {
           twitchId: u.twitchId ?? undefined,
           wins: w?.wins ?? 0,
           gamesPlayed: w?.gamesPlayed ?? 0,
+          createdAt: u.createdAt.toISOString(),
+          updatedAt: u.updatedAt.toISOString(),
         }
       })
       res.json({ databaseConfigured: true, users })

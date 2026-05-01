@@ -32,6 +32,8 @@ export type AdminUserRow = {
   twitchId?: string
   wins: number
   gamesPlayed: number
+  createdAt?: string
+  updatedAt?: string
 }
 
 export function useAdminUsersState(): {

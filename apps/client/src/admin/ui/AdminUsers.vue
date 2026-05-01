@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAdminUsersState, type AdminUserRow } from '@/admin'
 import { useAuth } from '@/composables/useAuth'
@@ -17,6 +17,12 @@ const copyFeedbackId = ref<string | null>(null)
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 const rolePatchingId = ref<string | null>(null)
 const rolePatchError = ref<string | null>(null)
+const detailUserId = ref<string | null>(null)
+
+const detailUser = computed(() => {
+  if (!detailUserId.value) return null
+  return users.value.find((u) => u.id === detailUserId.value) ?? null
+})
 
 const rating = (u: AdminUserRow) => u.wins - Math.max(0, u.gamesPlayed - u.wins)
 type EditableRole = 'HOST' | 'ADMIN' | 'STREAMER'
@@ -65,12 +71,49 @@ const noSearchMatches = computed(
   () => !loading.value && !errorKey.value && databaseConfigured.value && users.value.length > 0 && filteredSorted.value.length === 0,
 )
 
+watch(users, (list) => {
+  if (detailUserId.value && !list.some((u) => u.id === detailUserId.value)) {
+    detailUserId.value = null
+  }
+})
+
+function dashText(value: string | null | undefined): string {
+  const s = typeof value === 'string' ? value.trim() : ''
+  return s ? s : '—'
+}
+
 function formatUpdated(d: Date) {
   try {
     return new Intl.DateTimeFormat(locale.value || undefined, { dateStyle: 'short', timeStyle: 'short' }).format(d)
   } catch {
     return d.toLocaleString()
   }
+}
+
+function formatIso(iso: string | undefined): string {
+  if (!iso?.trim()) {
+    return '—'
+  }
+  try {
+    return formatUpdated(new Date(iso))
+  } catch {
+    return '—'
+  }
+}
+
+function openUserDetail(u: AdminUserRow) {
+  detailUserId.value = u.id
+}
+
+function closeUserDetail() {
+  detailUserId.value = null
+}
+
+function onDocKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape' || !detailUserId.value) {
+    return
+  }
+  closeUserDetail()
 }
 
 function escapeCsvCell(value: string) {
@@ -211,6 +254,11 @@ async function copyId(id: string) {
 
 onMounted(() => {
   void load()
+  document.addEventListener('keydown', onDocKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', onDocKeydown)
 })
 </script>
 
@@ -333,7 +381,8 @@ onMounted(() => {
         <li
           v-for="u in filteredSorted"
           :key="u.id"
-          class="flex flex-col gap-3 rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 ring-1 ring-white/[0.03] transition hover:border-slate-700/90 hover:bg-slate-900/55 sm:flex-row sm:items-center"
+          class="flex cursor-pointer flex-col gap-3 rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 ring-1 ring-white/[0.03] transition hover:border-slate-700/90 hover:bg-slate-900/55 sm:flex-row sm:items-center"
+          @click="openUserDetail(u)"
         >
           <div class="flex min-w-0 flex-1 items-center gap-3">
             <div
@@ -361,7 +410,7 @@ onMounted(() => {
                 <button
                   type="button"
                   class="rounded border border-slate-700/80 bg-slate-950/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-300 transition hover:border-cyan-700/60 hover:text-cyan-200"
-                  @click="copyId(u.id)"
+                  @click.stop="copyId(u.id)"
                 >
                   {{ copyFeedbackId === u.id ? t('adminPanel.usersCopied') : t('adminPanel.usersCopyId') }}
                 </button>
@@ -369,22 +418,24 @@ onMounted(() => {
                 <span class="rounded border border-slate-700/70 bg-slate-950/70 px-1.5 py-0.5 text-slate-300">
                   {{ roleLabel('USER') }}
                 </span>
-                <label
-                  v-for="role in editableRoles"
-                  :key="role"
-                  class="inline-flex items-center gap-1 rounded border border-slate-700/70 bg-slate-950/70 px-1.5 py-0.5 text-slate-200"
-                  :class="{ 'opacity-50': roleToggleDisabled(u, role) }"
-                >
-                  <input
-                    type="checkbox"
-                    class="h-3 w-3 accent-cyan-500"
-                    :checked="hasSystemRole(u, role)"
-                    :disabled="roleToggleDisabled(u, role)"
-                    :aria-label="`${roleLabel(role)} ${u.displayName}`"
-                    @change="onRoleToggle(u, role, $event)"
-                  />
-                  <span>{{ roleLabel(role) }}</span>
-                </label>
+                <span class="inline-flex flex-wrap items-center gap-1" @click.stop>
+                  <label
+                    v-for="role in editableRoles"
+                    :key="role"
+                    class="inline-flex items-center gap-1 rounded border border-slate-700/70 bg-slate-950/70 px-1.5 py-0.5 text-slate-200"
+                    :class="{ 'opacity-50': roleToggleDisabled(u, role) }"
+                  >
+                    <input
+                      type="checkbox"
+                      class="h-3 w-3 accent-cyan-500"
+                      :checked="hasSystemRole(u, role)"
+                      :disabled="roleToggleDisabled(u, role)"
+                      :aria-label="`${roleLabel(role)} ${u.displayName}`"
+                      @change="onRoleToggle(u, role, $event)"
+                    />
+                    <span>{{ roleLabel(role) }}</span>
+                  </label>
+                </span>
               </p>
             </div>
           </div>
@@ -404,6 +455,139 @@ onMounted(() => {
           </dl>
         </li>
       </ul>
+
+      <Teleport to="body">
+        <div
+          v-if="detailUser"
+          class="fixed inset-0 z-[90] flex justify-end"
+          role="presentation"
+        >
+          <button
+            type="button"
+            class="absolute inset-0 bg-black/55 backdrop-blur-[1px]"
+            :aria-label="t('adminPanel.usersDetailClose')"
+            @click="closeUserDetail"
+          />
+          <aside
+            class="relative flex h-full w-full max-w-md flex-col border-l border-slate-800/90 bg-slate-950 shadow-2xl shadow-black/40"
+            role="dialog"
+            aria-modal="true"
+            :aria-labelledby="'admin-user-detail-title'"
+          >
+            <div class="flex items-start justify-between gap-3 border-b border-slate-800/80 p-4">
+              <h3 id="admin-user-detail-title" class="min-w-0 text-lg font-semibold tracking-tight text-white">
+                {{ t('adminPanel.usersDetailTitle') }}
+              </h3>
+              <button
+                type="button"
+                class="shrink-0 rounded-lg border border-slate-700/80 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                @click="closeUserDetail"
+              >
+                {{ t('adminPanel.usersDetailClose') }}
+              </button>
+            </div>
+            <div class="min-h-0 flex-1 overflow-y-auto p-4">
+              <div class="flex gap-4">
+                <div
+                  class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-800 ring-1 ring-slate-700"
+                >
+                  <img
+                    v-if="detailUser.avatar"
+                    :src="detailUser.avatar"
+                    :alt="detailUser.displayName"
+                    width="64"
+                    height="64"
+                    class="h-full w-full object-cover"
+                  />
+                  <span v-else class="text-xl font-semibold text-slate-400" aria-hidden="true">
+                    {{ detailUser.displayName.charAt(0).toUpperCase() }}
+                  </span>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-base font-medium text-white">{{ detailUser.displayName }}</p>
+                  <p class="mt-1 break-all font-mono text-[11px] text-slate-500">
+                    {{ dashText(detailUser.id) }}
+                  </p>
+                  <button
+                    type="button"
+                    class="mt-2 rounded-lg border border-slate-700/80 bg-slate-900/80 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:border-cyan-700/50 hover:text-cyan-200"
+                    @click="copyId(detailUser.id)"
+                  >
+                    {{
+                      copyFeedbackId === detailUser.id ? t('adminPanel.usersCopied') : t('adminPanel.usersCopyId')
+                    }}
+                  </button>
+                </div>
+              </div>
+              <dl class="mt-6 space-y-3 text-sm">
+                <div class="flex flex-col gap-0.5">
+                  <dt class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    {{ t('adminPanel.colProvider') }}
+                  </dt>
+                  <dd class="text-slate-200">{{ dashText(detailUser.provider) }}</dd>
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <dt class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    {{ t('adminPanel.usersDetailLegacyRole') }}
+                  </dt>
+                  <dd class="font-mono text-slate-200">{{ dashText(detailUser.role) }}</dd>
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <dt class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    {{ t('adminPanel.usersDetailRoles') }}
+                  </dt>
+                  <dd class="text-slate-200">{{ dashText(displayRoles(detailUser)) }}</dd>
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <dt class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    {{ t('adminPanel.usersDetailTwitchId') }}
+                  </dt>
+                  <dd class="break-all font-mono text-slate-200">{{ dashText(detailUser.twitchId) }}</dd>
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <dt class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    {{ t('adminPanel.usersDetailStreamerId') }}
+                  </dt>
+                  <dd class="break-all font-mono text-slate-200">{{ dashText(detailUser.streamerId) }}</dd>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <dt class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                      {{ t('adminPanel.colWins') }}
+                    </dt>
+                    <dd class="font-semibold tabular-nums text-cyan-300">{{ detailUser.wins }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                      {{ t('adminPanel.colGames') }}
+                    </dt>
+                    <dd class="font-semibold tabular-nums text-slate-200">{{ detailUser.gamesPlayed }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                      {{ t('adminPanel.colRating') }}
+                    </dt>
+                    <dd class="font-semibold tabular-nums text-violet-200">{{ rating(detailUser) }}</dd>
+                  </div>
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <dt class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    {{ t('adminPanel.usersDetailCreated') }}
+                  </dt>
+                  <dd class="text-slate-200">{{ formatIso(detailUser.createdAt) }}</dd>
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <dt class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    {{ t('adminPanel.usersDetailUpdated') }}
+                  </dt>
+                  <dd class="text-slate-200">{{ formatIso(detailUser.updatedAt) }}</dd>
+                </div>
+              </dl>
+              <p class="mt-6 text-xs leading-relaxed text-slate-500">{{ t('adminPanel.usersDetailHint') }}</p>
+            </div>
+          </aside>
+        </div>
+      </Teleport>
     </template>
   </div>
 </template>
