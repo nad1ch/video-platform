@@ -81,6 +81,7 @@ const isMafiaRoute = computed(() => route.name === 'mafia')
 const isCheckersRoute = computed(() => route.name === 'checkers')
 const isCoinHubRoute = computed(() => route.name === 'coin-hub')
 const isNadrawRoute = computed(() => route.name === 'nadraw-show')
+const isBetaAccessRoute = computed(() => route.name === 'beta-access')
 const isAdminRoute = computed(() => String(route.name ?? '').startsWith('admin-'))
 const isHeavyVisualRoute = computed(() => isHomeRoute.value)
 const shellShowsCoinBalance = computed(() => showChrome.value)
@@ -129,6 +130,7 @@ const appLandingHeaderBrand = computed(() =>
   isMafiaRoute.value ||
   isCoinHubRoute.value ||
   isNadrawRoute.value ||
+  isBetaAccessRoute.value ||
   isEatRoute.value
     ? 'Stream Assist'
     : 'NADLE',

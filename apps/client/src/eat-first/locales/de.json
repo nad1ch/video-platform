@@ -118,6 +118,14 @@
     "nadrawShow": "Nadraw",
     "coinHub": "Coin-Hub"
   },
+  "betaAccess": {
+    "routeTitle": "Beta access",
+    "eyebrow": "Beta access",
+    "title": "This content is currently limited to beta access",
+    "body": "Video calls and Mafia require significant server resources, so during beta testing they are available only to streamers and their trusted circle.",
+    "note": "If you should have access, please contact the administrator or the streamer who invited you.",
+    "backHome": "Back to home"
+  },
   "coinHub": {
     "balance": "Guthaben",
     "heroBalance": "Ihr Guthaben",

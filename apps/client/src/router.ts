@@ -82,15 +82,33 @@ export const router = createRouter({
           component: () => import('./pages/VerifyEmailPage.vue'),
         },
         {
+          path: 'beta-access',
+          name: 'beta-access',
+          meta: { appTitleKey: 'betaAccess.routeTitle', footerContext: 'home', requiresAuth: true },
+          component: () => import('./pages/BetaAccessPage.vue'),
+        },
+        {
           path: 'call',
           name: 'call',
-          meta: { appTitleKey: 'routes.call', footerContext: 'call', footer: false, requiresAuth: true },
+          meta: {
+            appTitleKey: 'routes.call',
+            footerContext: 'call',
+            footer: false,
+            requiresAuth: true,
+            requiresBetaAccess: true,
+          },
           component: () => import('./components/call/CallPage.vue'),
         },
         {
           path: 'mafia',
           name: 'mafia',
-          meta: { appTitleKey: 'routes.mafia', footerContext: 'call', footer: false, requiresAuth: true },
+          meta: {
+            appTitleKey: 'routes.mafia',
+            footerContext: 'call',
+            footer: false,
+            requiresAuth: true,
+            requiresBetaAccess: true,
+          },
           component: loadMafiaPage,
         },
         {
@@ -273,6 +291,18 @@ function userNeedsEmailVerification(user: AppUser | null): boolean {
   )
 }
 
+function userHasCallMafiaBetaAccess(user: AppUser | null): boolean {
+  return (
+    user?.role === 'admin' ||
+    user?.roles?.includes('ADMIN') === true ||
+    user?.roles?.includes('STREAMER') === true
+  )
+}
+
+function routeNeedsBetaAccess(to: RouteLocationGeneric): boolean {
+  return to.matched.some((record) => record.meta.requiresBetaAccess === true)
+}
+
 function emailVerificationQuery(query: Record<string, unknown>): Record<string, string> {
   const next: Record<string, string> = {}
   const emailVerified = query.emailVerified
@@ -310,6 +340,17 @@ router.beforeEach(async (to) => {
       return {
         path: '/app',
         query: emailVerificationQuery(to.query as Record<string, unknown>),
+      }
+    }
+    if (
+      isAuthenticated.value &&
+      routeNeedsBetaAccess(to) &&
+      !userHasCallMafiaBetaAccess(user.value)
+    ) {
+      releaseRouteNavLoading()
+      return {
+        name: 'beta-access',
+        query: { from: to.fullPath },
       }
     }
   }
