@@ -5,6 +5,7 @@ import { clientPublicOrigin } from '../clientOrigin'
 import { resolvePrismaUserIdFromSession } from '../resolvePrismaUserFromSession'
 import { readSessionFromCookie } from '../session/sessionJwt'
 import { sendVerificationEmail } from './emailVerificationMailer'
+import { resolveEmailLocale } from './emailTemplates'
 
 const TOKEN_BYTES = 32
 const TOKEN_TTL_MINUTES = 30
@@ -37,6 +38,14 @@ function buildVerificationUrl(req: Request, token: string): string {
   const url = new URL('/api/auth/email-verification/verify', requestOrigin(req))
   url.searchParams.set('token', token)
   return url.toString()
+}
+
+function requestLocale(req: Request): 'en' | 'uk' {
+  const body = typeof req.body === 'object' && req.body !== null && !Array.isArray(req.body) ? req.body : {}
+  return resolveEmailLocale({
+    locale: (body as { locale?: unknown }).locale,
+    acceptLanguage: req.header('accept-language'),
+  })
 }
 
 function redirectToApp(res: Response, query: Record<string, string>): void {
@@ -108,6 +117,7 @@ export async function handleSendEmailVerification(req: Request, res: Response): 
       displayName: user.displayName,
       verificationUrl: buildVerificationUrl(req, rawToken),
       expiresInMinutes: TOKEN_TTL_MINUTES,
+      locale: requestLocale(req),
     })
     res.json({ ok: true })
   } catch (e) {

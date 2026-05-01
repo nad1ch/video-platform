@@ -491,11 +491,20 @@ export function useAuth() {
     return { ok: false, error: 'server' }
   }
 
-  async function sendEmailVerification(): Promise<
+  async function sendEmailVerification(locale?: string): Promise<
     | { ok: true }
     | { ok: false; error: 'email_unavailable' | 'unauthenticated' | 'server' }
   > {
-    const res = await apiFetch('/api/auth/email-verification/send', { method: 'POST' })
+    const normalizedLocale = locale?.trim()
+    const res = await apiFetch('/api/auth/email-verification/send', {
+      method: 'POST',
+      ...(normalizedLocale
+        ? {
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ locale: normalizedLocale }),
+          }
+        : {}),
+    })
     if (res.ok) {
       return { ok: true }
     }
@@ -508,14 +517,18 @@ export function useAuth() {
     return { ok: false, error: 'server' }
   }
 
-  async function sendPasswordReset(email: string): Promise<
+  async function sendPasswordReset(email: string, locale?: string): Promise<
     | { ok: true }
     | { ok: false; error: 'validation' | 'server' }
   > {
+    const normalizedLocale = locale?.trim()
     const res = await apiFetch('/api/auth/password-reset/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim() }),
+      body: JSON.stringify({
+        email: email.trim(),
+        ...(normalizedLocale ? { locale: normalizedLocale } : {}),
+      }),
     })
     if (res.ok) {
       return { ok: true }

@@ -6,7 +6,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import { useAuth } from '@/composables/useAuth'
 import { replaceAuthQuery } from '@/utils/authRouteQuery'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const { sendPasswordReset } = useAuth()
@@ -20,7 +20,7 @@ async function onSubmit(e: Event): Promise<void> {
   feedback.value = null
   submitting.value = true
   try {
-    const result = await sendPasswordReset(email.value)
+    const result = await sendPasswordReset(email.value, locale.value)
     if (result.ok) {
       void router.replace({ path: '/auth', query: replaceAuthQuery(route, 'forgot-success') })
       return
