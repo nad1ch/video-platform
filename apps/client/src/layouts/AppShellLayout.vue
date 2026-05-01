@@ -164,10 +164,12 @@ const appLandingHeaderUserAvatar = computed(() => auth.user.value?.avatar ?? '')
 const appLandingProfileTo = computed<RouteLocationRaw | undefined>(() =>
   auth.user.value?.role === 'admin' ? { name: 'admin-users' } : undefined,
 )
+const emailVerificationSuccessFromRoute = computed(() => firstQueryValue(route.query.emailVerified) === '1')
 const footerYear = new Date().getFullYear()
 
 const onboardingOpen = ref(false)
 const onboardingTourKey = ref('')
+const economyComingSoonOpen = ref(false)
 
 const onboardingForRoute = computed(() => {
   if (!isEatRoute.value) return ''
@@ -189,6 +191,21 @@ function openAppLandingAuth(mode: AuthMode) {
 
 function logoutAppLanding(): void {
   void auth.logout()
+}
+
+function openEconomyComingSoon(): void {
+  economyComingSoonOpen.value = true
+}
+
+function closeEconomyComingSoon(): void {
+  economyComingSoonOpen.value = false
+}
+
+function firstQueryValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return typeof value[0] === 'string' ? value[0] : ''
+  }
+  return typeof value === 'string' ? value : ''
 }
 
 function tryAutoOnboarding() {
@@ -689,12 +706,13 @@ async function copyMafiaObsViewUrl(): Promise<void> {
         :mafia-mode="isMafiaRoute"
         :profile-to="appLandingProfileTo"
         :show-help-button="isEatRoute && Boolean(onboardingForRoute)"
-        :show-coin="!isMafiaRoute"
+        :show-coin="true"
         :title="headerTitle"
         :user-prefix="isMafiaRoute && isCurrentMafiaHost ? 'host' : ''"
         :user-avatar="appLandingHeaderUserAvatar"
         :user-name="appLandingHeaderUserName"
         @open-help="openOnboardingForCurrentRoute"
+        @coin-click="openEconomyComingSoon"
         @login="openAppLandingAuth('login')"
         @logout="logoutAppLanding"
       >
@@ -911,6 +929,36 @@ async function copyMafiaObsViewUrl(): Promise<void> {
         :tour-key="onboardingTourKey"
         @dismiss-save="onOnboardingDismissSave"
       />
+
+      <p v-if="emailVerificationSuccessFromRoute" class="app-shell-email-status" role="status">
+        Email verified. Your account email is now verified.
+      </p>
+
+      <Teleport to="body">
+        <div
+          v-if="economyComingSoonOpen"
+          class="app-shell-economy-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="app-shell-economy-modal-title"
+          @click.self="closeEconomyComingSoon"
+        >
+          <div class="app-shell-economy-modal__card">
+            <button
+              type="button"
+              class="app-shell-economy-modal__close"
+              aria-label="Close"
+              title="Close"
+              @click="closeEconomyComingSoon"
+            >
+              ×
+            </button>
+            <p class="app-shell-economy-modal__eyebrow">Economy</p>
+            <h2 id="app-shell-economy-modal-title">Coming soon</h2>
+            <p>Coin economy is being prepared. Your balance is visible for now, and actions will open soon.</p>
+          </div>
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -954,9 +1002,117 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   flex-direction: column;
 }
 
+.app-shell-main {
+  --app-shell-content-x: clamp(1.35rem, 1.6vw, 1.55rem);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell-main__viewport {
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell-main__viewport--chrome {
+  padding-inline: var(--app-shell-content-x);
+}
+
 .app-shell-main--full {
   flex: 1;
   min-height: 100vh;
+}
+
+.app-shell-email-status {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 12000;
+  max-width: min(360px, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0.72rem 0.9rem;
+  border: 1px solid color-mix(in srgb, #22c55e 45%, var(--border-subtle, #334155));
+  border-radius: 14px;
+  background: color-mix(in srgb, #22c55e 13%, var(--bg-card-soft, rgb(15 23 42 / 0.94)));
+  color: #bbf7d0;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
+  font-family: var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.app-shell-economy-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 13000;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(3 7 18 / 0.56);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.app-shell-economy-modal__card {
+  position: relative;
+  box-sizing: border-box;
+  width: min(420px, 100%);
+  padding: 1.35rem;
+  border: 1px solid color-mix(in srgb, #f59e0b 42%, rgb(255 255 255 / 0.16));
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 80% 0%, rgb(245 158 11 / 0.18), transparent 42%),
+    rgb(18 8 34 / 0.96);
+  color: #f8fafc;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.42);
+  text-align: center;
+}
+
+.app-shell-economy-modal__card h2 {
+  margin: 0;
+  color: #ffda44;
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+  font-size: clamp(1.8rem, 6vw, 2.6rem);
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
+  text-transform: uppercase;
+}
+
+.app-shell-economy-modal__card p {
+  margin: 0.65rem 0 0;
+  color: rgb(248 250 252 / 0.78);
+  line-height: 1.45;
+}
+
+.app-shell-economy-modal__eyebrow {
+  color: #ffda44 !important;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.app-shell-economy-modal__close {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.08);
+  color: rgb(255 255 255 / 0.9);
+  cursor: pointer;
+  font-size: 1.35rem;
+  line-height: 1;
 }
 
 /* Route content crossfades; leaving page overlays the new one to avoid blank gaps. */
@@ -1512,6 +1668,18 @@ async function copyMafiaObsViewUrl(): Promise<void> {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+}
+
+@media (max-width: 1200px) {
+  .app-shell-main {
+    --app-shell-content-x: clamp(0.8rem, 2vw, 1.25rem);
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell-main {
+    --app-shell-content-x: 0.65rem;
   }
 }
 

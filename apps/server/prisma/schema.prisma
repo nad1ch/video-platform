@@ -66,6 +66,8 @@ model User {
   provider           String
   providerUserId     String
   email              String?             @unique
+  emailVerified      Boolean             @default(false)
+  emailVerifiedAt    DateTime?
   displayName        String
   avatarUrl          String?
   role               String
@@ -84,9 +86,37 @@ model User {
   coinHubCases       CoinCase[]
   activityEvents     UserActivityEvent[]
   clientErrors       ClientErrorEvent[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens PasswordResetToken[]
 
   @@unique([provider, providerUserId])
   @@index([streamerId])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model StreamerMember {

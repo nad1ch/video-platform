@@ -12,6 +12,8 @@ import { clientPublicOrigin } from './clientOrigin'
 import { exchangeCodeForToken, getGoogleAuthUrl, getUserProfile, resolveGoogleOAuthRedirectUri } from './googleOAuth'
 import { twitchExchangeCode, twitchFetchSessionUser, twitchFetchStreamStatus } from './twitchClient'
 import { handleEmailLogin, handleEmailRegister } from './email/emailAuthHandlers'
+import { handleSendEmailVerification, handleVerifyEmail } from './email/emailVerificationHandlers'
+import { handleConfirmPasswordReset, handleSendPasswordReset } from './email/passwordResetHandlers'
 import { persistGoogleOAuthUser, persistTwitchOAuthUser } from './persistOAuthUser'
 import { withSessionRole } from './session/withSessionRole'
 
@@ -84,6 +86,10 @@ oauthRouter.post('/logout', (_req: Request, res: Response) => {
 
 oauthRouter.post('/register', handleEmailRegister)
 oauthRouter.post('/login', handleEmailLogin)
+oauthRouter.post('/email-verification/send', handleSendEmailVerification)
+oauthRouter.get('/email-verification/verify', handleVerifyEmail)
+oauthRouter.post('/password-reset/send', handleSendPasswordReset)
+oauthRouter.post('/password-reset/confirm', handleConfirmPasswordReset)
 
 oauthRouter.get('/twitch', (req: Request, res: Response) => {
   if (!twitchConfigured()) {

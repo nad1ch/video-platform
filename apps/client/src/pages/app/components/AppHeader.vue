@@ -44,6 +44,7 @@ const emit = defineEmits<{
   login: []
   logout: []
   openHelp: []
+  coinClick: []
 }>()
 
 const hasUserAvatar = computed(() => props.userAvatar.trim().length > 0)
@@ -212,12 +213,19 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
             ?
           </button>
 
-          <RouterLink v-if="showCoin" class="app-landing-header__coin" :to="coinHubTo" :aria-label="t('app.openCoinHub')">
+          <button
+            v-if="showCoin"
+            type="button"
+            class="app-landing-header__coin app-landing-header__coin--disabled"
+            :aria-label="t('app.openCoinHub')"
+            aria-disabled="true"
+            @click="$emit('coinClick')"
+          >
             <span class="app-landing-header__coin-label">{{ coinBalanceLabel }}</span>
             <span class="app-landing-header__coin-icon" aria-hidden="true">
               <img class="app-landing-header__coin-img" :src="coinIcon" alt="" width="44" height="44" />
             </span>
-          </RouterLink>
+          </button>
 
           <div
             class="app-landing-header__auth sa-glass-button"
@@ -564,6 +572,11 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
   font-size: 0.78rem;
   font-weight: 800;
+  cursor: pointer;
+}
+
+.app-landing-header__coin--disabled {
+  opacity: 0.92;
 }
 
 .app-landing-header__coin-icon {

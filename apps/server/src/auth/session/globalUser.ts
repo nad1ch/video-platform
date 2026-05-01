@@ -43,6 +43,7 @@ export function sessionToGlobalAuthUser(session: SessionPayload, dbRole?: string
     displayName: session.display_name,
     ...(trimmed.length > 0 ? { avatar: trimmed } : {}),
     provider: p,
+    ...(typeof session.email === 'string' && session.email.length > 0 ? { email: session.email } : {}),
     role,
     ...(typeof twitchId === 'string' && twitchId.length > 0 ? { twitchId } : {}),
   }

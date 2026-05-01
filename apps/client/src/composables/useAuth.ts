@@ -29,6 +29,9 @@ export type AppUser = {
   displayName: string
   avatar?: string
   provider: 'twitch' | 'google' | 'apple' | 'email' | null
+  email?: string
+  emailVerified?: boolean
+  emailVerifiedAt?: string | null
   role: 'admin' | 'user'
   /** Backend-authoritative system roles from GET /api/auth/me. */
   roles?: AppSystemRole[]
@@ -51,7 +54,7 @@ let inflight: Promise<void> | null = null
 
 /** Display-only cache (no tokens). Speeds up first paint after reload; always revalidated over the network. */
 /** Bump when `AppUser` shape changes (e.g. `dbUserId`) so stale sessionStorage entries re-fetch. */
-const DISPLAY_CACHE_KEY = 'streamassist_auth_display_v4'
+const DISPLAY_CACHE_KEY = 'streamassist_auth_display_v5'
 const DISPLAY_CACHE_TTL_MS = 5 * 60 * 1000
 /** Dev-only: log Twitch numeric id once per tab session (cleared on logout). */
 const DEV_TWITCH_ID_LOG_KEY = 'streamassist_dev_twitch_id_logged'
@@ -177,6 +180,10 @@ function parseUser(raw: unknown): AppUser | null {
     p === 'twitch' || p === 'google' || p === 'apple' || p === 'email' ? p : null
   const roleRaw = u.role
   const role = roleRaw === 'admin' ? 'admin' : 'user'
+  const email = typeof u.email === 'string' && u.email.trim().length > 0 ? u.email.trim() : undefined
+  const emailVerified = typeof u.emailVerified === 'boolean' ? u.emailVerified : undefined
+  const emailVerifiedAt =
+    typeof u.emailVerifiedAt === 'string' && u.emailVerifiedAt.length > 0 ? u.emailVerifiedAt : null
   const roles = parseSystemRoles(u.roles)
   const permissions = parseFeaturePermissions(u.permissions)
   const streamer = parseStreamerContext(u.streamer)
@@ -204,6 +211,9 @@ function parseUser(raw: unknown): AppUser | null {
     displayName,
     ...(avatar ? { avatar } : {}),
     provider,
+    ...(email ? { email } : {}),
+    ...(typeof emailVerified === 'boolean' ? { emailVerified } : {}),
+    ...(emailVerifiedAt ? { emailVerifiedAt } : {}),
     role,
     ...(roles ? { roles } : {}),
     ...(permissions ? { permissions } : {}),
@@ -211,6 +221,15 @@ function parseUser(raw: unknown): AppUser | null {
     ...(streamer ? { streamer } : {}),
     ...(nadleStreamerId ? { nadleStreamerId } : {}),
     ...(nadleStreamerName ? { nadleStreamerName } : {}),
+  }
+}
+
+async function readErrorCode(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: unknown }
+    return typeof body.error === 'string' ? body.error : ''
+  } catch {
+    return ''
   }
 }
 
@@ -348,7 +367,7 @@ export function useAuth() {
     displayName?: string,
   ): Promise<
     | { ok: true; outcome: 'registered' | 'logged_in'; user: AppUser }
-    | { ok: false; error: 'validation' | 'wrong_password' | 'server' }
+    | { ok: false; error: 'validation' | 'wrong_password' | 'account_link_required' | 'server' }
   > {
     const body = {
       email: email.trim(),
@@ -369,6 +388,10 @@ export function useAuth() {
       return { ok: true, outcome: 'registered', user: u }
     }
     if (reg.status === 409) {
+      const errorCode = await readErrorCode(reg)
+      if (errorCode === 'ACCOUNT_LINK_REQUIRED') {
+        return { ok: false, error: 'account_link_required' }
+      }
       const loginRes = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -385,6 +408,9 @@ export function useAuth() {
       if (loginRes.status === 401) {
         return { ok: false, error: 'wrong_password' }
       }
+      if (loginRes.status === 409 && (await readErrorCode(loginRes)) === 'ACCOUNT_LINK_REQUIRED') {
+        return { ok: false, error: 'account_link_required' }
+      }
       return { ok: false, error: 'server' }
     }
     if (reg.status === 400) {
@@ -399,7 +425,7 @@ export function useAuth() {
     password: string,
   ): Promise<
     | { ok: true; user: AppUser }
-    | { ok: false; error: 'validation' | 'invalid_credentials' | 'server' }
+    | { ok: false; error: 'validation' | 'invalid_credentials' | 'account_link_required' | 'server' }
   > {
     const loginRes = await apiFetch('/api/auth/login', {
       method: 'POST',
@@ -420,6 +446,9 @@ export function useAuth() {
     if (loginRes.status === 400) {
       return { ok: false, error: 'validation' }
     }
+    if (loginRes.status === 409 && (await readErrorCode(loginRes)) === 'ACCOUNT_LINK_REQUIRED') {
+      return { ok: false, error: 'account_link_required' }
+    }
     return { ok: false, error: 'server' }
   }
 
@@ -430,7 +459,7 @@ export function useAuth() {
     displayName?: string,
   ): Promise<
     | { ok: true; user: AppUser }
-    | { ok: false; error: 'validation' | 'email_taken' | 'server' }
+    | { ok: false; error: 'validation' | 'email_taken' | 'account_link_required' | 'server' }
   > {
     const body = {
       email: email.trim(),
@@ -451,10 +480,67 @@ export function useAuth() {
       return { ok: true, user: u }
     }
     if (reg.status === 409) {
+      if ((await readErrorCode(reg)) === 'ACCOUNT_LINK_REQUIRED') {
+        return { ok: false, error: 'account_link_required' }
+      }
       return { ok: false, error: 'email_taken' }
     }
     if (reg.status === 400) {
       return { ok: false, error: 'validation' }
+    }
+    return { ok: false, error: 'server' }
+  }
+
+  async function sendEmailVerification(): Promise<
+    | { ok: true }
+    | { ok: false; error: 'email_unavailable' | 'unauthenticated' | 'server' }
+  > {
+    const res = await apiFetch('/api/auth/email-verification/send', { method: 'POST' })
+    if (res.ok) {
+      return { ok: true }
+    }
+    if (res.status === 401) {
+      return { ok: false, error: 'unauthenticated' }
+    }
+    if (res.status === 400) {
+      return { ok: false, error: 'email_unavailable' }
+    }
+    return { ok: false, error: 'server' }
+  }
+
+  async function sendPasswordReset(email: string): Promise<
+    | { ok: true }
+    | { ok: false; error: 'validation' | 'server' }
+  > {
+    const res = await apiFetch('/api/auth/password-reset/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim() }),
+    })
+    if (res.ok) {
+      return { ok: true }
+    }
+    if (res.status === 400) {
+      return { ok: false, error: 'validation' }
+    }
+    return { ok: false, error: 'server' }
+  }
+
+  async function confirmPasswordReset(token: string, password: string): Promise<
+    | { ok: true }
+    | { ok: false; error: 'validation' | 'invalid_or_expired' | 'server' }
+  > {
+    const res = await apiFetch('/api/auth/password-reset/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password }),
+    })
+    if (res.ok) {
+      return { ok: true }
+    }
+    if (res.status === 400) {
+      const code = await readErrorCode(res)
+      return { ok: false, error: code === 'INVALID_OR_EXPIRED' ? 'invalid_or_expired' : 'validation' }
     }
     return { ok: false, error: 'server' }
   }
@@ -473,6 +559,9 @@ export function useAuth() {
     loginOrRegisterWithEmail,
     loginWithEmail,
     registerWithEmail,
+    sendEmailVerification,
+    sendPasswordReset,
+    confirmPasswordReset,
     logout,
     getCurrentUser,
   }
