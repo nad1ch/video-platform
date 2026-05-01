@@ -1,4 +1,19 @@
 export type UserRole = 'admin' | 'user' | 'host'
+export type SystemRole = 'USER' | 'ADMIN' | 'HOST' | 'STREAMER'
+
+export type AuthStreamerContext = {
+  id: string
+  twitchId: string
+  username: string
+  displayName: string | null
+  profileImageUrl: string | null
+  broadcasterType: string | null
+  followersCount: number | null
+  currentOnline: number | null
+  avgOnline7d: number | null
+  isLive: boolean
+  tier: string | null
+}
 
 /** Stored in JWT / cookie payload (snake_case for backward-compatible tokens). */
 export type SessionUser = {
@@ -23,8 +38,11 @@ export type GlobalAuthUser = {
   avatar?: string
   provider: 'twitch' | 'google' | 'apple' | 'email' | null
   role: UserRole
+  roles?: SystemRole[]
   /** Present when the user signed in with Twitch (Helix user id). */
   twitchId?: string
+  /** Backend-authoritative streamer context when this user owns a Streamer row. */
+  streamer?: AuthStreamerContext
   /** When this account matches an active `Streamer` row (owner or same Twitch id). */
   nadleStreamerId?: string
   /** Public `/nadle/:name` slug for that streamer. */

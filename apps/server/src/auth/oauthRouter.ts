@@ -10,7 +10,7 @@ import { clearGlobalSessionCookie, setGlobalSessionCookie } from './session/cook
 import { handleGetApiAuthMe, handleGetApiMeLegacy } from './session/me'
 import { clientPublicOrigin } from './clientOrigin'
 import { exchangeCodeForToken, getGoogleAuthUrl, getUserProfile, resolveGoogleOAuthRedirectUri } from './googleOAuth'
-import { twitchExchangeCode, twitchFetchSessionUser } from './twitchClient'
+import { twitchExchangeCode, twitchFetchSessionUser, twitchFetchStreamStatus } from './twitchClient'
 import { handleEmailLogin, handleEmailRegister } from './email/emailAuthHandlers'
 import { persistGoogleOAuthUser, persistTwitchOAuthUser } from './persistOAuthUser'
 import { withSessionRole } from './session/withSessionRole'
@@ -136,7 +136,11 @@ oauthRouter.get('/twitch/callback', async (req: Request, res: Response) => {
     const redirectUri = twitchAppRedirectUri()
     const accessToken = await twitchExchangeCode(code, redirectUri)
     const profile = await twitchFetchSessionUser(accessToken)
-    await persistTwitchOAuthUser(profile)
+    const streamStatus = await twitchFetchStreamStatus(accessToken, profile.id).catch((e) => {
+      console.warn('[auth][twitch] live status sync skipped', e)
+      return null
+    })
+    await persistTwitchOAuthUser(profile, { streamStatus })
     /** `role` + `twitch_id` from {@link withSessionRole} → `resolveUserRole` (Helix `id` vs ADMIN_TWITCH_IDS). */
     const finalUser = withSessionRole(profile)
     const token = signSession(finalUser, NADLE_SESSION_MAX_AGE_SEC)

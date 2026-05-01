@@ -1,9 +1,16 @@
 /** Profile from Helix `users` — `id` is the stable numeric string (not login name). */
 export type TwitchProfileForSession = {
   id: string
+  login: string
   display_name: string
   profile_image_url: string
+  broadcaster_type: string
   provider: 'twitch'
+}
+
+export type TwitchStreamStatus = {
+  isLive: boolean
+  currentOnline: number | null
 }
 
 function requiredEnv(name: string): string {
@@ -64,20 +71,56 @@ export async function twitchFetchSessionUser(accessToken: string): Promise<Twitc
   const json = (await res.json()) as {
     data?: Array<{
       id?: string
+      login?: string
       display_name?: string
       profile_image_url?: string
+      broadcaster_type?: string
     }>
   }
   const u = json.data?.[0]
-  if (!u?.id || !u.display_name || u.profile_image_url === undefined) {
+  if (!u?.id || !u.login || !u.display_name || u.profile_image_url === undefined) {
     throw new Error('Twitch user payload incomplete')
   }
 
   return {
     id: u.id,
+    login: u.login,
     display_name: u.display_name,
     profile_image_url: u.profile_image_url,
+    broadcaster_type: u.broadcaster_type ?? '',
     provider: 'twitch',
+  }
+}
+
+export async function twitchFetchStreamStatus(
+  accessToken: string,
+  twitchUserId: string,
+): Promise<TwitchStreamStatus> {
+  const clientId = requiredEnv('TWITCH_CLIENT_ID')
+  const p = new URLSearchParams({ user_id: twitchUserId })
+  const res = await fetch(`https://api.twitch.tv/helix/streams?${p.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Client-Id': clientId,
+    },
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Twitch /helix/streams failed: ${res.status} ${text}`)
+  }
+
+  const json = (await res.json()) as {
+    data?: Array<{
+      type?: string
+      viewer_count?: number
+    }>
+  }
+  const stream = json.data?.[0]
+  const isLive = stream?.type === 'live'
+  return {
+    isLive,
+    currentOnline: isLive && typeof stream?.viewer_count === 'number' ? stream.viewer_count : null,
   }
 }
 

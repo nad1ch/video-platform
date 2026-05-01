@@ -1,17 +1,7 @@
 import type { Express, Request, Response } from 'express'
 import { isDatabaseConfigured, prisma } from '../prisma'
+import { normalizeTwitchLogin } from '../streamerIdentity'
 import { DEV_FALLBACK_STREAMER_ID } from './streamerContext'
-
-function normalizeTwitchUsername(raw: string): string | null {
-  const t = raw.trim().replace(/^#/, '').toLowerCase()
-  if (t.length < 2 || t.length > 25) {
-    return null
-  }
-  if (!/^[a-z0-9_]+$/.test(t)) {
-    return null
-  }
-  return t
-}
 
 /**
  * Public streamer card for routing + WebSocket `streamerId`.
@@ -19,7 +9,7 @@ function normalizeTwitchUsername(raw: string): string | null {
  */
 export function mountStreamerApiRoutes(app: Express): void {
   app.get('/api/streamer/:username', async (req: Request, res: Response) => {
-    const username = normalizeTwitchUsername(String(req.params.username ?? ''))
+    const username = normalizeTwitchLogin(String(req.params.username ?? ''))
     if (!username) {
       res.status(400).json({ error: 'invalid_username' })
       return

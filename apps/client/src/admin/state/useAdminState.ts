@@ -27,6 +27,9 @@ export type AdminUserRow = {
   avatar?: string
   provider: string
   role: 'admin' | 'user' | 'host'
+  roles?: Array<'USER' | 'HOST' | 'ADMIN' | 'STREAMER'>
+  streamerId?: string
+  twitchId?: string
   wins: number
   gamesPlayed: number
 }

@@ -15,11 +15,21 @@ model Streamer {
   name      String   @unique
   twitchId  String   @unique
   username  String   @unique
+  displayName      String?
+  profileImageUrl  String?
+  broadcasterType  String?
+  followersCount   Int?
+  currentOnline    Int?
+  avgOnline7d      Int?
+  isLive           Boolean  @default(false)
+  lastSyncAt       DateTime?
+  tier             String?
   /// User who may administer this streamer row (admin-created).
   ownerId   String?
   owner     User?    @relation("StreamerOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   isActive  Boolean  @default(true)
   members   User[]   @relation("StreamerMembers")
+  ownerMemberships   StreamerMember[]
   gameRounds          GameRound[]
   userStreamerStats   UserStreamerStats[]
   nadrawPrompts       NadrawPrompt[]
@@ -63,6 +73,7 @@ model User {
   streamerId         String?
   streamer           Streamer?           @relation("StreamerMembers", fields: [streamerId], references: [id], onDelete: SetNull)
   ownedStreamers     Streamer[]          @relation("StreamerOwner")
+  streamerMemberships StreamerMember[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   stats              UserStats?
@@ -74,6 +85,35 @@ model User {
 
   @@unique([provider, providerUserId])
   @@index([streamerId])
+}
+
+model StreamerMember {
+  id          String   @id @default(cuid())
+  userId      String
+  streamerId  String
+  role        String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamer    Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, streamerId])
+  @@index([streamerId, role])
+}
+
+model AdminAuditLog {
+  id                String   @id @default(cuid())
+  actorUserId       String
+  targetUserId      String?
+  targetStreamerId  String?
+  action            String
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([targetStreamerId, createdAt])
+  @@index([action, createdAt])
 }
 
 /// Smallest whole-coin unit; `amount` is non-negative.

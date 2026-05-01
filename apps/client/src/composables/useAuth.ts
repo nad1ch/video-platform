@@ -5,6 +5,22 @@ import { createLogger } from '@/utils/logger'
 import { safeOAuthRedirectPath } from '@/utils/safeOAuthRedirectPath'
 
 /** Global auth user (GET /api/auth/me). */
+export type AppSystemRole = 'USER' | 'ADMIN' | 'HOST' | 'STREAMER'
+
+export type AppStreamerContext = {
+  id: string
+  twitchId: string
+  username: string
+  displayName: string | null
+  profileImageUrl: string | null
+  broadcasterType: string | null
+  followersCount: number | null
+  currentOnline: number | null
+  avgOnline7d: number | null
+  isLive: boolean
+  tier: string | null
+}
+
 export type AppUser = {
   id: string
   /** Prisma `User.id` when linked; leaderboard `userId` for wins/rating matches this. */
@@ -13,8 +29,12 @@ export type AppUser = {
   avatar?: string
   provider: 'twitch' | 'google' | 'apple' | 'email' | null
   role: 'admin' | 'user' | 'host'
+  /** Backend-authoritative system roles from GET /api/auth/me. */
+  roles?: AppSystemRole[]
   /** Helix user id when provider is Twitch (same as `id`). */
   twitchId?: string
+  /** Backend-authoritative streamer context when this user owns a Streamer row. */
+  streamer?: AppStreamerContext
   /** Linked Nadle streamer row (owner or same Twitch channel). */
   nadleStreamerId?: string
   nadleStreamerName?: string
@@ -28,7 +48,7 @@ let inflight: Promise<void> | null = null
 
 /** Display-only cache (no tokens). Speeds up first paint after reload; always revalidated over the network. */
 /** Bump when `AppUser` shape changes (e.g. `dbUserId`) so stale sessionStorage entries re-fetch. */
-const DISPLAY_CACHE_KEY = 'streamassist_auth_display_v2'
+const DISPLAY_CACHE_KEY = 'streamassist_auth_display_v3'
 const DISPLAY_CACHE_TTL_MS = 5 * 60 * 1000
 /** Dev-only: log Twitch numeric id once per tab session (cleared on logout). */
 const DEV_TWITCH_ID_LOG_KEY = 'streamassist_dev_twitch_id_logged'
@@ -73,6 +93,51 @@ function writeDisplayCache(u: AppUser | null): void {
   }
 }
 
+function parseSystemRoles(raw: unknown): AppSystemRole[] | undefined {
+  if (!Array.isArray(raw)) {
+    return undefined
+  }
+  const roles = raw.filter(
+    (role): role is AppSystemRole =>
+      role === 'USER' || role === 'ADMIN' || role === 'HOST' || role === 'STREAMER',
+  )
+  return roles.length > 0 ? roles : undefined
+}
+
+function nullableString(raw: unknown): string | null {
+  return typeof raw === 'string' && raw.length > 0 ? raw : null
+}
+
+function nullableNumber(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : null
+}
+
+function parseStreamerContext(raw: unknown): AppStreamerContext | undefined {
+  if (!raw || typeof raw !== 'object') {
+    return undefined
+  }
+  const s = raw as Record<string, unknown>
+  const id = typeof s.id === 'string' && s.id.length > 0 ? s.id : null
+  const twitchId = typeof s.twitchId === 'string' && s.twitchId.length > 0 ? s.twitchId : null
+  const username = typeof s.username === 'string' && s.username.length > 0 ? s.username : null
+  if (!id || !twitchId || !username) {
+    return undefined
+  }
+  return {
+    id,
+    twitchId,
+    username,
+    displayName: nullableString(s.displayName),
+    profileImageUrl: nullableString(s.profileImageUrl),
+    broadcasterType: nullableString(s.broadcasterType),
+    followersCount: nullableNumber(s.followersCount),
+    currentOnline: nullableNumber(s.currentOnline),
+    avgOnline7d: nullableNumber(s.avgOnline7d),
+    isLive: s.isLive === true,
+    tier: nullableString(s.tier),
+  }
+}
+
 function parseUser(raw: unknown): AppUser | null {
   if (!raw || typeof raw !== 'object') {
     return null
@@ -100,6 +165,8 @@ function parseUser(raw: unknown): AppUser | null {
   const roleRaw = u.role
   const role =
     roleRaw === 'admin' || roleRaw === 'user' || roleRaw === 'host' ? roleRaw : 'user'
+  const roles = parseSystemRoles(u.roles)
+  const streamer = parseStreamerContext(u.streamer)
   let twitchId: string | undefined
   if (typeof u.twitchId === 'string' && u.twitchId.length > 0) {
     twitchId = u.twitchId
@@ -125,7 +192,9 @@ function parseUser(raw: unknown): AppUser | null {
     ...(avatar ? { avatar } : {}),
     provider,
     role,
+    ...(roles ? { roles } : {}),
     ...(twitchId ? { twitchId } : {}),
+    ...(streamer ? { streamer } : {}),
     ...(nadleStreamerId ? { nadleStreamerId } : {}),
     ...(nadleStreamerName ? { nadleStreamerName } : {}),
   }
@@ -207,6 +276,7 @@ function logOAuthTargetWhenDevApiAmbiguous(target: string): void {
 export function useAuth() {
   const isAuthenticated = computed(() => Boolean(user.value))
   const isAdmin = computed(() => user.value?.role === 'admin')
+  const isStreamer = computed(() => user.value?.roles?.includes('STREAMER') === true)
   const canEatFirstHost = computed(() => {
     const r = user.value?.role
     return r === 'admin' || r === 'host'
@@ -381,6 +451,7 @@ export function useAuth() {
     loaded,
     isAuthenticated,
     isAdmin,
+    isStreamer,
     canEatFirstHost,
     refresh,
     ensureAuthLoaded,

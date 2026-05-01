@@ -21,7 +21,7 @@ const {
 } = useAdminStreamersState()
 
 async function removeStreamer(id: string) {
-  if (!appConfirm(t('adminPanel.streamersDeleteConfirm'))) {
+  if (!appConfirm('Deactivate this streamer? Existing game and leaderboard history will be kept.')) {
     return
   }
   await removeStreamerRequest(id)
@@ -123,16 +123,22 @@ function formatUpdated() {
             <p class="font-mono font-semibold text-cyan-200">{{ s.name }}</p>
             <p class="truncate text-xs text-slate-500">
               id {{ s.id.slice(0, 12) }}… · Twitch {{ s.twitchId }}
+              <span
+                class="ml-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase"
+                :class="s.isActive ? 'border-emerald-700/60 text-emerald-300' : 'border-slate-700 text-slate-500'"
+              >
+                {{ s.isActive ? 'active' : 'inactive' }}
+              </span>
               <span v-if="s.owner"> · {{ t('adminPanel.streamersOwnerShort') }} {{ s.owner.displayName }}</span>
             </p>
           </div>
           <button
             type="button"
             class="shrink-0 text-xs font-medium text-rose-400 hover:underline"
-            :disabled="saving"
+            :disabled="saving || !s.isActive"
             @click="removeStreamer(s.id)"
           >
-            {{ t('adminPanel.streamersDelete') }}
+            {{ s.isActive ? t('adminPanel.streamersDelete') : 'Inactive' }}
           </button>
         </li>
       </ul>

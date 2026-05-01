@@ -2,9 +2,12 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAdminUsersState, type AdminUserRow } from '@/admin'
+import { useAuth } from '@/composables/useAuth'
+import { appConfirm } from '@/utils/appConfirm'
 import { apiFetch } from '@/utils/apiFetch'
 
 const { t, locale } = useI18n()
+const auth = useAuth()
 
 const { users, loading, errorKey, databaseConfigured, lastUpdated, load } = useAdminUsersState()
 
@@ -16,12 +19,14 @@ const rolePatchingId = ref<string | null>(null)
 const rolePatchError = ref<string | null>(null)
 
 const rating = (u: AdminUserRow) => u.wins - Math.max(0, u.gamesPlayed - u.wins)
+type EditableRole = 'HOST' | 'ADMIN' | 'STREAMER'
+const editableRoles: EditableRole[] = ['HOST', 'ADMIN', 'STREAMER']
 
 const empty = computed(() => !loading.value && !errorKey.value && users.value.length === 0)
 
 const summary = computed(() => {
   if (!users.value.length) return null
-  const admins = users.value.filter((u) => u.role === 'admin').length
+  const admins = users.value.filter((u) => hasSystemRole(u, 'ADMIN')).length
   const avgWins = users.value.reduce((s, u) => s + u.wins, 0) / users.value.length
   return { total: users.value.length, admins, avgWins }
 })
@@ -35,7 +40,7 @@ const filteredSorted = computed(() => {
         u.displayName.toLowerCase().includes(q) ||
         u.id.toLowerCase().includes(q) ||
         u.provider.toLowerCase().includes(q) ||
-        u.role.toLowerCase().includes(q),
+        displayRoles(u).toLowerCase().includes(q),
     )
   }
   const out = [...list]
@@ -82,7 +87,7 @@ function exportCsv() {
         escapeCsvCell(u.id),
         escapeCsvCell(u.displayName),
         escapeCsvCell(u.provider),
-        escapeCsvCell(u.role),
+        escapeCsvCell(displayRoles(u)),
         String(u.wins),
         String(u.gamesPlayed),
         String(rating(u)),
@@ -98,29 +103,93 @@ function exportCsv() {
   URL.revokeObjectURL(url)
 }
 
-async function onRoleChange(u: AdminUserRow, ev: Event) {
-  const sel = ev.target as HTMLSelectElement
-  const next = sel.value
-  if (u.role === 'admin') return
-  if (next !== 'user' && next !== 'host') return
-  if (next === u.role) return
+function normalizedRoles(u: AdminUserRow): Set<'USER' | 'HOST' | 'ADMIN' | 'STREAMER'> {
+  const roles = new Set<'USER' | 'HOST' | 'ADMIN' | 'STREAMER'>(['USER'])
+  for (const role of u.roles ?? []) {
+    roles.add(role)
+  }
+  if (u.role === 'admin') {
+    roles.add('ADMIN')
+  } else if (u.role === 'host') {
+    roles.add('HOST')
+  }
+  return roles
+}
+
+function hasSystemRole(u: AdminUserRow, role: 'USER' | 'HOST' | 'ADMIN' | 'STREAMER'): boolean {
+  return normalizedRoles(u).has(role)
+}
+
+function displayRoles(u: AdminUserRow): string {
+  return [...normalizedRoles(u)].join(', ')
+}
+
+function roleLabel(role: 'USER' | EditableRole): string {
+  return role === 'USER' ? t('adminPanel.roleUser') : role
+}
+
+function isSelfAdminRole(u: AdminUserRow, role: EditableRole): boolean {
+  return role === 'ADMIN' && u.id === auth.user.value?.dbUserId
+}
+
+function roleToggleDisabled(u: AdminUserRow, role: EditableRole): boolean {
+  if (rolePatchingId.value === u.id || isSelfAdminRole(u, role)) {
+    return true
+  }
+  if (role === 'STREAMER' && !hasSystemRole(u, 'STREAMER') && !u.streamerId && !u.twitchId) {
+    return true
+  }
+  return false
+}
+
+async function onRoleToggle(u: AdminUserRow, role: EditableRole, ev: Event) {
+  const input = ev.target as HTMLInputElement
+  if (roleToggleDisabled(u, role)) {
+    input.checked = hasSystemRole(u, role)
+    return
+  }
+  if (!input.checked && role === 'ADMIN' && !appConfirm(`Remove ADMIN from ${u.displayName}? They will lose admin panel access.`)) {
+    input.checked = true
+    return
+  }
+  if (
+    !input.checked &&
+    role === 'STREAMER' &&
+    !appConfirm(`Remove STREAMER from ${u.displayName}? This clears streamer ownership and streamer context.`)
+  ) {
+    input.checked = true
+    return
+  }
+  const nextRoles = normalizedRoles(u)
+  if (input.checked) {
+    nextRoles.add(role)
+  } else {
+    nextRoles.delete(role)
+  }
+  nextRoles.add('USER')
+  if (nextRoles.has('ADMIN')) {
+    nextRoles.delete('HOST')
+  }
+  if (nextRoles.has('HOST')) {
+    nextRoles.delete('ADMIN')
+  }
   rolePatchError.value = null
   rolePatchingId.value = u.id
   try {
     const r = await apiFetch(`/api/admin/users/${encodeURIComponent(u.id)}/role`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role: next }),
+      body: JSON.stringify({ roles: [...nextRoles], ...(u.streamerId ? { streamerId: u.streamerId } : {}) }),
     })
     if (!r.ok) {
       rolePatchError.value = t('adminPanel.usersRolePatchError')
-      sel.value = u.role === 'host' ? 'host' : 'user'
+      input.checked = hasSystemRole(u, role)
       return
     }
     await load()
   } catch {
     rolePatchError.value = t('adminPanel.usersRolePatchError')
-    sel.value = u.role === 'host' ? 'host' : 'user'
+    input.checked = hasSystemRole(u, role)
   } finally {
     rolePatchingId.value = null
   }
@@ -297,18 +366,25 @@ onMounted(() => {
                   {{ copyFeedbackId === u.id ? t('adminPanel.usersCopied') : t('adminPanel.usersCopyId') }}
                 </button>
                 <span>· {{ u.provider }} ·</span>
-                <select
-                  v-if="u.role !== 'admin'"
-                  class="rounded border border-slate-700/80 bg-slate-950/80 px-1 py-0.5 text-[10px] font-medium text-slate-200 focus:border-cyan-600/50 focus:outline-none"
-                  :disabled="rolePatchingId === u.id"
-                  :value="u.role === 'host' ? 'host' : 'user'"
-                  :aria-label="t('adminPanel.usersRoleAria')"
-                  @change="onRoleChange(u, $event)"
+                <span class="rounded border border-slate-700/70 bg-slate-950/70 px-1.5 py-0.5 text-slate-300">
+                  {{ roleLabel('USER') }}
+                </span>
+                <label
+                  v-for="role in editableRoles"
+                  :key="role"
+                  class="inline-flex items-center gap-1 rounded border border-slate-700/70 bg-slate-950/70 px-1.5 py-0.5 text-slate-200"
+                  :class="{ 'opacity-50': roleToggleDisabled(u, role) }"
                 >
-                  <option value="user">{{ t('adminPanel.roleUser') }}</option>
-                  <option value="host">{{ t('adminPanel.roleHost') }}</option>
-                </select>
-                <span v-else class="text-cyan-300">admin</span>
+                  <input
+                    type="checkbox"
+                    class="h-3 w-3 accent-cyan-500"
+                    :checked="hasSystemRole(u, role)"
+                    :disabled="roleToggleDisabled(u, role)"
+                    :aria-label="`${roleLabel(role)} ${u.displayName}`"
+                    @change="onRoleToggle(u, role, $event)"
+                  />
+                  <span>{{ roleLabel(role) }}</span>
+                </label>
               </p>
             </div>
           </div>
