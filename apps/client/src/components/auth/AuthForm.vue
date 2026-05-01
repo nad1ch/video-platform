@@ -10,6 +10,7 @@ import { replaceAuthQuery } from '@/utils/authRouteQuery'
 import type { AuthMode } from '@/types/authMode'
 import LoginForm from '@/components/auth/LoginForm.vue'
 import ForgotForm from '@/components/auth/ForgotForm.vue'
+import ResetPasswordForm from '@/components/auth/ResetPasswordForm.vue'
 
 const props = defineProps<{
   redirectPath: string
@@ -63,6 +64,21 @@ function goLoginFromSuccess(): void {
         {{ t('app.authBackToSignIn') }}
       </AppButton>
     </div>
+
+    <div v-else-if="mode === 'reset-success'" class="auth-form-panel" role="status">
+      <h2 class="auth-form-title">Password reset</h2>
+      <p class="auth-form-lead">Your password has been updated. You can now log in with the new password.</p>
+      <AppButton variant="primary" type="button" class="auth-form-back-btn" @click="goLoginFromSuccess">
+        {{ t('app.authBackToSignIn') }}
+      </AppButton>
+    </div>
+
+    <template v-else-if="mode === 'reset'">
+      <div class="auth-form-panel">
+        <h2 class="auth-form-title">Reset password</h2>
+        <ResetPasswordForm />
+      </div>
+    </template>
 
     <template v-else-if="mode === 'forgot'">
       <div class="auth-form-panel">

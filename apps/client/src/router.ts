@@ -6,7 +6,7 @@ import {
   type RouteRecordRaw,
   type RouterScrollBehavior,
 } from 'vue-router'
-import { useAuth } from '@/composables/useAuth'
+import { useAuth, type AppUser } from '@/composables/useAuth'
 import { registerEatFirstRouterGuards } from '@/eat-first/router.js'
 import { installRouteNavLoadingGuards, releaseRouteNavLoading } from '@/routeNavLoading'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
@@ -74,6 +74,12 @@ export const router = createRouter({
           name: 'home',
           meta: { appTitleKey: 'routes.streamAssist', footerContext: 'home' },
           component: () => import('./pages/HomePage.vue'),
+        },
+        {
+          path: 'verify-email',
+          name: 'verify-email',
+          meta: { appTitle: 'Verify your email', footerContext: 'home', requiresAuth: true },
+          component: () => import('./pages/VerifyEmailPage.vue'),
         },
         {
           path: 'call',
@@ -259,6 +265,27 @@ function eatViewNeedsStreamAuth(query: Record<string, unknown>): boolean {
   return s === 'admin' || s === 'control'
 }
 
+function userNeedsEmailVerification(user: AppUser | null): boolean {
+  return (
+    typeof user?.email === 'string' &&
+    user.email.length > 0 &&
+    user.emailVerified === false
+  )
+}
+
+function emailVerificationQuery(query: Record<string, unknown>): Record<string, string> {
+  const next: Record<string, string> = {}
+  const emailVerified = query.emailVerified
+  const emailVerification = query.emailVerification
+  if (emailVerified === '1') {
+    next.emailVerified = '1'
+  }
+  if (emailVerification === 'failed') {
+    next.emailVerification = 'failed'
+  }
+  return next
+}
+
 /**
  * When a guard returns a new location, vue-router may not run `afterEach` for the
  * superseded navigation — but `installRouteNavLoadingGuards` always bumped on
@@ -266,6 +293,27 @@ function eatViewNeedsStreamAuth(query: Record<string, unknown>): boolean {
  * stays on (e.g. after redirect to `/auth`). Same for admin → `/app` redirect.
  */
 router.beforeEach(async (to) => {
+  const isAppRoute = to.path === '/app' || to.path.startsWith('/app/')
+  const isVerifyEmailRoute = to.name === 'verify-email'
+  if (isAppRoute) {
+    const { ensureAuthLoaded, isAuthenticated, user } = useAuth()
+    await ensureAuthLoaded()
+    if (isAuthenticated.value && userNeedsEmailVerification(user.value) && !isVerifyEmailRoute) {
+      releaseRouteNavLoading()
+      return {
+        name: 'verify-email',
+        query: emailVerificationQuery(to.query as Record<string, unknown>),
+      }
+    }
+    if (isAuthenticated.value && user.value?.emailVerified === true && isVerifyEmailRoute) {
+      releaseRouteNavLoading()
+      return {
+        path: '/app',
+        query: emailVerificationQuery(to.query as Record<string, unknown>),
+      }
+    }
+  }
+
   if (to.meta.requiresAdmin) {
     const { ensureAuthLoaded, user } = useAuth()
     await ensureAuthLoaded()

@@ -20,7 +20,7 @@ const email = ref('')
 const password = ref('')
 const showPassword = ref(false)
 const submitting = ref(false)
-const feedback = ref<'err_val' | 'err_pw' | 'err_srv' | null>(null)
+const feedback = ref<'err_val' | 'err_pw' | 'account_link_required' | 'err_srv' | null>(null)
 
 async function onSubmit(e: Event): Promise<void> {
   e.preventDefault()
@@ -44,6 +44,10 @@ async function onSubmit(e: Event): Promise<void> {
     }
     if (r.error === 'validation') {
       feedback.value = 'err_val'
+      return
+    }
+    if (r.error === 'account_link_required') {
+      feedback.value = 'account_link_required'
       return
     }
     feedback.value = 'err_srv'
@@ -145,6 +149,9 @@ function goForgot(): void {
     </p>
     <p v-else-if="feedback === 'err_pw'" class="auth-page-feedback auth-page-feedback--err" role="alert">
       {{ t('app.authEmailWrongPassword') }}
+    </p>
+    <p v-else-if="feedback === 'account_link_required'" class="auth-page-feedback auth-page-feedback--err" role="alert">
+      {{ t('app.authEmailAccountLinkRequired') }}
     </p>
     <p v-else-if="feedback === 'err_srv'" class="auth-page-feedback auth-page-feedback--err" role="alert">
       {{ t('app.authEmailServerError') }}

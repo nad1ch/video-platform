@@ -21,9 +21,15 @@ const redirectPath = computed(() => {
   return typeof r === 'string' && r.startsWith('/') && !r.startsWith('//') ? r : '/app'
 })
 
+const allowsAuthedAccess = computed(() => {
+  const mode = route.query.mode
+  const value = Array.isArray(mode) ? mode[0] : mode
+  return value === 'reset'
+})
+
 async function redirectIfAuthed(): Promise<void> {
   await ensureAuthLoaded()
-  if (isAuthenticated.value) {
+  if (isAuthenticated.value && !allowsAuthedAccess.value) {
     await router.replace(safeOAuthRedirectPath(redirectPath.value))
   }
 }
@@ -34,7 +40,7 @@ onMounted(() => {
 })
 
 watch([loaded, isAuthenticated], () => {
-  if (loaded.value && isAuthenticated.value) {
+  if (loaded.value && isAuthenticated.value && !allowsAuthedAccess.value) {
     void router.replace(safeOAuthRedirectPath(redirectPath.value))
   }
 })

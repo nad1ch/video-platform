@@ -38,6 +38,9 @@ export type GlobalAuthUser = {
   displayName: string
   avatar?: string
   provider: 'twitch' | 'google' | 'apple' | 'email' | null
+  email?: string
+  emailVerified?: boolean
+  emailVerifiedAt?: string | null
   role: UserRole
   roles?: SystemRole[]
   permissions?: FeaturePermission[]

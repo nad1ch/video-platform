@@ -43,3 +43,10 @@ export function createEmailUser(email: string, password: string, displayName: st
 export function verifyPassword(row: EmailUserRow, password: string): boolean {
   return bcrypt.compareSync(password, row.password_hash)
 }
+
+export function updateEmailUserPassword(userId: string, password: string): boolean {
+  const db = getEmailUserDb()
+  const hash = bcrypt.hashSync(password, SALT_ROUNDS)
+  const result = db.prepare('UPDATE email_users SET password_hash = ? WHERE id = ?').run(hash, userId)
+  return result.changes === 1
+}

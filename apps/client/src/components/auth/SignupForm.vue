@@ -17,7 +17,7 @@ const { registerWithEmail, refresh } = useAuth()
 const email = ref('')
 const password = ref('')
 const submitting = ref(false)
-const feedback = ref<'err_val' | 'email_taken' | 'err_srv' | null>(null)
+const feedback = ref<'err_val' | 'email_taken' | 'account_link_required' | 'err_srv' | null>(null)
 
 async function onSubmit(e: Event): Promise<void> {
   e.preventDefault()
@@ -41,6 +41,10 @@ async function onSubmit(e: Event): Promise<void> {
     }
     if (r.error === 'validation') {
       feedback.value = 'err_val'
+      return
+    }
+    if (r.error === 'account_link_required') {
+      feedback.value = 'account_link_required'
       return
     }
     feedback.value = 'err_srv'
@@ -86,6 +90,9 @@ async function onSubmit(e: Event): Promise<void> {
     </p>
     <p v-else-if="feedback === 'email_taken'" class="auth-page-feedback auth-page-feedback--err" role="alert">
       {{ t('app.authSignupEmailTaken') }}
+    </p>
+    <p v-else-if="feedback === 'account_link_required'" class="auth-page-feedback auth-page-feedback--err" role="alert">
+      {{ t('app.authEmailAccountLinkRequired') }}
     </p>
     <p v-else-if="feedback === 'err_srv'" class="auth-page-feedback auth-page-feedback--err" role="alert">
       {{ t('app.authEmailServerError') }}

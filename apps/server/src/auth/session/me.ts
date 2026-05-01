@@ -34,14 +34,27 @@ export async function handleGetApiAuthMe(req: Request, res: Response): Promise<v
   try {
     const prismaUserId = await resolvePrismaUserIdFromSession(session)
     let dbRole: string | null = null
+    let dbEmail: string | null = null
+    let dbEmailVerified: boolean | null = null
+    let dbEmailVerifiedAt: Date | null = null
     if (prismaUserId) {
       const row = await prisma.user.findUnique({
         where: { id: prismaUserId },
-        select: { role: true },
+        select: { role: true, email: true, emailVerified: true, emailVerifiedAt: true },
       })
       dbRole = row?.role ?? null
+      dbEmail = row?.email ?? null
+      dbEmailVerified = row?.emailVerified ?? null
+      dbEmailVerifiedAt = row?.emailVerifiedAt ?? null
     }
     const base = sessionToGlobalAuthUser(session, dbRole)
+    const email = dbEmail ?? base.email
+    const emailVerified =
+      typeof dbEmailVerified === 'boolean'
+        ? dbEmailVerified
+        : typeof email === 'string' && email.length > 0
+          ? false
+          : undefined
     const streamer =
       prismaUserId != null ? await resolveUserStreamerContext(prismaUserId) : null
     const nadleStreamer =
@@ -52,6 +65,9 @@ export async function handleGetApiAuthMe(req: Request, res: Response): Promise<v
       user: {
         ...base,
         roles: buildSystemRoles(base.role, streamer != null),
+        ...(typeof email === 'string' && email.length > 0 ? { email } : {}),
+        ...(typeof emailVerified === 'boolean' ? { emailVerified } : {}),
+        ...(dbEmailVerifiedAt ? { emailVerifiedAt: dbEmailVerifiedAt.toISOString() } : {}),
         ...(permissions ? { permissions } : {}),
         ...(streamer ? { streamer } : {}),
         ...(prismaUserId ? { dbUserId: prismaUserId } : {}),

@@ -1,7 +1,9 @@
 import type { SessionUser } from './session/types'
 import { clientPublicOrigin } from './clientOrigin'
 
-export type GoogleProfileForSession = Omit<SessionUser, 'role'>
+export type GoogleProfileForSession = Omit<SessionUser, 'role'> & {
+  email_verified?: boolean
+}
 
 function requiredEnv(name: string): string {
   const v = process.env[name]
@@ -93,6 +95,8 @@ export async function getUserProfile(accessToken: string): Promise<GoogleProfile
     id?: string
     name?: string
     email?: string
+    verified_email?: boolean
+    email_verified?: boolean
     picture?: string
   }
 
@@ -116,5 +120,6 @@ export async function getUserProfile(accessToken: string): Promise<GoogleProfile
     profile_image_url: avatar,
     provider: 'google',
     ...(emailRaw.length > 0 ? { email: emailRaw } : {}),
+    ...(u.verified_email === true || u.email_verified === true ? { email_verified: true } : {}),
   }
 }

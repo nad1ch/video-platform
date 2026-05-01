@@ -153,12 +153,17 @@ export async function persistGoogleOAuthUser(profile: GoogleProfileForSession): 
           providerUserId: profile.id,
         },
       },
-      select: { role: true },
+      select: { role: true, emailVerified: true },
     })
     let storedRole: string = allowlistRole
     if (existing?.role === 'host' && allowlistRole === 'user') {
       storedRole = 'host'
     }
+    const googleEmailVerified = profile.email_verified === true
+    const markEmailVerified =
+      googleEmailVerified && existing?.emailVerified !== true
+        ? { emailVerified: true, emailVerifiedAt: new Date() }
+        : {}
     await prisma.user.upsert({
       where: {
         provider_providerUserId: {
@@ -170,6 +175,7 @@ export async function persistGoogleOAuthUser(profile: GoogleProfileForSession): 
         provider: 'google',
         providerUserId: profile.id,
         email,
+        ...(googleEmailVerified ? { emailVerified: true, emailVerifiedAt: new Date() } : {}),
         displayName: profile.display_name,
         avatarUrl: profile.profile_image_url?.trim() ? profile.profile_image_url : null,
         role: storedRole,
@@ -178,6 +184,7 @@ export async function persistGoogleOAuthUser(profile: GoogleProfileForSession): 
       },
       update: {
         ...(email ? { email } : {}),
+        ...markEmailVerified,
         displayName: profile.display_name,
         avatarUrl: profile.profile_image_url?.trim() ? profile.profile_image_url : null,
         role: storedRole,

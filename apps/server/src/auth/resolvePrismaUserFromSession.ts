@@ -39,11 +39,16 @@ export async function resolvePrismaUserIdFromSession(session: SessionPayload): P
   }
 
   if (provider === 'email') {
-    const byEmailId = await prisma.user.findUnique({
-      where: { id: session.id },
+    const byProvider = await prisma.user.findUnique({
+      where: {
+        provider_providerUserId: {
+          provider: 'email',
+          providerUserId: session.id,
+        },
+      },
       select: { id: true },
     })
-    return byEmailId?.id ?? null
+    return byProvider?.id ?? null
   }
 
   return null

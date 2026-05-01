@@ -732,8 +732,8 @@ onUnmounted(() => {
   --nadle-tile-bg: rgba(102, 56, 143, 0.33);
   flex: 1 1 auto;
   padding-block: var(--sa-space-2) var(--sa-space-5);
-  /* AppContainer `flush` прибирає зовнішній padding — відступи лише тут */
-  padding-inline: var(--sa-space-4);
+  /* Horizontal inset comes from `AppShellLayout` (`--app-shell-content-x`); avoid double padding. */
+  padding-inline: 0;
   font-family: var(--sa-font-main);
   display: flex;
   flex-direction: column;
@@ -1041,11 +1041,15 @@ onUnmounted(() => {
     min-height: 0;
   }
 
+  /* Chrome-padding дає `app-shell-main__viewport--chrome`; без цього cap вузькіший за ряд хедера (`AppContainer --wide`). */
+  .app-container.app-container--wide.app-container--flush.nadle-page {
+    max-width: 100%;
+  }
+
   .nadle-page {
     --nadle-gap: clamp(10px, 1.35vmin, 13px);
     padding-block: 18px 18px;
-    padding-inline: clamp(6px, 0.75vw, 12px);
-    max-width: min(1577px, 100%);
+    padding-inline: 0;
     flex: 1 1 auto;
     min-height: 0;
     height: 100%;
@@ -1074,7 +1078,7 @@ onUnmounted(() => {
     max-height: 100%;
     grid-template-columns:
       minmax(278px, 336px)
-      minmax(0, 845px)
+      minmax(0, 1fr)
       minmax(278px, 336px);
     gap: 13px;
   }
@@ -1085,10 +1089,6 @@ onUnmounted(() => {
         minmax(220px, 260px)
         minmax(0, 1fr)
         minmax(220px, 260px);
-    }
-
-    .nadle-page__game {
-      padding-inline: clamp(14px, 2vw, 34px);
     }
   }
 
@@ -1185,7 +1185,7 @@ onUnmounted(() => {
     justify-content: flex-start;
     max-width: 100%;
     overflow: visible;
-    padding: clamp(12px, 3vw, 18px) clamp(10px, 4vw, 48px) clamp(12px, 3vw, 16px);
+    padding: clamp(12px, 3vw, 18px) 0 clamp(12px, 3vw, 16px);
   }
 
   .nadle-page__stack--leader > .nadle-page__leader-stack {
@@ -1250,7 +1250,7 @@ onUnmounted(() => {
 @media (max-width: 1200px) {
   .nadle-page {
     padding-block: var(--sa-space-2) var(--sa-space-4);
-    padding-inline: clamp(0.65rem, 2.8vw, var(--sa-space-3));
+    padding-inline: 0;
     --nadle-gap: clamp(4px, 1.2vw, 8px);
     overflow-x: clip;
   }
@@ -1264,7 +1264,7 @@ onUnmounted(() => {
 @media (min-width: 1024px) and (max-width: 1200px) {
   .nadle-page {
     max-width: min(100%, 1200px);
-    padding-inline: clamp(0.65rem, 1.25vw, 1rem);
+    padding-inline: 0;
   }
 
   .nadle-page__grid {
@@ -1315,7 +1315,7 @@ onUnmounted(() => {
     min-height: 0;
     height: 100%;
     justify-content: stretch;
-    padding-inline: clamp(14px, 2.2vw, 26px);
+    padding-inline: 0;
   }
 
   .nadle-page__grid :deep(.nadle-page__stack--game .nadle-page__guess-board) {
@@ -1415,13 +1415,13 @@ onUnmounted(() => {
 
 @media (max-width: 520px) {
   .nadle-page {
-    padding-inline: clamp(0.25rem, 1.6vw, var(--sa-space-2));
+    padding-inline: 0;
     --nadle-gap: clamp(3px, 1vw, 5px);
   }
 
   .nadle-page__game,
   .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
-    padding-inline: clamp(4px, 1.7vw, 8px);
+    padding-inline: 0;
   }
 
 }
@@ -1452,7 +1452,8 @@ onUnmounted(() => {
 .nadle-page__stack--game {
   justify-content: center;
   align-items: center;
-  padding: 8px;
+  padding-block: 8px;
+  padding-inline: 0;
   overflow: hidden;
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.7px),
@@ -1948,12 +1949,13 @@ onUnmounted(() => {
   }
 }
 
-/* Final game-card sizing: one outer 8px inset, centered content, no nested padding. */
+/* Final game-card sizing: vertical inset only; shell + grid gaps define horizontal alignment. */
 .nadle-page__stack--game {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
+  padding-block: 8px;
+  padding-inline: 0;
   overflow: hidden;
 }
 
