@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
 const auth = useAuth()
+const { locale } = useI18n()
 const sending = ref(false)
 const sent = ref(false)
 const error = ref('')
@@ -27,7 +29,7 @@ async function sendEmailVerification(): Promise<void> {
   sent.value = false
   error.value = ''
   try {
-    const result = await auth.sendEmailVerification()
+    const result = await auth.sendEmailVerification(locale.value)
     if (result.ok) {
       sent.value = true
       return

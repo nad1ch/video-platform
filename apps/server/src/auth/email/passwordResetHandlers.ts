@@ -6,6 +6,7 @@ import { clientPublicOrigin } from '../clientOrigin'
 import { resolveUserRole } from '../resolveUserRole'
 import { findUserByEmail, normalizeEmail, updateEmailUserPassword } from './emailUserService'
 import { sendPasswordResetEmail } from './emailVerificationMailer'
+import { resolveEmailLocale } from './emailTemplates'
 
 const TOKEN_BYTES = 32
 const TOKEN_TTL_MINUTES = 30
@@ -32,6 +33,7 @@ function passwordResetToken(client: unknown): PasswordResetTokenDelegate {
 
 const sendBodySchema = z.object({
   email: z.string().email().max(320),
+  locale: z.string().max(32).optional(),
 })
 
 const confirmBodySchema = z.object({
@@ -70,6 +72,13 @@ function buildResetUrl(req: Request, token: string): string {
     return url.toString()
   }
   return url.toString()
+}
+
+function requestLocale(req: Request, locale: string | undefined): 'en' | 'uk' {
+  return resolveEmailLocale({
+    locale,
+    acceptLanguage: req.header('accept-language'),
+  })
 }
 
 async function ensureEmailPasswordPrismaUser(row: { id: string; email: string; display_name: string }): Promise<string | null> {
@@ -162,6 +171,7 @@ export async function handleSendPasswordReset(req: Request, res: Response): Prom
       displayName: row.display_name.trim() || 'User',
       resetUrl: buildResetUrl(req, rawToken),
       expiresInMinutes: TOKEN_TTL_MINUTES,
+      locale: requestLocale(req, parsed.data.locale),
     })
     genericOk()
   } catch (e) {

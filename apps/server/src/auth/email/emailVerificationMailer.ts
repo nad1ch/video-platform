@@ -1,10 +1,11 @@
 import nodemailer from 'nodemailer'
+import { renderPasswordResetEmailTemplate, renderVerifyEmailTemplate, type EmailLocale } from './emailTemplates'
 
 type SendAuthEmailInput = {
   to: string
-  displayName: string
-  actionUrl: string
-  expiresInMinutes: number
+  subject: string
+  text: string
+  html: string
 }
 
 function env(name: string): string {
@@ -32,7 +33,7 @@ function emailFrom(): string {
   return 'StreamAssist <no-reply@localhost>'
 }
 
-async function sendAuthEmail(input: SendAuthEmailInput & { subject: string; textAction: string; htmlAction: string }): Promise<void> {
+async function sendAuthEmail(input: SendAuthEmailInput): Promise<void> {
   if (!smtpConfigured()) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('SMTP_HOST and SMTP_PORT must be set in production to send auth email.')
@@ -50,62 +51,53 @@ async function sendAuthEmail(input: SendAuthEmailInput & { subject: string; text
     ...(user.length > 0 || pass.length > 0 ? { auth: { user, pass } } : {}),
   })
 
-  const text = [
-    `Hi ${input.displayName},`,
-    '',
-    input.textAction,
-    input.actionUrl,
-    '',
-    `This link expires in ${input.expiresInMinutes} minutes.`,
-    'If you did not request this email, you can ignore it.',
-  ].join('\n')
-
-  const html = `
-    <p>Hi ${escapeHtml(input.displayName)},</p>
-    <p>${escapeHtml(input.textAction)}</p>
-    <p><a href="${escapeHtml(input.actionUrl)}">${escapeHtml(input.htmlAction)}</a></p>
-    <p>This link expires in ${input.expiresInMinutes} minutes.</p>
-    <p>If you did not request this email, you can ignore it.</p>
-  `
-
   await transporter.sendMail({
     from: emailFrom(),
     to: input.to,
     subject: input.subject,
-    text,
-    html,
+    text: input.text,
+    html: input.html,
   })
 }
 
-export async function sendVerificationEmail(input: Omit<SendAuthEmailInput, 'actionUrl'> & { verificationUrl: string }): Promise<void> {
+export async function sendVerificationEmail(input: {
+  to: string
+  displayName: string
+  verificationUrl: string
+  expiresInMinutes: number
+  locale?: EmailLocale
+}): Promise<void> {
+  const template = renderVerifyEmailTemplate({
+    locale: input.locale,
+    name: input.displayName,
+    verificationUrl: input.verificationUrl,
+    expiresInMinutes: input.expiresInMinutes,
+  })
   await sendAuthEmail({
     to: input.to,
-    displayName: input.displayName,
-    actionUrl: input.verificationUrl,
-    expiresInMinutes: input.expiresInMinutes,
-    subject: 'Verify your StreamAssist email',
-    textAction: 'Please verify your StreamAssist email address by opening this link:',
-    htmlAction: 'Verify your email',
+    subject: template.subject,
+    text: template.text,
+    html: template.html,
   })
 }
 
-export async function sendPasswordResetEmail(input: Omit<SendAuthEmailInput, 'actionUrl'> & { resetUrl: string }): Promise<void> {
+export async function sendPasswordResetEmail(input: {
+  to: string
+  displayName: string
+  resetUrl: string
+  expiresInMinutes: number
+  locale?: EmailLocale
+}): Promise<void> {
+  const template = renderPasswordResetEmailTemplate({
+    locale: input.locale,
+    name: input.displayName,
+    resetUrl: input.resetUrl,
+    expiresInMinutes: input.expiresInMinutes,
+  })
   await sendAuthEmail({
     to: input.to,
-    displayName: input.displayName,
-    actionUrl: input.resetUrl,
-    expiresInMinutes: input.expiresInMinutes,
-    subject: 'Reset your StreamAssist password',
-    textAction: 'Reset your StreamAssist password by opening this link:',
-    htmlAction: 'Reset your password',
+    subject: template.subject,
+    text: template.text,
+    html: template.html,
   })
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
 }
