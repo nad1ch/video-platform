@@ -91,9 +91,21 @@ function toIso(d: Date | null | undefined): string | null {
 function deriveSubscriptionDto(
   row: { plan: string; status: string; expiresAt: Date } | null,
   now: Date,
+  userEmails: { billingEmail: string | null; accountEmail: string | null } = {
+    billingEmail: null,
+    accountEmail: null,
+  },
 ): SubscriptionDto {
+  const effectiveBillingEmail = userEmails.billingEmail ?? userEmails.accountEmail
   if (!row) {
-    return { status: null, plan: null, expiresAt: null, isActive: false }
+    return {
+      status: null,
+      plan: null,
+      expiresAt: null,
+      isActive: false,
+      billingEmail: effectiveBillingEmail,
+      accountEmail: userEmails.accountEmail,
+    }
   }
   const expiresMs = row.expiresAt.getTime()
   // Reconcile lazily on read: an `active` row with `expiresAt <= now` is
@@ -112,6 +124,8 @@ function deriveSubscriptionDto(
     plan: row.plan === PLAN_PRO ? PLAN_PRO : null,
     expiresAt: row.expiresAt.toISOString(),
     isActive: status === 'active',
+    billingEmail: effectiveBillingEmail,
+    accountEmail: userEmails.accountEmail,
   }
 }
 
@@ -149,16 +163,105 @@ export function getBillingConfigDto(): BillingConfigDto {
 /**
  * `GET /api/billing/subscription/me`. Falls back to a "not active" snapshot
  * when DB isn't configured so dev/manual-review modes never crash.
+ *
+ * Lazy expiry-email side effect: when we observe a previously-active row past
+ * its `expiresAt`, fire the user-facing "Pro період закінчився" email exactly
+ * once via the `expiredEmailSentAt` claim. We don't run a cron — the global
+ * 20s notifier ticks `subscription/me` continually for online users, and any
+ * read by the user catches up on their first visit after expiry. The DB row
+ * is NOT mutated to `expired` here (matching existing behavior); only the
+ * email-sent timestamp is set.
  */
 export async function getSubscriptionDtoForUser(userId: string): Promise<SubscriptionDto> {
   if (!isDatabaseConfigured()) {
-    return { status: null, plan: null, expiresAt: null, isActive: false }
+    return {
+      status: null,
+      plan: null,
+      expiresAt: null,
+      isActive: false,
+      billingEmail: null,
+      accountEmail: null,
+    }
   }
+  const userRow = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, billingEmail: true, displayName: true },
+  })
   const row = await prisma.subscription.findUnique({
     where: { userId },
-    select: { plan: true, status: true, expiresAt: true },
+    select: {
+      id: true,
+      plan: true,
+      status: true,
+      expiresAt: true,
+      expiredEmailSentAt: true,
+    },
   })
-  return deriveSubscriptionDto(row, new Date())
+  const now = new Date()
+  // Lazy expiry-email: only when the row is `active`-in-DB but past expiresAt.
+  // The single-flight `updateMany` filter (still null) prevents double sending.
+  if (
+    row &&
+    row.status === 'active' &&
+    row.expiresAt.getTime() <= now.getTime() &&
+    row.expiredEmailSentAt == null
+  ) {
+    const claim = await prisma.subscription.updateMany({
+      where: { id: row.id, expiredEmailSentAt: null },
+      data: { expiredEmailSentAt: now },
+    })
+    if (claim.count > 0) {
+      const to = userRow?.billingEmail ?? userRow?.email ?? null
+      if (to) {
+        // Fire-and-forget: failure is logged by the mailer, billing path is
+        // never blocked by SMTP.
+        void sendUserBillingNotification({
+          event: 'subscription_expired',
+          to,
+          displayName: userRow?.displayName ?? 'StreamAssist',
+          // Subscription expiry has no payment-request context — pass plan-level info only.
+          amountKopecks: 0,
+          currency: '',
+          subscriptionExpiresAt: row.expiresAt,
+          adminNote: null,
+        })
+      }
+    }
+  }
+  return deriveSubscriptionDto(row, now, {
+    billingEmail: userRow?.billingEmail ?? null,
+    accountEmail: userRow?.email ?? null,
+  })
+}
+
+/**
+ * Update (or clear) the user's billing notification email. Empty string in
+ * `email` clears the override — the user falls back to their auth `email`.
+ * Returns the same shape as `subscription/me` so the FE can update its
+ * singleton snapshot in a single round-trip.
+ */
+export async function setUserBillingEmail(
+  userId: string,
+  rawEmail: string,
+): Promise<SubscriptionDto> {
+  ensureDatabase()
+  const trimmed = typeof rawEmail === 'string' ? rawEmail.trim() : ''
+  // Empty → clear the override. Otherwise validate a minimal email shape so
+  // `console.warn` from the mailer isn't the first feedback the user gets.
+  let nextValue: string | null
+  if (trimmed.length === 0) {
+    nextValue = null
+  } else {
+    if (trimmed.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      throw new BillingHttpError(400, 'INVALID_EMAIL', 'Email format is invalid')
+    }
+    nextValue = trimmed.toLowerCase()
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: { billingEmail: nextValue },
+  })
+  return getSubscriptionDtoForUser(userId)
 }
 
 /**
@@ -494,11 +597,15 @@ export async function ingestStatementWebhook(rawBody: unknown): Promise<{ accept
     // signal "not accepted" for logging.
     return { accepted: false }
   }
-  const cfg = readPersonalConfig()
-  // If the webhook account doesn't match our configured account, persist as
-  // unmatched (still useful for admin forensic review).
-  const ourAccountId = cfg?.accountId ?? accountId
-  await persistAndMatchStatementItem(item, ourAccountId, new Date())
+  // Persist using the webhook-reported account id. The matcher's eligibility
+  // gate (`t.accountId !== expectedAccountId`) then rejects any transaction
+  // whose account does not match our configured `MONO_ACCOUNT_ID`, so a
+  // forged webhook claiming `data.account = "anything"` is stored for
+  // forensic review but cannot trigger auto-activation. (Stamping
+  // `cfg.accountId` here would silently override the gate — anyone who knew
+  // the public webhook URL could otherwise mint payments by POSTing a
+  // StatementItem with the matching amount.)
+  await persistAndMatchStatementItem(item, accountId, new Date())
   return { accepted: true }
 }
 
@@ -561,6 +668,7 @@ async function sendStatusEmailIfNotSent(
           select: {
             id: true,
             email: true,
+            billingEmail: true,
             displayName: true,
             twitchId: true,
           },
@@ -647,7 +755,11 @@ async function sendStatusEmailIfNotSent(
   // above, so repeated webhook deliveries / repeated admin approve/reject
   // clicks cannot cause a duplicate user email. SMTP failure here is
   // swallowed by the mailer — billing state never rolls back on email loss.
-  const userEmail = row.user?.email ?? null
+  // Effective billing email: explicit `billingEmail` override (set via
+  // POST /api/billing/billing-email) wins, otherwise the user's auth email.
+  // Twitch sign-ups without either still get the admin-side email; they just
+  // don't receive a user-facing copy.
+  const userEmail = row.user?.billingEmail ?? row.user?.email ?? null
   if (userEmail) {
     await sendUserBillingNotification({
       event: kind,
@@ -973,9 +1085,11 @@ export async function cancelAdminSubscription(
 
   // Single-flight: only an active+future-expiry row gets transitioned. Already
   // inactive / past-expiry rows return count=0 → idempotent no-op below.
+  // We also claim `cancelledEmailSentAt` in the same update so the user
+  // notification fires at most once per actual cancellation.
   const updated = await prisma.subscription.updateMany({
     where: { id: subscriptionId, status: 'active', expiresAt: { gt: now } },
-    data: { status: 'inactive', expiresAt: now },
+    data: { status: 'inactive', expiresAt: now, cancelledEmailSentAt: now },
   })
   const cancelledNow = updated.count > 0
 
@@ -990,7 +1104,7 @@ export async function cancelAdminSubscription(
       expiresAt: true,
       createdAt: true,
       updatedAt: true,
-      user: { select: { email: true, displayName: true } },
+      user: { select: { email: true, displayName: true, billingEmail: true } },
     },
   })
   if (!row) {
@@ -1014,6 +1128,21 @@ export async function cancelAdminSubscription(
         displayName: row.user?.displayName ?? null,
       },
     })
+    // User-facing notification — uses the effective billing email (override
+    // first, then auth email). Twitch sign-ups without either still get the
+    // admin-side email above; the user just doesn't receive one.
+    const userTo = row.user?.billingEmail ?? row.user?.email ?? null
+    if (userTo) {
+      void sendUserBillingNotification({
+        event: 'subscription_cancelled',
+        to: userTo,
+        displayName: row.user?.displayName ?? 'StreamAssist',
+        amountKopecks: 0,
+        currency: '',
+        subscriptionExpiresAt: null,
+        adminNote: null,
+      })
+    }
   }
   return {
     subscription: subscriptionToAdminRow(row, now),

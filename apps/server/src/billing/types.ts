@@ -47,7 +47,24 @@ export type SubscriptionDto = {
   plan: typeof PLAN_PRO | null
   expiresAt: string | null
   isActive: boolean
+  /**
+   * Effective notification address for billing emails. `User.billingEmail`
+   * when set, otherwise the user's auth `email`, otherwise `null` (Twitch
+   * sign-up without email and no notification address configured).
+   */
+  billingEmail: string | null
+  /** Auth-side `User.email` (read-only display source for the FE prompt). */
+  accountEmail: string | null
 }
+
+/** Body for `POST /api/billing/billing-email`. */
+export type UpdateBillingEmailRequest = {
+  /** Empty string clears the override (FE will fall back to auth email). */
+  email: string
+}
+
+/** Response for the same endpoint — same shape as the DTO above. */
+export type UpdateBillingEmailResponse = SubscriptionDto
 
 /** Public DTO returned by `POST /api/billing/jar/create-payment-request`. */
 export type PaymentRequestDto = {

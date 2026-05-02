@@ -68,6 +68,11 @@ model User {
   email              String?             @unique
   emailVerified      Boolean             @default(false)
   emailVerifiedAt    DateTime?
+  /// Optional notification address used for billing emails (Pro activated /
+  /// rejected / cancelled / expired). Lets Twitch sign-ups (which often have
+  /// no auth `email`) still receive billing confirmations. Falls back to
+  /// `email` when null. Not unique — a user may share an ops/manager inbox.
+  billingEmail       String?
   displayName        String
   avatarUrl          String?
   role               String
@@ -411,6 +416,15 @@ model Subscription {
   status    String
   startsAt  DateTime
   expiresAt DateTime
+  /// Single-flight claim for the user-facing "Pro доступ скасовано" email.
+  /// Set the moment `cancelAdminSubscription` performs the active→inactive
+  /// transition; repeated cancels collapse to a no-op without re-emailing.
+  cancelledEmailSentAt DateTime?
+  /// Single-flight claim for the user-facing "Pro період закінчився" email.
+  /// Set lazily on read in `getSubscriptionDtoForUser` when the row is past
+  /// `expiresAt`. Not driven by a cron — fired the next time the user's UI
+  /// (or the global notifier tick) hits `subscription/me` after expiry.
+  expiredEmailSentAt   DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

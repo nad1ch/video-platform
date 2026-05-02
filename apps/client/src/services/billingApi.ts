@@ -26,6 +26,15 @@ export type SubscriptionDto = {
   plan: 'pro' | null
   expiresAt: string | null
   isActive: boolean
+  /**
+   * Effective notification address used by billing emails:
+   * `User.billingEmail` (if explicitly set via `POST /api/billing/billing-email`)
+   * or fallback to the user's auth `email`. `null` when neither is available
+   * (Twitch sign-up without email and no override).
+   */
+  billingEmail: string | null
+  /** Auth-side `User.email` — exposed so the FE can show "fallback to <auth email>". */
+  accountEmail: string | null
 }
 
 export type PaymentRequestDto = {
@@ -189,6 +198,22 @@ async function jsonRequest<T>(
 
 export function fetchSubscriptionMe(): Promise<BillingApiResult<SubscriptionDto>> {
   return jsonRequest<SubscriptionDto>('/api/billing/subscription/me')
+}
+
+/**
+ * Set (or clear, with empty string) the billing notification email. Returns
+ * the same shape as `subscription/me` so callers can update the singleton
+ * snapshot atomically. Server-side validation rejects malformed addresses
+ * with `400 INVALID_EMAIL`.
+ */
+export function updateBillingEmail(
+  email: string,
+): Promise<BillingApiResult<SubscriptionDto>> {
+  return jsonRequest<SubscriptionDto>('/api/billing/billing-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
 }
 
 export function createJarPaymentRequest(): Promise<BillingApiResult<PaymentRequestDto>> {

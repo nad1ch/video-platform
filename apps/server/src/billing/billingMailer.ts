@@ -294,23 +294,40 @@ export async function sendBillingAdminNotification(
  * webhook deliveries / repeated admin approve/reject clicks cannot cause
  * duplicate user emails.
  */
+/**
+ * User-facing event union — superset of `BillingAdminEventType`. Adds two
+ * subscription-lifecycle events that don't map to a PaymentRequest:
+ *   - `subscription_cancelled` — admin clicked "Скасувати Pro".
+ *   - `subscription_expired`   — natural end of the paid window.
+ *
+ * The admin notification uses the narrower `BillingAdminEventType` because
+ * the admin-side cancellation has its own dedicated context+template (see
+ * `sendSubscriptionCancelledNotification`); this union is user-side only.
+ */
+export type UserBillingEventType =
+  | BillingAdminEventType
+  | 'subscription_cancelled'
+  | 'subscription_expired'
+
 export type UserBillingNotificationContext = {
-  event: BillingAdminEventType
+  event: UserBillingEventType
   to: string
   displayName: string
   amountKopecks: number
   currency: string
-  /** Active subscription expiresAt for activation events; ignored otherwise. */
+  /** Active subscription expiresAt for activation/expiry events; ignored otherwise. */
   subscriptionExpiresAt: Date | null
-  /** Optional admin note shown in the rejection email body. */
+  /** Optional admin note shown in rejection / cancellation email bodies. */
   adminNote: string | null
 }
 
-const USER_SUBJECTS: Record<BillingAdminEventType, string> = {
+const USER_SUBJECTS: Record<UserBillingEventType, string> = {
   auto_matched: 'StreamAssist Pro активовано',
   approved: 'StreamAssist Pro активовано адміністратором',
   needs_review: 'Перевіряємо ваш платіж за StreamAssist Pro',
   rejected: 'Платіж за StreamAssist Pro відхилено',
+  subscription_cancelled: 'StreamAssist Pro скасовано',
+  subscription_expired: 'StreamAssist Pro закінчився',
 }
 
 function fmtUahWithCcy(amountKopecks: number, currency: string): string {
@@ -359,7 +376,25 @@ function renderUserBody(
     const html = `<p>Привіт, ${safeName}!</p><p>Ми отримали запит на оплату <strong>${safeAmount}</strong>. Платіж зараз на ручній перевірці у нашого адміністратора — це може зайняти трохи часу.</p><p>Ми надішлемо окремий лист, коли підтвердимо активацію.</p>`
     return { text, html }
   }
-  // rejected
+  if (ctx.event === 'subscription_cancelled') {
+    const noteText = ctx.adminNote ? ` Коментар адміністратора: ${ctx.adminNote}` : ''
+    const noteHtml = ctx.adminNote
+      ? `<p>Коментар адміністратора: <em>${escapeHtml(ctx.adminNote)}</em></p>`
+      : ''
+    const text = `Привіт, ${ctx.displayName}. Адміністратор скасував вашу підписку StreamAssist Pro — доступ до Pro більше не активний.${noteText} Якщо ви вважаєте, що сталася помилка — зверніться у підтримку.`
+    const html = `<p>Привіт, ${safeName}.</p><p>Адміністратор скасував вашу підписку <strong>StreamAssist Pro</strong> — доступ до Pro більше не активний.</p>${noteHtml}<p>Якщо ви вважаєте, що сталася помилка — зверніться у підтримку.</p>`
+    return { text, html }
+  }
+  if (ctx.event === 'subscription_expired') {
+    const text = `Привіт, ${ctx.displayName}. Ваш період StreamAssist Pro закінчився${
+      expires ? ` ${expires}` : ''
+    }. Поновіть, щоб продовжити користуватися Pro: відкрийте розділ білінгу в застосунку.`
+    const html = `<p>Привіт, ${safeName}.</p><p>Ваш період <strong>StreamAssist Pro</strong> закінчився${
+      safeExpires ? ` <strong>${safeExpires}</strong>` : ''
+    }.</p><p>Поновіть, щоб продовжити користуватися Pro — відкрийте розділ білінгу в застосунку.</p>`
+    return { text, html }
+  }
+  // rejected (default fall-through for the original BillingAdminEventType set)
   const noteText = ctx.adminNote ? ` Коментар адміністратора: ${ctx.adminNote}` : ''
   const noteHtml = ctx.adminNote
     ? `<p>Коментар адміністратора: <em>${escapeHtml(ctx.adminNote)}</em></p>`
