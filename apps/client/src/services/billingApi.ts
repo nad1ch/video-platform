@@ -52,7 +52,6 @@ export type MarkPaidDto = {
   status: PaymentRequestStatus
   expiresAt: string
   subscription: SubscriptionDto
-  monoConfigured: boolean
 }
 
 /** Public DTO returned by `GET /api/billing/jar/payment-request/:id`. Owner-only. */

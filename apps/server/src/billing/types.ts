@@ -82,7 +82,6 @@ export type MarkPaidDto = {
   status: PaymentRequestStatus
   expiresAt: string
   subscription: SubscriptionDto
-  monoConfigured: boolean
 }
 
 /**

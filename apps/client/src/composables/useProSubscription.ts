@@ -1,4 +1,4 @@
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { fetchSubscriptionMe, type SubscriptionDto } from '@/services/billingApi'
 import { createLogger } from '@/utils/logger'
 
@@ -8,9 +8,10 @@ import { createLogger } from '@/utils/logger'
  * Pro access locally — `isProActive.value === true` means the server confirmed
  * `status === 'active' && expiresAt > now` at the last poll.
  *
- * `pollUntilActive` is the post-`mark-paid` helper: after the user clicks
- * "I paid", we poll until either Pro turns on or the timeout elapses. Polling
- * stops automatically on component teardown.
+ * Per-request status polling lives in `useJarBillingFlow.startStatusPolling`
+ * (which polls the request, not the subscription, so it reacts to all
+ * terminal statuses, not just activation). The global notifier
+ * (`useBillingNotifications`) keeps this singleton fresh on a 20s tick.
  */
 
 const log = createLogger('billing')
@@ -61,62 +62,6 @@ export function useProSubscription() {
   /** Auth-side `User.email` — exposed so the FE can pre-fill the billing-email input. */
   const accountEmail = computed(() => subscription.value?.accountEmail ?? null)
 
-  let pollTimer: ReturnType<typeof setInterval> | null = null
-  let pollDeadline = 0
-  let pollResolve: ((activated: boolean) => void) | null = null
-  let disposed = false
-
-  function clearPoll(): void {
-    if (pollTimer) {
-      clearInterval(pollTimer)
-      pollTimer = null
-    }
-    if (pollResolve) {
-      const r = pollResolve
-      pollResolve = null
-      r(isProActive.value)
-    }
-  }
-
-  function pollUntilActive(opts?: {
-    intervalMs?: number
-    timeoutMs?: number
-  }): Promise<boolean> {
-    const intervalMs = Math.max(1000, opts?.intervalMs ?? 4000)
-    const timeoutMs = Math.max(intervalMs, opts?.timeoutMs ?? 90_000)
-    pollDeadline = Date.now() + timeoutMs
-    if (pollTimer) {
-      clearInterval(pollTimer)
-      pollTimer = null
-    }
-    return new Promise<boolean>((resolve) => {
-      pollResolve = resolve
-      const tick = (): void => {
-        if (disposed) {
-          clearPoll()
-          return
-        }
-        void refreshSubscription().then(() => {
-          if (disposed) return
-          if (isProActive.value) {
-            clearPoll()
-            return
-          }
-          if (Date.now() >= pollDeadline) {
-            clearPoll()
-          }
-        })
-      }
-      tick()
-      pollTimer = setInterval(tick, intervalMs)
-    })
-  }
-
-  onUnmounted(() => {
-    disposed = true
-    clearPoll()
-  })
-
   return {
     subscription,
     isProActive,
@@ -127,6 +72,5 @@ export function useProSubscription() {
     loading,
     lastError,
     refreshSubscription,
-    pollUntilActive,
   }
 }

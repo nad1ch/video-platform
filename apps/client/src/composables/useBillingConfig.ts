@@ -48,11 +48,6 @@ export function refreshBillingConfig(): Promise<void> {
 }
 
 export function useBillingConfig() {
-  const priceLabel = computed(() => {
-    const c = config.value
-    if (!c) return null
-    return `${c.amountUah} ${c.currency} / ${c.durationDays} днів`
-  })
   const durationLabel = computed(() => {
     const c = config.value
     if (!c) return null
@@ -66,7 +61,6 @@ export function useBillingConfig() {
     loading,
     lastError,
     isReady,
-    priceLabel,
     durationLabel,
     jarConfigured,
     refreshBillingConfig,

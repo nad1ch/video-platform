@@ -200,19 +200,24 @@ export async function getSubscriptionDtoForUser(userId: string): Promise<Subscri
   const now = new Date()
   // Lazy expiry-email: only when the row is `active`-in-DB but past expiresAt.
   // The single-flight `updateMany` filter (still null) prevents double sending.
+  //
+  // Important: only claim the timestamp when the user actually has a deliverable
+  // address. Otherwise a Twitch sign-up without auth email would burn the claim
+  // and never receive the expiry email later, even after configuring
+  // `User.billingEmail` via POST /api/billing/billing-email.
   if (
     row &&
     row.status === 'active' &&
     row.expiresAt.getTime() <= now.getTime() &&
     row.expiredEmailSentAt == null
   ) {
-    const claim = await prisma.subscription.updateMany({
-      where: { id: row.id, expiredEmailSentAt: null },
-      data: { expiredEmailSentAt: now },
-    })
-    if (claim.count > 0) {
-      const to = userRow?.billingEmail ?? userRow?.email ?? null
-      if (to) {
+    const to = userRow?.billingEmail ?? userRow?.email ?? null
+    if (to) {
+      const claim = await prisma.subscription.updateMany({
+        where: { id: row.id, expiredEmailSentAt: null },
+        data: { expiredEmailSentAt: now },
+      })
+      if (claim.count > 0) {
         // Fire-and-forget: failure is logged by the mailer, billing path is
         // never blocked by SMTP.
         void sendUserBillingNotification({
@@ -337,6 +342,12 @@ function buildPublicDto(
  * waiting_payment/checking request that is not yet expired, return that. This
  * prevents accidental fan-out when "Buy Pro" is clicked multiple times. Expired
  * leftovers are reaped in the same call so the next click starts a fresh window.
+ *
+ * The find→create pair runs inside a Serializable transaction so two parallel
+ * "Buy Pro" clicks from the same user (slow network, two tabs) cannot both
+ * observe "no reusable" and create two duplicate `waiting_payment` rows. Without
+ * this, a single payment landing later would match both → matcher escalates to
+ * `needs_review`, sending the user through manual review unnecessarily.
  */
 export async function createOrReusePaymentRequest(userId: string): Promise<PaymentRequestDto> {
   ensureDatabase()
@@ -344,34 +355,38 @@ export async function createOrReusePaymentRequest(userId: string): Promise<Payme
   const now = new Date()
   await sweepExpiredRequests(now)
 
-  const reusable = await prisma.paymentRequest.findFirst({
-    where: {
-      userId,
-      provider: PROVIDER_MONO_JAR,
-      status: { in: ELIGIBLE_FOR_MATCH as unknown as PaymentRequestStatus[] },
-      expiresAt: { gt: now },
+  const result = await prisma.$transaction(
+    async (tx) => {
+      const reusable = await tx.paymentRequest.findFirst({
+        where: {
+          userId,
+          provider: PROVIDER_MONO_JAR,
+          status: { in: ELIGIBLE_FOR_MATCH as unknown as PaymentRequestStatus[] },
+          expiresAt: { gt: now },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, status: true, expiresAt: true, amount: true },
+      })
+      if (reusable) {
+        return reusable
+      }
+      const amount = readPriceKopecks()
+      const expiresAt = new Date(now.getTime() + readMatchWindowMinutes() * 60 * 1000)
+      return tx.paymentRequest.create({
+        data: {
+          userId,
+          provider: PROVIDER_MONO_JAR,
+          amount,
+          currency: CURRENCY_UAH,
+          status: 'waiting_payment' satisfies PaymentRequestStatus,
+          expiresAt,
+        },
+        select: { id: true, status: true, expiresAt: true, amount: true },
+      })
     },
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, status: true, expiresAt: true, amount: true },
-  })
-  if (reusable) {
-    return buildPublicDto(reusable, jarUrl)
-  }
-
-  const amount = readPriceKopecks()
-  const expiresAt = new Date(now.getTime() + readMatchWindowMinutes() * 60 * 1000)
-  const created = await prisma.paymentRequest.create({
-    data: {
-      userId,
-      provider: PROVIDER_MONO_JAR,
-      amount,
-      currency: CURRENCY_UAH,
-      status: 'waiting_payment' satisfies PaymentRequestStatus,
-      expiresAt,
-    },
-    select: { id: true, status: true, expiresAt: true, amount: true },
-  })
-  return buildPublicDto(created, jarUrl)
+    { isolationLevel: 'Serializable' },
+  )
+  return buildPublicDto(result, jarUrl)
 }
 
 /**
@@ -430,7 +445,6 @@ export async function markPaymentRequestAsPaid(
   // Best-effort statement pull + matching pass. Both swallow errors internally
   // so a Mono outage cannot crash mark-paid.
   const cfg = readPersonalConfig()
-  const monoConfigured = cfg !== null
   if (cfg) {
     try {
       await pollAndMatchOnce(now)
@@ -459,7 +473,6 @@ export async function markPaymentRequestAsPaid(
     status: finalReq.status as PaymentRequestStatus,
     expiresAt: finalReq.expiresAt.toISOString(),
     subscription,
-    monoConfigured,
   }
 }
 
@@ -534,7 +547,19 @@ async function pollAndMatchOnce(now: Date): Promise<void> {
   const cfg = readPersonalConfig()
   if (!cfg) return
   for (const item of result.items) {
-    await persistAndMatchStatementItem(item, cfg.accountId, now)
+    // Per-item try/catch so a Postgres serialization failure (or any other
+    // throw inside `tryAutoMatchTransaction`) on one transaction does NOT
+    // abort the whole loop and leave subsequent items unmatched until the
+    // next poll cycle. Each item is independent.
+    try {
+      await persistAndMatchStatementItem(item, cfg.accountId, now)
+    } catch (err) {
+      console.warn(
+        '[billing] persistAndMatchStatementItem failed',
+        item.monoTransactionId,
+        (err as Error).message,
+      )
+    }
   }
 }
 
@@ -576,7 +601,17 @@ export async function forceAdminPollAndMatch(): Promise<AdminForcePollResult> {
     }
   }
   for (const item of result.items) {
-    await persistAndMatchStatementItem(item, cfg.accountId, now)
+    // Per-item try/catch — see `pollAndMatchOnce`. One bad item must not
+    // bubble up and 500 the admin force-poll endpoint.
+    try {
+      await persistAndMatchStatementItem(item, cfg.accountId, now)
+    } catch (err) {
+      console.warn(
+        '[billing][admin] persistAndMatchStatementItem failed',
+        item.monoTransactionId,
+        (err as Error).message,
+      )
+    }
   }
   return { ok: true, itemCount: result.items.length, accountId: cfg.accountId }
 }
@@ -982,6 +1017,17 @@ export async function adminRejectPaymentRequest(
       409,
       'ALREADY_ACTIVATED',
       'Cannot reject an already-activated request (no revoke flow in MVP)',
+    )
+  }
+  // Block reject of already-`expired` requests too: the user has already seen
+  // the "Час на оплату вийшов" terminal state in the modal/toast — sending
+  // them a follow-up "Платіж відхилено" email would be misleading. Admin can
+  // simply leave the row as `expired`; it is already terminal.
+  if (existing.status === 'expired') {
+    throw new BillingHttpError(
+      409,
+      'ALREADY_EXPIRED',
+      'Cannot reject an already-expired request (it is already terminal)',
     )
   }
   const now = new Date()
