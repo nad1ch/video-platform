@@ -23,6 +23,15 @@ const props = withDefaults(
     mafiaMode?: boolean
     showCoin?: boolean
     userPrefix?: string
+    /**
+     * Show the gold "PRO" pill linking to billing. Driven by
+     * `useProSubscription().isProActive` from the layout. Hidden when
+     * Pro is inactive — non-paying users do not see the pill at all.
+     */
+    isProActive?: boolean
+    proLinkTo?: RouteLocationRaw
+    /** Tooltip + accessible label for the Pro pill (e.g. "Pro until …"). */
+    proLabel?: string
   }>(),
   {
     title: '',
@@ -37,6 +46,9 @@ const props = withDefaults(
     mafiaMode: false,
     showCoin: true,
     userPrefix: '',
+    isProActive: false,
+    proLinkTo: undefined,
+    proLabel: '',
   },
 )
 
@@ -212,6 +224,24 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
           >
             ?
           </button>
+
+          <!--
+            Gold "PRO" pill — visible only when the user has an active Pro
+            subscription. Routes to /app/billing so users can see expiry
+            and renew. Driven by `useProSubscription().isProActive` from
+            AppShellLayout, so it appears within ~20s of activation and
+            disappears within ~20s of cancel/expiry (global notifier tick).
+          -->
+          <RouterLink
+            v-if="isProActive && proLinkTo"
+            :to="proLinkTo"
+            class="app-landing-header__pro"
+            :title="proLabel || 'StreamAssist Pro'"
+            :aria-label="proLabel || 'StreamAssist Pro'"
+          >
+            <span class="app-landing-header__pro-crown" aria-hidden="true">👑</span>
+            <span class="app-landing-header__pro-label">PRO</span>
+          </RouterLink>
 
           <button
             v-if="showCoin"
@@ -555,6 +585,94 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   background: rgba(91, 51, 125, 0.9);
   color: #fff;
   border-color: rgba(255, 255, 255, 0.24);
+}
+
+/* —— Gold "PRO" pill (visible only when subscription is active) —— */
+.app-landing-header__pro {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 2.15rem;
+  padding: 0 0.7rem 0 0.55rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: #1a0f02;
+  background: linear-gradient(135deg, #fff7ed, #fde68a 35%, #fbbf24 65%, #f59e0b);
+  border: 1px solid rgba(255, 200, 80, 0.9);
+  box-shadow:
+    0 0 0 1px rgba(255, 220, 140, 0.35),
+    0 0 22px rgba(255, 200, 80, 0.55),
+    0 0 36px rgba(255, 160, 40, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition:
+    transform 0.2s ease,
+    filter 0.2s ease,
+    box-shadow 0.2s ease;
+  animation: app-header-pro-pulse 3.2s ease-in-out infinite;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.app-landing-header__pro:hover,
+.app-landing-header__pro:focus-visible {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow:
+    0 0 0 1px rgba(255, 240, 200, 0.5),
+    0 0 30px rgba(255, 220, 100, 0.75),
+    0 0 50px rgba(255, 180, 60, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.app-landing-header__pro:focus-visible {
+  outline: 2px solid rgba(255, 230, 160, 0.9);
+  outline-offset: 2px;
+}
+
+.app-landing-header__pro-crown {
+  display: inline-block;
+  font-size: 0.92rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 4px rgba(255, 220, 130, 0.55));
+}
+
+.app-landing-header__pro-label {
+  display: inline-block;
+  line-height: 1;
+}
+
+@keyframes app-header-pro-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(255, 220, 140, 0.35),
+      0 0 22px rgba(255, 200, 80, 0.5),
+      0 0 32px rgba(255, 160, 40, 0.26),
+      inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(255, 240, 200, 0.45),
+      0 0 32px rgba(255, 220, 110, 0.75),
+      0 0 48px rgba(255, 180, 60, 0.42),
+      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-landing-header__pro {
+    animation: none;
+    transition: filter 0.2s ease;
+  }
+
+  .app-landing-header__pro:hover,
+  .app-landing-header__pro:focus-visible {
+    transform: none;
+  }
 }
 
 .app-landing-header__coin {

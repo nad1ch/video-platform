@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
+import BillingToastSurface from '@/components/billing/BillingToastSurface.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useSaTooltips } from '@/composables/useSaTooltips'
 import { routeNavLoadingVisible } from '@/routeNavLoading'
@@ -91,6 +92,13 @@ onMounted(async () => {
       :label="initialAppLoading ? t('loader.default') : ''"
     />
     <RouterView />
+    <!--
+      Global billing notifications. Mounts a fixed-position toast surface
+      that fires on subscription/payment-request transitions while the user
+      is signed in (e.g. admin approves while user has navigated to /app/call).
+      Polling stops automatically on logout. See `useBillingNotifications`.
+    -->
+    <BillingToastSurface />
   </div>
 </template>
 

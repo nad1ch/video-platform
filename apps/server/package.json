@@ -13,7 +13,8 @@
     "db:migrate:prod": "npx dotenv-cli -e .env.production -- prisma migrate deploy",
     "db:migrate:dev": "npx dotenv-cli -e .env.local -- prisma migrate dev --skip-generate",
     "db:migrate:dev:raw": "prisma migrate dev",
-    "db:seed": "node prisma/seed.cjs"
+    "db:seed": "node prisma/seed.cjs",
+    "mono:accounts": "node scripts/list-mono-accounts.cjs"
   },
   "prisma": {
     "seed": "node prisma/seed.cjs"
