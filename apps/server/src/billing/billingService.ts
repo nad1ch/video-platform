@@ -597,11 +597,15 @@ export async function ingestStatementWebhook(rawBody: unknown): Promise<{ accept
     // signal "not accepted" for logging.
     return { accepted: false }
   }
-  const cfg = readPersonalConfig()
-  // If the webhook account doesn't match our configured account, persist as
-  // unmatched (still useful for admin forensic review).
-  const ourAccountId = cfg?.accountId ?? accountId
-  await persistAndMatchStatementItem(item, ourAccountId, new Date())
+  // Persist using the webhook-reported account id. The matcher's eligibility
+  // gate (`t.accountId !== expectedAccountId`) then rejects any transaction
+  // whose account does not match our configured `MONO_ACCOUNT_ID`, so a
+  // forged webhook claiming `data.account = "anything"` is stored for
+  // forensic review but cannot trigger auto-activation. (Stamping
+  // `cfg.accountId` here would silently override the gate — anyone who knew
+  // the public webhook URL could otherwise mint payments by POSTing a
+  // StatementItem with the matching amount.)
+  await persistAndMatchStatementItem(item, accountId, new Date())
   return { accepted: true }
 }
 
