@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import JarPaymentModal from '@/components/billing/JarPaymentModal.vue'
 import { useProSubscription } from '@/composables/useProSubscription'
 import { useJarBillingFlow } from '@/composables/useJarBillingFlow'
 import { refreshBillingConfig, useBillingConfig } from '@/composables/useBillingConfig'
+import { updateBillingEmail } from '@/services/billingApi'
+import { subscriptionState } from '@/composables/useProSubscription'
 import '@/styles/coinhub-design-system.css'
 
 /**
@@ -27,11 +29,86 @@ import '@/styles/coinhub-design-system.css'
  * the request DTO), so changing `PRO_PRICE_UAH` only affects new requests.
  */
 
-const { subscription, isProActive, expiresAt, refreshSubscription } = useProSubscription()
+const {
+  subscription,
+  isProActive,
+  expiresAt,
+  refreshSubscription,
+  billingEmail: subscriptionBillingEmail,
+  accountEmail,
+} = useProSubscription()
 const flow = useJarBillingFlow()
 const billingConfig = useBillingConfig()
 
 const modalOpen = ref(false)
+
+/* -------------------------------------------------------------------------- */
+/* Billing notification email                                                 */
+/* -------------------------------------------------------------------------- */
+
+const billingEmailDraft = ref('')
+const billingEmailSaving = ref(false)
+const billingEmailMessage = ref<{ kind: 'ok' | 'err'; text: string } | null>(null)
+
+// Pre-fill the input when the singleton snapshot arrives. We seed from the
+// effective `billingEmail` (override OR auth fallback) so users with an auth
+// email see their existing address immediately and can confirm-or-change.
+watch(
+  subscriptionBillingEmail,
+  (next, prev) => {
+    if (next !== prev && billingEmailDraft.value.length === 0) {
+      billingEmailDraft.value = next ?? ''
+    }
+  },
+  { immediate: true },
+)
+
+const billingEmailHelper = computed(() => {
+  if (subscriptionBillingEmail.value) {
+    return `Сповіщення надсилаємо на ${subscriptionBillingEmail.value}.`
+  }
+  if (accountEmail.value) {
+    return `За замовчуванням сповіщення підуть на ${accountEmail.value}. Можна вказати іншу адресу нижче.`
+  }
+  return 'Введіть пошту, щоб отримувати підтвердження оплати, відмови та закінчення підписки.'
+})
+
+const isBillingEmailDirty = computed(() => {
+  const draft = billingEmailDraft.value.trim().toLowerCase()
+  const current = (subscriptionBillingEmail.value ?? '').toLowerCase()
+  return draft !== current
+})
+
+async function onSaveBillingEmail(): Promise<void> {
+  if (billingEmailSaving.value) return
+  billingEmailSaving.value = true
+  billingEmailMessage.value = null
+  try {
+    const r = await updateBillingEmail(billingEmailDraft.value.trim())
+    if (!r.ok) {
+      billingEmailMessage.value = {
+        kind: 'err',
+        text:
+          r.code === 'INVALID_EMAIL'
+            ? 'Невірний формат пошти. Перевірте адресу.'
+            : `Не вдалося зберегти: ${r.message}`,
+      }
+      return
+    }
+    // Server returns the same shape as `subscription/me` — push it into the
+    // singleton so every other UI consumer (header pill, toast notifier,
+    // admin views opened in another tab) sees the change immediately.
+    subscriptionState.value = r.data
+    billingEmailMessage.value = {
+      kind: 'ok',
+      text: r.data.billingEmail
+        ? 'Email для сповіщень збережено.'
+        : 'Email для сповіщень очищено.',
+    }
+  } finally {
+    billingEmailSaving.value = false
+  }
+}
 
 const FEATURES: string[] = [
   'Безлімітні кімнати дзвінків та оверлеї для OBS',
@@ -158,6 +235,62 @@ onMounted(() => {
           щоб продовжити користуватися Pro.
         </p>
       </div>
+
+      <!--
+        Billing notification email card. Lets Twitch sign-ups (no auth email)
+        provide an address; lets email users override the auth address with
+        a different one for billing-only mail. Empty input clears the override
+        and falls back to the auth email server-side.
+      -->
+      <section class="billing-email-card" aria-labelledby="billing-email-title">
+        <div class="billing-email-card__head">
+          <h2 id="billing-email-title" class="billing-email-card__title">
+            Email для сповіщень
+          </h2>
+          <p class="billing-email-card__hint">{{ billingEmailHelper }}</p>
+        </div>
+        <form
+          class="billing-email-card__form"
+          @submit.prevent="onSaveBillingEmail"
+        >
+          <input
+            v-model.trim="billingEmailDraft"
+            type="email"
+            inputmode="email"
+            autocomplete="email"
+            spellcheck="false"
+            class="billing-email-card__input"
+            placeholder="example@gmail.com"
+            :disabled="billingEmailSaving"
+            :aria-label="'Email для сповіщень'"
+            maxlength="254"
+          />
+          <button
+            type="submit"
+            class="billing-email-card__btn"
+            :disabled="billingEmailSaving || !isBillingEmailDirty"
+          >
+            {{
+              billingEmailSaving
+                ? 'Зберігаємо…'
+                : isBillingEmailDirty
+                  ? 'Зберегти'
+                  : 'Збережено'
+            }}
+          </button>
+        </form>
+        <p
+          v-if="billingEmailMessage"
+          class="billing-email-card__msg"
+          :class="
+            billingEmailMessage.kind === 'ok'
+              ? 'billing-email-card__msg--ok'
+              : 'billing-email-card__msg--err'
+          "
+        >
+          {{ billingEmailMessage.text }}
+        </p>
+      </section>
 
       <!--
         Pro pricing card. Visual structure mirrors Coin Hub's `PricingPlanCard`
@@ -737,5 +870,138 @@ onMounted(() => {
 
 .ppc__legal--warn {
   color: #ffd28a;
+}
+
+/* ============================================================================
+   Billing notification email card
+   ========================================================================== */
+
+.billing-email-card {
+  margin: 0 auto;
+  max-width: 28rem;
+  width: 100%;
+  border-radius: 16px;
+  padding: 1.1rem 1.25rem 1.25rem;
+  background: linear-gradient(
+    180deg,
+    rgba(36, 28, 70, 0.55) 0%,
+    rgba(8, 6, 18, 0.7) 100%
+  );
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 40px rgba(8, 6, 18, 0.35);
+}
+
+.billing-email-card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.85rem;
+}
+
+.billing-email-card__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #f5f3ff;
+}
+
+.billing-email-card__hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.billing-email-card__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.billing-email-card__input {
+  flex: 1 1 16rem;
+  min-width: 0;
+  appearance: none;
+  border-radius: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.32);
+  padding: 0.65rem 0.85rem;
+  background: rgba(11, 7, 22, 0.7);
+  color: #f5f3ff;
+  font-size: 0.9rem;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.billing-email-card__input::placeholder {
+  color: rgba(196, 181, 253, 0.4);
+}
+
+.billing-email-card__input:focus {
+  outline: 2px solid rgba(196, 181, 253, 0.65);
+  outline-offset: 1px;
+  border-color: rgba(196, 181, 253, 0.6);
+  background: rgba(20, 14, 38, 0.85);
+}
+
+.billing-email-card__input:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.billing-email-card__btn {
+  appearance: none;
+  border-radius: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.5);
+  padding: 0 1.1rem;
+  min-height: 2.4rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-size: 0.85rem;
+  color: #faf5ff;
+  background: linear-gradient(145deg, #7c3aed 0%, #5b21b6 60%, #4c1d95 100%);
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.35),
+    0 0 22px rgba(124, 58, 237, 0.32),
+    0 6px 18px rgba(40, 20, 80, 0.45);
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    filter 0.18s ease;
+}
+
+.billing-email-card__btn:hover:not([disabled]) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.billing-email-card__btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.billing-email-card__msg {
+  margin: 0.55rem 0 0;
+  font-size: 0.82rem;
+}
+
+.billing-email-card__msg--ok {
+  color: #b8f5cf;
+}
+
+.billing-email-card__msg--err {
+  color: #ffb4b4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .billing-email-card__btn,
+  .billing-email-card__btn:hover:not([disabled]) {
+    transform: none;
+    transition: filter 0.15s ease;
+  }
 }
 </style>

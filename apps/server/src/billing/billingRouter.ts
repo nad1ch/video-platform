@@ -8,6 +8,7 @@ import {
   getSubscriptionDtoForUser,
   ingestStatementWebhook,
   markPaymentRequestAsPaid,
+  setUserBillingEmail,
 } from './billingService'
 import { BillingHttpError } from './httpError'
 
@@ -20,6 +21,7 @@ import { BillingHttpError } from './httpError'
  *   POST /api/billing/jar/mark-paid               — auth; idempotent "I paid"
  *   GET  /api/billing/jar/payment-request/:id     — auth; owner-only status poll
  *   GET  /api/billing/subscription/me             — auth; subscription snapshot
+ *   POST /api/billing/billing-email                — auth; set/clear billing notification email
  *   GET  /api/billing/mono-personal/webhook       — public; monobank verification ping
  *   POST /api/billing/mono-personal/webhook       — public; monobank StatementItem
  *
@@ -123,6 +125,24 @@ export function mountBillingRoutes(app: Express): void {
           return
         }
         const out = await getOwnedPaymentRequestSnapshot(userId, id)
+        res.json(out)
+      } catch (err) {
+        sendError(res, err)
+      }
+    })()
+  })
+
+  // Set/clear the billing notification email. Body: `{ "email": "..." }` or
+  // `{ "email": "" }` to clear. Returns the same shape as `subscription/me`
+  // so the FE can replace its singleton snapshot in one round-trip.
+  app.post(`${base}/billing-email`, (req, res) => {
+    void (async () => {
+      try {
+        const userId = await resolveUserIdOr401(req, res)
+        if (userId == null) return
+        const body = (req.body ?? {}) as { email?: unknown }
+        const email = typeof body.email === 'string' ? body.email : ''
+        const out = await setUserBillingEmail(userId, email)
         res.json(out)
       } catch (err) {
         sendError(res, err)
