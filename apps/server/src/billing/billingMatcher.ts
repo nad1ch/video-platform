@@ -94,6 +94,13 @@ async function activateProInTx(
       status: 'active' satisfies SubscriptionStatus,
       // Do NOT rewrite startsAt for renewals — preserves the historical timeline.
       expiresAt,
+      // Reset email single-flight claims so the NEXT future expiry / cancellation
+      // fires its user notification. Without this, a user who lets Pro lapse
+      // (or has it cancelled), then re-pays and lapses again, would silently
+      // miss the second "Pro закінчився" / "Pro скасовано" email because the
+      // claim timestamp from the previous lifecycle is still set.
+      expiredEmailSentAt: null,
+      cancelledEmailSentAt: null,
     },
   })
 }

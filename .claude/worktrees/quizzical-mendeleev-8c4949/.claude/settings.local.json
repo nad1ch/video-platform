@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(git -C \"D:/Stream staff/video-platform\" branch --show-current)",
+      "Bash(git -C \"D:/Stream staff/video-platform\" status --short)",
+      "Bash(git -C \"D:/Stream staff/video-platform\" diff --stat)",
+      "Read(//d/Stream staff/video-platform/**)",
+      "Bash(rm -rf .claude/worktrees/quizzical-mendeleev-8c4949)",
+      "PowerShell(try { Remove-Item -LiteralPath 'D:\\\\Stream staff\\\\video-platform\\\\.claude\\\\worktrees\\\\quizzical-mendeleev-8c4949' -Recurse -Force -ErrorAction Stop; 'removed' } catch { 'failed: ' + $_.Exception.Message })",
+      "Bash(git -C \"D:/Stream staff/video-platform\" log --oneline -10)"
+    ]
+  }
+}
