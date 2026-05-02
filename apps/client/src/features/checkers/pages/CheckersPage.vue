@@ -314,7 +314,6 @@ const checkersUi = computed(() => {
     botName: uk ? 'Бот' : 'Bot',
     guest: uk ? 'Гість' : 'Guest',
     spectator: uk ? 'Глядач' : 'Spectator',
-    winsVerb: uk ? 'переміг' : 'wins',
     lbColPlayer: uk ? 'Гравець' : 'Player',
     lbYou: uk ? 'Ти' : 'You',
     overlayGuestTitle: uk ? 'Твій нікнейм' : 'Your nickname',
@@ -426,11 +425,6 @@ const boardFlipped = computed(() => checkers.myRole.value === 'player2')
 const isCheckersPlayer = computed(() => checkers.myRole.value === 'player1' || checkers.myRole.value === 'player2')
 const isCheckersSpectator = computed(() => !isCheckersPlayer.value)
 type EndGameWinner = CheckersPlayer | 'you' | 'opponent'
-const winnerLabel = computed(() => {
-  const winner = checkers.displayState.value.winner
-  if (!winner) return ''
-  return `${playerLabels.value[winner]} ${checkersUi.value.winsVerb}`
-})
 const isEndGameOverlayVisible = computed(() => Boolean(checkers.displayState.value.winner))
 const isFriendInviteVisible = computed(() => {
   if (selectedUiMode.value !== 'friend' || checkers.isRatedMatch.value) return false
@@ -1869,9 +1863,6 @@ function handleCellClick(pos: CheckersPosition): void {
             </div>
             <div class="checkers-controls">
               <div class="checkers-controls__actions" aria-hidden="true" />
-              <p v-if="winnerLabel" class="checkers-controls__meta">
-                <span>{{ winnerLabel }}</span>
-              </p>
             </div>
           </div>
         </AppCard>
@@ -3104,16 +3095,6 @@ function handleCellClick(pos: CheckersPosition): void {
 .checkers-mode-confirm-leave-to {
   opacity: 0;
   transform: scale(0.98);
-}
-
-.checkers-controls__meta {
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--sa-space-2);
-  color: var(--sa-color-text-body);
-  font-size: 0.78rem;
 }
 
 @media (min-width: 1201px) {
