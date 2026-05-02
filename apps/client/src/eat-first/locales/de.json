@@ -417,6 +417,7 @@
     "scoreStreak": "Längste Serie",
     "selfBestStreak": "Deine Bestserie: {n}",
     "scoreRating": "Punkte",
+    "scoreRatingCheckers": "Elo-Rating",
     "colRank": "Rang",
     "colPlayer": "Spieler",
     "empty": "Noch keine Einträge.",

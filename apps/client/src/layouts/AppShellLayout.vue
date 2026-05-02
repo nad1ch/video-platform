@@ -78,7 +78,6 @@ const isEatRoute = computed(() => route.path.startsWith('/app/eat'))
 const isHomeRoute = computed(() => route.name === 'home')
 const isCallRoute = computed(() => route.name === 'call')
 const isMafiaRoute = computed(() => route.name === 'mafia')
-const isCheckersRoute = computed(() => route.name === 'checkers')
 const isCoinHubRoute = computed(() => route.name === 'coin-hub')
 const isNadrawRoute = computed(() => route.name === 'nadraw-show')
 const isBetaAccessRoute = computed(() => route.name === 'beta-access')
@@ -136,7 +135,7 @@ const appLandingHeaderBrand = computed(() =>
     : 'NADLE',
 )
 const appLandingFooterBrand = 'Nad1ch'
-const appLandingFeedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
+const appLandingFeedbackHref = 'https://docs.google.com/forms/d/e/1FAIpQLSdlLcJTCl7VIufeRmeZHsMD2h08kwwCkHZVMmQBNuN2Z3930Q/viewform?usp=header'
 const appLandingCoinHubRoute = { name: 'coin-hub' } satisfies RouteLocationRaw
 const appLandingHeaderCompact = computed(() => !isHomeRoute.value)
 const appLandingLocaleLabelByCode: Record<string, string> = {
@@ -855,7 +854,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
             </Teleport>
           </div>
         </template>
-        <template v-if="isCallRoute || isMafiaRoute || isCheckersRoute" #center>
+        <template v-if="isCallRoute || isMafiaRoute" #center>
           <div :id="CALL_ROOM_DROPDOWN_HOST_ID" class="app-shell-call-room-anchor">
             <button
               type="button"
@@ -866,7 +865,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
               :aria-controls="CALL_ROOM_POPOVER_PANEL_ID"
               @click.stop="callRoomHeaderJoin.toggleRoomPopover()"
             >
-              {{ isMafiaRoute || isCheckersRoute ? 'room' : t('callPage.headerJoinRoom') }}
+              {{ isMafiaRoute ? 'room' : t('callPage.headerJoinRoom') }}
             </button>
           </div>
         </template>

@@ -17,11 +17,15 @@ import { CheckersWs } from './wsProtocol'
 
 type CheckersMode = 'friend' | 'bot' | 'local'
 type CheckersRole = 'player1' | 'player2' | 'spectator'
+type CheckersPlayerRole = Exclude<CheckersRole, 'spectator'>
 
 export type RoomMeta = {
   mode: CheckersMode
   player1?: string
   player2?: string
+  rated: boolean
+  readyClientIds: Set<string>
+  displayNames: Map<string, string>
   rematchAccepted: Set<string>
   lastMove: { from: { row: number; col: number }; to: { row: number; col: number } } | null
   botDifficulty: CheckersBotDifficulty
@@ -37,7 +41,7 @@ const hydratedRooms = new Set<string>()
 const hydrationByRoom = new Map<string, Promise<void>>()
 
 type ClientMsg =
-  | { type: typeof CheckersWs.join; roomId: string; clientId: string; botDifficulty?: CheckersBotDifficulty }
+  | { type: typeof CheckersWs.join; roomId: string; clientId: string; displayName?: string; botDifficulty?: CheckersBotDifficulty }
   | {
       type: typeof CheckersWs.move
       roomId?: string
@@ -47,6 +51,8 @@ type ClientMsg =
     }
   | { type: typeof CheckersWs.restart; roomId?: string }
   | { type: typeof CheckersWs.setMode; roomId?: string; mode: CheckersMode }
+  | { type: typeof CheckersWs.ready; roomId?: string; ready: boolean }
+  | { type: typeof CheckersWs.identity; roomId?: string; displayName?: string }
   | { type: typeof CheckersWs.timeout; roomId?: string; revision?: number }
   | { type: typeof CheckersWs.rematch; roomId?: string }
 
@@ -103,6 +109,14 @@ function cleanBotDifficulty(raw: unknown): CheckersBotDifficulty | undefined {
   return raw === 'easy' || raw === 'medium' || raw === 'hard' ? raw : undefined
 }
 
+function cleanDisplayName(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') {
+    return undefined
+  }
+  const displayName = raw.trim().replace(/\s+/g, ' ').slice(0, 48)
+  return displayName.length > 0 ? displayName : undefined
+}
+
 function isPosition(value: unknown): value is { row: number; col: number } {
   if (!value || typeof value !== 'object') {
     return false
@@ -127,6 +141,8 @@ function parseClientMsg(raw: string): ClientMsg | null {
     clientId?: unknown
     revision?: unknown
     mode?: unknown
+    ready?: unknown
+    displayName?: unknown
     botDifficulty?: unknown
     from?: unknown
     to?: unknown
@@ -137,7 +153,15 @@ function parseClientMsg(raw: string): ClientMsg | null {
   if (msg.type === CheckersWs.join) {
     const roomId = cleanRoomId(msg.roomId)
     const clientId = cleanClientId(msg.clientId)
-    return roomId && clientId ? { type: CheckersWs.join, roomId, clientId, botDifficulty: cleanBotDifficulty(msg.botDifficulty) } : null
+    return roomId && clientId
+      ? {
+          type: CheckersWs.join,
+          roomId,
+          clientId,
+          displayName: cleanDisplayName(msg.displayName),
+          botDifficulty: cleanBotDifficulty(msg.botDifficulty),
+        }
+      : null
   }
   if (msg.type === CheckersWs.move && isPosition(msg.from) && isPosition(msg.to)) {
     const roomId = cleanRoomId(msg.roomId)
@@ -158,6 +182,14 @@ function parseClientMsg(raw: string): ClientMsg | null {
     const mode = cleanMode(msg.mode)
     return mode ? { type: CheckersWs.setMode, roomId: roomId ?? undefined, mode } : null
   }
+  if (msg.type === CheckersWs.ready) {
+    const roomId = cleanRoomId(msg.roomId)
+    return { type: CheckersWs.ready, roomId: roomId ?? undefined, ready: msg.ready === true }
+  }
+  if (msg.type === CheckersWs.identity) {
+    const roomId = cleanRoomId(msg.roomId)
+    return { type: CheckersWs.identity, roomId: roomId ?? undefined, displayName: cleanDisplayName(msg.displayName) }
+  }
   if (msg.type === CheckersWs.timeout) {
     const roomId = cleanRoomId(msg.roomId)
     return {
@@ -176,7 +208,15 @@ function parseClientMsg(raw: string): ClientMsg | null {
 function metaForRoom(roomId: string): RoomMeta {
   let meta = roomMeta.get(roomId)
   if (!meta) {
-    meta = { mode: 'bot', rematchAccepted: new Set(), lastMove: null, botDifficulty: 'medium' }
+    meta = {
+      mode: 'bot',
+      rated: false,
+      readyClientIds: new Set(),
+      displayNames: new Map(),
+      rematchAccepted: new Set(),
+      lastMove: null,
+      botDifficulty: 'medium',
+    }
     roomMeta.set(roomId, meta)
   }
   return meta
@@ -187,6 +227,9 @@ function persistedMeta(meta: RoomMeta): PersistedCheckersRoomMeta {
     mode: meta.mode,
     player1: meta.player1,
     player2: meta.player2,
+    rated: meta.rated,
+    readyClientIds: [...meta.readyClientIds],
+    displayNames: Object.fromEntries(meta.displayNames),
     rematchAccepted: [...meta.rematchAccepted],
     lastMove: meta.lastMove,
     botDifficulty: meta.botDifficulty,
@@ -198,6 +241,9 @@ function applyPersistedMeta(roomId: string, meta: PersistedCheckersRoomMeta): vo
     mode: meta.mode,
     player1: meta.player1,
     player2: meta.player2,
+    rated: meta.rated === true,
+    readyClientIds: new Set(meta.readyClientIds ?? []),
+    displayNames: new Map(Object.entries(meta.displayNames ?? {})),
     rematchAccepted: new Set(meta.rematchAccepted),
     lastMove: meta.lastMove,
     botDifficulty: meta.botDifficulty,
@@ -237,8 +283,10 @@ async function hydrateCheckersLiveRoom(roomId: string): Promise<void> {
 export function reserveCheckersMatchRoom(roomId: string, player1ClientId: string, player2ClientId: string): void {
   const meta = metaForRoom(roomId)
   meta.mode = 'friend'
+  meta.rated = true
   meta.player1 = player1ClientId
   meta.player2 = player2ClientId
+  meta.readyClientIds.clear()
   meta.rematchAccepted.clear()
   meta.lastMove = null
   persistRoomSnapshot(roomId)
@@ -281,6 +329,47 @@ function pruneInactiveRoomRoles(roomId: string): void {
   }
 }
 
+function displayNameForClient(meta: RoomMeta, clientId: string | undefined): string | undefined {
+  return clientId ? meta.displayNames.get(clientId) : undefined
+}
+
+function isClientReady(meta: RoomMeta, clientId: string | undefined): boolean {
+  return clientId ? meta.readyClientIds.has(clientId) : false
+}
+
+function playerMeta(roomId: string): Partial<Record<CheckersPlayerRole, { displayName?: string; ready: boolean }>> {
+  const meta = metaForRoom(roomId)
+  return {
+    player1: meta.player1
+      ? { displayName: displayNameForClient(meta, meta.player1), ready: isClientReady(meta, meta.player1) }
+      : undefined,
+    player2: meta.player2 && meta.player2 !== 'bot'
+      ? { displayName: displayNameForClient(meta, meta.player2), ready: isClientReady(meta, meta.player2) }
+      : meta.player2 === 'bot'
+        ? { displayName: 'Bot', ready: true }
+        : undefined,
+  }
+}
+
+function privateFriendRoomReady(meta: RoomMeta): boolean {
+  if (meta.mode !== 'friend' || meta.rated) {
+    return true
+  }
+  return Boolean(meta.player1 && meta.player2 && meta.readyClientIds.has(meta.player1) && meta.readyClientIds.has(meta.player2))
+}
+
+function setClientDisplayName(roomId: string, clientId: string | null, displayName: string | undefined): void {
+  if (!clientId) {
+    return
+  }
+  const meta = metaForRoom(roomId)
+  if (displayName) {
+    meta.displayNames.set(clientId, displayName)
+  } else {
+    meta.displayNames.delete(clientId)
+  }
+}
+
 function assignRole(roomId: string, clientId: string): CheckersRole {
   const meta = metaForRoom(roomId)
   pruneInactiveRoomRoles(roomId)
@@ -307,6 +396,9 @@ function canSocketMove(ws: WebSocket, roomId: string): boolean {
   const turn = getCheckersState(roomId).turn
   if (meta.mode === 'bot') {
     return role === 'player1' && turn === 'player1'
+  }
+  if (meta.mode === 'friend' && !privateFriendRoomReady(meta)) {
+    return false
   }
   return role === turn
 }
@@ -378,6 +470,8 @@ function sendState(ws: WebSocket, roomId: string): void {
       state: getCheckersState(roomId),
       myRole: role,
       mode: meta.mode,
+      rated: meta.rated,
+      players: playerMeta(roomId),
       rematch: {
         requestedByMe: clientId ? meta.rematchAccepted.has(clientId) : false,
         requestedByOpponent: opponentClientId ? meta.rematchAccepted.has(opponentClientId) : false,
@@ -395,6 +489,8 @@ function broadcastUpdate(roomId: string): void {
       state: getCheckersState(roomId),
       myRole: roleForClient(roomId, clientBySocket.get(ws) ?? null),
       mode: metaForRoom(roomId).mode,
+      rated: metaForRoom(roomId).rated,
+      players: playerMeta(roomId),
       rematch: (() => {
         const clientId = clientBySocket.get(ws) ?? null
         const meta = metaForRoom(roomId)
@@ -488,6 +584,8 @@ function scheduleBotMove(roomId: string): void {
 function setRoomMode(roomId: string, mode: CheckersMode, clientId: string | null): void {
   const meta = metaForRoom(roomId)
   meta.mode = mode
+  meta.rated = false
+  meta.readyClientIds.clear()
   meta.rematchAccepted.clear()
   meta.lastMove = null
   if (mode === 'bot') {
@@ -545,6 +643,7 @@ export function attachCheckersSocketServer(wss: WebSocketServer): void {
           if (msg.botDifficulty) {
             metaForRoom(msg.roomId).botDifficulty = msg.botDifficulty
           }
+          setClientDisplayName(msg.roomId, msg.clientId, msg.displayName)
           registerClient(roomId, ws)
           assignRole(roomId, msg.clientId)
           persistRoomSnapshot(roomId)
@@ -584,6 +683,30 @@ export function attachCheckersSocketServer(wss: WebSocketServer): void {
         setRoomMode(targetRoomId, msg.mode, clientBySocket.get(ws) ?? null)
         broadcastUpdate(targetRoomId)
         scheduleBotMove(targetRoomId)
+        return
+      }
+
+      if (msg.type === CheckersWs.identity) {
+        setClientDisplayName(targetRoomId, clientBySocket.get(ws) ?? null, msg.displayName)
+        persistRoomSnapshot(targetRoomId)
+        broadcastUpdate(targetRoomId)
+        return
+      }
+
+      if (msg.type === CheckersWs.ready) {
+        const meta = metaForRoom(targetRoomId)
+        const clientId = clientBySocket.get(ws) ?? null
+        const role = roleForClient(targetRoomId, clientId)
+        if (meta.mode !== 'friend' || meta.rated || !clientId || (role !== 'player1' && role !== 'player2')) {
+          return
+        }
+        if (msg.ready) {
+          meta.readyClientIds.add(clientId)
+        } else {
+          meta.readyClientIds.delete(clientId)
+        }
+        persistRoomSnapshot(targetRoomId)
+        broadcastUpdate(targetRoomId)
         return
       }
 

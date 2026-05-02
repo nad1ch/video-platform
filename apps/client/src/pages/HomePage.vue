@@ -52,7 +52,7 @@ const defaultNadleStreamer =
 
 const callRoute = { name: 'call' } satisfies RouteLocationRaw
 const mafiaRoute = { name: 'mafia' } satisfies RouteLocationRaw
-const checkersRoute = { name: 'checkers', params: { roomId: 'lobby' } } satisfies RouteLocationRaw
+const checkersRoute = { name: 'checkers', params: { roomId: 'lobby' }, query: { defaultMode: 'rated' } } satisfies RouteLocationRaw
 const economyComingSoonRoute = { name: 'home', query: { comingSoon: 'economy' } } satisfies RouteLocationRaw
 
 const nadleRoute = computed<RouteLocationRaw>(() => ({

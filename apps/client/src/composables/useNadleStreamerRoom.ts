@@ -26,23 +26,31 @@ export function useNadleStreamerRoom(options: {
   const nadlePublicConfig = shallowRef<NadlePublicConfigPayload | null>(null)
   const streamerProfile = shallowRef<NadleStreamerCard | null>(null)
   const streamerLoadError = ref<string | null>(null)
+  let streamerLoadSeq = 0
 
   async function loadStreamerCard(): Promise<void> {
+    const seq = ++streamerLoadSeq
     streamerLoadError.value = null
     const slug = effectiveNadleSlug.value
+    streamerProfile.value = null
     if (!slug) {
-      streamerProfile.value = null
       streamerLoadError.value = 'Invalid streamer'
       return
     }
     try {
       const res = await fetch(apiUrl(`/api/streamer/${encodeURIComponent(slug)}`))
+      if (seq !== streamerLoadSeq || effectiveNadleSlug.value !== slug) {
+        return
+      }
       if (!res.ok) {
         streamerProfile.value = null
         streamerLoadError.value = res.status === 404 ? 'Streamer not found' : 'Failed to load streamer'
         return
       }
       const card = await readJsonIfOk<NadleStreamerCard>(res)
+      if (seq !== streamerLoadSeq || effectiveNadleSlug.value !== slug) {
+        return
+      }
       if (!card) {
         streamerProfile.value = null
         streamerLoadError.value = 'Network error'
@@ -51,6 +59,9 @@ export function useNadleStreamerRoom(options: {
       streamerProfile.value = card
       streamerLoadError.value = null
     } catch {
+      if (seq !== streamerLoadSeq || effectiveNadleSlug.value !== slug) {
+        return
+      }
       streamerProfile.value = null
       streamerLoadError.value = 'Network error'
     }

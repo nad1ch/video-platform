@@ -151,7 +151,8 @@ defineExpose({ scrollToBottom })
   min-width: 0;
   min-height: 0;
   height: 100%;
-  padding: 17px 10px 11px 23px;
+  /* Symmetric horizontal padding (was 23px left / 10px right). */
+  padding: 17px 14px 11px;
   box-sizing: border-box;
 }
 
@@ -162,6 +163,8 @@ defineExpose({ scrollToBottom })
   max-height: 100%;
   min-height: 0;
   overflow: hidden;
+  /* Tighter stack so the feed sits just under the header (no %-based absolute offset). */
+  gap: 6px;
 }
 
 .twitch-relay-chat__shell--flex-rail .twitch-relay-chat__feed {
@@ -504,27 +507,10 @@ defineExpose({ scrollToBottom })
     height: 100%;
   }
 
-  .twitch-relay-chat__shell--flex-rail .twitch-relay-chat__head {
-    position: relative;
-    z-index: 1;
-  }
-
   .twitch-relay-chat__feed {
     flex: 1 1 0;
     min-height: min(12rem, 42dvh);
     overflow-y: auto;
-  }
-
-  .twitch-relay-chat__shell--flex-rail .twitch-relay-chat__feed {
-    position: absolute;
-    left: 50%;
-    top: 17%;
-    bottom: 11px;
-    width: calc(100% - 20px);
-    transform: translateX(-50%);
-    flex: none;
-    min-height: 0;
-    max-height: none;
   }
 }
 </style>

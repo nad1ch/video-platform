@@ -49,6 +49,7 @@ export function useNadleWs(options: {
   const ircRelayStatus = ref<NadleIrcRelayState>('idle')
 
   let ws: WebSocket | null = null
+  let wsTargetStreamerId: string | null = null
   let nadleWsDisposed = false
   let nadleWsReconnectTimer: ReturnType<typeof setTimeout> | null = null
   /** Resets on successful `open`; incremented when scheduling reconnect after close. */
@@ -102,6 +103,22 @@ export function useNadleWs(options: {
     }, delay)
   }
 
+  function silentCloseNadleWs(): void {
+    clearNadleWsReconnect()
+    const s = ws
+    if (!s) {
+      wsTargetStreamerId = null
+      return
+    }
+    s.onopen = null
+    s.onmessage = null
+    s.onerror = null
+    s.onclose = null
+    s.close()
+    ws = null
+    wsTargetStreamerId = null
+  }
+
   function nadleWsUrl(streamerId: string): string {
     const env = import.meta.env.VITE_NADLE_WS_URL as string | undefined
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -130,23 +147,20 @@ export function useNadleWs(options: {
     if (!streamerId || nadleWsDisposed) {
       return
     }
-    clearNadleWsReconnect()
-    const prev = ws
-    if (prev) {
-      prev.onopen = null
-      prev.onmessage = null
-      prev.onerror = null
-      prev.onclose = null
-      prev.close()
-      ws = null
+    if (ws && wsTargetStreamerId === streamerId) {
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        return
+      }
     }
+    silentCloseNadleWs()
     wsStatus.value = 'idle'
     const url = nadleWsUrl(streamerId)
     const socket = new WebSocket(url)
     ws = socket
+    wsTargetStreamerId = streamerId
 
     socket.onopen = () => {
-      if (ws !== socket) {
+      if (nadleWsDisposed || ws !== socket) {
         return
       }
       nadleWsReconnectAttempt = 0
@@ -155,23 +169,27 @@ export function useNadleWs(options: {
     }
 
     socket.onclose = () => {
+      if (nadleWsDisposed || ws !== socket) {
+        return
+      }
       log.info('closed')
-      if (ws === socket) {
-        ws = null
-        wsStatus.value = 'closed'
-      }
-      if (!nadleWsDisposed) {
-        scheduleNadleWsReconnect()
-      }
+      ws = null
+      wsTargetStreamerId = null
+      wsStatus.value = 'closed'
+      scheduleNadleWsReconnect()
     }
 
     socket.onerror = () => {
-      if (ws === socket) {
-        wsStatus.value = 'error'
+      if (nadleWsDisposed || ws !== socket) {
+        return
       }
+      wsStatus.value = 'error'
     }
 
     socket.onmessage = (ev) => {
+      if (nadleWsDisposed || ws !== socket) {
+        return
+      }
       let data: { type?: string; payload?: unknown }
       try {
         data = JSON.parse(String(ev.data))
@@ -225,21 +243,25 @@ export function useNadleWs(options: {
   }
 
   watch(
-    () => streamerProfile.value?.id,
-    (id, prev) => {
-      if (prev !== undefined && id !== prev) {
+    [() => streamerProfile.value?.id ?? null, isAuthenticated],
+    ([id, auth], oldValue) => {
+      const prevId = Array.isArray(oldValue) ? oldValue[0] : undefined
+      if (!auth) {
+        sessionUser.value = null
+      }
+      if (prevId !== undefined && id !== prevId) {
         chatLines.value = []
         ircRelayStatus.value = 'idle'
       }
+      if (!id) {
+        silentCloseNadleWs()
+        wsStatus.value = 'idle'
+        return
+      }
+      connectWs()
     },
+    { immediate: true },
   )
-
-  watch(isAuthenticated, (auth) => {
-    if (!auth) {
-      sessionUser.value = null
-    }
-    connectWs()
-  })
 
   function prepareNadleWsMount(): void {
     nadleWsDisposed = false
@@ -248,16 +270,8 @@ export function useNadleWs(options: {
 
   function disposeNadleWs(): void {
     nadleWsDisposed = true
-    clearNadleWsReconnect()
-    const s = ws
-    if (s) {
-      s.onopen = null
-      s.onmessage = null
-      s.onerror = null
-      s.onclose = null
-      s.close()
-    }
-    ws = null
+    silentCloseNadleWs()
+    wsStatus.value = 'idle'
   }
 
   return {

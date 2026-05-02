@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { CheckersPlayer } from '../core/types'
 import type { CheckersMode } from '../ws/checkersWs'
 
@@ -9,6 +10,7 @@ const props = defineProps<{
   winner: EndGameWinner | null
   mode: CheckersMode
   isVisible: boolean
+  playerLabels: Record<'player1' | 'player2', string>
 }>()
 
 const emit = defineEmits<{
@@ -18,11 +20,28 @@ const emit = defineEmits<{
   playLocal: []
 }>()
 
+const { locale } = useI18n()
+const isUk = computed(() => String(locale.value || '').toLowerCase().startsWith('uk'))
+
+const ui = computed(() => {
+  const uk = isUk.value
+  return {
+    youWin: uk ? 'Ти переміг' : 'You win',
+    youLose: uk ? 'Ти програв' : 'You lose',
+    wins: (name: string) => (uk ? `${name} переміг` : `${name} wins`),
+    rematch: uk ? 'Реванш' : 'Rematch',
+    playBot: uk ? 'Проти бота' : 'Play vs bot',
+    playFriend: uk ? 'З другом' : 'Play with friend',
+    playLocal: uk ? 'На одному пристрої' : 'Same device',
+  }
+})
+
 const title = computed(() => {
-  if (props.winner === 'you') return 'You win'
-  if (props.winner === 'opponent') return 'You lose'
-  if (props.winner === 'player1') return 'Player 1 wins'
-  if (props.winner === 'player2') return 'Player 2 wins'
+  const copy = ui.value
+  if (props.winner === 'you') return copy.youWin
+  if (props.winner === 'opponent') return copy.youLose
+  if (props.winner === 'player1') return copy.wins(props.playerLabels.player1)
+  if (props.winner === 'player2') return copy.wins(props.playerLabels.player2)
   return ''
 })
 </script>
@@ -46,7 +65,7 @@ const title = computed(() => {
         <slot />
         <div class="checkers-end-game-actions">
           <button type="button" class="checkers-end-game-button checkers-end-game-button--primary" @click="emit('rematch')">
-            Rematch
+            {{ ui.rematch }}
           </button>
           <button
             type="button"
@@ -54,7 +73,7 @@ const title = computed(() => {
             :class="{ 'checkers-end-game-button--active': mode === 'bot' }"
             @click="emit('playBot')"
           >
-            Play vs bot
+            {{ ui.playBot }}
           </button>
           <button
             type="button"
@@ -62,7 +81,7 @@ const title = computed(() => {
             :class="{ 'checkers-end-game-button--active': mode === 'friend' }"
             @click="emit('playFriend')"
           >
-            Play with friend
+            {{ ui.playFriend }}
           </button>
           <button
             type="button"
@@ -70,7 +89,7 @@ const title = computed(() => {
             :class="{ 'checkers-end-game-button--active': mode === 'local' }"
             @click="emit('playLocal')"
           >
-            2 players local
+            {{ ui.playLocal }}
           </button>
         </div>
       </div>

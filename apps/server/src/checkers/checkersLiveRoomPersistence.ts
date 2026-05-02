@@ -8,6 +8,9 @@ export type PersistedCheckersRoomMeta = {
   mode: 'friend' | 'bot' | 'local'
   player1?: string
   player2?: string
+  rated?: boolean
+  readyClientIds?: string[]
+  displayNames?: Record<string, string>
   rematchAccepted: string[]
   lastMove: { from: { row: number; col: number }; to: { row: number; col: number } } | null
   botDifficulty: CheckersBotDifficulty
@@ -46,6 +49,9 @@ export function parseCheckersLiveRoomSnapshot(value: unknown): PersistedCheckers
     mode?: unknown
     player1?: unknown
     player2?: unknown
+    rated?: unknown
+    readyClientIds?: unknown
+    displayNames?: unknown
     rematchAccepted?: unknown
     lastMove?: unknown
     botDifficulty?: unknown
@@ -59,6 +65,18 @@ export function parseCheckersLiveRoomSnapshot(value: unknown): PersistedCheckers
       mode: meta.mode,
       player1: typeof meta.player1 === 'string' ? meta.player1 : undefined,
       player2: typeof meta.player2 === 'string' ? meta.player2 : undefined,
+      rated: meta.rated === true,
+      readyClientIds: Array.isArray(meta.readyClientIds)
+        ? meta.readyClientIds.filter((id): id is string => typeof id === 'string')
+        : [],
+      displayNames:
+        meta.displayNames && typeof meta.displayNames === 'object' && !Array.isArray(meta.displayNames)
+          ? Object.fromEntries(
+              Object.entries(meta.displayNames).filter(
+                (entry): entry is [string, string] => typeof entry[1] === 'string',
+              ),
+            )
+          : {},
       rematchAccepted: Array.isArray(meta.rematchAccepted)
         ? meta.rematchAccepted.filter((id): id is string => typeof id === 'string')
         : [],

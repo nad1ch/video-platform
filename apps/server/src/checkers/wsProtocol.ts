@@ -7,6 +7,10 @@ export const CheckersWs = {
   restart: 'checkers:restart',
   /** Client -> server: choose room interaction mode. */
   setMode: 'checkers:set-mode',
+  /** Client -> server: mark this player ready/unready for private friend rooms. */
+  ready: 'checkers:ready',
+  /** Client -> server: update display-only player identity metadata. */
+  identity: 'checkers:identity',
   /** Client -> server: current player ran out of time. */
   timeout: 'checkers:timeout',
   /** Client -> server: request a rematch in the same room. */

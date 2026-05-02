@@ -109,8 +109,8 @@ const authRouteLogin = { path: '/auth', query: { redirect: '/app', mode: 'login'
 const callRoute = { name: 'call' } as const
 const economyComingSoonRoute = { name: 'home', query: { comingSoon: 'economy' } } satisfies RouteLocationRaw
 const mafiaRoute = { name: 'mafia' } satisfies RouteLocationRaw
-const checkersRoute = { name: 'checkers', params: { roomId: 'lobby' } } satisfies RouteLocationRaw
-const landingFeedbackHref = 'mailto:feedback@streamassist.net?subject=StreamAssist%20feedback'
+const checkersRoute = { name: 'checkers', params: { roomId: 'lobby' }, query: { defaultMode: 'rated' } } satisfies RouteLocationRaw
+const landingFeedbackHref = 'https://docs.google.com/forms/d/e/1FAIpQLSdlLcJTCl7VIufeRmeZHsMD2h08kwwCkHZVMmQBNuN2Z3930Q/viewform?usp=header'
 const landingPageLoading = ref(true)
 const landingCanvasElement = ref<HTMLElement | null>(null)
 

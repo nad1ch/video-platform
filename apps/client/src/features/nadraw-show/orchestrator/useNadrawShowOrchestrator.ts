@@ -3,7 +3,7 @@ import { apiUrl } from '@/utils/apiUrl'
 import { readJsonIfOk } from '@/utils/apiFetch'
 import {
   computed,
-  onUnmounted,
+  onBeforeUnmount,
   ref,
   shallowRef,
   watch,
@@ -296,6 +296,9 @@ export function useNadrawShowOrchestrator(options: {
     reconnectAttempt += 1
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null
+      if (disposed) {
+        return
+      }
       connectWs(true)
     }, delay)
   }
@@ -361,7 +364,7 @@ export function useNadrawShowOrchestrator(options: {
     wsStatus.value = 'reconnecting'
 
     s.onopen = () => {
-      if (disposed) {
+      if (disposed || ws !== s) {
         return
       }
       reconnectAttempt = 0
@@ -371,7 +374,7 @@ export function useNadrawShowOrchestrator(options: {
     }
 
     s.onmessage = (ev) => {
-      if (disposed) {
+      if (disposed || ws !== s) {
         return
       }
       let data: unknown
@@ -427,7 +430,7 @@ export function useNadrawShowOrchestrator(options: {
     }
 
     s.onerror = () => {
-      if (disposed) {
+      if (disposed || ws !== s) {
         return
       }
       if (!loggedWsErrorThisSocket) {
@@ -668,7 +671,7 @@ export function useNadrawShowOrchestrator(options: {
     }
   })
 
-  onUnmounted(() => {
+  onBeforeUnmount(() => {
     disposeWs()
   })
 

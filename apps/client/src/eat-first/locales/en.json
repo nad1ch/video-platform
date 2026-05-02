@@ -417,6 +417,7 @@
     "scoreStreak": "Best streak",
     "selfBestStreak": "Your best streak: {n}",
     "scoreRating": "Rating",
+    "scoreRatingCheckers": "Rating (Elo)",
     "colRank": "Rank",
     "colPlayer": "Player",
     "empty": "No entries yet.",

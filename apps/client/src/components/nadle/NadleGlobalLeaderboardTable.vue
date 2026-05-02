@@ -111,8 +111,8 @@ defineProps<{
                     class="nadle-page__glb-avatar"
                     :src="row.avatarUrl"
                     alt=""
-                    width="28"
-                    height="28"
+                    width="26"
+                    height="26"
                     referrerpolicy="no-referrer"
                   />
                   <span v-else class="nadle-page__glb-avatar nadle-page__glb-avatar--ph" aria-hidden="true">{{
@@ -407,18 +407,18 @@ defineProps<{
   min-width: 0;
   table-layout: fixed;
   border-collapse: separate;
-  border-spacing: 0 4px;
-  font-size: 10px;
+  border-spacing: 0 7px;
+  font-size: 12px;
 }
 
 .nadle-page__glb-th {
   text-align: left;
-  padding: 0 6px 2px;
+  padding: 0 8px 6px;
   border-bottom: 0;
   color: rgba(255, 255, 255, 0.86);
   font-family: "Marmelad", var(--sa-font-main);
   font-weight: 400;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: none;
   letter-spacing: 0;
   line-height: 1.2;
@@ -431,7 +431,7 @@ defineProps<{
 }
 
 .nadle-page__glb-th--rank {
-  width: 38px;
+  width: 42px;
   min-width: 0;
   text-align: center;
 }
@@ -442,14 +442,14 @@ defineProps<{
 }
 
 .nadle-page__glb-th--score {
-  width: 48px;
+  width: 54px;
   min-width: 0;
   text-align: right;
 }
 
 .nadle-page__glb-td {
-  height: 27px;
-  padding: 0 6px;
+  min-height: 38px;
+  padding: 6px 8px;
   border-bottom: 0;
   background: rgba(102, 56, 143, 0.11);
   vertical-align: middle;
@@ -466,7 +466,7 @@ defineProps<{
   text-align: center;
   font-variant-numeric: tabular-nums;
   font-family: "Coda Caption", var(--sa-font-mono);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
   color: #ffffff;
 }
@@ -479,7 +479,7 @@ defineProps<{
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-family: "Coda Caption", var(--sa-font-mono);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
   color: #ffd455;
 }
@@ -512,13 +512,13 @@ defineProps<{
 .nadle-page__glb-player {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.5rem;
   min-width: 0;
 }
 
 .nadle-page__glb-avatar {
-  width: 18px;
-  height: 18px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
@@ -531,7 +531,7 @@ defineProps<{
   justify-content: center;
   background: #d9d9d9;
   color: #2b1a3d;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -540,7 +540,7 @@ defineProps<{
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: "Marmelad", var(--sa-font-main);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 400;
   color: #ffffff;
   min-width: 0;
@@ -548,11 +548,11 @@ defineProps<{
 
 .nadle-page__glb-you {
   flex-shrink: 0;
-  font-size: 0.58rem;
+  font-size: 0.68rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 0.08rem 0.3rem;
+  padding: 0.12rem 0.38rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--sa-color-primary) 35%, transparent);
   color: var(--sa-color-text-strong);
@@ -581,6 +581,34 @@ defineProps<{
   .nadle-page__glb-tab {
     font-size: 9px;
     padding-inline: 0.2rem;
+  }
+
+  .nadle-page__glb-table {
+    border-spacing: 0 6px;
+  }
+
+  .nadle-page__glb-td {
+    min-height: 34px;
+    padding: 5px 6px;
+  }
+
+  .nadle-page__glb-th {
+    padding: 0 6px 4px;
+    font-size: 10px;
+  }
+
+  .nadle-page__glb-td--rank,
+  .nadle-page__glb-td--score {
+    font-size: 13px;
+  }
+
+  .nadle-page__glb-avatar {
+    width: 22px;
+    height: 22px;
+  }
+
+  .nadle-page__glb-name {
+    font-size: 11px;
   }
 }
 </style>

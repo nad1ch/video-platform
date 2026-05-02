@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch, type Ref } from 'vue'
+import { computed, onUnmounted, ref, shallowRef, watch, type Ref } from 'vue'
 import {
   createInitialCheckersState,
   getLegalMoves,
@@ -6,13 +6,24 @@ import {
   isSameCheckersPosition,
 } from '../core/checkersEngine'
 import type { CheckersMove, CheckersPosition, CheckersState } from '../core/types'
-import { createCheckersWsClient, type CheckersBotDifficulty, type CheckersMode, type CheckersRole } from '../ws/checkersWs'
+import {
+  createCheckersWsClient,
+  type CheckersBotDifficulty,
+  type CheckersMode,
+  type CheckersPlayerMeta,
+  type CheckersRole,
+} from '../ws/checkersWs'
 
 function cleanRoomId(roomId: string): string {
   return roomId.trim().slice(0, 80)
 }
 
-export function useCheckersOrchestrator(options: { roomId: Ref<string>; botDifficulty?: Ref<CheckersBotDifficulty> }) {
+export function useCheckersOrchestrator(options: {
+  roomId: Ref<string>
+  botDifficulty?: Ref<CheckersBotDifficulty>
+  displayName?: Ref<string>
+  canJoin?: Ref<boolean>
+}) {
   const roomId = computed(() => cleanRoomId(options.roomId.value))
   const initialState = createInitialCheckersState()
   const state = shallowRef<CheckersState | null>(null)
@@ -21,6 +32,11 @@ export function useCheckersOrchestrator(options: { roomId: Ref<string>; botDiffi
   const movePending = ref(false)
   const myRole = ref<CheckersRole>('spectator')
   const mode = ref<CheckersMode>('bot')
+  /** After roomId / canJoin changes, false until first WS `state` for this room (avoids bot-mode UI flicker). */
+  const serverModeSynced = ref(false)
+  const isRatedMatch = ref(false)
+  const players = ref<Partial<Record<'player1' | 'player2', CheckersPlayerMeta>>>({})
+  const readyPending = ref(false)
   const rematchRequestedByMe = ref(false)
   const rematchRequestedByOpponent = ref(false)
   const lastMove = ref<Pick<CheckersMove, 'from' | 'to'> | null>(null)
@@ -36,6 +52,10 @@ export function useCheckersOrchestrator(options: { roomId: Ref<string>; botDiffi
       state.value = payload.state
       myRole.value = payload.myRole
       mode.value = payload.mode
+      serverModeSynced.value = true
+      isRatedMatch.value = payload.rated === true
+      players.value = payload.players ?? {}
+      readyPending.value = false
       rematchRequestedByMe.value = Boolean(payload.rematch?.requestedByMe)
       rematchRequestedByOpponent.value = Boolean(payload.rematch?.requestedByOpponent)
       lastMove.value = payload.lastMove ?? null
@@ -52,6 +72,7 @@ export function useCheckersOrchestrator(options: { roomId: Ref<string>; botDiffi
       movePending.value = false
     },
     getBotDifficulty: () => options.botDifficulty?.value ?? 'medium',
+    getDisplayName: () => options.displayName?.value ?? '',
   })
 
   const legalMoves = computed<CheckersMove[]>(() => {
@@ -80,7 +101,7 @@ export function useCheckersOrchestrator(options: { roomId: Ref<string>; botDiffi
   })
 
   function connect(): void {
-    if (!roomId.value) {
+    if (!roomId.value || options.canJoin?.value === false) {
       return
     }
     ws.connect(roomId.value)
@@ -156,7 +177,21 @@ export function useCheckersOrchestrator(options: { roomId: Ref<string>; botDiffi
   function setMode(nextMode: CheckersMode): void {
     selected.value = null
     movePending.value = false
+    readyPending.value = false
     ws.setMode(nextMode)
+  }
+
+  function setReady(ready: boolean): void {
+    if (readyPending.value) {
+      return
+    }
+    if (ws.setReady(ready)) {
+      readyPending.value = true
+    }
+  }
+
+  function updateDisplayName(displayName: string): void {
+    ws.setIdentity(displayName)
   }
 
   function timeoutTurn(): void {
@@ -169,20 +204,30 @@ export function useCheckersOrchestrator(options: { roomId: Ref<string>; botDiffi
     ws.timeoutTurn(current.revision)
   }
 
-  watch(roomId, () => {
+  watch([roomId, () => options.canJoin?.value ?? true], () => {
+    serverModeSynced.value = false
     state.value = null
     selected.value = null
     lastError.value = null
     movePending.value = false
     myRole.value = 'spectator'
     mode.value = 'bot'
+    isRatedMatch.value = false
+    players.value = {}
+    readyPending.value = false
     rematchRequestedByMe.value = false
     rematchRequestedByOpponent.value = false
     lastMove.value = null
     connect()
-  })
+  }, { immediate: true })
 
-  onMounted(connect)
+  watch(
+    () => options.displayName?.value ?? '',
+    (displayName) => {
+      updateDisplayName(displayName)
+    },
+  )
+
   onUnmounted(dispose)
 
   return {
@@ -199,6 +244,10 @@ export function useCheckersOrchestrator(options: { roomId: Ref<string>; botDiffi
     movePending,
     myRole,
     mode,
+    serverModeSynced,
+    isRatedMatch,
+    players,
+    readyPending,
     rematchRequestedByMe,
     rematchRequestedByOpponent,
     lastMove,
@@ -207,6 +256,8 @@ export function useCheckersOrchestrator(options: { roomId: Ref<string>; botDiffi
     restartGame,
     requestRematch,
     setMode,
+    setReady,
+    updateDisplayName,
     timeoutTurn,
     isSelected,
     isValidDestination,

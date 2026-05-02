@@ -312,8 +312,12 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
 .app-landing-header__inner {
   width: 100%;
-  padding: 0.6rem clamp(1.35rem, 1.6vw, 1.55rem) 0;
   box-sizing: border-box;
+  padding-top: 0.6rem;
+  padding-bottom: 0;
+  padding-left: clamp(1.35rem, 1.6vw, 1.55rem);
+  /* Outer inset: mirror left chrome + 4px; inner bar uses its own 4px right padding. */
+  padding-right: calc(clamp(1.35rem, 1.6vw, 1.55rem) + 4px);
   transition: padding 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -326,7 +330,10 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   gap: 1rem;
   min-height: 4.5rem;
   overflow: visible;
-  padding: 0 1.1rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: calc(1.1rem - 5px);
+  padding-right: 4px;
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 999px;
   background: rgba(18, 8, 34, 0.015);
@@ -918,13 +925,19 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
 @media (max-width: 1200px) {
   .app-landing-header__inner {
-    padding: 0.45rem clamp(0.8rem, 2vw, 1.25rem) 0;
+    padding-top: 0.45rem;
+    padding-bottom: 0;
+    padding-left: clamp(0.8rem, 2vw, 1.25rem);
+    padding-right: calc(clamp(0.8rem, 2vw, 1.25rem) + 4px);
   }
 
   .app-landing-header__bar {
     gap: 0.85rem;
     min-height: 4.4rem;
-    padding: 0 1rem;
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: calc(1rem - 5px);
+    padding-right: 4px;
   }
 
   .app-landing-header--compact .app-landing-header__bar {
@@ -996,14 +1009,18 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
 @media (max-width: 640px) {
   .app-landing-header__inner {
-    padding-inline: 0.65rem;
+    padding-left: 0.65rem;
+    padding-right: calc(0.65rem + 4px);
   }
 
   .app-landing-header__bar {
     grid-template-columns: auto minmax(0, 1fr);
     gap: 0.4rem;
     min-height: 3.5rem;
-    padding: 0.45rem 0.55rem;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+    padding-left: calc(0.55rem - 5px);
+    padding-right: 4px;
     border-radius: 999px;
   }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import AppContainer from '@/components/ui/AppContainer.vue'
@@ -120,7 +120,6 @@ const {
   sessionUser,
   wsStatus,
   ircRelayStatus,
-  connectWs,
   sendGuess: sendNadleWsGuess,
   requestNextWord: requestNadleNextWord,
   prepareNadleWsMount,
@@ -355,13 +354,18 @@ function activeKbdKeyFeedbackModifier(ch: string): string | undefined {
   return fb ? `nadle-page__kbd-key--${fb}` : undefined
 }
 
+let nadleStreamerLoadSeq = 0
+
 watch(
   () => effectiveNadleSlug.value || 'default',
   async (scope) => {
+    const seq = ++nadleStreamerLoadSeq
     hydrateScope(scope)
     await loadStreamerCard()
+    if (seq !== nadleStreamerLoadSeq) {
+      return
+    }
     void fetchNadlePublicConfig()
-    connectWs()
   },
   { immediate: true },
 )
@@ -503,7 +507,7 @@ onMounted(() => {
   window.addEventListener('keydown', onWindowKeydown)
 })
 
-onUnmounted(() => {
+onBeforeUnmount(() => {
   disposeNadleWs()
   document.documentElement.classList.remove(NADLE_ROUTE_HTML_CLASS)
   window.removeEventListener('keydown', onWindowKeydown)
@@ -2044,76 +2048,6 @@ onUnmounted(() => {
       calc((100vw - 32px - (var(--nadle-len-css, 5) - 1) * var(--nadle-gap)) / var(--nadle-len-css, 5)),
       52px
     );
-  }
-}
-
-/* Large displays: scale only typography and controls; keep layout blocks/cells unchanged. */
-@media (min-width: 1440px) {
-  .nadle-page {
-    --nadle-content-scale: clamp(1.16, 0.08vw + 1.04, 1.28);
-    font-size: clamp(1.14rem, 0.78vw, 1.42rem);
-  }
-
-  .nadle-page__leader-stack :deep(.nadle-page__global-lb-title),
-  .nadle-page__stack--chat :deep(.twitch-relay-chat__title) {
-    font-size: clamp(1.05rem, 0.82vw, 1.45rem);
-  }
-
-  .nadle-page__leader-stack :deep(.nadle-page__global-lb),
-  .nadle-page__stack--chat :deep(.twitch-relay-chat__shell),
-  .nadle-page__stack--chat :deep(.twitch-relay-chat__feed),
-  .nadle-page__side-tools,
-  .nadle-page__hint,
-  .nadle-page__channel-line {
-    font-size: clamp(0.88rem, 0.62vw, 1.12rem);
-  }
-
-  .nadle-page :deep(button),
-  .nadle-page :deep(a),
-  .nadle-page :deep(input),
-  .nadle-page :deep(select) {
-    font-size: clamp(0.98rem, 0.68vw, 1.22rem);
-  }
-
-  .nadle-page__stack--game > .nadle-page__game,
-  .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
-    transform: scale(var(--nadle-content-scale));
-    transform-origin: center;
-  }
-
-  .nadle-page__leader-stack,
-  .nadle-page__side-tools,
-  .nadle-page__stack--chat :deep(.twitch-relay-chat__shell) {
-    transform: scale(var(--nadle-content-scale));
-    transform-origin: top center;
-  }
-}
-
-@media (min-width: 2200px) {
-  .nadle-page {
-    --nadle-content-scale: clamp(1.34, 0.05vw + 1.22, 1.56);
-    font-size: clamp(1.42rem, 0.74vw, 1.96rem);
-  }
-
-  .nadle-page__leader-stack :deep(.nadle-page__global-lb-title),
-  .nadle-page__stack--chat :deep(.twitch-relay-chat__title) {
-    font-size: clamp(1.3rem, 0.7vw, 2rem);
-  }
-
-  .nadle-page__leader-stack :deep(.nadle-page__global-lb),
-  .nadle-page__stack--chat :deep(.twitch-relay-chat__shell),
-  .nadle-page__stack--chat :deep(.twitch-relay-chat__feed),
-  .nadle-page__side-tools,
-  .nadle-page__hint,
-  .nadle-page__channel-line {
-    font-size: clamp(1.02rem, 0.54vw, 1.45rem);
-  }
-
-  .nadle-page :deep(button),
-  .nadle-page :deep(a),
-  .nadle-page :deep(input),
-  .nadle-page :deep(select) {
-    font-size: clamp(1.16rem, 0.58vw, 1.56rem);
   }
 }
 </style>

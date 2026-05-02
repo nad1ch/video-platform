@@ -8,6 +8,8 @@ export const CheckersWs = {
   move: 'checkers:move',
   restart: 'checkers:restart',
   setMode: 'checkers:set-mode',
+  ready: 'checkers:ready',
+  identity: 'checkers:identity',
   timeout: 'checkers:timeout',
   rematch: 'checkers:rematch',
   state: 'checkers:state',
@@ -19,12 +21,18 @@ export type CheckersWsStatus = 'idle' | 'open' | 'reconnecting' | 'error'
 export type CheckersMode = 'friend' | 'bot' | 'local'
 export type CheckersRole = 'player1' | 'player2' | 'spectator'
 export type CheckersBotDifficulty = 'easy' | 'medium' | 'hard'
+export type CheckersPlayerMeta = {
+  displayName?: string
+  ready?: boolean
+}
 
 export type CheckersStateMessagePayload = {
   roomId: string
   state: CheckersState
   myRole: CheckersRole
   mode: CheckersMode
+  rated?: boolean
+  players?: Partial<Record<Exclude<CheckersRole, 'spectator'>, CheckersPlayerMeta>>
   rematch?: {
     requestedByMe?: boolean
     requestedByOpponent?: boolean
@@ -36,6 +44,7 @@ type CheckersWsClientOptions = {
   onState: (payload: CheckersStateMessagePayload) => void
   onError: (message: string) => void
   getBotDifficulty?: () => CheckersBotDifficulty
+  getDisplayName?: () => string
 }
 
 function randomPeerId(): string {
@@ -96,6 +105,8 @@ export function createCheckersWsClient(options: CheckersWsClientOptions): {
   sendMove: (move: Pick<CheckersMove, 'from' | 'to'>, revision: number) => void
   restart: () => void
   setMode: (mode: CheckersMode) => void
+  setReady: (ready: boolean) => boolean
+  setIdentity: (displayName: string) => boolean
   timeoutTurn: (revision: number) => void
   requestRematch: () => void
   dispose: () => void
@@ -179,7 +190,13 @@ export function createCheckersWsClient(options: CheckersWsClientOptions): {
       reconnectAttempt = 0
       status.value = 'open'
       lastServerPingAt.value = Date.now()
-      socket.send(JSON.stringify({ type: CheckersWs.join, roomId, clientId, botDifficulty: options.getBotDifficulty?.() }))
+      socket.send(JSON.stringify({
+        type: CheckersWs.join,
+        roomId,
+        clientId,
+        displayName: options.getDisplayName?.(),
+        botDifficulty: options.getBotDifficulty?.(),
+      }))
     }
 
     socket.onmessage = (event) => {
@@ -256,6 +273,22 @@ export function createCheckersWsClient(options: CheckersWsClientOptions): {
     ws.send(JSON.stringify({ type: CheckersWs.setMode, roomId: activeRoomId, mode }))
   }
 
+  function setReady(ready: boolean): boolean {
+    if (!ws || ws.readyState !== WebSocket.OPEN || !activeRoomId) {
+      return false
+    }
+    ws.send(JSON.stringify({ type: CheckersWs.ready, roomId: activeRoomId, ready }))
+    return true
+  }
+
+  function setIdentity(displayName: string): boolean {
+    if (!ws || ws.readyState !== WebSocket.OPEN || !activeRoomId) {
+      return false
+    }
+    ws.send(JSON.stringify({ type: CheckersWs.identity, roomId: activeRoomId, displayName }))
+    return true
+  }
+
   function timeoutTurn(revision: number): void {
     if (!ws || ws.readyState !== WebSocket.OPEN || !activeRoomId) {
       return
@@ -279,5 +312,5 @@ export function createCheckersWsClient(options: CheckersWsClientOptions): {
     lastServerPingAt.value = null
   }
 
-  return { status, lastServerPingAt, connect, sendMove, restart, setMode, timeoutTurn, requestRematch, dispose }
+  return { status, lastServerPingAt, connect, sendMove, restart, setMode, setReady, setIdentity, timeoutTurn, requestRematch, dispose }
 }

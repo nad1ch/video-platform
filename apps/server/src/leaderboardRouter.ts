@@ -360,6 +360,85 @@ async function checkersRatingLeaderboard(): Promise<
     .map((row, index) => ({ ...row, rank: index + 1 }))
 }
 
+async function checkersWinsLeaderboard(): Promise<
+  Array<{ rank: number; userId: string; displayName: string; avatarUrl: string | null; wins: number }>
+> {
+  const snapshots = await computeCheckersEloSnapshots()
+  const displayMap = await buildParticipantDisplayMap([...snapshots.keys()])
+  return [...snapshots.entries()]
+    .map(([userId, snapshot]) => ({
+      userId,
+      displayName: displayMap.get(userId)?.displayName ?? 'Player',
+      avatarUrl: displayMap.get(userId)?.avatarUrl ?? null,
+      wins: snapshot.wins,
+    }))
+    .filter((r) => r.wins > 0)
+    .sort(
+      (a, b) =>
+        b.wins - a.wins || a.userId.localeCompare(b.userId) || a.displayName.localeCompare(b.displayName),
+    )
+    .slice(0, 100)
+    .map((r, i) => ({ ...r, rank: i + 1 }))
+}
+
+async function checkersStreakLeaderboard(): Promise<
+  Array<{ rank: number; userId: string; displayName: string; avatarUrl: string | null; streak: number }>
+> {
+  const flat = await prisma.$queryRaw<Array<{ userId: string; isWinner: boolean; createdAt: Date }>>(
+    Prisma.sql`
+      SELECT gr."userId", gr."isWinner", g."createdAt" AS "createdAt"
+      FROM "GameResult" gr
+      INNER JOIN "GameRound" g ON g.id = gr."roundId"
+      WHERE g."streamerId" IS NULL
+    `,
+  )
+  const raw = flat.map((r) => ({
+    userId: r.userId,
+    isWinner: r.isWinner,
+    round: { createdAt: r.createdAt },
+  }))
+  return streakFromRows(raw)
+}
+
+/** Best consecutive-win streak for rated Checkers rounds (`GameRound.streamerId` is null). */
+async function viewerMaxWinStreakForCheckers(prismaUserId: string): Promise<number> {
+  const u = await prisma.user.findUnique({
+    where: { id: prismaUserId },
+    select: { id: true, twitchId: true },
+  })
+  if (!u) {
+    return 0
+  }
+  const uniqKeys = [
+    ...new Set(
+      [u.id, u.twitchId].filter((x): x is string => typeof x === 'string' && x.trim().length > 0),
+    ),
+  ]
+  if (uniqKeys.length === 0) {
+    return 0
+  }
+  const flat = await prisma.$queryRaw<Array<{ isWinner: boolean; createdAt: Date; roundId: string }>>(
+    Prisma.sql`
+      SELECT gr."isWinner", g."createdAt" AS "createdAt", g."id" AS "roundId"
+      FROM "GameResult" gr
+      INNER JOIN "GameRound" g ON g.id = gr."roundId"
+      WHERE g."streamerId" IS NULL
+        AND gr."userId" IN (${Prisma.join(uniqKeys)})
+    `,
+  )
+  const sorted = [...flat].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+  const seenRound = new Set<string>()
+  const merged: { isWinner: boolean }[] = []
+  for (const row of sorted) {
+    if (seenRound.has(row.roundId)) {
+      continue
+    }
+    seenRound.add(row.roundId)
+    merged.push({ isWinner: row.isWinner })
+  }
+  return maxConsecutiveWinStreakChronological(merged)
+}
+
 export function mountLeaderboardRoutes(app: Express): void {
   /**
    * Nadle results must be written by the server-side WebSocket round flow.
@@ -375,6 +454,11 @@ export function mountLeaderboardRoutes(app: Express): void {
       return
     }
     try {
+      if (req.query.game === 'checkers') {
+        const entries = await checkersWinsLeaderboard()
+        res.json({ entries })
+        return
+      }
       const scope = await resolveStreamerScopeFromQuery(req)
       if (!scope) {
         res.json({ entries: [] })
@@ -394,6 +478,15 @@ export function mountLeaderboardRoutes(app: Express): void {
       return
     }
     try {
+      if (req.query.game === 'checkers') {
+        const entries = await checkersStreakLeaderboard()
+        const session = readSessionFromCookie(req.headers.cookie)
+        const prismaUserId = session ? await resolvePrismaUserIdFromSession(session) : null
+        const viewerMaxStreak =
+          prismaUserId !== null ? await viewerMaxWinStreakForCheckers(prismaUserId) : undefined
+        res.json({ entries, ...(viewerMaxStreak !== undefined ? { viewerMaxStreak } : {}) })
+        return
+      }
       const scope = await resolveStreamerScopeFromQuery(req)
       if (!scope) {
         res.json({ entries: [] })

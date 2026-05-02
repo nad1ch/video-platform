@@ -126,19 +126,35 @@ function registerClient(streamerId: string, ws: WebSocket, isStreamer: boolean):
   clientMeta.set(ws, { streamerId, isStreamer })
 }
 
-function unregisterClient(ws: WebSocket): void {
+function unregisterClient(ws: WebSocket): { streamerId: string; isStreamer: boolean; hasStreamerClients: boolean } | null {
   const meta = clientMeta.get(ws)
   clientMeta.delete(ws)
   if (!meta) {
-    return
+    return null
   }
   const set = clientsByStreamer.get(meta.streamerId)
   if (!set) {
-    return
+    return { ...meta, hasStreamerClients: false }
   }
   set.delete(ws)
+  let hasStreamerClients = false
+  for (const client of set) {
+    if (clientMeta.get(client)?.isStreamer === true) {
+      hasStreamerClients = true
+      break
+    }
+  }
   if (set.size === 0) {
     clientsByStreamer.delete(meta.streamerId)
+  }
+  return { ...meta, hasStreamerClients }
+}
+
+function cleanupAfterClientDisconnect(ws: WebSocket): void {
+  const meta = unregisterClient(ws)
+  if (meta?.isStreamer === true && !meta.hasStreamerClients) {
+    hostClearNadrawRound(meta.streamerId)
+    broadcastNadrawCanvasClear(meta.streamerId)
   }
 }
 
@@ -580,11 +596,11 @@ export function attachNadrawShowSocketServer(wss: WebSocketServer): void {
       })
 
       ws.on('error', () => {
-        unregisterClient(ws)
+        cleanupAfterClientDisconnect(ws)
       })
 
       ws.on('close', () => {
-        unregisterClient(ws)
+        cleanupAfterClientDisconnect(ws)
       })
     })()
   })

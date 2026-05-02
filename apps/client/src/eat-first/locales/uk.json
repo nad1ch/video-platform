@@ -417,6 +417,7 @@
     "scoreStreak": "Серія",
     "selfBestStreak": "Твій рекорд серії: {n}",
     "scoreRating": "Бали",
+    "scoreRatingCheckers": "Рейтинг (Elo)",
     "colRank": "№",
     "colPlayer": "Гравець",
     "empty": "Поки що порожньо.",
