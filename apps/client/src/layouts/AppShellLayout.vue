@@ -36,6 +36,7 @@ import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
 import '@/eat-first/styles/motion.css'
 import { useCoinHubStore } from '@/stores/coinHub'
 import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
+import { useProSubscription } from '@/composables/useProSubscription'
 import type { AuthMode } from '@/types/authMode'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
 import type { BackgroundItem, MafiaBackgroundItem, MafiaEliminationBackground } from '@/utils/mafiaGameTypes'
@@ -57,6 +58,23 @@ const { t, locale } = useI18n()
 const callRoomHeaderJoin = useCallRoomHeaderJoinStore()
 const auth = useAuth()
 const { openStreamAuthModal } = useStreamAuthModal()
+// Header gold "PRO" pill — driven by the same singleton subscription state
+// the global billing notifier keeps fresh (~20s tick), so the badge appears
+// automatically when Pro is activated and disappears when admin cancels.
+const { isProActive: isProActiveSubscription, expiresAt: proExpiresAt } = useProSubscription()
+const proHeaderLinkTo = { path: '/app/billing' } as const
+const proHeaderLabel = computed(() => {
+  const iso = proExpiresAt.value
+  if (!iso) return 'StreamAssist Pro'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return 'StreamAssist Pro'
+  const formatted = d.toLocaleDateString(undefined, {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  })
+  return `StreamAssist Pro · до ${formatted}`
+})
 const coinHub = useCoinHubStore()
 const { balance: coinHubBalance } = storeToRefs(coinHub)
 const mafiaGame = useMafiaGameStore()
@@ -703,6 +721,9 @@ async function copyMafiaObsViewUrl(): Promise<void> {
         :coin-hub-to="appLandingCoinHubRoute"
         :help-label="t('onboarding.openGuide')"
         :is-authenticated="auth.isAuthenticated.value"
+        :is-pro-active="isProActiveSubscription"
+        :pro-link-to="proHeaderLinkTo"
+        :pro-label="proHeaderLabel"
         :logo-src="isMafiaRoute ? mafiaHeaderLogo : BRAND_LOGO_LIGHT_SVG"
         :mafia-mode="isMafiaRoute"
         :profile-to="appLandingProfileTo"

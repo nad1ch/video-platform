@@ -147,6 +147,12 @@ export const router = createRouter({
           component: () => import('./pages/CoinHubPage.vue'),
         },
         {
+          path: 'billing',
+          name: 'billing',
+          meta: { appTitle: 'StreamAssist Pro', footerContext: 'home', requiresAuth: true },
+          component: () => import('./pages/BillingPage.vue'),
+        },
+        {
           path: 'admin',
           meta: {
             requiresAdmin: true,
@@ -180,11 +186,16 @@ export const router = createRouter({
               name: 'admin-debug',
               component: () => import('./admin/ui/AdminDebug.vue'),
             },
+            {
+              path: 'billing',
+              name: 'admin-billing',
+              component: () => import('./admin/ui/AdminBilling.vue'),
+            },
           ],
         },
         /**
          * Short URL: `/app/:streamer` (legacy). Static segments above take precedence:
-         * `call`, `mafia`, `nadle`, `nadle/:streamer`, `nadraw-show/:streamer`, `checkers/:roomId`, `eat`, `coin-hub`, `admin` are reserved — a streamer slug matching
+         * `call`, `mafia`, `nadle`, `nadle/:streamer`, `nadraw-show/:streamer`, `checkers/:roomId`, `eat`, `coin-hub`, `billing`, `admin` are reserved — a streamer slug matching
          * those first segments cannot use this short path (e.g. `/app/call` is the Call page, not nadle for "call").
          */
         {

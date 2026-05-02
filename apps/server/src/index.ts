@@ -23,6 +23,8 @@ import { mountNadrawShowRoutes } from './nadraw-show/nadrawRouter'
 import { mountCoinHubRoutes } from './coinHub/coinHubRouter'
 import { attachCheckersSocketServer } from './checkers/checkersSocket'
 import { mountCheckersMatchmakingRoutes } from './checkers/checkersMatchmaking'
+import { mountBillingRoutes } from './billing/billingRouter'
+import { mountBillingAdminRoutes } from './billing/billingAdminRouter'
 
 async function bootstrap(): Promise<void> {
   let shuttingDown = false
@@ -134,6 +136,8 @@ async function bootstrap(): Promise<void> {
   mountNadrawShowRoutes(app)
   mountCoinHubRoutes(app)
   mountCheckersMatchmakingRoutes(app)
+  mountBillingRoutes(app)
+  mountBillingAdminRoutes(app)
 
   app.get('/health', (_req, res) => {
     res.json({

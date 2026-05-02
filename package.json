@@ -20,6 +20,7 @@
     "db:migrate:dev:raw": "npm run db:migrate:dev:raw -w server",
     "db:seed": "npm run db:seed -w server",
     "db:generate:server": "node apps/server/scripts/prisma-generate-retry.cjs",
+    "mono:accounts": "npm run mono:accounts -w server",
     "docker:mediasoup:up": "docker compose -f docker/docker-compose.yml up --build",
     "docker:mediasoup:up:turn": "docker compose -f docker/docker-compose.yml --profile turn up --build",
     "docker:mediasoup:config": "docker compose -f docker/docker-compose.yml config",

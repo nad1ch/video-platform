@@ -1,64 +1,16 @@
-import nodemailer from 'nodemailer'
+import { sendEmailIfConfigured } from '../../email/transport'
 import { renderPasswordResetEmailTemplate, renderVerifyEmailTemplate, type EmailLocale } from './emailTemplates'
 
-type SendAuthEmailInput = {
-  to: string
-  subject: string
-  text: string
-  html: string
-}
+/**
+ * Auth email senders. SMTP plumbing lives in `apps/server/src/email/transport.ts`
+ * (shared with billing). This file now only owns the auth-specific templates
+ * and the auth fail-closed policy: missing SMTP in production is a hard error
+ * (so OAuth/email registration cannot succeed without a verifiable address).
+ *
+ * Public API (`sendVerificationEmail`, `sendPasswordResetEmail`) is unchanged.
+ */
 
-function env(name: string): string {
-  const value = process.env[name]
-  return typeof value === 'string' ? value.trim() : ''
-}
-
-function smtpConfigured(): boolean {
-  return env('SMTP_HOST').length > 0 && env('SMTP_PORT').length > 0
-}
-
-function smtpSecure(): boolean {
-  const raw = env('SMTP_SECURE').toLowerCase()
-  return raw === '1' || raw === 'true' || raw === 'yes'
-}
-
-function emailFrom(): string {
-  const from = env('EMAIL_FROM')
-  if (from.length > 0) {
-    return from
-  }
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('EMAIL_FROM must be set in production.')
-  }
-  return 'StreamAssist <no-reply@localhost>'
-}
-
-async function sendAuthEmail(input: SendAuthEmailInput): Promise<void> {
-  if (!smtpConfigured()) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('SMTP_HOST and SMTP_PORT must be set in production to send auth email.')
-    }
-    console.info('[auth][email] SMTP not configured; auth email was not sent.')
-    return
-  }
-
-  const user = env('SMTP_USER')
-  const pass = env('SMTP_PASS')
-  const transporter = nodemailer.createTransport({
-    host: env('SMTP_HOST'),
-    port: Number(env('SMTP_PORT')),
-    secure: smtpSecure(),
-    ...(user.length > 0 || pass.length > 0 ? { auth: { user, pass } } : {}),
-  })
-
-  await transporter.sendMail({
-    from: emailFrom(),
-    to: input.to,
-    subject: input.subject,
-    text: input.text,
-    html: input.html,
-  })
-}
+const DEV_LOG_TAG = '[auth][email]'
 
 export async function sendVerificationEmail(input: {
   to: string
@@ -73,12 +25,15 @@ export async function sendVerificationEmail(input: {
     verificationUrl: input.verificationUrl,
     expiresInMinutes: input.expiresInMinutes,
   })
-  await sendAuthEmail({
-    to: input.to,
-    subject: template.subject,
-    text: template.text,
-    html: template.html,
-  })
+  await sendEmailIfConfigured(
+    {
+      to: input.to,
+      subject: template.subject,
+      text: template.text,
+      html: template.html,
+    },
+    { throwInProduction: true, devLogTag: DEV_LOG_TAG },
+  )
 }
 
 export async function sendPasswordResetEmail(input: {
@@ -94,10 +49,13 @@ export async function sendPasswordResetEmail(input: {
     resetUrl: input.resetUrl,
     expiresInMinutes: input.expiresInMinutes,
   })
-  await sendAuthEmail({
-    to: input.to,
-    subject: template.subject,
-    text: template.text,
-    html: template.html,
-  })
+  await sendEmailIfConfigured(
+    {
+      to: input.to,
+      subject: template.subject,
+      text: template.text,
+      html: template.html,
+    },
+    { throwInProduction: true, devLogTag: DEV_LOG_TAG },
+  )
 }

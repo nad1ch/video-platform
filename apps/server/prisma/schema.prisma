@@ -88,6 +88,8 @@ model User {
   clientErrors       ClientErrorEvent[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens PasswordResetToken[]
+  paymentRequests    PaymentRequest[]
+  subscription       Subscription?
 
   @@unique([provider, providerUserId])
   @@index([streamerId])
@@ -322,4 +324,95 @@ model NadrawLiveRoom {
   streamer   Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
   state      Json     @default("{}")
   updatedAt  DateTime @updatedAt
+}
+
+/// StreamAssist Pro payment intent placed against a monobank Jar (Banka) link.
+/// `amount` is integer kopecks (UAH ×100); `currency` is `"UAH"` for the MVP.
+/// Status lifecycle (server-driven only):
+///   created → waiting_payment → checking → (auto_matched | needs_review | expired | rejected | approved)
+/// Activation of `Subscription` is allowed only from `auto_matched` (matcher) or
+/// `approved` (admin); never from `created`/`waiting_payment`/`checking`/`rejected`/`expired`.
+model PaymentRequest {
+  id                          String          @id @default(cuid())
+  userId                      String
+  user                        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Acquirer-style identifier for the payment surface. MVP: always `mono_jar`.
+  provider                    String          @default("mono_jar")
+  /// Smallest currency unit (kopecks for UAH).
+  amount                      Int
+  /// ISO-4217 alphabetic currency code (UAH only in MVP).
+  currency                    String
+  status                      String          @default("waiting_payment")
+  /// Optional internal correlation reference (kept for future "comment-based"
+  /// disambiguation; intentionally not required by matcher).
+  internalReference           String?         @unique
+  adminNote                   String?
+  expiresAt                   DateTime
+  markedPaidAt                DateTime?
+  checkedAt                   DateTime?
+  autoMatchedAt               DateTime?
+  approvedAt                  DateTime?
+  rejectedAt                  DateTime?
+  /// Only set on `auto_matched` (matcher attached transaction). Manual `approved`
+  /// does not consume a specific transaction in the MVP.
+  matchedTransactionId        String?         @unique
+  matchedTransaction          MonoTransaction? @relation(fields: [matchedTransactionId], references: [id], onDelete: SetNull)
+  autoMatchedEmailSentAt      DateTime?
+  needsReviewEmailSentAt      DateTime?
+  approvedEmailSentAt         DateTime?
+  rejectedEmailSentAt         DateTime?
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
+
+  @@index([userId, status])
+  @@index([status, expiresAt])
+  @@index([amount, currency, status])
+  @@index([createdAt])
+}
+
+/// Mirror of a single monobank "Personal API" StatementItem stored idempotently
+/// by `monoTransactionId`. Amount is normalized to kopecks (positive integer)
+/// alongside a sign flag so we never auto-match negative/outgoing operations.
+model MonoTransaction {
+  id                       String          @id @default(cuid())
+  /// Monobank `StatementItem.id` — guaranteed unique by monobank; webhook idempotency.
+  monoTransactionId        String          @unique
+  /// Monobank account id from `MONO_ACCOUNT_ID`. Used to scope matching.
+  accountId                String
+  /// Always positive kopecks (absolute value). `direction` records the sign.
+  amount                   Int
+  /// `"incoming"` for credits (positive monobank `amount`), `"outgoing"` for debits.
+  direction                String
+  /// ISO-4217 alphabetic; matcher only auto-matches when `"UAH"`.
+  currency                 String
+  description              String?
+  operationTime            DateTime
+  /// Original StatementItem JSON for forensic admin review.
+  rawPayload               Json
+  /// Set by the matcher (or admin tooling) when this transaction is consumed.
+  matchedPaymentRequestId  String?
+  matchedPaymentRequest    PaymentRequest?
+  createdAt                DateTime        @default(now())
+
+  @@index([accountId, operationTime])
+  @@index([matchedPaymentRequestId])
+  @@index([amount, currency, direction])
+}
+
+/// One Pro subscription per user (MVP single plan, single record).
+/// `status` is `"active"` while `expiresAt > now`; `"inactive"` after manual deactivation
+/// (not used in MVP); `"expired"` after the window passes (reconciled lazily on read).
+model Subscription {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// MVP: always `"pro"`.
+  plan      String
+  status    String
+  startsAt  DateTime
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
 }
