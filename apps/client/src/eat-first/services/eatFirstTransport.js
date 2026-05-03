@@ -1,9 +1,17 @@
 const PREFIX = '/api/eat-first'
 
+// X-Requested-With accompanies every mutation so the server's CSRF guard accepts
+// the request even when the browser omits `Origin`. Matches apps/client/src/utils/apiFetch.ts.
+const CSRF_HEADER = { 'X-Requested-With': 'streamassist-fetch' }
+
 async function jfetch(path, init = {}) {
   const res = await fetch(`${PREFIX}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...CSRF_HEADER,
+      ...(init.headers || {}),
+    },
     ...init,
   })
   if (res.status === 204) return null
@@ -34,17 +42,27 @@ export async function efPatchRoom(gameId, patch) {
   })
 }
 
-export async function efPostHand(gameId, playerId, raised) {
+export async function efPostHand(gameId, playerId, raised, auth) {
+  const body = { playerId, raised }
+  if (auth && typeof auth === 'object') {
+    if (typeof auth.joinToken === 'string' && auth.joinToken.length > 0) body.joinToken = auth.joinToken
+    if (typeof auth.deviceId === 'string' && auth.deviceId.length > 0) body.deviceId = auth.deviceId
+  }
   await jfetch(`/games/${encodeURIComponent(gameId)}/hand`, {
     method: 'POST',
-    body: JSON.stringify({ playerId, raised }),
+    body: JSON.stringify(body),
   })
 }
 
-export async function efPostReady(gameId, playerId, ready) {
+export async function efPostReady(gameId, playerId, ready, auth) {
+  const body = { playerId, ready }
+  if (auth && typeof auth === 'object') {
+    if (typeof auth.joinToken === 'string' && auth.joinToken.length > 0) body.joinToken = auth.joinToken
+    if (typeof auth.deviceId === 'string' && auth.deviceId.length > 0) body.deviceId = auth.deviceId
+  }
   await jfetch(`/games/${encodeURIComponent(gameId)}/ready`, {
     method: 'POST',
-    body: JSON.stringify({ playerId, ready }),
+    body: JSON.stringify(body),
   })
 }
 
@@ -69,10 +87,15 @@ export async function efDeletePlayer(gameId, slotId) {
   })
 }
 
-export async function efSubmitVote(gameId, voterPlayerId, targetPlayer, choice, round) {
+export async function efSubmitVote(gameId, voterPlayerId, targetPlayer, choice, round, auth) {
+  const body = { voterPlayerId, targetPlayer, choice, round }
+  if (auth && typeof auth === 'object') {
+    if (typeof auth.joinToken === 'string' && auth.joinToken.length > 0) body.joinToken = auth.joinToken
+    if (typeof auth.deviceId === 'string' && auth.deviceId.length > 0) body.deviceId = auth.deviceId
+  }
   return jfetch(`/games/${encodeURIComponent(gameId)}/votes/submit`, {
     method: 'POST',
-    body: JSON.stringify({ voterPlayerId, targetPlayer, choice, round }),
+    body: JSON.stringify(body),
   })
 }
 

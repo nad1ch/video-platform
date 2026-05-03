@@ -1,6 +1,8 @@
 import type { WebSocket } from 'ws'
 import type { WebSocketServer } from 'ws'
 import { prisma } from '../prisma'
+import { attachWsHeartbeat } from '../utils/wsHeartbeat'
+import { safeSendJson as safeSend } from '../utils/wsSafeSend'
 import { eatFirstSnapshot } from './snapshot'
 
 const subs = new Map<string, Set<WebSocket>>()
@@ -16,18 +18,15 @@ function removeSubscription(gameId: string, ws: WebSocket): void {
   }
 }
 
-function safeSend(ws: WebSocket, obj: unknown): void {
-  if (ws.readyState !== 1) {
-    return
-  }
-  try {
-    ws.send(JSON.stringify(obj))
-  } catch {
-    /* ignore */
-  }
-}
+/* safeSend is now `safeSendJson` from `../utils/wsSafeSend` (imported above). */
 
 export function attachEatFirstSocketServer(wss: WebSocketServer): void {
+  // WS-level ping-frame heartbeat so half-open TCP clients are reaped and do
+  // not keep accumulating in `subs` forever. EatFirst has no separate JSON
+  // keep-alive; the WS ping is enough because EatFirst WS traffic is already
+  // chatty enough (state broadcasts) for proxies to see activity.
+  attachWsHeartbeat(wss, { logLabel: 'eat-first-ws' })
+
   wss.on('connection', (ws) => {
     let subscribedId: string | null = null
     ws.on('message', (raw) => {
@@ -66,7 +65,17 @@ export function attachEatFirstSocketServer(wss: WebSocketServer): void {
   })
 }
 
-export function broadcastEatFirstUpdate(gameId: string): void {
+/**
+ * Coalesce repeated broadcast requests for the same gameId inside a single
+ * synchronous call batch. Many service-layer code paths triggered 2-3
+ * `broadcast(gameId)` calls per request (`ensureGame` → mutate → broadcast);
+ * each previously ran a full `eatFirstSnapshot` DB read + fan-out. With the
+ * microtask flush, the snapshot is read once per burst and subscribers
+ * always converge on the latest state.
+ */
+const pendingBroadcasts = new Set<string>()
+
+function flushBroadcast(gameId: string): void {
   void eatFirstSnapshot(prisma, gameId).then((snap) => {
     const payload = { type: 'eat-first:update' as const, gameId, ...snap }
     const msg = JSON.stringify(payload)
@@ -83,5 +92,16 @@ export function broadcastEatFirstUpdate(gameId: string): void {
         }
       }
     }
+  })
+}
+
+export function broadcastEatFirstUpdate(gameId: string): void {
+  if (pendingBroadcasts.has(gameId)) {
+    return
+  }
+  pendingBroadcasts.add(gameId)
+  queueMicrotask(() => {
+    pendingBroadcasts.delete(gameId)
+    flushBroadcast(gameId)
   })
 }

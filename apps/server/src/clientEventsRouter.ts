@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from 'express'
+import express, { type Express, type Request, type Response } from 'express'
 import { Prisma } from '@prisma/client'
 import { resolvePrismaUserIdFromSession } from './auth/resolvePrismaUserFromSession'
 import { readSessionFromCookie } from './auth/session/sessionJwt'
@@ -26,6 +26,24 @@ const RATE_LIMIT = 80
 type RateBucket = { count: number; resetAt: number }
 
 const rateBuckets = new Map<string, RateBucket>()
+
+/**
+ * Reaper for `rateBuckets`. Without this, every unique `(ip, path)` pair
+ * lived in the map for the lifetime of the process, and long-running
+ * deployments with many distinct client IPs leaked memory monotonically.
+ */
+const RATE_BUCKETS_REAP_INTERVAL_MS = 60_000
+const rateBucketsReaper = setInterval(() => {
+  const now = Date.now()
+  for (const [k, v] of rateBuckets) {
+    if (v.resetAt <= now) {
+      rateBuckets.delete(k)
+    }
+  }
+}, RATE_BUCKETS_REAP_INTERVAL_MS)
+if (typeof rateBucketsReaper.unref === 'function') {
+  rateBucketsReaper.unref()
+}
 
 function redactSensitiveText(value: string): string {
   return value
@@ -140,7 +158,46 @@ function safeAccepted(res: Response): void {
 }
 
 export function mountClientEventRoutes(app: Express): void {
-  app.post('/api/events/client', async (req: Request, res: Response) => {
+  // Tight per-route body cap (the global `express.json()` accepts 100 KB by
+  // default — way larger than any legitimate analytics/error event). Field
+  // truncation in `sanitizeMetadata` / `truncateString` already protects DB
+  // writes; this blocks oversized POSTs at the transport layer.
+  const clientEventsJson = express.json({ limit: '16kb' })
+
+  function mountWithBodyCap(
+    path: string,
+    handler: (req: Request, res: Response) => void | Promise<void>,
+  ): void {
+    app.post(
+      path,
+      clientEventsJson,
+      (err: unknown, _req: Request, res: Response, next: (err?: unknown) => void): void => {
+        // express.json error path: payload too large → 413 without touching
+        // the downstream handler.
+        const e = err as { type?: string; status?: number } | null | undefined
+        if (e && e.type === 'entity.too.large') {
+          res.status(413).json({ error: 'payload_too_large' })
+          return
+        }
+        if (e) {
+          next(e)
+          return
+        }
+        next()
+      },
+      (req: Request, res: Response) => {
+        const ret = handler(req, res)
+        if (ret && typeof (ret as Promise<void>).then === 'function') {
+          void (ret as Promise<void>).catch((err: unknown) => {
+            console.error('[events] handler threw', err)
+            if (!res.headersSent) res.status(500).json({ error: 'server_error' })
+          })
+        }
+      },
+    )
+  }
+
+  mountWithBodyCap('/api/events/client', async (req: Request, res: Response) => {
     if (!isDatabaseConfigured()) {
       safeAccepted(res)
       return
@@ -172,7 +229,7 @@ export function mountClientEventRoutes(app: Express): void {
     }
   })
 
-  app.post('/api/events/error', async (req: Request, res: Response) => {
+  mountWithBodyCap('/api/events/error', async (req: Request, res: Response) => {
     if (!isDatabaseConfigured()) {
       safeAccepted(res)
       return

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { isDatabaseConfigured, prisma } from '../../prisma'
+import { createRateLimiter, getClientIp, type RateLimiter } from '../../utils/rateLimit'
 import { setGlobalSessionCookie } from '../session/cookies'
 import { signSession, NADLE_SESSION_MAX_AGE_SEC } from '../session/sessionJwt'
 import type { GlobalAuthUser, SessionUser } from '../session/types'
@@ -17,6 +18,39 @@ const loginBodySchema = z.object({
   email: z.string().email().max(320),
   password: z.string().min(1).max(128),
 })
+
+/**
+ * Rate limiters for email auth endpoints. Two keys per request (IP and
+ * normalized email) so one abuser on a shared NAT does not lock out another
+ * user, and a credential-stuffer cycling emails still hits the per-IP cap.
+ * Values are conservative production defaults — legitimate users almost
+ * never hit them even on retry loops.
+ */
+const loginIpLimiter: RateLimiter = createRateLimiter({
+  label: 'auth:login:ip',
+  windowMs: 5 * 60 * 1000,
+  limit: 10,
+})
+const loginEmailLimiter: RateLimiter = createRateLimiter({
+  label: 'auth:login:email',
+  windowMs: 15 * 60 * 1000,
+  limit: 8,
+})
+const registerIpLimiter: RateLimiter = createRateLimiter({
+  label: 'auth:register:ip',
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+})
+const registerEmailLimiter: RateLimiter = createRateLimiter({
+  label: 'auth:register:email',
+  windowMs: 15 * 60 * 1000,
+  limit: 3,
+})
+
+function denyRateLimited(res: Response, retryAfterSec: number): void {
+  res.setHeader('Retry-After', String(retryAfterSec))
+  res.status(429).json({ error: 'RATE_LIMITED', retryAfterSec })
+}
 
 function rowToSessionUser(row: { id: string; display_name: string; email: string }): SessionUser {
   const dn = row.display_name.trim()
@@ -151,6 +185,13 @@ function sendSession(
 
 /** POST /api/auth/register */
 export async function handleEmailRegister(req: Request, res: Response): Promise<void> {
+  // Per-IP RL runs first — cheap and protects against registration spam
+  // without needing to peek at the body.
+  const ipCheck = registerIpLimiter.tryConsume(`ip:${getClientIp(req)}`)
+  if (!ipCheck.allowed) {
+    denyRateLimited(res, ipCheck.retryAfterSec)
+    return
+  }
   const parsed = registerBodySchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: 'VALIDATION' })
@@ -158,6 +199,13 @@ export async function handleEmailRegister(req: Request, res: Response): Promise<
   }
   const { email, password, displayName } = parsed.data
   const normalized = normalizeEmail(email)
+  // Per-email RL prevents someone cycling IPs from pounding the same address
+  // (enumeration / password-guess via DB-backed `EMAIL_TAKEN` response).
+  const emailCheck = registerEmailLimiter.tryConsume(`email:${normalized}`)
+  if (!emailCheck.allowed) {
+    denyRateLimited(res, emailCheck.retryAfterSec)
+    return
+  }
   if (findUserByEmail(normalized)) {
     res.status(409).json({ error: 'EMAIL_TAKEN' })
     return
@@ -201,13 +249,27 @@ export async function handleEmailRegister(req: Request, res: Response): Promise<
 
 /** POST /api/auth/login */
 export async function handleEmailLogin(req: Request, res: Response): Promise<void> {
+  // Per-IP RL runs first so credential-stuffing hits the cap before bcrypt.
+  const ipCheck = loginIpLimiter.tryConsume(`ip:${getClientIp(req)}`)
+  if (!ipCheck.allowed) {
+    denyRateLimited(res, ipCheck.retryAfterSec)
+    return
+  }
   const parsed = loginBodySchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: 'VALIDATION' })
     return
   }
   const { email, password } = parsed.data
-  const row = findUserByEmail(email)
+  const normalized = normalizeEmail(email)
+  // Per-email RL protects the same user from distributed brute force across
+  // many IPs. Applied BEFORE bcrypt verify so the cost of a miss stays O(1).
+  const emailCheck = loginEmailLimiter.tryConsume(`email:${normalized}`)
+  if (!emailCheck.allowed) {
+    denyRateLimited(res, emailCheck.retryAfterSec)
+    return
+  }
+  const row = findUserByEmail(normalized)
   if (!row || !verifyPassword(row, password)) {
     res.status(401).json({ error: 'INVALID_CREDENTIALS' })
     return
@@ -218,5 +280,9 @@ export async function handleEmailLogin(req: Request, res: Response): Promise<voi
     res.status(verification.error === 'ACCOUNT_LINK_REQUIRED' ? 409 : 500).json({ error: verification.error })
     return
   }
+  // Reset both counters on a successful login so a legit user who mistyped
+  // repeatedly isn't locked out after they got it right.
+  loginIpLimiter.reset(`ip:${getClientIp(req)}`)
+  loginEmailLimiter.reset(`email:${normalized}`)
   sendSession(res, session, false, 200, verification.state)
 }

@@ -9,6 +9,25 @@ export function nadrawGuessCooldownMs(): number {
   return 2000
 }
 
+/**
+ * Reaper: drop entries whose last guess is older than 4× the cooldown so
+ * large channels do not grow the Map one entry per unique viewer for the
+ * lifetime of the process. Safely past any pending throttle window.
+ */
+const NADRAW_THROTTLE_REAP_INTERVAL_MS = 60_000
+const nadrawThrottleReaper = setInterval(() => {
+  const now = Date.now()
+  const staleAfter = nadrawGuessCooldownMs() * 4
+  for (const [k, t] of lastNadrawGuessByUser) {
+    if (now - t > staleAfter) {
+      lastNadrawGuessByUser.delete(k)
+    }
+  }
+}, NADRAW_THROTTLE_REAP_INTERVAL_MS)
+if (typeof nadrawThrottleReaper.unref === 'function') {
+  nadrawThrottleReaper.unref()
+}
+
 export function tryConsumeNadrawGuessThrottle(streamerId: string, userId: string): boolean {
   const now = Date.now()
   const cd = nadrawGuessCooldownMs()

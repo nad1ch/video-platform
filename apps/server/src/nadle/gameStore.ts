@@ -25,17 +25,27 @@ function isSupportedWordLength(word: string): boolean {
   return len === 5 || len === 6 || len === 7
 }
 
+/**
+ * In-memory accessor. MUST NOT write to the DB here.
+ *
+ * `hydrateNadleLiveGame` owns the "persist a default when no row exists"
+ * side-effect. Persisting from `storeFor` used to race against hydration:
+ * if a WS message arrived before hydration resolved, this would overwrite
+ * the persisted round with a fresh default. The defensive in-memory
+ * default still guards against a crash if a caller forgets to hydrate —
+ * subsequent mutation helpers (`submitGuess`, `startPlayerNewGame`) call
+ * `persistNadleLiveGame` themselves after the mutation, which reconciles
+ * state once hydration completes.
+ */
 function storeFor(streamerId: string): Store {
   let s = stores.get(streamerId)
   if (s && !isSupportedWordLength(s.currentGame.word)) {
     s = createStore()
     stores.set(streamerId, s)
-    persistNadleLiveGame(streamerId, s)
   }
   if (!s) {
     s = createStore()
     stores.set(streamerId, s)
-    persistNadleLiveGame(streamerId, s)
   }
   return s
 }

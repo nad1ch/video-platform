@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { isDatabaseConfigured, prisma } from './prisma'
 import { resolvePrismaUserIdFromSession } from './auth/resolvePrismaUserFromSession'
 import { readSessionFromCookie } from './auth/session/sessionJwt'
+import { normalizeTwitchLogin } from './streamerIdentity'
 
 const CHECKERS_ELO_INITIAL = 1200
 const CHECKERS_ELO_K = 20
@@ -30,8 +31,9 @@ async function resolveStreamerScopeFromQuery(req: Request): Promise<string | nul
     })
     return row?.id ?? null
   }
-  const raw = typeof q.streamer === 'string' ? q.streamer.trim().toLowerCase().replace(/^#/, '') : ''
-  if (raw.length < 2 || raw.length > 25 || !/^[a-z0-9_]+$/.test(raw)) {
+  const raw =
+    typeof q.streamer === 'string' ? normalizeTwitchLogin(q.streamer) : null
+  if (!raw) {
     return null
   }
   const row = await prisma.streamer.findFirst({
@@ -253,7 +255,28 @@ async function ratingLeaderboardForStreamer(streamerId: string): Promise<
   }))
 }
 
-async function computeCheckersEloSnapshots(): Promise<Map<string, CheckersEloSnapshot>> {
+/**
+ * Short-TTL cache for the full-history ELO recomputation.
+ *
+ * Before this cache every `/api/leaderboard/{rating,wins,streak}` hit ran a
+ * full `gameRound.findMany({ streamerId: null, include: { results } })` and
+ * re-evaluated every round — O(rounds). With dashboards polling and the
+ * leaderboard surfacing in multiple tabs this was a hot path.
+ *
+ * 5 s is short enough that operator clicks feel live (multiple leaderboard
+ * views share one snapshot), and any write path (`recordCheckersMatchResult`)
+ * explicitly invalidates it, so a just-played match appears without delay.
+ */
+const CHECKERS_ELO_CACHE_TTL_MS = 5_000
+let checkersEloCacheAt = 0
+let checkersEloCachedPromise: Promise<Map<string, CheckersEloSnapshot>> | null = null
+
+function invalidateCheckersEloCache(): void {
+  checkersEloCacheAt = 0
+  checkersEloCachedPromise = null
+}
+
+async function computeCheckersEloSnapshotsUncached(): Promise<Map<string, CheckersEloSnapshot>> {
   const rounds = await prisma.gameRound.findMany({
     where: { streamerId: null },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -271,12 +294,32 @@ async function computeCheckersEloSnapshots(): Promise<Map<string, CheckersEloSna
   }
 
   for (const round of rounds) {
-    const results = round.results.filter((result) => result.userId.length > 0)
-    const winner = results.find((result) => result.isWinner)
-    const loser = results.find((result) => !result.isWinner && result.userId !== winner?.userId)
-    if (!winner || !loser) {
+    // Strict round validation: exactly 2 distinct non-empty userIds with
+    // exactly 1 isWinner=true. Any corruption (3+ results, 2 winners, a
+    // user recorded against themselves) silently skips the round rather
+    // than credit ELO to the wrong side.
+    const results = round.results.filter((r) => r.userId.length > 0)
+    if (results.length !== 2 || results[0]!.userId === results[1]!.userId) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[leaderboard][checkers] skipping malformed round', {
+          roundId: round.id,
+          resultCount: results.length,
+        })
+      }
       continue
     }
+    const winners = results.filter((r) => r.isWinner)
+    if (winners.length !== 1) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[leaderboard][checkers] skipping round with ambiguous winner', {
+          roundId: round.id,
+          winnerCount: winners.length,
+        })
+      }
+      continue
+    }
+    const winner = winners[0]!
+    const loser = results.find((r) => r.userId !== winner.userId)!
     const winnerRow = ensure(winner.userId)
     const loserRow = ensure(loser.userId)
     const winnerExpected = 1 / (1 + 10 ** ((loserRow.rating - winnerRow.rating) / 400))
@@ -288,6 +331,24 @@ async function computeCheckersEloSnapshots(): Promise<Map<string, CheckersEloSna
   }
 
   return snapshots
+}
+
+async function computeCheckersEloSnapshots(): Promise<Map<string, CheckersEloSnapshot>> {
+  const now = Date.now()
+  if (checkersEloCachedPromise && now - checkersEloCacheAt < CHECKERS_ELO_CACHE_TTL_MS) {
+    return checkersEloCachedPromise
+  }
+  const pending = computeCheckersEloSnapshotsUncached()
+  checkersEloCachedPromise = pending
+  checkersEloCacheAt = now
+  // On error, drop the cache so the next caller retries. Otherwise a one-off
+  // DB hiccup would pin the rejection for the whole TTL.
+  pending.catch(() => {
+    if (checkersEloCachedPromise === pending) {
+      invalidateCheckersEloCache()
+    }
+  })
+  return pending
 }
 
 export async function checkersRatingsForUsers(userIds: string[]): Promise<Map<string, number>> {
@@ -328,6 +389,9 @@ export async function recordCheckersMatchResult(input: {
       ],
     })
   })
+  // New round — force the next leaderboard read to recompute from DB so the
+  // just-played match appears without a 5 s stale cache window.
+  invalidateCheckersEloCache()
 }
 
 async function checkersRatingLeaderboard(): Promise<

@@ -261,7 +261,29 @@ export class Room {
   }
 
   setMafiaSpeakingQueue(seats: number[]): void {
-    this.mafiaSpeakingQueue = seats
+    // Defensive copy: callers passed in arrays they still hold references to,
+    // so without the spread a subsequent external mutation would silently
+    // corrupt the room's queue.
+    this.mafiaSpeakingQueue = [...seats]
+  }
+
+  /**
+   * Drop seat indices greater than `maxSeat` from the speaking queue.
+   * Returns `true` when the queue changed. Used on `peer-left` so the queue
+   * never references a seat that can no longer have an active player.
+   * The host's next `mafia:players-update` / `mafia:queue-update` will
+   * republish the authoritative queue; this is a safety net for the interval
+   * between peer-left and the host's update.
+   */
+  pruneMafiaSpeakingQueueToMaxSeat(maxSeat: number): boolean {
+    const cap = Math.max(0, Math.floor(maxSeat))
+    const before = this.mafiaSpeakingQueue
+    const next = before.filter((seat) => seat >= 1 && seat <= cap)
+    if (next.length === before.length) {
+      return false
+    }
+    this.mafiaSpeakingQueue = next
+    return true
   }
 
   getMafiaTimer(): { startedAt: number; duration: number; isRunning: true } | null {

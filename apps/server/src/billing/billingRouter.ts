@@ -164,22 +164,87 @@ export function mountBillingRoutes(app: Express): void {
   })
 
   // Public verification endpoint: monobank Personal API webhook setup expects
-  // a fast 200 to confirm the URL belongs to us.
+  // a fast 200 to confirm the URL belongs to us. Intentionally unauthenticated
+  // — Monobank's registration probe is a bare GET.
   app.get(`${base}/mono-personal/webhook`, (_req, res) => {
     res.status(200).json({ ok: true })
   })
 
   // Public statement webhook. ALWAYS return 200 quickly so monobank does not
   // hammer us — activation safety lives in the service layer.
+  //
+  // Defense-in-depth: when MONO_WEBHOOK_SECRET is configured, require a matching
+  // `X-Mono-Secret` header (preferred) OR `?secret=<value>` query (fallback:
+  // Mono's Personal API registers a single URL, so secret-in-URL is the
+  // practical deployment path). Without this, an attacker who learned the
+  // private MONO_ACCOUNT_ID could forge a StatementItem with the right amount
+  // against a pending `PaymentRequest` and auto-activate Pro — the matcher's
+  // account-id gate alone is not sufficient once the id leaks.
+  //
+  // Responses are always 200 (even on secret mismatch) so Mono does not
+  // retry-storm when the secret rolls or the attacker probes.
   app.post(`${base}/mono-personal/webhook`, (req, res) => {
     // Reply first so monobank gets a fast 200 even if our matcher is slow.
     res.status(200).json({ ok: true })
     void (async () => {
       try {
+        if (!verifyMonoWebhookSecret(req)) {
+          return
+        }
         await ingestStatementWebhook(req.body)
       } catch (err) {
         console.error('[billing] mono-personal webhook handler failed', err)
       }
     })()
   })
+}
+
+/**
+ * Constant-time compare helper (prevents timing leaks on secret equality).
+ * Falls back to a strict `===` check when inputs have different lengths.
+ */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false
+  }
+  let diff = 0
+  for (let i = 0; i < a.length; i += 1) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return diff === 0
+}
+
+let warnedMissingMonoWebhookSecret = false
+
+function verifyMonoWebhookSecret(req: Request): boolean {
+  const expected = (process.env.MONO_WEBHOOK_SECRET ?? '').trim()
+  if (expected.length === 0) {
+    // Dev / not-yet-configured. Log once in production so the operator notices.
+    if (process.env.NODE_ENV === 'production' && !warnedMissingMonoWebhookSecret) {
+      warnedMissingMonoWebhookSecret = true
+      console.warn(
+        '[billing] MONO_WEBHOOK_SECRET is not set — webhook is unauthenticated in production. ' +
+          'Configure MONO_WEBHOOK_SECRET and re-register the webhook URL with `?secret=<value>` or send `X-Mono-Secret`.',
+      )
+    }
+    return true
+  }
+  const headerRaw = req.headers['x-mono-secret']
+  const header =
+    typeof headerRaw === 'string'
+      ? headerRaw
+      : Array.isArray(headerRaw)
+        ? (headerRaw[0] ?? '')
+        : ''
+  if (header.length > 0 && constantTimeEqual(header, expected)) {
+    return true
+  }
+  const query = typeof req.query.secret === 'string' ? req.query.secret : ''
+  if (query.length > 0 && constantTimeEqual(query, expected)) {
+    return true
+  }
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('[billing] mono-personal webhook secret mismatch — ignoring payload')
+  }
+  return false
 }

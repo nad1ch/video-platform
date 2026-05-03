@@ -62,6 +62,7 @@ import { useMafiaGameStore } from '@/stores/mafiaGame'
 import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
 import { mafiaEliminationAvatarKindForPeerId } from '@/utils/mafiaEliminationAvatarKind'
 import { MAFIA_OBS_URL_TOAST_EVENT, MAFIA_SETTINGS_TOAST_EVENT } from '@/composables/mafiaStreamViewRoute'
+import { MafiaWs } from '@/composables/mafiaWsProtocol'
 import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
 import type { MafiaEliminationBackground } from '@/utils/mafiaGameTypes'
 
@@ -273,8 +274,8 @@ useMafiaHostSignaling(sendSignalingMessage, subscribeSignalingMessage, wsStatus)
 
 const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
 
-const MAFIA_FORCE_CAMERA_OFF_SIGNAL = 'mafia:force-camera-off'
-const MAFIA_FORCE_MUTE_ALL_SIGNAL = 'mafia:force-mute-all'
+const MAFIA_FORCE_CAMERA_OFF_SIGNAL = MafiaWs.forceCameraOff
+const MAFIA_FORCE_MUTE_ALL_SIGNAL = MafiaWs.forceMuteAll
 
 function mafiaSignalPayload(data: unknown, type: string): Record<string, unknown> | null {
   if (data == null || typeof data !== 'object') {

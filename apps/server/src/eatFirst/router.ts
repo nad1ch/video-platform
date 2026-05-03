@@ -1,7 +1,10 @@
 import type { Express, Request, Response } from 'express'
 import { prisma } from '../prisma'
-import { isValidGameId } from './slot'
-import { eatFirstSessionCanOperate } from './sessionGate'
+import { isValidGameId, normalizeEatFirstSlot } from './slot'
+import {
+  eatFirstSessionCanOperateGame,
+  resolveEatFirstOperatorUserId,
+} from './sessionGate'
 import {
   eatFirstClearVotesAdmin,
   eatFirstClaimSlot,
@@ -15,14 +18,57 @@ import {
   eatFirstReviveEliminatedAdmin,
   eatFirstSnapshot,
   eatFirstSubmitVote,
+  verifyEatFirstSlotAuth,
 } from './service'
 
-async function requireEatFirstHost(req: Request, res: Response): Promise<boolean> {
-  if (!(await eatFirstSessionCanOperate(req.headers.cookie))) {
+async function requireEatFirstHostForGame(
+  req: Request,
+  res: Response,
+  gameId: string,
+): Promise<boolean> {
+  if (!(await eatFirstSessionCanOperateGame(req.headers.cookie, gameId))) {
     res.status(403).type('text/plain').send('Forbidden')
     return false
   }
   return true
+}
+
+/**
+ * Authorize an action on behalf of `slotId` in `gameId`. Accepts either:
+ *   - authenticated host/admin session that is allowed to operate this game, OR
+ *   - matching `joinToken` + `deviceId` for the claimed slot (eatFirstClaimSlot).
+ *
+ * Responds with the appropriate HTTP status on failure. Callers must return
+ * immediately when this returns `false`.
+ */
+async function authorizePlayerAction(
+  req: Request,
+  res: Response,
+  gameId: string,
+  slotId: string,
+  body: { joinToken?: unknown; deviceId?: unknown },
+): Promise<boolean> {
+  // Host/admin for this game always wins — supports the admin overlay UI
+  // which acts on behalf of any slot without carrying that slot's token.
+  if (await eatFirstSessionCanOperateGame(req.headers.cookie, gameId)) {
+    return true
+  }
+  const joinToken = typeof body.joinToken === 'string' ? body.joinToken : ''
+  const deviceId = typeof body.deviceId === 'string' ? body.deviceId : ''
+  const verdict = await verifyEatFirstSlotAuth(gameId, slotId, deviceId, joinToken)
+  if (verdict.ok) {
+    return true
+  }
+  if (verdict.reason === 'no-slot') {
+    res.status(404).json({ error: 'no-slot' })
+    return false
+  }
+  if (verdict.reason === 'unclaimed') {
+    res.status(409).json({ error: 'unclaimed' })
+    return false
+  }
+  res.status(403).json({ error: 'forbidden' })
+  return false
 }
 
 function sendErr(res: Response, err: unknown): void {
@@ -57,7 +103,14 @@ export function mountEatFirstRoutes(app: Express): void {
     void (async () => {
       try {
         const gameId = String(req.params.gameId ?? '')
-        const created = await eatFirstEnsureGame(gameId)
+        // When called by an authenticated host/admin, stamp them as the game
+        // owner so later mutations route through the per-game gate. Anonymous
+        // callers (public join/overlay pages that GET and opportunistically
+        // POST ensure) still get the row created without an owner — legacy
+        // ownership fallback in `eatFirstSessionCanOperateGame` keeps such
+        // rooms usable while still isolating hosts to games they created.
+        const ownerUserId = await resolveEatFirstOperatorUserId(req.headers.cookie)
+        const created = await eatFirstEnsureGame(gameId, ownerUserId)
         res.json({ created })
       } catch (err) {
         sendErr(res, err)
@@ -68,8 +121,8 @@ export function mountEatFirstRoutes(app: Express): void {
   app.patch(`${base}/games/:gameId/room`, (req, res) => {
     void (async () => {
       try {
-        if (!(await requireEatFirstHost(req, res))) return
         const gameId = String(req.params.gameId ?? '')
+        if (!(await requireEatFirstHostForGame(req, res, gameId))) return
         const patch = (req.body as { patch?: unknown })?.patch ?? req.body
         await eatFirstMergeRoomAdmin(gameId, patch)
         res.status(204).end()
@@ -83,8 +136,16 @@ export function mountEatFirstRoutes(app: Express): void {
     void (async () => {
       try {
         const gameId = String(req.params.gameId ?? '')
-        const { playerId, raised } = req.body as { playerId?: string; raised?: boolean }
-        await eatFirstPostHand(gameId, String(playerId ?? ''), Boolean(raised))
+        const body = req.body as {
+          playerId?: string
+          raised?: boolean
+          joinToken?: unknown
+          deviceId?: unknown
+        }
+        const rawSlot = String(body.playerId ?? '')
+        const slotId = normalizeEatFirstSlot(rawSlot)
+        if (!(await authorizePlayerAction(req, res, gameId, slotId, body))) return
+        await eatFirstPostHand(gameId, rawSlot, Boolean(body.raised))
         res.status(204).end()
       } catch (err) {
         sendErr(res, err)
@@ -96,8 +157,16 @@ export function mountEatFirstRoutes(app: Express): void {
     void (async () => {
       try {
         const gameId = String(req.params.gameId ?? '')
-        const { playerId, ready } = req.body as { playerId?: string; ready?: boolean }
-        await eatFirstPostReady(gameId, String(playerId ?? ''), Boolean(ready))
+        const body = req.body as {
+          playerId?: string
+          ready?: boolean
+          joinToken?: unknown
+          deviceId?: unknown
+        }
+        const rawSlot = String(body.playerId ?? '')
+        const slotId = normalizeEatFirstSlot(rawSlot)
+        if (!(await authorizePlayerAction(req, res, gameId, slotId, body))) return
+        await eatFirstPostReady(gameId, rawSlot, Boolean(body.ready))
         res.status(204).end()
       } catch (err) {
         sendErr(res, err)
@@ -131,8 +200,8 @@ export function mountEatFirstRoutes(app: Express): void {
   app.patch(`${base}/games/:gameId/players/:slotId`, (req, res) => {
     void (async () => {
       try {
-        if (!(await requireEatFirstHost(req, res))) return
         const gameId = String(req.params.gameId ?? '')
+        if (!(await requireEatFirstHostForGame(req, res, gameId))) return
         const slotId = String(req.params.slotId ?? '')
         const { patch } = req.body as { patch?: unknown }
         await eatFirstMergePlayerAdmin(gameId, slotId, patch)
@@ -146,8 +215,8 @@ export function mountEatFirstRoutes(app: Express): void {
   app.delete(`${base}/games/:gameId/players/:slotId`, (req, res) => {
     void (async () => {
       try {
-        if (!(await requireEatFirstHost(req, res))) return
         const gameId = String(req.params.gameId ?? '')
+        if (!(await requireEatFirstHostForGame(req, res, gameId))) return
         const slotId = String(req.params.slotId ?? '')
         await eatFirstDeletePlayerAdmin(gameId, slotId)
         res.status(204).end()
@@ -161,18 +230,23 @@ export function mountEatFirstRoutes(app: Express): void {
     void (async () => {
       try {
         const gameId = String(req.params.gameId ?? '')
-        const { voterPlayerId, targetPlayer, choice, round } = req.body as {
+        const body = req.body as {
           voterPlayerId?: string
           targetPlayer?: string
           choice?: string
           round?: number
+          joinToken?: unknown
+          deviceId?: unknown
         }
+        const rawVoter = String(body.voterPlayerId ?? '')
+        const voterSlotId = normalizeEatFirstSlot(rawVoter)
+        if (!(await authorizePlayerAction(req, res, gameId, voterSlotId, body))) return
         const out = await eatFirstSubmitVote(
           gameId,
-          String(voterPlayerId ?? ''),
-          String(targetPlayer ?? ''),
-          String(choice ?? ''),
-          Number(round ?? 0),
+          rawVoter,
+          String(body.targetPlayer ?? ''),
+          String(body.choice ?? ''),
+          Number(body.round ?? 0),
         )
         res.json(out)
       } catch (err) {
@@ -184,8 +258,8 @@ export function mountEatFirstRoutes(app: Express): void {
   app.post(`${base}/games/:gameId/votes/clear`, (req, res) => {
     void (async () => {
       try {
-        if (!(await requireEatFirstHost(req, res))) return
         const gameId = String(req.params.gameId ?? '')
+        if (!(await requireEatFirstHostForGame(req, res, gameId))) return
         await eatFirstClearVotesAdmin(gameId)
         res.status(204).end()
       } catch (err) {
@@ -197,8 +271,8 @@ export function mountEatFirstRoutes(app: Express): void {
   app.post(`${base}/games/:gameId/votes/delete`, (req, res) => {
     void (async () => {
       try {
-        if (!(await requireEatFirstHost(req, res))) return
         const gameId = String(req.params.gameId ?? '')
+        if (!(await requireEatFirstHostForGame(req, res, gameId))) return
         const { voterId } = req.body as { voterId?: string }
         await eatFirstDeleteVoteAdmin(gameId, String(voterId ?? ''))
         res.status(204).end()
@@ -211,8 +285,8 @@ export function mountEatFirstRoutes(app: Express): void {
   app.post(`${base}/games/:gameId/players/revive-eliminated`, (req, res) => {
     void (async () => {
       try {
-        if (!(await requireEatFirstHost(req, res))) return
         const gameId = String(req.params.gameId ?? '')
+        if (!(await requireEatFirstHostForGame(req, res, gameId))) return
         const n = await eatFirstReviveEliminatedAdmin(gameId)
         res.json({ updated: n })
       } catch (err) {

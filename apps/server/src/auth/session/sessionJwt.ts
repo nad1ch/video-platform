@@ -79,6 +79,7 @@ export const NADLE_SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 7
 
 const OAUTH_STATE_TYP = 'oauth_return'
 const OAUTH_STATE_MAX_AGE_SEC = 600
+const OAUTH_STATE_MAX_AGE_MS = OAUTH_STATE_MAX_AGE_SEC * 1000
 
 export function signOAuthReturnPath(redirectPath: string): string {
   return jwt.sign({ typ: OAUTH_STATE_TYP, r: redirectPath }, authJwtSecret(), {
@@ -86,15 +87,58 @@ export function signOAuthReturnPath(redirectPath: string): string {
   })
 }
 
+/**
+ * Single-use marker for `verifyOAuthReturnPath`. A state that validates once
+ * is recorded here with its expiry; a second verify of the same string falls
+ * back to the default redirect (treated as an invalid state).
+ *
+ * The map is bounded: a periodic reaper drops expired entries, and the map
+ * would reach steady state at ~one entry per concurrent in-flight OAuth
+ * login within the 10-minute window.
+ */
+const seenOAuthStates = new Map<string, number>()
+
+const OAUTH_STATE_REAP_INTERVAL_MS = 60_000
+const oauthStateReaper = setInterval(() => {
+  const now = Date.now()
+  for (const [k, expiresAt] of seenOAuthStates) {
+    if (expiresAt <= now) {
+      seenOAuthStates.delete(k)
+    }
+  }
+}, OAUTH_STATE_REAP_INTERVAL_MS)
+if (typeof oauthStateReaper.unref === 'function') {
+  oauthStateReaper.unref()
+}
+
 export function verifyOAuthReturnPath(state: string | undefined): string {
   if (!state || typeof state !== 'string') {
     return '/'
   }
   try {
-    const decoded = jwt.verify(state, authJwtSecret()) as { typ?: string; r?: unknown }
+    const decoded = jwt.verify(state, authJwtSecret()) as {
+      typ?: string
+      r?: unknown
+      exp?: number
+    }
     if (decoded.typ !== OAUTH_STATE_TYP || typeof decoded.r !== 'string') {
       return '/'
     }
+    // Single-use replay guard. A legitimate OAuth login consumes the state
+    // exactly once; a replay from a captured state string falls back to the
+    // safe default path. `exp` is in seconds; we cache up to the same window
+    // so the entry cannot outlive the JWT expiry.
+    if (seenOAuthStates.has(state)) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[auth][oauth] rejected state replay')
+      }
+      return '/'
+    }
+    const expMs =
+      typeof decoded.exp === 'number'
+        ? decoded.exp * 1000
+        : Date.now() + OAUTH_STATE_MAX_AGE_MS
+    seenOAuthStates.set(state, expMs)
     return decoded.r
   } catch {
     return '/'

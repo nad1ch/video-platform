@@ -238,7 +238,19 @@ export type RefreshAuthOptions = {
   force?: boolean
 }
 
-async function refresh(options?: RefreshAuthOptions): Promise<void> {
+/**
+ * Shared inflight promise for `refresh()`. Multiple callers (App mount,
+ * route guards, post-login UI, background pollers) previously each fired
+ * their own `/api/auth/me` request; now they converge on a single network
+ * hop per overlapping call batch.
+ *
+ * A `force: true` call still dedupes within the same inflight window —
+ * the first caller's cache-clear already happened, so subsequent forces
+ * waiting on the same promise see the same fresh result.
+ */
+let refreshInflight: Promise<void> | null = null
+
+async function refreshOnce(options?: RefreshAuthOptions): Promise<void> {
   if (!options?.force) {
     const cached = readDisplayCache()
     if (cached) {
@@ -250,9 +262,18 @@ async function refresh(options?: RefreshAuthOptions): Promise<void> {
 
   try {
     const r = await apiFetch('/api/auth/me')
-    if (r.status === 401) {
+    // Confirmed-unauthenticated: clear user. Any other non-OK status
+    // (5xx, 502 from a proxy blip, 0/CORS/network when this path returns
+    // something unexpected) keeps the previous user state — a transient
+    // backend error must not falsely flip the UI to "logged out".
+    if (r.status === 401 || r.status === 403) {
       user.value = null
       writeDisplayCache(null)
+      return
+    }
+    if (!r.ok) {
+      // 5xx or similar: keep whatever we showed before. Mark loaded so
+      // gates like `ensureAuthLoaded()` do not hang.
       return
     }
     const j = (await r.json()) as { authenticated?: boolean; user?: unknown }
@@ -277,21 +298,38 @@ async function refresh(options?: RefreshAuthOptions): Promise<void> {
         }
       }
     } else {
+      // Server responded 2xx but said `authenticated: false`. Intentional
+      // logout from the server side, clear local state.
       user.value = null
       writeDisplayCache(null)
     }
   } catch {
-    user.value = null
-    writeDisplayCache(null)
+    // Network failure / CORS / aborted fetch. Do NOT clear the user —
+    // the previous session may still be valid; a later refresh will
+    // reconcile. Only mark loaded so the initial-load guard releases.
   } finally {
     loaded.value = true
   }
+}
+
+async function refresh(options?: RefreshAuthOptions): Promise<void> {
+  if (refreshInflight) {
+    return refreshInflight
+  }
+  refreshInflight = refreshOnce(options).finally(() => {
+    refreshInflight = null
+  })
+  return refreshInflight
 }
 
 export function ensureAuthLoaded(): Promise<void> {
   if (loaded.value) {
     return Promise.resolve()
   }
+  // `refresh()` now self-dedupes, so `ensureAuthLoaded` callers transparently
+  // share the same inflight with any other `refresh()` caller (App mount,
+  // router guards, etc). The local `inflight` here stays as a small
+  // redundancy in case `refresh()` resolves synchronously in tests.
   if (!inflight) {
     inflight = refresh().finally(() => {
       inflight = null

@@ -16,6 +16,7 @@ import type {
   MafiaTimerStartPayload,
   MafiaTimerStopPayload,
 } from '@/utils/mafiaGameTypes'
+import { MafiaWs } from './mafiaWsProtocol'
 
 function parseMafiaHostUpdated(
   data: unknown,
@@ -24,7 +25,7 @@ function parseMafiaHostUpdated(
     return null
   }
   const o = data as { type?: unknown; payload?: unknown }
-  if (o.type !== 'mafia:host-updated') {
+  if (o.type !== MafiaWs.hostUpdated) {
     return null
   }
   const p = o.payload
@@ -48,7 +49,7 @@ function parseMafiaQueueUpdate(data: unknown): { speakingQueue: number[] } | nul
     return null
   }
   const o = data as { type?: unknown; payload?: unknown }
-  if (o.type !== 'mafia:queue-update') {
+  if (o.type !== MafiaWs.queueUpdate) {
     return null
   }
   const p = o.payload
@@ -75,7 +76,7 @@ function parseMafiaReshuffle(data: unknown): MafiaReshufflePayload | null {
     return null
   }
   const o = data as { type?: unknown; payload?: unknown }
-  if (o.type !== 'mafia:reshuffle') {
+  if (o.type !== MafiaWs.reshuffle) {
     return null
   }
   const p = o.payload
@@ -114,7 +115,7 @@ function parseMafiaPlayersUpdate(data: unknown): MafiaPlayersUpdatePayload | nul
     return null
   }
   const o = data as { type?: unknown; payload?: unknown }
-  if (o.type !== 'mafia:players-update') {
+  if (o.type !== MafiaWs.playersUpdate) {
     return null
   }
   const p = o.payload
@@ -168,7 +169,7 @@ function parseMafiaModeUpdate(data: unknown): MafiaModeUpdatePayload | null {
     return null
   }
   const o = data as { type?: unknown; payload?: unknown }
-  if (o.type !== 'mafia:mode-update') {
+  if (o.type !== MafiaWs.modeUpdate) {
     return null
   }
   const p = o.payload
@@ -184,7 +185,7 @@ function parseMafiaSettingsUpdate(data: unknown): MafiaSettingsUpdatePayload | n
     return null
   }
   const o = data as { type?: unknown; payload?: unknown }
-  if (o.type !== 'mafia:settings-update') {
+  if (o.type !== MafiaWs.settingsUpdate) {
     return null
   }
   const p = o.payload
@@ -241,7 +242,7 @@ function parseMafiaPageBackgroundSettings(data: unknown): MafiaPageBackgroundSet
     return null
   }
   const o = data as { type?: unknown; payload?: unknown }
-  if (o.type !== 'mafia:page-background-settings') {
+  if (o.type !== MafiaWs.pageBackgroundSettings) {
     return null
   }
   const p = o.payload
@@ -269,7 +270,7 @@ function parseMafiaTimerStart(data: unknown): MafiaTimerStartPayload | null {
     return null
   }
   const o = data as { type?: unknown; payload?: unknown }
-  if (o.type !== 'mafia:timer-start') {
+  if (o.type !== MafiaWs.timerStart) {
     return null
   }
   const p = o.payload
@@ -294,7 +295,7 @@ function parseMafiaTimerStop(data: unknown): MafiaTimerStopPayload | null {
     return null
   }
   const o = data as { type?: unknown; payload?: unknown }
-  if (o.type !== 'mafia:timer-stop') {
+  if (o.type !== MafiaWs.timerStop) {
     return null
   }
   if (o.payload === undefined || o.payload === null) {
@@ -311,7 +312,7 @@ function parseMafiaPlayerKick(data: unknown): MafiaPlayerKickPayload | null {
     return null
   }
   const o = data as { type?: unknown; payload?: unknown }
-  if (o.type !== 'mafia:player-kick') {
+  if (o.type !== MafiaWs.playerKick) {
     return null
   }
   const p = o.payload
@@ -330,7 +331,7 @@ function parseMafiaPlayerRevive(data: unknown): MafiaPlayerRevivePayload | null 
     return null
   }
   const o = data as { type?: unknown; payload?: unknown }
-  if (o.type !== 'mafia:player-revive') {
+  if (o.type !== MafiaWs.playerRevive) {
     return null
   }
   const p = o.payload
@@ -349,7 +350,7 @@ function parseMafiaPlayerLifeStateSnapshot(data: unknown): MafiaPlayerLifeStateS
     return null
   }
   const o = data as { type?: unknown; payload?: unknown }
-  if (o.type !== 'mafia:player-life-state') {
+  if (o.type !== MafiaWs.playerLifeState) {
     return null
   }
   const p = o.payload
@@ -488,7 +489,7 @@ export function useMafiaHostSignaling(
       if (mafiaHostUserId.value != null && mafiaHostUserId.value !== localUserId) {
         return
       }
-      sendSignalingMessage({ type: 'mafia:claim-host', payload: { sessionId: localSessionId } })
+      sendSignalingMessage({ type: MafiaWs.claimHost, payload: { sessionId: localSessionId } })
     },
     { immediate: true },
   )
@@ -508,7 +509,7 @@ export function useMafiaHostSignaling(
       if (!isMafiaHost.value) {
         return
       }
-      sendSignalingMessage({ type: 'mafia:queue-update', payload: { speakingQueue: [...q] } })
+      sendSignalingMessage({ type: MafiaWs.queueUpdate, payload: { speakingQueue: [...q] } })
     },
     { deep: true },
   )
@@ -531,7 +532,7 @@ export function useMafiaHostSignaling(
         mafia.clearReshuffleBroadcastPayload()
         return
       }
-      sendSignalingMessage({ type: 'mafia:reshuffle', payload: p })
+      sendSignalingMessage({ type: MafiaWs.reshuffle, payload: p })
       mafia.clearReshuffleBroadcastPayload()
     },
     { flush: 'post' },
@@ -555,7 +556,7 @@ export function useMafiaHostSignaling(
         mafia.clearPlayersUpdateBroadcastPayload()
         return
       }
-      sendSignalingMessage({ type: 'mafia:players-update', payload: p })
+      sendSignalingMessage({ type: MafiaWs.playersUpdate, payload: p })
       mafia.clearPlayersUpdateBroadcastPayload()
     },
     { flush: 'post' },
@@ -579,7 +580,7 @@ export function useMafiaHostSignaling(
         mafia.clearModeUpdateBroadcastPayload()
         return
       }
-      sendSignalingMessage({ type: 'mafia:mode-update', payload: p })
+      sendSignalingMessage({ type: MafiaWs.modeUpdate, payload: p })
       mafia.clearModeUpdateBroadcastPayload()
     },
     { flush: 'post' },
@@ -603,7 +604,7 @@ export function useMafiaHostSignaling(
         mafia.clearSettingsUpdateBroadcastPayload()
         return
       }
-      sendSignalingMessage({ type: 'mafia:settings-update', payload: p })
+      sendSignalingMessage({ type: MafiaWs.settingsUpdate, payload: p })
       mafia.clearSettingsUpdateBroadcastPayload()
     },
     { flush: 'post' },
@@ -627,7 +628,7 @@ export function useMafiaHostSignaling(
         mafia.clearPageBackgroundSettingsBroadcastPayload()
         return
       }
-      sendSignalingMessage({ type: 'mafia:page-background-settings', payload: p })
+      sendSignalingMessage({ type: MafiaWs.pageBackgroundSettings, payload: p })
       mafia.clearPageBackgroundSettingsBroadcastPayload()
     },
     { flush: 'post' },
@@ -651,7 +652,7 @@ export function useMafiaHostSignaling(
         mafia.clearTimerStartBroadcastPayload()
         return
       }
-      sendSignalingMessage({ type: 'mafia:timer-start', payload: p })
+      sendSignalingMessage({ type: MafiaWs.timerStart, payload: p })
       mafia.clearTimerStartBroadcastPayload()
     },
     { flush: 'post' },
@@ -675,7 +676,7 @@ export function useMafiaHostSignaling(
         mafia.clearTimerStopBroadcastPayload()
         return
       }
-      sendSignalingMessage({ type: 'mafia:timer-stop', payload: {} })
+      sendSignalingMessage({ type: MafiaWs.timerStop, payload: {} })
       mafia.clearTimerStopBroadcastPayload()
     },
     { flush: 'post' },
@@ -699,7 +700,7 @@ export function useMafiaHostSignaling(
         mafia.clearKickBroadcastPayload()
         return
       }
-      sendSignalingMessage({ type: 'mafia:player-kick', payload: p })
+      sendSignalingMessage({ type: MafiaWs.playerKick, payload: p })
       mafia.clearKickBroadcastPayload()
     },
     { flush: 'post' },
@@ -723,7 +724,7 @@ export function useMafiaHostSignaling(
         mafia.clearReviveBroadcastPayload()
         return
       }
-      sendSignalingMessage({ type: 'mafia:player-revive', payload: p })
+      sendSignalingMessage({ type: MafiaWs.playerRevive, payload: p })
       mafia.clearReviveBroadcastPayload()
     },
     { flush: 'post' },

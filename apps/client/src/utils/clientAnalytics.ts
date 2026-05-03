@@ -104,7 +104,11 @@ function send(endpoint: string, payload: Record<string, unknown>): void {
     method: 'POST',
     credentials: 'include',
     keepalive: true,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      // Matches apps/server/src/index.ts CSRF guard expectation.
+      'X-Requested-With': 'streamassist-fetch',
+    },
     body: JSON.stringify({ ...payload, sessionId: sessionId() }),
   }).catch(() => {
     // Analytics must never affect the app flow.

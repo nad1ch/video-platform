@@ -24,6 +24,25 @@ import {
 } from './eatFirstTransport.js'
 import { debugDelete } from '../utils/debugDelete.js'
 import { logListenerDetach } from '../utils/appLogger.js'
+import { getOrCreateDeviceId } from '../utils/deviceId.js'
+import {
+  getEatFirstJoinToken,
+  saveEatFirstJoinToken,
+} from '../utils/joinTokenStore.js'
+
+/**
+ * Build the per-slot auth bundle (joinToken + deviceId) sent with every player
+ * action. The server requires a match against the stored `EatFirstPlayer.data`
+ * unless the caller is an authenticated host/admin session.
+ * Returns `null` when no token is stored for this slot — callers then send
+ * the action without auth, which is only accepted by the server for
+ * authenticated host/admin sessions.
+ */
+function slotAuth(gameId, slotId) {
+  const token = getEatFirstJoinToken(gameId, slotId)
+  if (!token) return null
+  return { joinToken: token, deviceId: getOrCreateDeviceId() }
+}
 
 function nowIso() {
   return new Date().toISOString()
@@ -57,8 +76,9 @@ export async function setPlayerReady(gameId, playerId, ready) {
   const raw = String(playerId ?? '').trim()
   if (!raw) return
   const pid = normalizePlayerSlotId(playerId)
+  const gid = String(gameId ?? '').trim()
   try {
-    await efPostReady(String(gameId ?? '').trim(), pid, Boolean(ready))
+    await efPostReady(gid, pid, Boolean(ready), slotAuth(gid, pid))
   } catch (e) {
     logListenerDetach('setPlayerReady', e, { gameId, playerId: pid })
   }
@@ -329,8 +349,9 @@ export async function setGameHandRaised(gameId, playerId, raised) {
   const raw = String(playerId ?? '').trim()
   if (!raw) return
   const pid = normalizePlayerSlotId(playerId)
+  const gid = String(gameId ?? '').trim()
   try {
-    await efPostHand(String(gameId ?? '').trim(), pid, Boolean(raised))
+    await efPostHand(gid, pid, Boolean(raised), slotAuth(gid, pid))
   } catch (e) {
     logListenerDetach('setGameHandRaised', e, { gameId, playerId: pid })
   }
@@ -346,6 +367,9 @@ export async function claimPlayerSlot(gameId, playerId, options = {}) {
   try {
     const out = await efClaimSlot(gid, pid, deviceId, displayName)
     if (out && out.ok === true && typeof out.token === 'string') {
+      // Persist for subsequent hand/ready/vote auth — server rejects actions
+      // without a matching (joinToken + deviceId) for claimed slots.
+      saveEatFirstJoinToken(gid, pid, out.token)
       return { ok: true, token: out.token }
     }
     if (out && out.ok === false && out.reason) {
@@ -363,10 +387,11 @@ export async function saveVote(gameId, voterPlayerId, targetPlayer, choice, roun
   const gid = String(gameId ?? '').trim()
   if (!gid || !target) return { ok: false, reason: 'invalid' }
   const voter = String(voterPlayerId ?? '').trim()
+  const voterSlot = normalizePlayerSlotId(voter)
   const r = Math.floor(Number(round) || 0)
   if (!voter || !target || r < MIN_ROUND) return { ok: false, reason: 'invalid' }
   try {
-    const out = await efSubmitVote(gid, voter, target, c, r)
+    const out = await efSubmitVote(gid, voter, target, c, r, slotAuth(gid, voterSlot))
     return out && typeof out === 'object' ? out : { ok: false, reason: 'invalid' }
   } catch {
     return { ok: false, reason: 'invalid' }

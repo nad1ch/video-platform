@@ -11,7 +11,14 @@ import {
   submitGuess,
 } from './gameStore'
 import { persistNadleRound } from './persistRound'
-import { readSessionFromCookie } from '../auth/session/sessionJwt'
+import { readSessionFromCookie, type SessionPayload } from '../auth/session/sessionJwt'
+import { resolveUserRole } from '../auth/resolveUserRole'
+import { attachWsHeartbeat } from '../utils/wsHeartbeat'
+import { safeSendJson as safeSend } from '../utils/wsSafeSend'
+import {
+  parseOptionalPeerIdFromUpgrade,
+  parseStreamerIdFromUpgrade,
+} from '../utils/wsUpgradeQuery'
 import { clearTwitchGuessThrottleForStreamer } from './tmiGuessThrottle'
 import { NadleWs } from './wsProtocol'
 import { normalizeWordLength, type NadleWordLength } from './nadleLogic'
@@ -19,8 +26,31 @@ import { normalizeWordLength, type NadleWordLength } from './nadleLogic'
 const clientsByStreamer = new Map<string, Set<WebSocket>>()
 const clientSessionBySocket = new WeakMap<WebSocket, { id: string; displayName: string; canSeeSecret: boolean }>()
 
-function canSessionControlNadle(session: { id: string; role?: string } | null): boolean {
-  return Boolean(session && (session.role === 'admin' || isAdminTwitchUserId(session.id)))
+/**
+ * Re-evaluate admin eligibility from the server-side env allowlist at WS
+ * connect time. Previously this checked `session.role === 'admin'` from the
+ * JWT — that claim was stamped once at sign time, so removing an operator
+ * from `ADMIN_EMAILS` / `ADMIN_TWITCH_IDS` did not revoke their Nadle
+ * "see the secret word" privilege until their JWT expired (up to 7 days).
+ * `resolveUserRole` reads env fresh on every call.
+ */
+function canSessionControlNadle(session: SessionPayload | null): boolean {
+  if (!session) return false
+  if (isAdminTwitchUserId(session.id)) return true
+  const twitchId =
+    session.provider === 'twitch'
+      ? typeof session.twitch_id === 'string' && session.twitch_id.length > 0
+        ? session.twitch_id
+        : session.id
+      : undefined
+  return (
+    resolveUserRole({
+      provider: session.provider,
+      id: session.id,
+      email: session.email,
+      twitchId,
+    }) === 'admin'
+  )
 }
 
 /** JSON ping so nginx / proxies do not close idle upstream WebSockets. */
@@ -35,7 +65,7 @@ function pingAllNadleClients(): void {
   }
 }
 
-function ensureNadleJsonPingTimer(): void {
+function ensureNadleJsonPingTimer(wss: WebSocketServer): void {
   if (nadleJsonPingTimer !== null) {
     return
   }
@@ -43,6 +73,14 @@ function ensureNadleJsonPingTimer(): void {
   if (typeof nadleJsonPingTimer.unref === 'function') {
     nadleJsonPingTimer.unref()
   }
+  // Stop the app-level JSON ping when the WS server shuts down to prevent
+  // orphan intervals on hot-reload / graceful exit.
+  wss.on('close', () => {
+    if (nadleJsonPingTimer !== null) {
+      clearInterval(nadleJsonPingTimer)
+      nadleJsonPingTimer = null
+    }
+  })
 }
 
 function clientSet(streamerId: string): Set<WebSocket> {
@@ -69,16 +107,7 @@ function unregisterClient(streamerId: string, ws: WebSocket): void {
   }
 }
 
-function safeSend(ws: WebSocket, obj: unknown): void {
-  if (ws.readyState !== 1) {
-    return
-  }
-  try {
-    ws.send(JSON.stringify(obj))
-  } catch {
-    /* ignore */
-  }
-}
+/* safeSend is now `safeSendJson` from `../utils/wsSafeSend` (imported above). */
 
 function broadcastNadleToStreamer(streamerId: string, obj: unknown): void {
   const set = clientsByStreamer.get(streamerId)
@@ -194,44 +223,17 @@ function parseClientMsg(raw: string): ClientMsg | null {
   return null
 }
 
-function parseStreamerId(req: IncomingMessage): string | null {
-  try {
-    const host = req.headers.host ?? 'localhost'
-    const u = new URL(req.url ?? '/', `http://${host}`)
-    const id = u.searchParams.get('streamerId')
-    if (typeof id !== 'string' || id.trim().length < 4) {
-      return null
-    }
-    return id.trim()
-  } catch {
-    return null
-  }
-}
-
-/** Optional client tab id for logs (each tab should send a unique value). */
-function parseOptionalPeerId(req: IncomingMessage): string | null {
-  try {
-    const host = req.headers.host ?? 'localhost'
-    const u = new URL(req.url ?? '/', `http://${host}`)
-    const raw = u.searchParams.get('peerId')
-    if (typeof raw !== 'string') {
-      return null
-    }
-    const t = raw.trim()
-    if (t.length < 4 || t.length > 200) {
-      return null
-    }
-    return t
-  } catch {
-    return null
-  }
-}
+/* parseStreamerId / parseOptionalPeerId are now shared helpers in
+ * `../utils/wsUpgradeQuery` (identical byte-for-byte behavior). */
 
 export function attachNadleSocketServer(wss: WebSocketServer): void {
-  ensureNadleJsonPingTimer()
+  ensureNadleJsonPingTimer(wss)
+  // WS-level ping-frame heartbeat reaps half-open TCP clients the JSON ping
+  // cannot detect; shared with Nadraw / Checkers / EatFirst.
+  attachWsHeartbeat(wss, { logLabel: 'nadle-ws' })
 
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
-    const streamerId = parseStreamerId(req)
+    const streamerId = parseStreamerIdFromUpgrade(req)
     if (!streamerId) {
       safeSend(ws, {
         type: NadleWs.error,
@@ -241,7 +243,7 @@ export function attachNadleSocketServer(wss: WebSocketServer): void {
       return
     }
 
-    const tabPeerId = parseOptionalPeerId(req)
+    const tabPeerId = parseOptionalPeerIdFromUpgrade(req)
     if (process.env.NODE_ENV !== 'production' && tabPeerId) {
       console.log('[nadle-ws] client tab', { streamerId, peerId: tabPeerId.slice(0, 12) })
     }
@@ -303,57 +305,67 @@ export function attachNadleSocketServer(wss: WebSocketServer): void {
         return
       }
 
-      if (msg.type === NadleWs.clientGuess) {
-        if (!session) {
-          safeSend(ws, {
-            type: NadleWs.error,
-            payload: { code: 'auth_required', message: 'Login to submit from web' },
-          })
-          return
-        }
-        const result = submitGuess(streamerId, session.id, session.display_name, msg.word, msg.gameId)
-        if (!result.ok) {
-          safeSend(ws, { type: NadleWs.guessRejected, payload: { reason: result.reason } })
-          return
-        }
-        broadcastUserGuess(streamerId, {
-          gameId: result.gameId,
-          userId: result.userId,
-          displayName: result.displayName,
-          guess: result.guess,
-          feedback: result.feedback,
-          word: result.guess,
-          result: result.feedback,
-          attempts: result.attempts,
-          guessed: result.guessed,
-        })
-        if (result.guessed) {
-          const payload = buildNadleRoundPersistencePayload(streamerId, result.userId)
-          if (payload) {
-            void persistNadleRound(payload)
-          }
-        }
-        return
-      }
+      void (async () => {
+        // Any state-mutating path (guess / next-word) must see the real
+        // persisted round. Hydration is memoized via `hydratedStores` +
+        // `hydrationByStreamer`, so repeated calls after the first are
+        // effectively free — but awaiting here closes the pre-hydration race
+        // that would otherwise let `storeFor` return a default and clobber
+        // the DB with a brand-new word.
+        await hydrateNadleLiveGame(streamerId)
 
-      if (msg.type === NadleWs.clientNextWord) {
-        if (!session) {
-          safeSend(ws, { type: NadleWs.error, payload: { code: 'auth_required', message: 'Login to start a new word' } })
+        if (msg.type === NadleWs.clientGuess) {
+          if (!session) {
+            safeSend(ws, {
+              type: NadleWs.error,
+              payload: { code: 'auth_required', message: 'Login to submit from web' },
+            })
+            return
+          }
+          const result = submitGuess(streamerId, session.id, session.display_name, msg.word, msg.gameId)
+          if (!result.ok) {
+            safeSend(ws, { type: NadleWs.guessRejected, payload: { reason: result.reason } })
+            return
+          }
+          broadcastUserGuess(streamerId, {
+            gameId: result.gameId,
+            userId: result.userId,
+            displayName: result.displayName,
+            guess: result.guess,
+            feedback: result.feedback,
+            word: result.guess,
+            result: result.feedback,
+            attempts: result.attempts,
+            guessed: result.guessed,
+          })
+          if (result.guessed) {
+            const payload = buildNadleRoundPersistencePayload(streamerId, result.userId)
+            if (payload) {
+              void persistNadleRound(payload)
+            }
+          }
           return
         }
-        const meta = startPlayerNewGame(streamerId, session.id, session.display_name, msg.wordLength)
-        clearTwitchGuessThrottleForStreamer(streamerId)
-        safeSend(ws, { type: NadleWs.newGame, payload: meta })
-        safeSend(ws, {
-          type: NadleWs.state,
-          payload: getGameStatePayload(streamerId, {
-            userId: session.id,
-            displayName: session.display_name,
-            canSeeSecret: canSessionControlNadle(session),
-          }),
-        })
-        pushLeaderboard(streamerId)
-      }
+
+        if (msg.type === NadleWs.clientNextWord) {
+          if (!session) {
+            safeSend(ws, { type: NadleWs.error, payload: { code: 'auth_required', message: 'Login to start a new word' } })
+            return
+          }
+          const meta = startPlayerNewGame(streamerId, session.id, session.display_name, msg.wordLength)
+          clearTwitchGuessThrottleForStreamer(streamerId)
+          safeSend(ws, { type: NadleWs.newGame, payload: meta })
+          safeSend(ws, {
+            type: NadleWs.state,
+            payload: getGameStatePayload(streamerId, {
+              userId: session.id,
+              displayName: session.display_name,
+              canSeeSecret: canSessionControlNadle(session),
+            }),
+          })
+          pushLeaderboard(streamerId)
+        }
+      })()
     })
 
     ws.on('error', () => {

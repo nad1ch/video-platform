@@ -11,6 +11,14 @@ import {
 const MATCH_WAIT_TIMEOUT_MS = 30_000
 const PREFERRED_RATING_DIFF = 200
 
+/**
+ * How long a matched room stays in memory before the orphan reaper drops it
+ * and its corresponding `recordedResultKeys` entries. Normal games finish in
+ * minutes; 30 min leaves slack for long pauses but bounds memory growth.
+ */
+const MATCHED_ROOM_TTL_MS = 30 * 60 * 1000
+const MATCHED_ROOM_REAP_INTERVAL_MS = 5 * 60 * 1000
+
 type WaitingPlayer = {
   clientId: string
   userId: string | null
@@ -25,11 +33,44 @@ type MatchedRoom = {
   player2ClientId: string
   player1UserId: string | null
   player2UserId: string | null
+  createdAt: number
 }
 
 const waitingPlayers: WaitingPlayer[] = []
 const matchedRooms = new Map<string, MatchedRoom>()
 const recordedResultKeys = new Set<string>()
+
+/**
+ * Forget a matchmaking room and every recorded-result key under its prefix.
+ * Called after a successful `/api/matchmaking/result` and from the reaper
+ * below. Idempotent — missing entries are no-ops.
+ */
+function forgetMatchmakingRoom(roomId: string): void {
+  matchedRooms.delete(roomId)
+  const prefix = `${roomId}:`
+  for (const key of recordedResultKeys) {
+    if (key.startsWith(prefix)) {
+      recordedResultKeys.delete(key)
+    }
+  }
+}
+
+/**
+ * Bounded orphan reaper for `matchedRooms` that never received a result
+ * submission (client crashed mid-game, network failure, etc). Without this
+ * both maps grew monotonically for the process lifetime.
+ */
+const matchedRoomReaper = setInterval(() => {
+  const now = Date.now()
+  for (const [roomId, room] of matchedRooms) {
+    if (now - room.createdAt > MATCHED_ROOM_TTL_MS) {
+      forgetMatchmakingRoom(roomId)
+    }
+  }
+}, MATCHED_ROOM_REAP_INTERVAL_MS)
+if (typeof matchedRoomReaper.unref === 'function') {
+  matchedRoomReaper.unref()
+}
 
 function cleanClientId(raw: unknown): string | null {
   if (typeof raw !== 'string') {
@@ -127,12 +168,16 @@ export function mountCheckersMatchmakingRoutes(app: Express): void {
     if (opponent) {
       removeWaitingPlayer(opponent)
       const roomId = createMatchRoomId()
-      reserveCheckersMatchRoom(roomId, opponent.clientId, clientId)
+      reserveCheckersMatchRoom(roomId, opponent.clientId, clientId, {
+        player1UserId: opponent.userId,
+        player2UserId: userId,
+      })
       matchedRooms.set(roomId, {
         player1ClientId: opponent.clientId,
         player2ClientId: clientId,
         player1UserId: opponent.userId,
         player2UserId: userId,
+        createdAt: Date.now(),
       })
       finishWaiting(opponent, 200, { roomId })
       res.json({ roomId })
@@ -204,6 +249,10 @@ export function mountCheckersMatchmakingRoutes(app: Express): void {
       const afterRatings = await checkersRatingsForUsers([room.player1UserId, room.player2UserId])
       const before = beforeRatings.get(submitterUserId) ?? 1200
       const after = afterRatings.get(submitterUserId) ?? before
+      // Match is now persisted in the DB. Drop in-memory state so both maps
+      // stay bounded. A later resubmit would 202 `unrated_match` — acceptable
+      // since the DB is the source of truth for the result.
+      forgetMatchmakingRoom(roomId)
       res.json({ recorded: true, ratingDelta: after - before })
     } catch (err) {
       recordedResultKeys.delete(resultKey)

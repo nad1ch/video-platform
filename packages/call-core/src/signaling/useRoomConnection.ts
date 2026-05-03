@@ -572,7 +572,12 @@ export function useRoomConnection(wsUrl?: string) {
     wsStatus.value = 'closed'
     peers.value = []
     lastRoomState.value = null
-    messageListeners.clear()
+    // Do NOT clear `messageListeners` here — they are owned by their subscriber
+    // (the unsub closure returned from `addMessageListener`) and are expected to
+    // survive a leave→rejoin cycle within the same component instance. The
+    // engine top-level registrations (presence, chat, raise-hand, mafia
+    // force-controls in CallPage) would otherwise go silent after rejoin.
+    // Full cleanup still happens via each subscriber's own scope dispose.
     pendingNewProducers.length = 0
     bufferNewProducers = true
   }

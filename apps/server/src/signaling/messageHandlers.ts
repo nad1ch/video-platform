@@ -21,8 +21,27 @@ import { createWebRtcTransport } from '../mediasoup/createWebRtcTransport'
 import { Peer } from '../peers/Peer'
 import type { MafiaBackgroundItem, MafiaPageBackgroundItem, MafiaPlayerLifeState, Room } from '../rooms/Room'
 import type { RoomManager } from '../rooms/RoomManager'
+import { MafiaWs } from './mafiaWsProtocol'
+
+const MAFIA_ROOM_PREFIX = 'mafia:'
+
+/**
+ * Mafia-only behavior (host auto-assign, host/queue/timer state snapshots,
+ * and every `mafia:*` message handler) must only run for rooms whose id is
+ * under this namespace. The client wraps Mafia calls via
+ * `apps/client/src/composables/useMafiaMediaRoom.ts#mafiaSignalingRoomId`.
+ */
+function isMafiaRoomId(roomId: string): boolean {
+  return roomId.startsWith(MAFIA_ROOM_PREFIX)
+}
 
 const mafiaRoleSchema = z.enum(['mafia', 'don', 'sheriff', 'doctor', 'civilian'])
+
+/**
+ * Per-item upper bound: a 5 MB raw image inflates to ~6.8 MB after base64
+ * (the client uploads custom backgrounds as `data:image/...;base64,...` via
+ * `FileReader.readAsDataURL`). Anything above this is not a legit upload.
+ */
 const mafiaBackgroundItemSchema = z.object({
   id: z.string().min(1).max(128),
   url: z.string().min(1).max(7_000_000),
@@ -33,6 +52,28 @@ const mafiaPageBackgroundItemSchema = z.object({
   url: z.string().min(1).max(7_000_000),
   type: z.union([z.literal('default'), z.literal('preset'), z.literal('custom')]),
 })
+
+/**
+ * Total URL bytes cap for a full backgrounds array across a `mafia:settings-update`
+ * or `mafia:page-background-settings` payload. Prevents broadcast amplification
+ * (20 items × 7 MB per-item cap = 140 MB per peer without this check). Realistic
+ * multi-upload use case is a handful of 4-5 MB customs — 20 MB leaves slack.
+ */
+const MAFIA_BACKGROUNDS_TOTAL_URL_BYTES_MAX = 20 * 1024 * 1024
+
+function totalUrlBytes<T extends { url?: unknown }>(items: readonly T[]): number {
+  let total = 0
+  for (const it of items) {
+    if (typeof it.url === 'string') {
+      total += it.url.length
+    }
+  }
+  return total
+}
+
+function backgroundsArrayUnderTotalCap<T extends { url?: unknown }>(items: readonly T[]): boolean {
+  return totalUrlBytes(items) <= MAFIA_BACKGROUNDS_TOTAL_URL_BYTES_MAX
+}
 
 const directionSchema = z.enum(['send', 'recv'])
 
@@ -161,26 +202,26 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       .optional(),
   }),
   z.object({
-    type: z.literal('mafia:claim-host'),
+    type: z.literal(MafiaWs.claimHost),
     payload: z.object({
       sessionId: z.string().min(1).max(128).optional(),
     }).optional(),
   }),
   z.object({
-    type: z.literal('mafia:transfer-host'),
+    type: z.literal(MafiaWs.transferHost),
     payload: z.object({
       userId: z.string().min(1).max(128),
     }),
   }),
   z.object({
-    type: z.literal('mafia:queue-update'),
+    type: z.literal(MafiaWs.queueUpdate),
     payload: z.object({
       /** 1-based seat indices; order preserved; max length bounded server-side. */
       speakingQueue: z.array(z.number().int().min(1).max(12)).max(16),
     }),
   }),
   z.object({
-    type: z.literal('mafia:reshuffle'),
+    type: z.literal(MafiaWs.reshuffle),
     payload: z.object({
       players: z
         .array(
@@ -195,7 +236,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     }),
   }),
   z.object({
-    type: z.literal('mafia:players-update'),
+    type: z.literal(MafiaWs.playersUpdate),
     payload: z.object({
       order: z.array(z.string().min(1)).min(1).max(12),
       clearRoles: z.boolean().optional(),
@@ -213,28 +254,40 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     }),
   }),
   z.object({
-    type: z.literal('mafia:mode-update'),
+    type: z.literal(MafiaWs.modeUpdate),
     payload: z.object({
       mode: z.union([z.literal('old'), z.literal('new')]),
     }),
   }),
   z.object({
-    type: z.literal('mafia:settings-update'),
+    type: z.literal(MafiaWs.settingsUpdate),
     payload: z.object({
-      deadBackgrounds: z.array(mafiaBackgroundItemSchema).min(1).max(20),
+      deadBackgrounds: z
+        .array(mafiaBackgroundItemSchema)
+        .min(1)
+        .max(20)
+        .refine(backgroundsArrayUnderTotalCap, {
+          message: 'deadBackgrounds total URL bytes exceeds cap',
+        }),
       activeBackgroundId: z.string().min(1).max(128).nullable(),
     }),
   }),
   z.object({
-    type: z.literal('mafia:page-background-settings'),
+    type: z.literal(MafiaWs.pageBackgroundSettings),
     payload: z.object({
-      backgrounds: z.array(mafiaPageBackgroundItemSchema).min(1).max(20),
+      backgrounds: z
+        .array(mafiaPageBackgroundItemSchema)
+        .min(1)
+        .max(20)
+        .refine(backgroundsArrayUnderTotalCap, {
+          message: 'backgrounds total URL bytes exceeds cap',
+        }),
       selectedBackgroundId: z.string().min(1).max(128).nullable(),
       forcedBackgroundId: z.string().min(1).max(128).nullable(),
     }),
   }),
   z.object({
-    type: z.literal('mafia:timer-start'),
+    type: z.literal(MafiaWs.timerStart),
     payload: z.object({
       startedAt: z.number().int(),
       duration: z.number().int().min(30_000).max(7_200_000),
@@ -242,29 +295,29 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     }),
   }),
   z.object({
-    type: z.literal('mafia:timer-stop'),
+    type: z.literal(MafiaWs.timerStop),
     payload: z.object({}).strict(),
   }),
   z.object({
-    type: z.literal('mafia:player-kick'),
+    type: z.literal(MafiaWs.playerKick),
     payload: z.object({
       peerId: z.string().min(1),
     }),
   }),
   z.object({
-    type: z.literal('mafia:player-revive'),
+    type: z.literal(MafiaWs.playerRevive),
     payload: z.object({
       peerId: z.string().min(1),
     }),
   }),
   z.object({
-    type: z.literal('mafia:force-camera-off'),
+    type: z.literal(MafiaWs.forceCameraOff),
     payload: z.object({
       peerId: z.string().min(1),
     }),
   }),
   z.object({
-    type: z.literal('mafia:force-mute-all'),
+    type: z.literal(MafiaWs.forceMuteAll),
     payload: z.object({
       muted: z.boolean().optional(),
     }).strict(),
@@ -331,6 +384,10 @@ export type ServerMessage =
         kind: MediaKind
         videoSource?: 'camera' | 'screen'
       }
+    }
+  | {
+      type: 'producer-closed'
+      payload: { producerId: string; peerId: string; kind: MediaKind }
     }
   | {
       type: 'producer-video-source-changed'
@@ -410,6 +467,17 @@ export type ServerMessage =
 export type SignalingDeps = {
   roomManager: RoomManager
   socketPeer: Map<WsSocket, Peer>
+  /**
+   * Session-resolved user id per socket (populated in `attachSocketServer`
+   * from the HTTP-upgrade session cookie). Used by {@link handleJoinRoom}
+   * to override the untrusted client-supplied `userId` in the `join-room`
+   * payload — Mafia host authority keys on `peer.userId`, so trusting the
+   * client there would let anonymous sockets spoof any existing user id.
+   *
+   * Optional at module-interface level for test harnesses that build a
+   * minimal `SignalingDeps`; real production wiring always sets it.
+   */
+  socketSessionUserId?: WeakMap<WsSocket, string>
 }
 
 export function sendServerMessage(socket: WsSocket, message: ServerMessage): void {
@@ -478,11 +546,15 @@ function findProducerInRoom(room: Room, producerId: string): Producer | undefine
 /**
  * After outbound `replaceTrack` (same producer id), remotes may receive RTP without a decodable keyframe.
  * Ask each mediasoup video Consumer for this producer to request PLI/FIR toward the publisher.
+ *
+ * Uses `Peer.getConsumersByProducerId` (an index maintained by Peer) so the
+ * scan is O(peers) rather than O(peers × consumers-per-peer). A 12-peer call
+ * previously iterated ~144 consumers per source-change; now at most ~12.
  */
 function requestVideoKeyframesForProducerConsumers(room: Room, producerId: string): void {
   for (const p of room.getPeers()) {
-    for (const c of p.getConsumers()) {
-      if (c.closed || c.kind !== 'video' || c.producerId !== producerId) {
+    for (const c of p.getConsumersByProducerId(producerId)) {
+      if (c.closed || c.kind !== 'video') {
         continue
       }
       void c.requestKeyFrame().catch((err: unknown) => {
@@ -511,6 +583,43 @@ function detachPeerAudioProducersFromLevelObserver(peer: Peer, room: Room): void
   }
 }
 
+function broadcastProducerClosed(
+  room: Room,
+  peerId: string,
+  producerId: string,
+  kind: MediaKind,
+): void {
+  const msg: ServerMessage = {
+    type: 'producer-closed',
+    payload: { producerId, peerId, kind },
+  }
+  for (const p of room.getPeers()) {
+    p.sendJson(msg)
+  }
+}
+
+/**
+ * Close a single producer and notify the room so consumers can drop their
+ * stale track/consumer without waiting for `peer-left`. Used from:
+ *   - audio-producer swap (new audio producer created while the peer still has one);
+ *   - producer's own `transportclose` (transport died but the peer may stay).
+ *
+ * Safe to call when the producer is already closed (idempotent: `peer.removeProducer`
+ * no-ops for unknown ids; level-observer remove is try/catched).
+ */
+function closeAndBroadcastProducer(
+  room: Room,
+  peer: Peer,
+  producerId: string,
+  kind: MediaKind,
+): void {
+  if (kind === 'audio') {
+    void room.removeAudioProducerFromLevelObserver(producerId)
+  }
+  peer.removeProducer(producerId)
+  broadcastProducerClosed(room, peer.id, producerId, kind)
+}
+
 function broadcastPeerLeftToRoom(room: Room, leftPeerId: string): void {
   const msg: ServerMessage = { type: 'peer-left', payload: { peerId: leftPeerId } }
   for (const p of room.getPeers()) {
@@ -521,7 +630,7 @@ function broadcastPeerLeftToRoom(room: Room, leftPeerId: string): void {
 function broadcastMafiaHostUpdated(room: Room): void {
   const hostPeerId = room.getMafiaHostPeerId()
   const msg: ServerMessage = {
-    type: 'mafia:host-updated',
+    type: MafiaWs.hostUpdated,
     payload: {
       hostPeerId,
       hostUserId: room.getMafiaHostUserId(),
@@ -547,6 +656,24 @@ function isMafiaHostPeer(room: Room, peer: Peer): boolean {
     peer.mafiaSessionId === hostSessionId &&
     peer.id === hostPeerId
   )
+}
+
+/**
+ * Resolve the current peer + its room for a mafia-namespaced message. Returns
+ * `null` when the socket has no peer, no room, or the room is not a Mafia
+ * room — every `handleMafia*` handler short-circuits via this one helper,
+ * which keeps the room-type guard in one place.
+ */
+function resolveMafiaPeerAndRoom(
+  socket: WsSocket,
+  deps: SignalingDeps,
+): { peer: Peer; room: Room } | null {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) return null
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) return null
+  if (!isMafiaRoomId(room.id)) return null
+  return { peer, room }
 }
 
 function sanitizeUserId(raw: string | undefined): string {
@@ -586,7 +713,7 @@ function sanitizeMafiaSpeakingQueueList(raw: unknown, maxSeat: number): number[]
 
 function broadcastMafiaQueueUpdate(room: Room): void {
   const speakingQueue = room.getMafiaSpeakingQueue()
-  const msg: ServerMessage = { type: 'mafia:queue-update', payload: { speakingQueue } }
+  const msg: ServerMessage = { type: MafiaWs.queueUpdate, payload: { speakingQueue } }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
@@ -602,7 +729,7 @@ function broadcastMafiaReshuffle(
     }>
   },
 ): void {
-  const msg: ServerMessage = { type: 'mafia:reshuffle', payload }
+  const msg: ServerMessage = { type: MafiaWs.reshuffle, payload }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
@@ -632,6 +759,22 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
   }
   broadcastPeerLeftToRoom(room, peer.id)
   broadcastMafiaHostUpdated(room)
+  // Mafia speaking queue hygiene: seat indices > current peer count are
+  // stale after a leave. The host's next `mafia:players-update` will
+  // republish authoritative state, but until then we publish a pruned
+  // queue so UIs do not render a seat that no longer has a player.
+  if (isMafiaRoomId(room.id)) {
+    const changed = room.pruneMafiaSpeakingQueueToMaxSeat(room.getPeers().length)
+    if (changed) {
+      const msg: ServerMessage = {
+        type: MafiaWs.queueUpdate,
+        payload: { speakingQueue: room.getMafiaSpeakingQueue() },
+      }
+      for (const p of room.getPeers()) {
+        p.sendJson(msg)
+      }
+    }
+  }
   finalizeRoomIfEmpty(room, deps.roomManager)
 }
 
@@ -643,10 +786,22 @@ function disassociateSocketFromCurrentRoom(socket: WsSocket, deps: SignalingDeps
   removePeerFromNetwork(prev, deps)
 }
 
-function replaceDuplicatePeerId(room: Room, incomingSocket: WsSocket, peerId: string, deps: SignalingDeps): void {
+/**
+ * Evict an existing peer that shares the incoming socket's peerId. Returns
+ * `true` if the eviction caused the room to be finalized (last peer left
+ * → disposed + unregistered), so the caller can re-fetch a fresh Room from
+ * the manager. Returning a boolean lets `handleJoinRoom` skip the second
+ * `getOrCreateRoom` call on the common happy path.
+ */
+function replaceDuplicatePeerId(
+  room: Room,
+  incomingSocket: WsSocket,
+  peerId: string,
+  deps: SignalingDeps,
+): { roomFinalized: boolean } {
   const existing = room.getPeer(peerId)
   if (!existing || existing.socket === incomingSocket) {
-    return
+    return { roomFinalized: false }
   }
 
   console.warn('[signaling] duplicate peerId in room; closing previous socket (open a new tab with a fresh peer id)', {
@@ -667,7 +822,14 @@ function replaceDuplicatePeerId(room: Room, incomingSocket: WsSocket, peerId: st
     // ignore
   }
 
-  finalizeRoomIfEmpty(room, deps.roomManager)
+  // Only finalize (and therefore dispose the Room) when the eviction actually
+  // emptied the room. Report this back so the join path can re-create.
+  if (room.getPeers().length === 0) {
+    room.dispose()
+    deps.roomManager.removeRoom(room.id)
+    return { roomFinalized: true }
+  }
+  return { roomFinalized: false }
 }
 
 function sanitizeDisplayName(raw: string | undefined, peerId: string): string {
@@ -678,7 +840,16 @@ function sanitizeDisplayName(raw: string | undefined, peerId: string): string {
   return `Guest ${peerId.length > 6 ? peerId.slice(-6) : peerId}`
 }
 
-/** Client-announced profile URL — http(s) only, bounded length. */
+/**
+ * Client-announced profile URL — https only, bounded length.
+ *
+ * Previously accepted `http:` as well; the avatar is rendered by every other
+ * peer in the room, so accepting plaintext URLs risked mixed-content breakage
+ * and trivially trackable pixels. Every legitimate provider (Twitch, Google,
+ * Apple, Gravatar) serves avatars over https, so rejecting http has no
+ * legitimate-UX cost. `data:` / `blob:` / `javascript:` remain rejected by
+ * the protocol check; empty → `''` (no avatar) as before.
+ */
 function sanitizeAvatarUrl(raw: string | undefined): string {
   const t = raw?.trim() ?? ''
   if (t.length === 0) {
@@ -689,7 +860,7 @@ function sanitizeAvatarUrl(raw: string | undefined): string {
   }
   try {
     const u = new URL(t)
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') {
+    if (u.protocol !== 'https:') {
       return ''
     }
     return t
@@ -728,17 +899,44 @@ export async function handleJoinRoom(
   disassociateSocketFromCurrentRoom(socket, deps)
 
   let room = await deps.roomManager.getOrCreateRoom(roomId)
-  replaceDuplicatePeerId(room, socket, peerId, deps)
-  room = await deps.roomManager.getOrCreateRoom(roomId)
+  const { roomFinalized } = replaceDuplicatePeerId(room, socket, peerId, deps)
+  // Re-fetch only if the duplicate eviction finalized (disposed) the room.
+  // Previously this was called unconditionally, paying a Map lookup + async
+  // hop per join; now the happy path takes the fast branch.
+  if (roomFinalized) {
+    room = await deps.roomManager.getOrCreateRoom(roomId)
+  }
 
   const name = sanitizeDisplayName(displayName, peerId)
   const avatarUrlSafe = sanitizeAvatarUrl(avatarUrlRaw)
-  const userId = sanitizeUserId(userIdRaw)
+  // Server-authoritative user id for Mafia host scoping.
+  // Prefer the id resolved from the HTTP-upgrade session cookie; ignore the
+  // client-supplied field entirely — trusting it would let anonymous sockets
+  // spoof any Mafia host's user id via a forged `join-room` payload.
+  // Anonymous sockets get `''`, which every Mafia authority check already rejects.
+  const sessionUserId = deps.socketSessionUserId?.get(socket) ?? ''
+  const userId = sanitizeUserId(sessionUserId)
+  if (process.env.NODE_ENV !== 'production') {
+    const clientClaim = sanitizeUserId(userIdRaw)
+    if (clientClaim.length > 0 && clientClaim !== userId) {
+      console.warn('[signaling] join-room userId mismatch ignored', {
+        peerId,
+        clientClaim: clientClaim.slice(0, 16),
+        sessionUserIdPresent: userId.length > 0,
+      })
+    }
+  }
   const peer = new Peer(peerId, socket, room.id, name, avatarUrlSafe, userId)
   room.addPeer(peer)
   deps.socketPeer.set(socket, peer)
+  // Only `mafia:`-prefixed rooms maintain Mafia host state. Previously this
+  // ran unconditionally, so any authenticated user joining a plain `/app/call`
+  // room would silently become a "Mafia host" of that call room — harmless
+  // for non-Mafia UI (which never reads the field) but a cross-feature leak
+  // that pollutes room state and broadcasts.
+  const isMafiaRoom = isMafiaRoomId(room.id)
   let mafiaHostAssignedOnJoin = false
-  if (room.getMafiaHostUserId() == null && userId.length > 0) {
+  if (isMafiaRoom && room.getMafiaHostUserId() == null && userId.length > 0) {
     room.setMafiaHostUserId(userId)
     mafiaHostAssignedOnJoin = true
   }
@@ -790,47 +988,49 @@ export async function handleJoinRoom(
     broadcastMafiaHostUpdated(room)
   }
 
-  sendServerMessage(socket, {
-    type: 'mafia:host-updated',
-    payload: {
-      hostPeerId: room.getMafiaHostPeerId(),
-      hostUserId: room.getMafiaHostUserId(),
-      hostSessionId: room.getMafiaHostSessionId(),
-    },
-  })
-  sendServerMessage(socket, {
-    type: 'mafia:queue-update',
-    payload: { speakingQueue: room.getMafiaSpeakingQueue() },
-  })
-  sendServerMessage(socket, {
-    type: 'mafia:mode-update',
-    payload: { mode: room.getMafiaMode() },
-  })
-  sendServerMessage(socket, {
-    type: 'mafia:settings-update',
-    payload: {
-      deadBackgrounds: room.getMafiaDeadBackgrounds(),
-      activeBackgroundId: room.getMafiaActiveBackgroundId(),
-    },
-  })
-  sendServerMessage(socket, {
-    type: 'mafia:page-background-settings',
-    payload: {
-      backgrounds: room.getMafiaPageBackgrounds(),
-      selectedBackgroundId: null,
-      forcedBackgroundId: room.getMafiaForcedPageBackgroundId(),
-    },
-  })
-  sendServerMessage(socket, {
-    type: 'mafia:player-life-state',
-    payload: { states: room.getMafiaPlayerLifeStateSnapshot() },
-  })
-  {
+  // Mafia state snapshots — only valid for Mafia rooms. Non-Mafia joiners
+  // previously received a series of empty `mafia:*` messages on every join.
+  if (isMafiaRoom) {
+    sendServerMessage(socket, {
+      type: MafiaWs.hostUpdated,
+      payload: {
+        hostPeerId: room.getMafiaHostPeerId(),
+        hostUserId: room.getMafiaHostUserId(),
+        hostSessionId: room.getMafiaHostSessionId(),
+      },
+    })
+    sendServerMessage(socket, {
+      type: MafiaWs.queueUpdate,
+      payload: { speakingQueue: room.getMafiaSpeakingQueue() },
+    })
+    sendServerMessage(socket, {
+      type: MafiaWs.modeUpdate,
+      payload: { mode: room.getMafiaMode() },
+    })
+    sendServerMessage(socket, {
+      type: MafiaWs.settingsUpdate,
+      payload: {
+        deadBackgrounds: room.getMafiaDeadBackgrounds(),
+        activeBackgroundId: room.getMafiaActiveBackgroundId(),
+      },
+    })
+    sendServerMessage(socket, {
+      type: MafiaWs.pageBackgroundSettings,
+      payload: {
+        backgrounds: room.getMafiaPageBackgrounds(),
+        selectedBackgroundId: null,
+        forcedBackgroundId: room.getMafiaForcedPageBackgroundId(),
+      },
+    })
+    sendServerMessage(socket, {
+      type: MafiaWs.playerLifeState,
+      payload: { states: room.getMafiaPlayerLifeStateSnapshot() },
+    })
     const mt = room.getMafiaTimer()
     if (mt != null) {
       const rem = mt.duration - (Date.now() - mt.startedAt)
       if (rem > 0) {
-        sendServerMessage(socket, { type: 'mafia:timer-start', payload: { ...mt, isRunning: true } })
+        sendServerMessage(socket, { type: MafiaWs.timerStart, payload: { ...mt, isRunning: true } })
       } else {
         room.setMafiaTimer(null)
       }
@@ -905,14 +1105,11 @@ export function handleMafiaClaimHost(
   payload: { sessionId?: string } | null | undefined,
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (peer.userId.length < 1) {
     return
   }
@@ -950,14 +1147,11 @@ export function handleMafiaTransferHost(
   payload: { userId: string },
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
@@ -980,14 +1174,11 @@ export function handleMafiaQueueUpdate(
   payload: { speakingQueue: unknown } | null | undefined,
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
@@ -1012,14 +1203,11 @@ export function handleMafiaReshuffle(
   },
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
@@ -1051,28 +1239,28 @@ export function handleMafiaReshuffle(
 }
 
 function broadcastMafiaPlayerKick(room: Room, payload: { peerId: string }): void {
-  const msg: ServerMessage = { type: 'mafia:player-kick', payload }
+  const msg: ServerMessage = { type: MafiaWs.playerKick, payload }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
 }
 
 function broadcastMafiaPlayerRevive(room: Room, payload: { peerId: string }): void {
-  const msg: ServerMessage = { type: 'mafia:player-revive', payload }
+  const msg: ServerMessage = { type: MafiaWs.playerRevive, payload }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
 }
 
 function broadcastMafiaForceCameraOff(room: Room, payload: { peerId: string }): void {
-  const msg: ServerMessage = { type: 'mafia:force-camera-off', payload }
+  const msg: ServerMessage = { type: MafiaWs.forceCameraOff, payload }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
 }
 
 function broadcastMafiaForceMuteAll(room: Room, payload: { muted?: boolean }): void {
-  const msg: ServerMessage = { type: 'mafia:force-mute-all', payload }
+  const msg: ServerMessage = { type: MafiaWs.forceMuteAll, payload }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
@@ -1086,14 +1274,11 @@ export function handleMafiaPlayerKick(
   payload: { peerId: string },
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
@@ -1121,14 +1306,11 @@ export function handleMafiaPlayerRevive(
   payload: { peerId: string },
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
@@ -1149,14 +1331,11 @@ export function handleMafiaForceCameraOff(
   payload: { peerId: string },
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
@@ -1176,14 +1355,11 @@ export function handleMafiaForceMuteAll(
   payload: { muted?: boolean },
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
@@ -1205,7 +1381,7 @@ function broadcastMafiaPlayersUpdate(
     speakingQueue: number[]
   },
 ): void {
-  const msg: ServerMessage = { type: 'mafia:players-update', payload }
+  const msg: ServerMessage = { type: MafiaWs.playersUpdate, payload }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
@@ -1213,7 +1389,7 @@ function broadcastMafiaPlayersUpdate(
 
 function broadcastMafiaModeUpdate(room: Room, payload: { mode: 'old' | 'new' }): void {
   room.setMafiaMode(payload.mode)
-  const msg: ServerMessage = { type: 'mafia:mode-update', payload }
+  const msg: ServerMessage = { type: MafiaWs.modeUpdate, payload }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
@@ -1224,7 +1400,7 @@ function broadcastMafiaSettingsUpdate(
   payload: { deadBackgrounds: MafiaBackgroundItem[]; activeBackgroundId: string | null },
 ): void {
   room.setMafiaDeadBackgroundSettings(payload.deadBackgrounds, payload.activeBackgroundId)
-  const msg: ServerMessage = { type: 'mafia:settings-update', payload }
+  const msg: ServerMessage = { type: MafiaWs.settingsUpdate, payload }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
@@ -1239,7 +1415,7 @@ function broadcastMafiaPageBackgroundSettings(
   },
 ): void {
   room.setMafiaPageBackgroundSettings(payload.backgrounds, payload.forcedBackgroundId)
-  const msg: ServerMessage = { type: 'mafia:page-background-settings', payload }
+  const msg: ServerMessage = { type: MafiaWs.pageBackgroundSettings, payload }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
@@ -1264,14 +1440,11 @@ export function handleMafiaPlayersUpdate(
   },
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
@@ -1322,14 +1495,11 @@ export function handleMafiaModeUpdate(
   payload: { mode: 'old' | 'new' },
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
@@ -1341,14 +1511,11 @@ export function handleMafiaSettingsUpdate(
   payload: { deadBackgrounds: MafiaBackgroundItem[]; activeBackgroundId: string | null },
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
@@ -1371,16 +1538,15 @@ export function handleMafiaPageBackgroundSettings(
   },
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  // Previous logic: `if (isMafiaRoom && !isMafiaHostPeer) return` — inverted,
+  // which let NON-Mafia rooms broadcast background settings from any peer.
+  // The correct invariant: must be a Mafia room AND must be the host.
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
-  const isMafiaRoom = room.id.startsWith('mafia:')
-  if (isMafiaRoom && !isMafiaHostPeer(room, peer)) {
+  const { peer, room } = rp
+  if (!isMafiaHostPeer(room, peer)) {
     return
   }
   const ids = new Set(payload.backgrounds.map((background) => background.id))
@@ -1397,14 +1563,14 @@ function broadcastMafiaTimerStart(
   room: Room,
   payload: { startedAt: number; duration: number; isRunning: true },
 ): void {
-  const msg: ServerMessage = { type: 'mafia:timer-start', payload }
+  const msg: ServerMessage = { type: MafiaWs.timerStart, payload }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
 }
 
 function broadcastMafiaTimerStop(room: Room): void {
-  const msg: ServerMessage = { type: 'mafia:timer-stop', payload: {} }
+  const msg: ServerMessage = { type: MafiaWs.timerStop, payload: {} }
   for (const p of room.getPeers()) {
     p.sendJson(msg)
   }
@@ -1418,14 +1584,11 @@ export function handleMafiaTimerStart(
   payload: { startedAt: number; duration: number; isRunning?: boolean },
   deps: SignalingDeps,
 ): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
@@ -1446,14 +1609,11 @@ export function handleMafiaTimerStart(
 
 /** Only the Mafia host may clear the shared room timer. */
 export function handleMafiaTimerStop(socket: WsSocket, deps: SignalingDeps): void {
-  const peer = getPeerForSocket(socket, deps)
-  if (!peer) {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
     return
   }
-  const room = deps.roomManager.getRoom(peer.roomId)
-  if (!room) {
-    return
-  }
+  const { peer, room } = rp
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
@@ -1605,8 +1765,25 @@ export async function handleSetOutboundVideoPaused(
   if (!peer) {
     return
   }
+  // Camera mute/off must only affect CAMERA video producers — never the active
+  // screen-share producer. The room still receives `peer-outbound-video-paused`
+  // below so remote UIs flip the peer's camera-off state as before.
+  //
+  // `getVideoProducerSource` returns 'camera' | 'screen' | undefined:
+  //   - `camera`   → pause/resume (intended mute).
+  //   - `screen`   → SKIP (never silence an active share via a camera-off msg).
+  //   - undefined  → treat as camera-like. `Peer.addProducer` defaults new
+  //                  video producers to `'camera'` and `handleProduce` calls
+  //                  `setVideoProducerSource` right after `addProducer`, so
+  //                  `undefined` only exists in a vanishingly short window
+  //                  during produce; pausing it there is safe (matches the
+  //                  pre-fix behavior for that single producer).
   for (const p of peer.getProducers()) {
     if (p.closed || p.kind !== 'video') {
+      continue
+    }
+    const source = peer.getVideoProducerSource(p.id)
+    if (source === 'screen') {
       continue
     }
     try {
@@ -1707,8 +1884,9 @@ export async function handleProduce(
 
     if (producer.kind === 'audio') {
       for (const prev of previousAudioProducers) {
-        await room.removeAudioProducerFromLevelObserver(prev.id)
-        peer.removeProducer(prev.id)
+        // Notify room so other peers drop their stale audio consumer instead
+        // of silently decoding a now-dead producer id.
+        closeAndBroadcastProducer(room, peer, prev.id, 'audio')
       }
     }
 
@@ -1721,6 +1899,16 @@ export async function handleProduce(
     if (producer.kind === 'audio') {
       await room.addAudioProducerToLevelObserver(producer.id)
     }
+
+    // If the underlying transport goes away while the peer is still connected
+    // (e.g. ICE failure on a single direction), mediasoup emits `transportclose`
+    // on the Producer. Tell the room so consumers can drop it without waiting
+    // for a full `peer-left`. Listener is one-shot by design.
+    producer.on('transportclose', () => {
+      const r = deps.roomManager.getRoom(peer.roomId)
+      if (!r) return
+      closeAndBroadcastProducer(r, peer, producer.id, producer.kind)
+    })
 
     if (process.env.NODE_ENV !== 'production') {
       console.log('[mediasoup] SERVER PRODUCER', producer.kind, producer.id)

@@ -109,17 +109,22 @@ async function wireClient(h: Holder): Promise<void> {
       return
     }
     void (async () => {
-      await hydrateNadleLiveGame(streamerId)
       const userId = tags['user-id']
       if (!userId) {
         return
       }
       const displayName = displayNameFromTags(tags)
       const text = message.trim()
+      // Route to Nadraw first — it only needs the streamer's active-game flag,
+      // no Nadle hydration. Hydrating Nadle unconditionally meant every
+      // Twitch chat line on a Nadraw-active channel paid a DB read/cache hit
+      // for a game that was not going to be used.
       if (getStreamerActiveGame(streamerId) === 'nadraw-show') {
         ingestNadrawTwitchLine({ streamerId, userId, displayName, text })
         return
       }
+      // Nadle branch below needs the live store populated.
+      await hydrateNadleLiveGame(streamerId)
       const wordLen = getCurrentWordLength(streamerId)
       const normalized = normalizeWord(text)
       const looksLikeGuess = isValidGuessShape(normalized, wordLen)

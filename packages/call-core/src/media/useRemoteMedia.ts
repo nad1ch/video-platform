@@ -116,6 +116,27 @@ function isConsumeFailedForProducer(
   return typeof p.producerId === 'string' && p.producerId === producerId && typeof p.reason === 'string'
 }
 
+function isProducerClosedNotice(
+  data: unknown,
+): data is {
+  type: 'producer-closed'
+  payload: { producerId: string; peerId: string; kind: 'audio' | 'video' }
+} {
+  if (!data || typeof data !== 'object') {
+    return false
+  }
+  const msg = data as { type?: string; payload?: unknown }
+  if (msg.type !== 'producer-closed' || !msg.payload || typeof msg.payload !== 'object') {
+    return false
+  }
+  const p = msg.payload as { producerId?: unknown; peerId?: unknown; kind?: unknown }
+  return (
+    typeof p.producerId === 'string' &&
+    typeof p.peerId === 'string' &&
+    (p.kind === 'audio' || p.kind === 'video')
+  )
+}
+
 function isProducerVideoSourceChanged(
   data: unknown,
 ): data is {
@@ -293,6 +314,7 @@ export function useRemoteMedia() {
   let unsubscribeProducerSync: (() => void) | null = null
   let unsubscribeProducerVideoSource: (() => void) | null = null
   let unsubscribePeerOutboundPaused: (() => void) | null = null
+  let unsubscribeProducerClosed: (() => void) | null = null
 
   /**
    * Remote outbound video semantic for layout (camera vs screen).
@@ -462,6 +484,13 @@ export function useRemoteMedia() {
       return
     }
     const rows = await collectInboundVideoDebugStats()
+    // `collectInboundVideoDebugStats` awaits consumer.getStats() — `stopRemoteMedia`
+    // can run between the await and here (leaveCall / unmount). Re-check liveness
+    // so subsequent `schedulePreferredLayersUpdate()` / `room.sendJson` calls do
+    // not fire against a closed socket.
+    if (signalingRoom === null || !videoSpatialLayerSignalingEnabled.value) {
+      return
+    }
     updatePlaybackRenderFpsPressureFromInboundRows(rows)
 
     const slim: VideoInboundStatsRow[] = rows.map((r) => ({
@@ -1115,6 +1144,44 @@ export function useRemoteMedia() {
       }
       remoteOutboundVideoPausedByPeerId.value = next
     })
+    unsubscribeProducerClosed?.()
+    unsubscribeProducerClosed = room.addMessageListener((data) => {
+      if (!isProducerClosedNotice(data)) {
+        return
+      }
+      const { producerId, peerId } = data.payload
+      // Close the matching consumer (if any) and drop the stale track from the
+      // peer's composite stream. Safe when we don't have a consumer yet: the
+      // subsequent producer-sync / new-producer flow will not re-create one
+      // because producerInfoById is cleared here too.
+      const consumer = consumersByProducerId.get(producerId)
+      if (consumer && !consumer.closed) {
+        lastSentPreferredLayersByConsumerId.delete(consumer.id)
+        consumer.close()
+      }
+      consumersByProducerId.delete(producerId)
+      producerInfoById.delete(producerId)
+      consumeLifecycle.removeProducerLifecycle(producerId)
+
+      const stream = streamsByPeerId.get(peerId)
+      if (stream && consumer) {
+        for (const t of [...stream.getTracks()]) {
+          if (t.id === consumer.track.id) {
+            stream.removeTrack(t)
+            try {
+              t.stop()
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      }
+      syncRemotePeerStreamsRef()
+      bumpRemotePeerPlayRev(peerId)
+      if (import.meta.env.DEV) {
+        console.log('[producer-closed] cleaned up consumer', { producerId, peerId })
+      }
+    })
     unsubscribeProducerSync?.()
     unsubscribeProducerSync = room.addMessageListener((data) => {
       const parsed = parseProducerSyncPayload(data)
@@ -1305,6 +1372,8 @@ export function useRemoteMedia() {
     unsubscribeProducerVideoSource = null
     unsubscribePeerOutboundPaused?.()
     unsubscribePeerOutboundPaused = null
+    unsubscribeProducerClosed?.()
+    unsubscribeProducerClosed = null
     remoteVideoSourceByPeerId.value = new Map()
     remoteOutboundVideoPausedByPeerId.value = new Map()
     for (const consumer of consumersByProducerId.values()) {

@@ -5,6 +5,7 @@ import { isSessionAdminFromCookie } from './auth/session/isAdminRequest'
 import { resolvePrismaUserIdFromSession } from './auth/resolvePrismaUserFromSession'
 import { readSessionFromCookie } from './auth/session/sessionJwt'
 import { getUserRoles, parseFeaturePermissions, parseSystemRoles, setUserRoles } from './auth/userRoles'
+import { normalizeTwitchLogin } from './streamerIdentity'
 
 async function requireAdmin(req: Request, res: Response): Promise<boolean> {
   if (!(await isSessionAdminFromCookie(req.headers.cookie))) {
@@ -484,8 +485,8 @@ export function mountAdminRoutes(app: Express): void {
     const body = req.body as { name?: unknown; ownerId?: unknown }
     const rawName = typeof body.name === 'string' ? body.name : ''
     const ownerId = typeof body.ownerId === 'string' ? body.ownerId.trim() : ''
-    const name = rawName.trim().replace(/^#/, '').toLowerCase()
-    if (name.length < 2 || name.length > 25 || !/^[a-z0-9_]+$/.test(name)) {
+    const name = normalizeTwitchLogin(rawName)
+    if (!name) {
       res.status(400).json({ error: 'invalid_name' })
       return
     }

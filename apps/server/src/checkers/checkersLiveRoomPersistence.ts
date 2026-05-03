@@ -8,6 +8,15 @@ export type PersistedCheckersRoomMeta = {
   mode: 'friend' | 'bot' | 'local'
   player1?: string
   player2?: string
+  /**
+   * For rated rooms: Prisma userId reserved at matchmaking time for each seat.
+   * Persisted so a server restart mid-match still enforces the binding — the
+   * WS join handler compares the incoming session's Prisma userId against
+   * these fields and either rebinds the clientId (legitimate reclaim) or
+   * drops the joiner to spectator.
+   */
+  player1UserId?: string
+  player2UserId?: string
   rated?: boolean
   readyClientIds?: string[]
   displayNames?: Record<string, string>
@@ -49,6 +58,8 @@ export function parseCheckersLiveRoomSnapshot(value: unknown): PersistedCheckers
     mode?: unknown
     player1?: unknown
     player2?: unknown
+    player1UserId?: unknown
+    player2UserId?: unknown
     rated?: unknown
     readyClientIds?: unknown
     displayNames?: unknown
@@ -65,6 +76,14 @@ export function parseCheckersLiveRoomSnapshot(value: unknown): PersistedCheckers
       mode: meta.mode,
       player1: typeof meta.player1 === 'string' ? meta.player1 : undefined,
       player2: typeof meta.player2 === 'string' ? meta.player2 : undefined,
+      player1UserId:
+        typeof meta.player1UserId === 'string' && meta.player1UserId.length > 0
+          ? meta.player1UserId
+          : undefined,
+      player2UserId:
+        typeof meta.player2UserId === 'string' && meta.player2UserId.length > 0
+          ? meta.player2UserId
+          : undefined,
       rated: meta.rated === true,
       readyClientIds: Array.isArray(meta.readyClientIds)
         ? meta.readyClientIds.filter((id): id is string => typeof id === 'string')

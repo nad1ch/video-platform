@@ -8,9 +8,28 @@ function shouldTrackApiError(path: string): boolean {
 /**
  * Same-origin API `fetch` with `credentials: 'include'` (session cookie).
  * Pass `path` as for `apiUrl` (e.g. `/api/auth/me`). Optional `init` overrides/extends defaults.
+ *
+ * Always sends `X-Requested-With: streamassist-fetch` so the server-side CSRF
+ * guard accepts the request even when the browser elides the Origin header
+ * (happens on some same-site navigations / non-CORS flows). Cross-origin
+ * attackers cannot set this header without triggering a preflight, which the
+ * CORS middleware 403s for non-allow-listed origins.
  */
+const CSRF_HEADER_NAME = 'X-Requested-With'
+const CSRF_HEADER_VALUE = 'streamassist-fetch'
+
+function withCsrfHeader(init?: RequestInit): RequestInit {
+  const next: RequestInit = { credentials: 'include', ...(init ?? {}) }
+  const headers = new Headers(next.headers ?? undefined)
+  if (!headers.has(CSRF_HEADER_NAME)) {
+    headers.set(CSRF_HEADER_NAME, CSRF_HEADER_VALUE)
+  }
+  next.headers = headers
+  return next
+}
+
 export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(apiUrl(path), { credentials: 'include', ...init }).then(
+  return fetch(apiUrl(path), withCsrfHeader(init)).then(
     (res) => {
       if (!res.ok && shouldTrackApiError(path)) {
         trackClientError(

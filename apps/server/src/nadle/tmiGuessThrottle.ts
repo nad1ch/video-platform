@@ -14,6 +14,27 @@ export function readTwitchChatGuessCooldownMs(): number {
   return Number.isFinite(n) && n >= 1000 && n <= 2500 ? n : 1500
 }
 
+/**
+ * Reaper: drop entries whose last attempt is older than 4× the current cooldown.
+ * Every chatter left an entry for the lifetime of the process; large Twitch
+ * channels leak one Map entry per unique viewer. 4× cooldown is safely past
+ * the "pending throttle" window so legitimate throttle checks never see a
+ * stale-delete before they fire.
+ */
+const THROTTLE_REAP_INTERVAL_MS = 60_000
+const throttleReaper = setInterval(() => {
+  const now = Date.now()
+  const staleAfter = readTwitchChatGuessCooldownMs() * 4
+  for (const [k, t] of lastGuessShapeAttemptByUser) {
+    if (now - t > staleAfter) {
+      lastGuessShapeAttemptByUser.delete(k)
+    }
+  }
+}, THROTTLE_REAP_INTERVAL_MS)
+if (typeof throttleReaper.unref === 'function') {
+  throttleReaper.unref()
+}
+
 /** Returns false if this user must wait before another guess-shaped message is processed. */
 export function tryConsumeTwitchGuessThrottle(streamerId: string, userId: string): boolean {
   const now = Date.now()

@@ -2,11 +2,34 @@ import { createHash, randomBytes } from 'node:crypto'
 import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { isDatabaseConfigured, prisma } from '../../prisma'
+import { createRateLimiter, getClientIp, type RateLimiter } from '../../utils/rateLimit'
 import { clientPublicOrigin } from '../clientOrigin'
 import { resolveUserRole } from '../resolveUserRole'
 import { findUserByEmail, normalizeEmail, updateEmailUserPassword } from './emailUserService'
 import { sendPasswordResetEmail } from './emailVerificationMailer'
 import { resolveEmailLocale } from './emailTemplates'
+
+/**
+ * Rate limiters for password-reset send.
+ *
+ * Both responses are SILENT generic `{ ok: true }` (same shape as a legitimate
+ * success). A 429 response here would leak "this email exists" / "this IP has
+ * been probing" to an enumeration attacker — the whole point of the generic-ok
+ * design is that the attacker cannot distinguish existing vs. missing emails.
+ *
+ * The IP cap keeps cost bounded; the email cap specifically blunts enumeration
+ * velocity without adding a new distinguishing response code.
+ */
+const passwordResetIpLimiter: RateLimiter = createRateLimiter({
+  label: 'auth:password-reset:ip',
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+})
+const passwordResetEmailLimiter: RateLimiter = createRateLimiter({
+  label: 'auth:password-reset:email',
+  windowMs: 60 * 60 * 1000,
+  limit: 3,
+})
 
 const TOKEN_BYTES = 32
 const TOKEN_TTL_MINUTES = 30
@@ -137,8 +160,23 @@ export async function handleSendPasswordReset(req: Request, res: Response): Prom
     res.json({ ok: true })
   }
 
+  // Rate limit BEFORE any DB read so an attacker cannot pay DB cost while
+  // enumerating. Responses stay generic (`{ ok: true }`) on rate-limit hits
+  // so a probe cannot distinguish "throttled" from "unknown email".
+  const ipCheck = passwordResetIpLimiter.tryConsume(`ip:${getClientIp(req)}`)
+  if (!ipCheck.allowed) {
+    genericOk()
+    return
+  }
+  const normalized = normalizeEmail(parsed.data.email)
+  const emailCheck = passwordResetEmailLimiter.tryConsume(`email:${normalized}`)
+  if (!emailCheck.allowed) {
+    genericOk()
+    return
+  }
+
   try {
-    const row = findUserByEmail(parsed.data.email)
+    const row = findUserByEmail(normalized)
     if (!row) {
       genericOk()
       return

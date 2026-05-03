@@ -60,11 +60,62 @@ async function bootstrap(): Promise<void> {
 
     if (req.method === 'OPTIONS') {
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+      // Include X-Requested-With so the CSRF guard below can accept it after preflight.
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With, X-Mono-Secret')
       res.status(204).end()
       return
     }
     next()
+  })
+
+  // ---------------------------------------------------------------------------
+  // CSRF defense-in-depth for cookie-authenticated mutations.
+  //
+  // Session cookie is `sameSite=none` in production so the SPA on a different
+  // subdomain can include it. That means simple cross-site forms can submit
+  // POSTs with the cookie attached. The CORS middleware above already rejects
+  // cross-origin requests that *send* an Origin header with a disallowed value,
+  // but browsers/tools can also send mutations with Origin absent (classic form
+  // CSRF, some Safari same-site cases, server-side fetches with cookies).
+  //
+  // Require ONE of:
+  //   - an allow-listed `Origin` header (the CORS layer already validated it
+  //     is in `allowed`; we just re-check presence here), OR
+  //   - a custom `X-Requested-With` header (cross-origin JS cannot set this
+  //     without triggering a preflight, which the CORS layer 403s for
+  //     disallowed origins).
+  //
+  // Public webhooks that must accept server-to-server POSTs without Origin
+  // bypass this guard via an explicit allow-list.
+  // ---------------------------------------------------------------------------
+  const CSRF_WEBHOOK_ALLOWLIST: ReadonlySet<string> = new Set([
+    '/api/billing/mono-personal/webhook',
+  ])
+  app.use((req, res, next) => {
+    const method = req.method.toUpperCase()
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+      return next()
+    }
+    if (!req.path.startsWith('/api/')) {
+      return next()
+    }
+    if (CSRF_WEBHOOK_ALLOWLIST.has(req.path)) {
+      return next()
+    }
+    const origin = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : ''
+    const allowed = corsAllowedOrigins()
+    if (origin.length > 0 && allowed.includes(origin)) {
+      return next()
+    }
+    const xrw = req.headers['x-requested-with']
+    const xrwValue = typeof xrw === 'string' ? xrw.trim() : Array.isArray(xrw) ? (xrw[0] ?? '').trim() : ''
+    if (xrwValue.length > 0) {
+      return next()
+    }
+    res.status(403).json({
+      error: 'CSRF_PROTECTION',
+      message: 'Origin header or X-Requested-With is required for cookie-authenticated mutations',
+    })
   })
 
   app.use(cookieParser())
