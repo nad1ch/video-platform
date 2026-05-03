@@ -1,0 +1,11 @@
+---
+description: Git default branch for StreamAssist — AI audits and reviews must align with GitHub
+alwaysApply: true
+---
+
+# Repository default branch
+
+- **Source-of-truth branch:** `main` (remote: `origin/main`). This matches the GitHub default branch for StreamAssist.
+- **Do not** treat long-lived or topic feature branches (for example `feat/mediasoup-core`) as the product **main** / **base** / **default** branch unless the user explicitly says so for that task.
+- For **repo-wide audits**, **read-only reviews**, or **“what is in production / default tree”** questions: treat **`origin/main`** as the baseline. When reporting scope, prefer verifying **current `HEAD` against `origin/main`** (e.g. `git fetch origin` then `git merge-base HEAD origin/main` / `git log origin/main..HEAD`) so results are not limited to a local feature branch.
+- **Claude Code / Cursor project UI:** if a tool shows a “Main branch” or default that is **not** `main`, correct it in that product’s **project or workspace settings** — it is not defined in this repo’s tracked files.
