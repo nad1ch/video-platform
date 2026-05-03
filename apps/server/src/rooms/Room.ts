@@ -65,6 +65,14 @@ export class Room {
   private mafiaForcedPageBackgroundId: string | null = null
   /** Mafia overlay state only. Missing peer id means alive. */
   private mafiaPlayerLifeStateByPeerId = new Map<string, Exclude<MafiaPlayerLifeState, 'alive'>>()
+  /**
+   * Mafia host enforcement persistence. `Peer.forcedAudioMuted` /
+   * `Peer.forcedCameraOff` reset on rejoin (new Peer object), so the room
+   * remembers active force-state and re-applies on `handleJoinRoom`. Cleared
+   * automatically on `peer-left`.
+   */
+  private mafiaForceMuteAllActive = false
+  private mafiaForcedCameraOffPeerIds = new Set<string>()
 
   private constructor(id: string, router: Router, pooledWorker: PooledWorker) {
     this.id = id
@@ -210,6 +218,17 @@ export class Room {
       return undefined
     }
     this.peers.delete(peerId)
+    // If the leaving peer was the last broadcast active speaker, emit a clear
+    // immediately. The AudioLevelObserver eventually emits `silence` after its
+    // hold timer, but until then a fresh joiner's catch-up replay would point
+    // at a peer that is gone. The broadcast loop now skips the leaving peer
+    // because we already removed it from `this.peers` above.
+    if (this.lastBroadcastSpeakerPeerId === peerId) {
+      this.emitActiveSpeakerIfChanged(null)
+    }
+    // Drop any host-forced video state tied to this peerId. The room-level
+    // force-mute-all flag is room-wide and stays until the host clears it.
+    this.clearMafiaForceStateForPeer(peerId)
     return peer
   }
 
@@ -348,5 +367,29 @@ export class Room {
   setMafiaPageBackgroundSettings(backgrounds: MafiaPageBackgroundItem[], forcedBackgroundId: string | null): void {
     this.mafiaPageBackgrounds = backgrounds.map((item) => ({ ...item }))
     this.mafiaForcedPageBackgroundId = forcedBackgroundId
+  }
+
+  isMafiaForceMuteAllActive(): boolean {
+    return this.mafiaForceMuteAllActive
+  }
+
+  setMafiaForceMuteAllActive(active: boolean): void {
+    this.mafiaForceMuteAllActive = active
+  }
+
+  isMafiaPeerForcedCameraOff(peerId: string): boolean {
+    return this.mafiaForcedCameraOffPeerIds.has(peerId)
+  }
+
+  setMafiaPeerForcedCameraOff(peerId: string, forced: boolean): void {
+    if (forced) {
+      this.mafiaForcedCameraOffPeerIds.add(peerId)
+    } else {
+      this.mafiaForcedCameraOffPeerIds.delete(peerId)
+    }
+  }
+
+  clearMafiaForceStateForPeer(peerId: string): void {
+    this.mafiaForcedCameraOffPeerIds.delete(peerId)
   }
 }

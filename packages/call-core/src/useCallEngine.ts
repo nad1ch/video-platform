@@ -726,7 +726,58 @@ export function useCallEngine(options?: CallEngineOptions) {
       /* ws closed */
     }
 
+    // Resync UI-state messages that the reactive watchers below cannot re-emit
+    // on reconnect (deps unchanged: `inCall` stays true, `camEnabled`/`micEnabled`
+    // unchanged). On initial join this also closes the produce↔resume race for
+    // a user who started with cam-off/mic-muted: the watcher fires later via
+    // `[inCall]: false→true`, but by then the SFU already resumed the new
+    // producer. Sending immediately after publish makes the pause take effect
+    // before any frames are forwarded. Server handlers are idempotent.
+    if (mode === 'participant') {
+      resyncOutboundUiState()
+    }
+
     startSignalingKeepAlive()
+  }
+
+  /**
+   * Re-emit `set-outbound-video-paused`, `set-audio-muted`, and `raise-hand`
+   * (when active) based on current UI state. Caller invokes this at the tail
+   * of `wireCallMediaAfterRoomState` so the call site is already gated on a
+   * successful join (room-state, device, send transport, publish) — no
+   * `inCall` guard here because the engine sets `inCall = true` only AFTER
+   * wire returns (initial `joinCall`), and reconnect keeps `inCall` true
+   * throughout. All three server handlers are idempotent on equal state.
+   * Closed-WS is handled by `sendJson` try-blocks.
+   */
+  function resyncOutboundUiState(): void {
+    if (readEngineRole(options) !== 'participant') {
+      return
+    }
+    const cam = camEnabled.value
+    const outbound = outboundVideoSource.value
+    const mic = micEnabled.value
+    const wantVideoPaused = outbound !== 'screen' && !cam
+    try {
+      sendJson({
+        type: 'set-outbound-video-paused',
+        payload: { paused: wantVideoPaused },
+      })
+    } catch {
+      /* ws closed */
+    }
+    try {
+      sendJson({ type: 'set-audio-muted', payload: { muted: !mic } })
+    } catch {
+      /* ws closed */
+    }
+    if (handRaised.value) {
+      try {
+        sendJson({ type: 'raise-hand', payload: { raised: true } })
+      } catch {
+        /* ws closed */
+      }
+    }
   }
 
   /**

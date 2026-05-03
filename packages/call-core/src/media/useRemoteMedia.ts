@@ -480,18 +480,26 @@ export function useRemoteMedia() {
     if (signalingRoom === null) {
       return
     }
-    if (!videoSpatialLayerSignalingEnabled.value) {
-      return
-    }
+    // Always collect inbound stats and update the FPS-pressure UI signal —
+    // `playbackRenderFpsPressureByPeerId` feeds CallPage's `isSystemHealthy`
+    // / `isFullPowerMode` UI affordances and must keep updating even though
+    // spatial-layer signaling is currently disabled (single-encoding wire).
+    // Spatial-layer downgrade decisions remain gated on
+    // `videoSpatialLayerSignalingEnabled` so this fix does NOT change desktop
+    // video quality.
     const rows = await collectInboundVideoDebugStats()
     // `collectInboundVideoDebugStats` awaits consumer.getStats() — `stopRemoteMedia`
     // can run between the await and here (leaveCall / unmount). Re-check liveness
     // so subsequent `schedulePreferredLayersUpdate()` / `room.sendJson` calls do
     // not fire against a closed socket.
-    if (signalingRoom === null || !videoSpatialLayerSignalingEnabled.value) {
+    if (signalingRoom === null) {
       return
     }
     updatePlaybackRenderFpsPressureFromInboundRows(rows)
+
+    if (!videoSpatialLayerSignalingEnabled.value) {
+      return
+    }
 
     const slim: VideoInboundStatsRow[] = rows.map((r) => ({
       framesDecoded: r.framesDecoded,

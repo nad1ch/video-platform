@@ -190,7 +190,7 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'set-audio-muted': {
               const { muted } = parsed.data.payload
-              handleSetAudioMuted(socket, muted, deps)
+              await handleSetAudioMuted(socket, muted, deps)
               break
             }
             case 'consume': {
@@ -262,11 +262,11 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'mafia:force-camera-off': {
-              handleMafiaForceCameraOff(socket, parsed.data.payload, deps)
+              await handleMafiaForceCameraOff(socket, parsed.data.payload, deps)
               break
             }
             case 'mafia:force-mute-all': {
-              handleMafiaForceMuteAll(socket, parsed.data.payload, deps)
+              await handleMafiaForceMuteAll(socket, parsed.data.payload, deps)
               break
             }
             case 'request-producer-sync': {

@@ -280,6 +280,13 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     type: z.literal(MafiaWs.forceCameraOff),
     payload: z.object({
       peerId: z.string().min(1),
+      /**
+       * Optional toggle (default `true` when omitted). Lets the host clear
+       * `Peer.forcedCameraOff` for the target without changing the legacy
+       * "force camera off" semantic of older clients (they send no `paused`
+       * field, server defaults to `true`).
+       */
+      paused: z.boolean().optional(),
     }),
   }),
   z.object({

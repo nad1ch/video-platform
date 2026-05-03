@@ -12,6 +12,21 @@ export class Peer {
   avatarUrl: string
   /** UI metadata: true when this peer has locally muted their outbound mic. */
   audioMuted = false
+  /**
+   * Mafia host enforcement: when true, the SFU keeps this peer's audio
+   * producers paused regardless of the peer's own `set-audio-muted`. UI
+   * mute icon reflects `audioMuted || forcedAudioMuted` so remote peers
+   * see "muted" even if the user has not muted themselves.
+   */
+  forcedAudioMuted = false
+  /**
+   * Mafia host enforcement: when true, the SFU keeps this peer's video
+   * producers paused (both camera and screen — spoof-resistant). The peer's
+   * own `set-outbound-video-paused: false` is ignored while this is set.
+   * Cleared when the peer leaves the room (Peer destroyed) or when the host
+   * resends `mafia:force-camera-off` with `paused: false`.
+   */
+  forcedCameraOff = false
   /** Mafia tab/session identity; set by `mafia:claim-host`. */
   mafiaSessionId = ''
   /**
