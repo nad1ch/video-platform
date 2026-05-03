@@ -35,6 +35,7 @@ import {
   handleSetAudioMuted,
   handleRaiseHand,
   handleRequestProducerSync,
+  handleSetConsumerPaused,
   handleSetConsumerPreferredLayers,
   handleUpdateDisplayName,
   sendServerMessage,
@@ -206,6 +207,11 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             case 'set-consumer-preferred-layers': {
               const { consumerId, spatialLayer, temporalLayer } = parsed.data.payload
               await handleSetConsumerPreferredLayers(socket, consumerId, spatialLayer, temporalLayer, deps)
+              break
+            }
+            case 'set-consumer-paused': {
+              const { consumerId, paused } = parsed.data.payload
+              await handleSetConsumerPaused(socket, consumerId, paused, deps)
               break
             }
             case 'call-chat': {

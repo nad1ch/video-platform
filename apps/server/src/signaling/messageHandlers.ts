@@ -193,6 +193,33 @@ export function sendServerMessage(socket: WsSocket, message: ServerMessage): voi
   }
 }
 
+/**
+ * Broadcast helper: stringifies `message` once and sends the same buffer to every
+ * peer in `room`. Equivalent to `for (const p of room.getPeers()) p.sendJson(msg)`,
+ * but avoids re-running `JSON.stringify` per peer on identical payloads — a measurable
+ * win in 8-12 peer rooms when fan-out frequency is high (camera-off, peer-left,
+ * mafia state churn).
+ */
+function broadcastServerMessageToRoom(room: Room, message: ServerMessage): void {
+  const serialized = JSON.stringify(message)
+  for (const p of room.getPeers()) {
+    p.sendRaw(serialized)
+  }
+}
+
+/**
+ * Same as {@link broadcastServerMessageToRoom} but for messages whose shape is not in
+ * {@link ServerMessage} (call-chat, raise-hand and other ad-hoc broadcasts that were
+ * inlined as object literals before this helper existed). Uses `unknown` to allow any
+ * JSON-serializable shape; callers must construct a stable shape themselves.
+ */
+function broadcastUntypedJsonToRoom(room: Room, payload: unknown): void {
+  const serialized = JSON.stringify(payload)
+  for (const p of room.getPeers()) {
+    p.sendRaw(serialized)
+  }
+}
+
 let loggedClientIceConfig = false
 
 function serializeTransportOptions(transport: WebRtcTransport): TransportOptionsPayload {
@@ -296,13 +323,10 @@ function broadcastProducerClosed(
   producerId: string,
   kind: MediaKind,
 ): void {
-  const msg: ServerMessage = {
+  broadcastServerMessageToRoom(room, {
     type: 'producer-closed',
     payload: { producerId, peerId, kind },
-  }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  })
 }
 
 /**
@@ -328,25 +352,18 @@ function closeAndBroadcastProducer(
 }
 
 function broadcastPeerLeftToRoom(room: Room, leftPeerId: string): void {
-  const msg: ServerMessage = { type: 'peer-left', payload: { peerId: leftPeerId } }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, { type: 'peer-left', payload: { peerId: leftPeerId } })
 }
 
 function broadcastMafiaHostUpdated(room: Room): void {
-  const hostPeerId = room.getMafiaHostPeerId()
-  const msg: ServerMessage = {
+  broadcastServerMessageToRoom(room, {
     type: MafiaWs.hostUpdated,
     payload: {
-      hostPeerId,
+      hostPeerId: room.getMafiaHostPeerId(),
       hostUserId: room.getMafiaHostUserId(),
       hostSessionId: room.getMafiaHostSessionId(),
     },
-  }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  })
 }
 
 function isMafiaHostPeer(room: Room, peer: Peer): boolean {
@@ -384,11 +401,10 @@ function resolveMafiaPeerAndRoom(
 }
 
 function broadcastMafiaQueueUpdate(room: Room): void {
-  const speakingQueue = room.getMafiaSpeakingQueue()
-  const msg: ServerMessage = { type: MafiaWs.queueUpdate, payload: { speakingQueue } }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, {
+    type: MafiaWs.queueUpdate,
+    payload: { speakingQueue: room.getMafiaSpeakingQueue() },
+  })
 }
 
 function broadcastMafiaReshuffle(
@@ -401,10 +417,7 @@ function broadcastMafiaReshuffle(
     }>
   },
 ): void {
-  const msg: ServerMessage = { type: MafiaWs.reshuffle, payload }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, { type: MafiaWs.reshuffle, payload })
 }
 
 function finalizeRoomIfEmpty(room: Room, roomManager: RoomManager): void {
@@ -443,13 +456,10 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
   if (isMafiaRoomId(room.id)) {
     const changed = room.pruneMafiaSpeakingQueueToMaxSeat(room.getPeers().length)
     if (changed) {
-      const msg: ServerMessage = {
+      broadcastServerMessageToRoom(room, {
         type: MafiaWs.queueUpdate,
         payload: { speakingQueue: room.getMafiaSpeakingQueue() },
-      }
-      for (const p of room.getPeers()) {
-        p.sendJson(msg)
-      }
+      })
     }
   }
   finalizeRoomIfEmpty(room, deps.roomManager)
@@ -630,11 +640,12 @@ export async function handleJoinRoom(
       ...(avatarUrlSafe.length > 0 ? { avatarUrl: avatarUrlSafe } : {}),
     },
   }
+  const serializedJoined = JSON.stringify(joinedMsg)
   for (const p of room.getPeers()) {
     if (p.id === peerId) {
       continue
     }
-    p.sendJson(joinedMsg)
+    p.sendRaw(serializedJoined)
   }
   if (mafiaHostAssignedOnJoin) {
     broadcastMafiaHostUpdated(room)
@@ -703,18 +714,15 @@ export function handleCallChat(socket: WsSocket, text: string, deps: SignalingDe
   if (!trimmed) {
     return
   }
-  const msg = {
-    type: 'call-chat' as const,
+  broadcastUntypedJsonToRoom(room, {
+    type: 'call-chat',
     payload: {
       peerId: peer.id,
       displayName: peer.displayName,
       text: trimmed,
       at: Date.now(),
     },
-  }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  })
 }
 
 export function handleRaiseHand(socket: WsSocket, raised: boolean, deps: SignalingDeps): void {
@@ -726,10 +734,10 @@ export function handleRaiseHand(socket: WsSocket, raised: boolean, deps: Signali
   if (!room) {
     return
   }
-  const msg = { type: 'raise-hand' as const, payload: { peerId: peer.id, raised } }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastUntypedJsonToRoom(room, {
+    type: 'raise-hand',
+    payload: { peerId: peer.id, raised },
+  })
 }
 
 export async function handleSetAudioMuted(
@@ -770,13 +778,10 @@ export async function handleSetAudioMuted(
   
   
   const effectiveMuted = peer.audioMuted || peer.forcedAudioMuted
-  const msg: ServerMessage = {
+  broadcastServerMessageToRoom(room, {
     type: 'peer-audio-muted',
     payload: { peerId: peer.id, muted: effectiveMuted },
-  }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  })
 }
 
 /**
@@ -922,31 +927,19 @@ export function handleMafiaReshuffle(
 }
 
 function broadcastMafiaPlayerKick(room: Room, payload: { peerId: string }): void {
-  const msg: ServerMessage = { type: MafiaWs.playerKick, payload }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, { type: MafiaWs.playerKick, payload })
 }
 
 function broadcastMafiaPlayerRevive(room: Room, payload: { peerId: string }): void {
-  const msg: ServerMessage = { type: MafiaWs.playerRevive, payload }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, { type: MafiaWs.playerRevive, payload })
 }
 
 function broadcastMafiaForceCameraOff(room: Room, payload: { peerId: string }): void {
-  const msg: ServerMessage = { type: MafiaWs.forceCameraOff, payload }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, { type: MafiaWs.forceCameraOff, payload })
 }
 
 function broadcastMafiaForceMuteAll(room: Room, payload: { muted?: boolean }): void {
-  const msg: ServerMessage = { type: MafiaWs.forceMuteAll, payload }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, { type: MafiaWs.forceMuteAll, payload })
 }
 
 
@@ -1158,18 +1151,12 @@ function broadcastMafiaPlayersUpdate(
     speakingQueue: number[]
   },
 ): void {
-  const msg: ServerMessage = { type: MafiaWs.playersUpdate, payload }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, { type: MafiaWs.playersUpdate, payload })
 }
 
 function broadcastMafiaModeUpdate(room: Room, payload: { mode: 'old' | 'new' }): void {
   room.setMafiaMode(payload.mode)
-  const msg: ServerMessage = { type: MafiaWs.modeUpdate, payload }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, { type: MafiaWs.modeUpdate, payload })
 }
 
 function broadcastMafiaSettingsUpdate(
@@ -1177,10 +1164,7 @@ function broadcastMafiaSettingsUpdate(
   payload: { deadBackgrounds: MafiaBackgroundItem[]; activeBackgroundId: string | null },
 ): void {
   room.setMafiaDeadBackgroundSettings(payload.deadBackgrounds, payload.activeBackgroundId)
-  const msg: ServerMessage = { type: MafiaWs.settingsUpdate, payload }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, { type: MafiaWs.settingsUpdate, payload })
 }
 
 function broadcastMafiaPageBackgroundSettings(
@@ -1192,10 +1176,7 @@ function broadcastMafiaPageBackgroundSettings(
   },
 ): void {
   room.setMafiaPageBackgroundSettings(payload.backgrounds, payload.forcedBackgroundId)
-  const msg: ServerMessage = { type: MafiaWs.pageBackgroundSettings, payload }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, { type: MafiaWs.pageBackgroundSettings, payload })
 }
 
 
@@ -1340,17 +1321,11 @@ function broadcastMafiaTimerStart(
   room: Room,
   payload: { startedAt: number; duration: number; isRunning: true },
 ): void {
-  const msg: ServerMessage = { type: MafiaWs.timerStart, payload }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, { type: MafiaWs.timerStart, payload })
 }
 
 function broadcastMafiaTimerStop(room: Room): void {
-  const msg: ServerMessage = { type: MafiaWs.timerStop, payload: {} }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  broadcastServerMessageToRoom(room, { type: MafiaWs.timerStop, payload: {} })
 }
 
 
@@ -1414,13 +1389,10 @@ export function handleUpdateDisplayName(
   const trimmed = displayName.trim().slice(0, 64)
   const name = trimmed.length > 0 ? trimmed : sanitizeDisplayName(undefined, peer.id)
   peer.displayName = name
-  const msg: ServerMessage = {
+  broadcastServerMessageToRoom(room, {
     type: 'peer-display-name',
     payload: { peerId: peer.id, displayName: name },
-  }
-  for (const p of room.getPeers()) {
-    p.sendJson(msg)
-  }
+  })
 }
 
 function getPeerForSocket(socket: WsSocket, deps: SignalingDeps): Peer | undefined {
@@ -1616,13 +1588,10 @@ export async function handleProducerVideoSource(
     return
   }
   requestVideoKeyframesForProducerConsumers(room, producerId)
-  const notice: ServerMessage = {
+  broadcastServerMessageToRoom(room, {
     type: 'producer-video-source-changed',
     payload: { producerId, peerId: peer.id, source },
-  }
-  for (const p of room.getPeers()) {
-    p.sendJson(notice)
-  }
+  })
 }
 
 export async function handleProduce(
@@ -1738,11 +1707,12 @@ export async function handleProduce(
           : {}),
       },
     }
+    const serializedNotice = JSON.stringify(notice)
     for (const p of room.getPeers()) {
       if (p.id === peer.id) {
         continue
       }
-      p.sendJson(notice)
+      p.sendRaw(serializedNotice)
     }
   } catch (err) {
     console.error('produce failed', err)
@@ -1974,6 +1944,63 @@ export async function handleSetConsumerPreferredLayers(
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[layers] setPreferredLayers failed', consumerId, spatialLayer, msg)
     }
+  }
+}
+
+/**
+ * Receiver-driven consumer pause/resume. The client sends this when a video tile
+ * becomes hidden/offscreen or the tab goes into the background, so the SFU stops
+ * forwarding RTP for that consumer. mediasoup auto-issues PLI on resume so the
+ * decoder recovers without a black frame.
+ *
+ * Audio consumers are NEVER paused: muting them server-side would silence the
+ * speaker for the whole call grid and would break the active-speaker observer.
+ * The handler enforces this guard regardless of what the client sends.
+ */
+export async function handleSetConsumerPaused(
+  socket: WsSocket,
+  consumerId: string,
+  paused: boolean,
+  deps: SignalingDeps,
+): Promise<void> {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+
+  const consumer = peer.getConsumer(consumerId)
+  if (!consumer || consumer.closed) {
+    return
+  }
+  if (consumer.kind !== 'video') {
+    return
+  }
+
+  try {
+    if (paused) {
+      if (!consumer.paused) {
+        await consumer.pause()
+      }
+    } else {
+      if (consumer.paused) {
+        await consumer.resume()
+        
+        
+        void consumer.requestKeyFrame().catch(() => {
+          /* best-effort */
+        })
+      }
+    }
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[call-qa:consumer-pause] applied', {
+        consumerId,
+        paused,
+        consumerPaused: consumer.paused,
+      })
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn('[consumer-pause] failed', { consumerId, paused, msg })
   }
 }
 
