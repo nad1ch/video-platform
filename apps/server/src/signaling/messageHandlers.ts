@@ -420,6 +420,11 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
   if (room) {
     detachPeerAudioProducersFromLevelObserver(peer, room)
   }
+  // Suppress per-producer `producer-closed` fan-out triggered by the
+  // `transportclose` listeners while we close this peer's transports. The
+  // single `peer-left` broadcast below is sufficient for clients to drop
+  // every consumer/track owned by this peer. See `Peer.isTearingDown`.
+  peer.isTearingDown = true
   peer.closeAllMedia()
   deps.socketPeer.delete(peer.socket)
   if (!room) {
@@ -1540,6 +1545,11 @@ export async function handleProduce(
     // on the Producer. Tell the room so consumers can drop it without waiting
     // for a full `peer-left`. Listener is one-shot by design.
     producer.on('transportclose', () => {
+      // During `removePeerFromNetwork` → `closeAllMedia()` every transport
+      // closes in a loop and would fire this listener once per producer;
+      // the outer `peer-left` broadcast already covers client cleanup, so
+      // skip the redundant per-producer fan-out.
+      if (peer.isTearingDown) return
       const r = deps.roomManager.getRoom(peer.roomId)
       if (!r) return
       closeAndBroadcastProducer(r, peer, producer.id, producer.kind)

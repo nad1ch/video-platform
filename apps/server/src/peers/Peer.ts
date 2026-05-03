@@ -14,6 +14,16 @@ export class Peer {
   audioMuted = false
   /** Mafia tab/session identity; set by `mafia:claim-host`. */
   mafiaSessionId = ''
+  /**
+   * Set during full-peer removal (`removePeerFromNetwork`) before
+   * `closeAllMedia()` is invoked. The `transportclose` listeners installed
+   * on producers run synchronously inside `closeAllMedia()` and would each
+   * broadcast `producer-closed` to every peer — N redundant messages on top
+   * of the single authoritative `peer-left`. Checking this flag lets those
+   * listeners no-op during teardown while still firing for legitimate
+   * transport-lost-but-peer-stays cases (e.g. one-direction ICE failure).
+   */
+  isTearingDown = false
 
   private readonly transports = new Map<string, WebRtcTransport>()
   private readonly producers = new Map<string, Producer>()

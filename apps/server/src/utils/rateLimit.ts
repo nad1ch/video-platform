@@ -10,6 +10,16 @@ import type { Request } from 'express'
  * - Intended for auth / OAuth / password-reset style low-volume endpoints.
  *   For very high-volume RPC paths, prefer Redis-backed limits.
  *
+ * Known infra limitation (multi-instance deployments):
+ *   Buckets are per-process. If the API is horizontally scaled behind a load
+ *   balancer, the effective limit becomes `limit × instanceCount` because each
+ *   instance tracks its own counter. This is acceptable for enumeration-blunting
+ *   use cases (IP-level caps remain meaningful), but NOT sufficient as a hard
+ *   security boundary. For a hard cap across instances, migrate to a shared
+ *   store (Redis `INCR` + `EXPIRE`, SQL `SELECT ... FOR UPDATE`, etc.) — no
+ *   such store is wired into this codebase today, which is why this file is
+ *   in-memory only.
+ *
  * Keys are opaque — callers build them by composing (kind, value), e.g.
  * `ip:1.2.3.4` or `email:user@example.com`. Always normalize the value
  * component before keying (e.g. `normalizeEmail`) so logical aliases collapse.

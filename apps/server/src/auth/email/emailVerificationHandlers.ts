@@ -5,6 +5,7 @@ import { clientPublicOrigin } from '../clientOrigin'
 import { resolvePrismaUserIdFromSession } from '../resolvePrismaUserFromSession'
 import { readSessionFromCookie } from '../session/sessionJwt'
 import { sendVerificationEmail } from './emailVerificationMailer'
+import { resolveEmailRequestOrigin } from './emailRequestOrigin'
 import { resolveEmailLocale } from './emailTemplates'
 
 const TOKEN_BYTES = 32
@@ -20,22 +21,8 @@ function createRawToken(): string {
   return randomBytes(TOKEN_BYTES).toString('base64url')
 }
 
-function requestOrigin(req: Request): string {
-  const configured = process.env.EMAIL_VERIFICATION_ORIGIN ?? process.env.API_ORIGIN
-  if (typeof configured === 'string' && configured.trim().length > 0) {
-    return configured.trim().replace(/\/$/, '')
-  }
-  const forwardedProto = req.header('x-forwarded-proto')?.split(',')[0]?.trim()
-  const forwardedHost = req.header('x-forwarded-host')?.split(',')[0]?.trim()
-  const host = forwardedHost || req.header('host')
-  if (host) {
-    return `${forwardedProto || req.protocol}://${host}`.replace(/\/$/, '')
-  }
-  return clientPublicOrigin()
-}
-
 function buildVerificationUrl(req: Request, token: string): string {
-  const url = new URL('/api/auth/email-verification/verify', requestOrigin(req))
+  const url = new URL('/api/auth/email-verification/verify', resolveEmailRequestOrigin(req))
   url.searchParams.set('token', token)
   return url.toString()
 }

@@ -238,7 +238,14 @@ export function mountCheckersMatchmakingRoutes(app: Express): void {
       res.json({ recorded: true })
       return
     }
+    // Claim the idempotency slot BEFORE the first DB write. Node.js is
+    // single-threaded, so `has` + `add` with no intervening await is
+    // race-safe within one process — a truly concurrent sibling request
+    // will find the key already set and return `recorded: true` below.
+    // Cross-process duplication (horizontally-scaled API) is a separate
+    // infrastructure limitation, same class as the in-memory rate limits.
     recordedResultKeys.add(resultKey)
+    let persisted = false
     try {
       const beforeRatings = await checkersRatingsForUsers([room.player1UserId, room.player2UserId])
       await recordCheckersMatchResult({
@@ -246,6 +253,11 @@ export function mountCheckersMatchmakingRoutes(app: Express): void {
         player2UserId: room.player2UserId,
         winnerUserId: state.winner === 'player1' ? room.player1UserId : room.player2UserId,
       })
+      // From here on the GameRound row is committed; any later failure
+      // (ratings re-read, cache invalidation, network hiccup while writing
+      // the HTTP response) MUST NOT release the idempotency key, otherwise
+      // a client retry would create a second GameRound and double-apply ELO.
+      persisted = true
       const afterRatings = await checkersRatingsForUsers([room.player1UserId, room.player2UserId])
       const before = beforeRatings.get(submitterUserId) ?? 1200
       const after = afterRatings.get(submitterUserId) ?? before
@@ -255,7 +267,12 @@ export function mountCheckersMatchmakingRoutes(app: Express): void {
       forgetMatchmakingRoom(roomId)
       res.json({ recorded: true, ratingDelta: after - before })
     } catch (err) {
-      recordedResultKeys.delete(resultKey)
+      if (!persisted) {
+        // Write never committed — safe to allow a retry. If the write DID
+        // commit we keep the key so the retry returns `recorded: true`
+        // above instead of double-writing.
+        recordedResultKeys.delete(resultKey)
+      }
       console.error('[checkers-matchmaking] record result failed', err)
       res.status(500).json({ error: 'server_error' })
     }

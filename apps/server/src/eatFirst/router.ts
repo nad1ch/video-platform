@@ -34,6 +34,17 @@ async function requireEatFirstHostForGame(
 }
 
 /**
+ * Resolve the authenticated operator's Prisma user id for a request that has
+ * already passed a host/admin gate. Any mutation that may implicitly create
+ * the game row (via `eatFirstEnsureGame`) MUST pass this through so the first
+ * write stamps ownership — otherwise an ownerless row is created and any host
+ * can hijack it via the legacy fallback in `eatFirstSessionCanOperateGame`.
+ */
+async function resolveMutationOwnerUserId(req: Request): Promise<string | null> {
+  return resolveEatFirstOperatorUserId(req.headers.cookie)
+}
+
+/**
  * Authorize an action on behalf of `slotId` in `gameId`. Accepts either:
  *   - authenticated host/admin session that is allowed to operate this game, OR
  *   - matching `joinToken` + `deviceId` for the claimed slot (eatFirstClaimSlot).
@@ -124,7 +135,8 @@ export function mountEatFirstRoutes(app: Express): void {
         const gameId = String(req.params.gameId ?? '')
         if (!(await requireEatFirstHostForGame(req, res, gameId))) return
         const patch = (req.body as { patch?: unknown })?.patch ?? req.body
-        await eatFirstMergeRoomAdmin(gameId, patch)
+        const ownerUserId = await resolveMutationOwnerUserId(req)
+        await eatFirstMergeRoomAdmin(gameId, patch, ownerUserId)
         res.status(204).end()
       } catch (err) {
         sendErr(res, err)
@@ -145,7 +157,10 @@ export function mountEatFirstRoutes(app: Express): void {
         const rawSlot = String(body.playerId ?? '')
         const slotId = normalizeEatFirstSlot(rawSlot)
         if (!(await authorizePlayerAction(req, res, gameId, slotId, body))) return
-        await eatFirstPostHand(gameId, rawSlot, Boolean(body.raised))
+        // Null for slot-token anonymous callers (they never become owners);
+        // host/admin callers are stamped on first creation.
+        const ownerUserId = await resolveMutationOwnerUserId(req)
+        await eatFirstPostHand(gameId, rawSlot, Boolean(body.raised), ownerUserId)
         res.status(204).end()
       } catch (err) {
         sendErr(res, err)
@@ -166,7 +181,8 @@ export function mountEatFirstRoutes(app: Express): void {
         const rawSlot = String(body.playerId ?? '')
         const slotId = normalizeEatFirstSlot(rawSlot)
         if (!(await authorizePlayerAction(req, res, gameId, slotId, body))) return
-        await eatFirstPostReady(gameId, rawSlot, Boolean(body.ready))
+        const ownerUserId = await resolveMutationOwnerUserId(req)
+        await eatFirstPostReady(gameId, rawSlot, Boolean(body.ready), ownerUserId)
         res.status(204).end()
       } catch (err) {
         sendErr(res, err)
@@ -204,7 +220,8 @@ export function mountEatFirstRoutes(app: Express): void {
         if (!(await requireEatFirstHostForGame(req, res, gameId))) return
         const slotId = String(req.params.slotId ?? '')
         const { patch } = req.body as { patch?: unknown }
-        await eatFirstMergePlayerAdmin(gameId, slotId, patch)
+        const ownerUserId = await resolveMutationOwnerUserId(req)
+        await eatFirstMergePlayerAdmin(gameId, slotId, patch, ownerUserId)
         res.status(204).end()
       } catch (err) {
         sendErr(res, err)

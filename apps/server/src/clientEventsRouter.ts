@@ -23,9 +23,47 @@ const MAX_SOURCE_LENGTH = 80
 const RATE_WINDOW_MS = 60_000
 const RATE_LIMIT = 80
 
+/**
+ * Retention for analytics / error telemetry. `route_change` (and the other
+ * allowed events) fire on almost every client navigation, so without pruning
+ * both tables grow without bound for the lifetime of the deployment.
+ *
+ * 90 days is enough for short-term product analytics / incident debugging —
+ * longer-horizon insights should go through a warehouse ETL, not the live
+ * OLTP table. Both models have an `@@index([createdAt])` so `deleteMany`
+ * with a range predicate is efficient.
+ *
+ * In a horizontally-scaled deploy every instance runs this reaper; the
+ * `deleteMany` is idempotent against a time threshold so overlapping runs
+ * are safe (first instance to win the race deletes, the rest no-op).
+ */
+const RETENTION_DAYS = 90
+const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000
+const RETENTION_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000
+
 type RateBucket = { count: number; resetAt: number }
 
 const rateBuckets = new Map<string, RateBucket>()
+
+async function pruneOldClientEvents(): Promise<void> {
+  if (!isDatabaseConfigured()) {
+    return
+  }
+  const threshold = new Date(Date.now() - RETENTION_MS)
+  try {
+    await prisma.userActivityEvent.deleteMany({ where: { createdAt: { lt: threshold } } })
+    await prisma.clientErrorEvent.deleteMany({ where: { createdAt: { lt: threshold } } })
+  } catch (e) {
+    console.error('[events] retention cleanup failed', e)
+  }
+}
+
+const retentionReaper = setInterval(() => {
+  void pruneOldClientEvents()
+}, RETENTION_CLEANUP_INTERVAL_MS)
+if (typeof retentionReaper.unref === 'function') {
+  retentionReaper.unref()
+}
 
 /**
  * Reaper for `rateBuckets`. Without this, every unique `(ip, path)` pair

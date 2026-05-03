@@ -127,13 +127,20 @@ export async function eatFirstEnsureGame(
   return false
 }
 
-export async function eatFirstMergeRoomAdmin(gameId: string, patch: unknown): Promise<void> {
+export async function eatFirstMergeRoomAdmin(
+  gameId: string,
+  patch: unknown,
+  ownerUserId?: string | null,
+): Promise<void> {
   if (!isValidGameId(gameId)) {
     const e = new Error('Bad game id')
     ;(e as Error & { status?: number }).status = 400
     throw e
   }
-  await eatFirstEnsureGame(gameId)
+  // Stamp ownership on first creation / legacy backfill so a host that reaches
+  // this mutation before `/ensure` cannot produce an ownerless row that any
+  // other host could then take over via the legacy fallback gate.
+  await eatFirstEnsureGame(gameId, ownerUserId)
   const g = await prisma.eatFirstGame.findUnique({ where: { id: gameId } })
   if (!g) {
     const e = new Error('Not found')
@@ -191,6 +198,7 @@ export async function eatFirstPostHand(
   gameId: string,
   playerId: string,
   raised: boolean,
+  ownerUserId?: string | null,
 ): Promise<void> {
   if (!isValidGameId(gameId)) {
     const e = new Error('Bad game id')
@@ -198,7 +206,10 @@ export async function eatFirstPostHand(
     throw e
   }
   const pid = normalizeEatFirstSlot(playerId)
-  await eatFirstEnsureGame(gameId)
+  // `ownerUserId` is only non-null for authenticated host/admin callers; for
+  // public slot-token players it is null and ensureGame does NOT stamp an
+  // owner (anonymous actions must not create ownership).
+  await eatFirstEnsureGame(gameId, ownerUserId)
   await prisma.$transaction(async (tx) => {
     const g = await tx.eatFirstGame.findUnique({ where: { id: gameId } })
     if (!g) throw new Error('missing')
@@ -219,6 +230,7 @@ export async function eatFirstPostReady(
   gameId: string,
   playerId: string,
   ready: boolean,
+  ownerUserId?: string | null,
 ): Promise<void> {
   if (!isValidGameId(gameId)) {
     const e = new Error('Bad game id')
@@ -226,7 +238,9 @@ export async function eatFirstPostReady(
     throw e
   }
   const pid = normalizeEatFirstSlot(playerId)
-  await eatFirstEnsureGame(gameId)
+  // Same rule as `eatFirstPostHand`: only stamp ownership when the caller is
+  // an authenticated host/admin.
+  await eatFirstEnsureGame(gameId, ownerUserId)
   await prisma.$transaction(async (tx) => {
     const g = await tx.eatFirstGame.findUnique({ where: { id: gameId } })
     if (!g) throw new Error('missing')
@@ -314,6 +328,7 @@ export async function eatFirstMergePlayerAdmin(
   gameId: string,
   slot: string,
   patch: unknown,
+  ownerUserId?: string | null,
 ): Promise<void> {
   if (!isValidGameId(gameId)) {
     const e = new Error('Bad game id')
@@ -321,7 +336,7 @@ export async function eatFirstMergePlayerAdmin(
     throw e
   }
   const pid = normalizeEatFirstSlot(slot)
-  await eatFirstEnsureGame(gameId)
+  await eatFirstEnsureGame(gameId, ownerUserId)
   const clean = stripAdminKeyFromPatch(patch)
   await prisma.$transaction(async (tx) => {
     const row = await tx.eatFirstPlayer.findUnique({
@@ -438,18 +453,25 @@ export async function eatFirstReviveEliminatedAdmin(gameId: string): Promise<num
     ;(e as Error & { status?: number }).status = 400
     throw e
   }
-  const players = await prisma.eatFirstPlayer.findMany({ where: { gameId } })
-  let n = 0
-  for (const p of players) {
-    const d =
-      typeof p.data === 'object' && p.data !== null && !Array.isArray(p.data)
-        ? (p.data as Record<string, unknown>)
-        : {}
-    if (d.eliminated !== true) continue
-    n += 1
-    const next = mergePlayerDeep(d, { eliminated: false }) as object
-    await prisma.eatFirstPlayer.update({ where: { id: p.id }, data: { data: next } })
-  }
+  // Atomic: partial revivals previously left the room with a mix of
+  // eliminated=true/false when one update errored mid-loop. Running the scan
+  // and all updates inside a single transaction guarantees all-or-nothing so
+  // the broadcast reflects a consistent state.
+  const n = await prisma.$transaction(async (tx) => {
+    const players = await tx.eatFirstPlayer.findMany({ where: { gameId } })
+    let count = 0
+    for (const p of players) {
+      const d =
+        typeof p.data === 'object' && p.data !== null && !Array.isArray(p.data)
+          ? (p.data as Record<string, unknown>)
+          : {}
+      if (d.eliminated !== true) continue
+      count += 1
+      const next = mergePlayerDeep(d, { eliminated: false }) as object
+      await tx.eatFirstPlayer.update({ where: { id: p.id }, data: { data: next } })
+    }
+    return count
+  })
   if (n > 0) broadcast(gameId)
   return n
 }

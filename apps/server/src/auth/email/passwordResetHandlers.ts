@@ -72,28 +72,14 @@ function createRawToken(): string {
   return randomBytes(TOKEN_BYTES).toString('base64url')
 }
 
-function requestOrigin(req: Request): string {
-  const configured = process.env.EMAIL_VERIFICATION_ORIGIN ?? process.env.API_ORIGIN
-  if (typeof configured === 'string' && configured.trim().length > 0) {
-    return configured.trim().replace(/\/$/, '')
-  }
-  const forwardedProto = req.header('x-forwarded-proto')?.split(',')[0]?.trim()
-  const forwardedHost = req.header('x-forwarded-host')?.split(',')[0]?.trim()
-  const host = forwardedHost || req.header('host')
-  if (host) {
-    return `${forwardedProto || req.protocol}://${host}`.replace(/\/$/, '')
-  }
-  return clientPublicOrigin()
-}
-
-function buildResetUrl(req: Request, token: string): string {
+function buildResetUrl(token: string): string {
+  // The reset link targets the SPA route (/auth?mode=reset&token=...), so it
+  // MUST come from the trusted `clientPublicOrigin()` — never from
+  // `x-forwarded-host` / request headers which an attacker could spoof to
+  // redirect the victim's click to a hostile host.
   const url = new URL('/auth', clientPublicOrigin())
   url.searchParams.set('mode', 'reset')
   url.searchParams.set('token', token)
-  const apiOrigin = requestOrigin(req)
-  if (apiOrigin.length === 0) {
-    return url.toString()
-  }
   return url.toString()
 }
 
@@ -207,7 +193,7 @@ export async function handleSendPasswordReset(req: Request, res: Response): Prom
     await sendPasswordResetEmail({
       to: normalizeEmail(row.email),
       displayName: row.display_name.trim() || 'User',
-      resetUrl: buildResetUrl(req, rawToken),
+      resetUrl: buildResetUrl(rawToken),
       expiresInMinutes: TOKEN_TTL_MINUTES,
       locale: requestLocale(req, parsed.data.locale),
     })

@@ -77,8 +77,12 @@ export async function eatFirstSessionCanOperateGame(
   if (ctx.isAdmin) return true
   if (!ctx.isHostRole) return false
   if (!isDatabaseConfigured()) {
-    // No DB → no stamped ownership possible; fall back to role check.
-    return true
+    // No DB → per-game ownership cannot be verified. Production MUST fail
+    // closed: returning true here would let any host-role session operate any
+    // game on transient DB-unavailability or misconfigured deploys. Dev/test
+    // without DATABASE_URL is allowed to fall back to the role check for
+    // local iteration only.
+    return process.env.NODE_ENV !== 'production'
   }
   const row = await prisma.eatFirstGame.findUnique({
     where: { id: gameId },
@@ -98,7 +102,13 @@ export async function eatFirstSessionCanOperateGame(
       ? ownerUserIdRaw.trim()
       : ''
   if (ownerUserId.length === 0) {
-    // Legacy game with no stamped owner — back-compat fallback.
+    // Legacy game with no stamped owner — back-compat fallback. This is also
+    // the natural transition path: the first authenticated host action that
+    // flows through a mutation handler backfills ownership in
+    // `eatFirstEnsureGame`, after which only that host (or admins) can
+    // continue to operate the room ("first-owner-claim"). New rows are
+    // always stamped on first creation, so this branch is reachable only for
+    // pre-existing rows from before ownership was introduced.
     return true
   }
   return ctx.prismaUserId === ownerUserId
