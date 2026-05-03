@@ -119,7 +119,13 @@ async function bootstrap(): Promise<void> {
   })
 
   app.use(cookieParser())
-  app.use(express.json())
+  /**
+   * Cap JSON bodies at 256 kB. All current API shapes (analytics events, billing
+   * webhooks, leaderboard writes, eat-first persistence) fit comfortably in tens
+   * of kB; anything larger is almost certainly malformed/abuse and would make
+   * the JSON parser the slowest step in the request path.
+   */
+  app.use(express.json({ limit: '256kb' }))
 
   const server = http.createServer(app)
 

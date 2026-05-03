@@ -199,13 +199,12 @@ type ClientMsg =
   | { type: typeof NadleWs.clientGuess; word: string; gameId?: string }
   | { type: typeof NadleWs.clientNextWord; wordLength?: NadleWordLength }
 
-function parseClientMsg(raw: string): ClientMsg | null {
-  let data: unknown
-  try {
-    data = JSON.parse(raw)
-  } catch {
-    return null
-  }
+/**
+ * Validate an already-parsed JSON object into a typed `ClientMsg`. The caller
+ * parses once and shares the parsed value with the heartbeat / pong fast-path
+ * to avoid a second `JSON.parse` per inbound frame.
+ */
+function validateClientMsg(data: unknown): ClientMsg | null {
   if (!data || typeof data !== 'object') {
     return null
   }
@@ -289,10 +288,9 @@ export function attachNadleSocketServer(wss: WebSocketServer): void {
     })()
 
     ws.on('message', (buf) => {
-      const raw = buf.toString()
       let parsed: unknown
       try {
-        parsed = JSON.parse(raw)
+        parsed = JSON.parse(buf.toString())
       } catch {
         return
       }
@@ -300,7 +298,7 @@ export function attachNadleSocketServer(wss: WebSocketServer): void {
         return
       }
 
-      const msg = parseClientMsg(raw)
+      const msg = validateClientMsg(parsed)
       if (!msg) {
         return
       }

@@ -1640,6 +1640,30 @@ if (import.meta.env.DEV) {
   padding: 0;
   flex-shrink: 0;
 }
+
+/*
+ * Mobile (and reduced-motion) overrides: GPU-expensive effects sitting directly
+ * over decoded video tiles cause noticeable heat / FPS drop on phones with 4-8
+ * camera grids. Speaking-glow stays as a box-shadow ring (cheap layer); the
+ * scale promotion and the tile menu's `backdrop-filter` are dropped.
+ */
+@media (max-width: 768px) {
+  .tile--speaking .tile-video-wrap {
+    transform: none;
+  }
+  .tile-menu {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: #232428;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile--speaking .tile-video-wrap {
+    transform: none;
+    transition: none;
+  }
+}
 </style>
 
 

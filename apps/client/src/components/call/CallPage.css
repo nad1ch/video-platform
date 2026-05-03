@@ -1868,3 +1868,22 @@
 .call-page__debug-loss {
   opacity: 0.85;
 }
+
+/*
+ * Mobile-only call-route GPU diet. The 24px speaking glow is the most
+ * compositor-expensive element on phone grids (large blurred shadow promoted
+ * over decoded video tiles); we keep a tight ring so the highlight is still
+ * visually present but cheap to paint. The device popover and chat overlay
+ * `backdrop-filter` blurs are also dropped to opaque/semi-opaque fills.
+ */
+@media (max-width: 768px) {
+  .call-page__tile-wrap--speaking:not(.call-page__tile-wrap--dragging) {
+    --tile-speaking-scale: 1;
+    box-shadow: 0 0 0 2px rgba(140, 90, 255, 0.6);
+  }
+  .call-page__device-pop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: #232428;
+  }
+}

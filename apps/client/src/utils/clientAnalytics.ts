@@ -7,6 +7,15 @@ const SESSION_KEY = 'streamassist.analyticsSessionId'
 const MAX_METADATA_KEYS = 24
 const MAX_STRING_LENGTH = 240
 const SEND_DEBOUNCE_MS = 750
+/**
+ * Hard ceiling for the per-event-key debounce map. The dominant key is
+ * `event:path`, which is small and bounded in practice — but a long-running
+ * SPA session that visits many dynamic streamer routes could otherwise grow
+ * this map unboundedly. Map iteration preserves insertion order, so dropping
+ * the first entry behaves as a simple FIFO/LRU when entries are revisited
+ * (each `set` re-inserts at the end).
+ */
+const MAX_DEBOUNCE_KEYS = 256
 const SENSITIVE_KEY_RE = /(token|cookie|password|passwd|secret|authorization|authheader|auth_header|credential|private|message)/i
 
 const GAME_ROUTE_NAMES = new Map<string, string>([
@@ -120,6 +129,17 @@ export function trackClientEvent(event: string, metadata?: Record<string, unknow
   const key = `${event}:${path}`
   if (now - (lastSentAt.get(key) ?? 0) < SEND_DEBOUNCE_MS) {
     return
+  }
+  
+  
+  
+  if (lastSentAt.has(key)) {
+    lastSentAt.delete(key)
+  } else if (lastSentAt.size >= MAX_DEBOUNCE_KEYS) {
+    const oldest = lastSentAt.keys().next()
+    if (!oldest.done) {
+      lastSentAt.delete(oldest.value)
+    }
   }
   lastSentAt.set(key, now)
   send(EVENT_ENDPOINT, {

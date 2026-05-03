@@ -20,6 +20,18 @@ export const CALL_VIDEO_TARGET_BITRATE_BPS = 600_000
 export const CALL_VIDEO_MIN_BITRATE_BPS = 500_000
 export const CALL_VIDEO_MAX_BITRATE_BPS = 700_000
 
+/**
+ * Mobile-friendly capture preset. Server `RtpEncoding`/`maxBitrate` ceiling stays
+ * at desktop values (set in `FIXED_CALL_VIDEO_ENCODING`), but the camera capture
+ * itself is allowed to deliver at most 640×360 / 15 fps so phones avoid running
+ * the camera ISP and the encoder pipeline at full 854×480/20 fps. Constraints
+ * use `ideal/max` (never `exact`) so devices that cannot match a value still
+ * fall back gracefully instead of failing `getUserMedia`.
+ */
+export const CALL_VIDEO_MOBILE_WIDTH = 640
+export const CALL_VIDEO_MOBILE_HEIGHT = 360
+export const CALL_VIDEO_MOBILE_MAX_FRAMERATE = 15
+
 export function isVideoQualityPreset(v: string): v is VideoQualityPreset {
   return v === 'economy' || v === 'balanced' || v === 'hd'
 }
@@ -132,9 +144,31 @@ export function resolveVideoPublishTier(preset: VideoQualityPreset, explicit: bo
 }
 
 
+export const VIDEO_PRESET_MOBILE: MediaTrackConstraints = {
+  width: { ideal: CALL_VIDEO_MOBILE_WIDTH, max: CALL_VIDEO_WIDTH },
+  height: { ideal: CALL_VIDEO_MOBILE_HEIGHT, max: CALL_VIDEO_HEIGHT },
+  frameRate: { ideal: CALL_VIDEO_MOBILE_MAX_FRAMERATE, max: CALL_VIDEO_MAX_FRAMERATE },
+} as const
+
 export function getCallVideoConstraints(tier: VideoPublishTier): MediaTrackConstraints {
   void tier
   return { ...VIDEO_PRESET_MAFIA }
+}
+
+/**
+ * Public selector: `useLocalMedia` calls this with a runtime "mobile?" boolean so
+ * the call package itself stays UA-agnostic. Desktop continues to use the existing
+ * `VIDEO_PRESET_MAFIA` preset (854×480 / 20 fps); mobile switches to the lighter
+ * 640×360 / 15 fps preset.
+ */
+export function getCallVideoConstraintsForRuntime(
+  tier: VideoPublishTier,
+  isMobile: boolean,
+): MediaTrackConstraints {
+  if (isMobile) {
+    return { ...VIDEO_PRESET_MOBILE }
+  }
+  return getCallVideoConstraints(tier)
 }
 
 /**
