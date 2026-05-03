@@ -71,6 +71,18 @@ export class Peer {
     }
   }
 
+  /**
+   * Send a payload that has already been serialised. Used by broadcast helpers
+   * that stringify once and reuse the same string for every peer in the room
+   * (avoids N redundant `JSON.stringify` calls on identical messages such as
+   * `peer-left`, `producer-closed`, mafia state updates).
+   */
+  sendRaw(serialized: string): void {
+    if (this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(serialized)
+    }
+  }
+
   addTransport(transport: WebRtcTransport): void {
     this.transports.set(transport.id, transport)
   }

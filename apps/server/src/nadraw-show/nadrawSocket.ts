@@ -61,15 +61,62 @@ function ensureNadrawJsonPingTimer(wss: WebSocketServer): void {
       clearInterval(nadrawJsonPingTimer)
       nadrawJsonPingTimer = null
     }
+    
+    flushAllPendingNadrawPersist()
   })
 }
 
-function persistNadrawSnapshot(streamerId: string): void {
+/**
+ * Debounce window for `persistNadrawLiveRoom`. Draw events fire every few ms during
+ * an active round (mouse move broadcasts a coordinate per frame); writing the full
+ * snapshot per event hammered the persistence layer. We coalesce writes to roughly
+ * one disk hit per second per streamer, with an immediate flush on socket close /
+ * server shutdown so we never lose state to a graceful exit.
+ *
+ * Picked at 750ms: balances "snappy enough that a host who reloads after one second
+ * still sees their last brush stroke" vs "rare enough that 60 strokes/sec collapse
+ * to a single write".
+ */
+const NADRAW_PERSIST_DEBOUNCE_MS = 750
+const persistTimersByStreamer = new Map<string, ReturnType<typeof setTimeout>>()
+
+function persistNadrawSnapshotImmediate(streamerId: string): void {
   persistNadrawLiveRoom(streamerId, {
     room: getNadrawRoomSnapshot(streamerId),
     drawOps: drawHistoryByStreamer.get(streamerId) ?? [],
     chatEvents: chatHistoryByStreamer.get(streamerId) ?? [],
   })
+}
+
+function persistNadrawSnapshot(streamerId: string): void {
+  const existing = persistTimersByStreamer.get(streamerId)
+  if (existing !== undefined) {
+    clearTimeout(existing)
+  }
+  const timer = setTimeout(() => {
+    persistTimersByStreamer.delete(streamerId)
+    persistNadrawSnapshotImmediate(streamerId)
+  }, NADRAW_PERSIST_DEBOUNCE_MS)
+  if (typeof timer.unref === 'function') {
+    timer.unref()
+  }
+  persistTimersByStreamer.set(streamerId, timer)
+}
+
+function flushPendingNadrawPersist(streamerId: string): void {
+  const existing = persistTimersByStreamer.get(streamerId)
+  if (existing === undefined) {
+    return
+  }
+  clearTimeout(existing)
+  persistTimersByStreamer.delete(streamerId)
+  persistNadrawSnapshotImmediate(streamerId)
+}
+
+function flushAllPendingNadrawPersist(): void {
+  for (const streamerId of [...persistTimersByStreamer.keys()]) {
+    flushPendingNadrawPersist(streamerId)
+  }
 }
 
 async function hydrateNadrawLiveRoom(streamerId: string): Promise<void> {
@@ -194,6 +241,8 @@ function cleanupAfterClientDisconnect(ws: WebSocket): void {
   const meta = unregisterClient(ws)
   if (meta?.isStreamer === true && !meta.hasStreamerClients) {
     const streamerId = meta.streamerId
+    
+    flushPendingNadrawPersist(streamerId)
     cancelPendingStreamerClear(streamerId)
     const timer = setTimeout(() => {
       pendingStreamerClearTimers.delete(streamerId)

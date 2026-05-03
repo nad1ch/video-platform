@@ -209,6 +209,17 @@ export type InboundVideoDebugRow = {
 }
 
 
+/**
+ * Pull the negotiated codec mime-type for a consumer. mediasoup-client surfaces it on
+ * `consumer.rtpParameters.codecs[0]` (single-codec consumers, which is our case — we
+ * never request multi-codec). DEV-only helper used to verify codec negotiation when
+ * the router advertises VP8/H.264/VP9.
+ */
+function negotiatedCodecMimeType(consumer: Consumer): string | null {
+  const c = consumer.rtpParameters?.codecs?.[0]
+  return c && typeof c.mimeType === 'string' ? c.mimeType : null
+}
+
 async function logInboundVideoDebug(consumer: Consumer, peerId: string): Promise<void> {
   if (!import.meta.env.DEV) {
     return
@@ -221,6 +232,7 @@ async function logInboundVideoDebug(consumer: Consumer, peerId: string): Promise
   console.log('[video-debug] track settings', {
     peerId,
     producerId: consumer.producerId,
+    codec: negotiatedCodecMimeType(consumer),
     width: settings.width,
     height: settings.height,
     frameRate: settings.frameRate,
@@ -228,16 +240,31 @@ async function logInboundVideoDebug(consumer: Consumer, peerId: string): Promise
 
   try {
     const report = await consumer.getStats()
+    
+    
+    
+    const codecMimeById = new Map<string, string>()
+    report.forEach((r) => {
+      if (r.type !== 'codec') {
+        return
+      }
+      const c = r as RTCRtpCodec & { id?: string; mimeType?: string }
+      if (typeof c.id === 'string' && typeof c.mimeType === 'string') {
+        codecMimeById.set(c.id, c.mimeType)
+      }
+    })
     report.forEach((r) => {
       if (r.type !== 'inbound-rtp') {
         return
       }
-      const v = r as RTCInboundRtpStreamStats
+      const v = r as RTCInboundRtpStreamStats & { codecId?: string }
       if (v.kind !== 'video') {
         return
       }
       console.log('[video-debug] inbound-rtp', {
         peerId,
+        codec:
+          (v.codecId && codecMimeById.get(v.codecId)) ?? negotiatedCodecMimeType(consumer),
         framesDecoded: v.framesDecoded,
         framesDropped: v.framesDropped,
         framesReceived: v.framesReceived,
@@ -290,6 +317,20 @@ export function useRemoteMedia() {
   const recentSpeakerAtByPeerId = new Map<string, number>()
   /** Last preferred layers sent per recv video consumer (skip duplicate signaling). */
   const lastSentPreferredLayersByConsumerId = new Map<string, SimulcastPreferredLayers>()
+  /**
+   * Receiver-driven consumer pause: tracks consumer ids we have asked the SFU to
+   * pause via `set-consumer-paused`. Only video consumers ever appear here — audio
+   * is never paused by us. Used for one-shot transition semantics so we never
+   * spam duplicate pause/resume messages on UI hover/scroll.
+   */
+  const pausedConsumerIds = new Set<string>()
+  /**
+   * Cached `document.visibilityState === 'hidden'` flag. When the tab is hidden we
+   * pause every video consumer regardless of the per-tile visibility map; on
+   * visibilitychange we recompute and only send transitions.
+   */
+  let documentHiddenCached = false
+  let documentVisibilityHandler: (() => void) | null = null
   
   const receiveQualityPressure = shallowRef<ReceiveQualityPressure>('normal')
   
@@ -684,6 +725,95 @@ export function useRemoteMedia() {
     }, PREFERRED_LAYERS_DEBOUNCE_MS)
   }
 
+  /**
+   * True when the tile for `peerId` should not decode video right now.
+   * Combines per-tile visibility map with the document-hidden flag so a hidden
+   * tab pauses every remote video at once.
+   */
+  function isPeerVideoConsumerEffectivelyHidden(peerId: string): boolean {
+    if (documentHiddenCached) {
+      return true
+    }
+    const v = peerVisibility.value.get(peerId)
+    
+    return v === false
+  }
+
+  /** Send a single pause/resume transition; idempotent via {@link pausedConsumerIds}. */
+  function sendConsumerPauseTransition(consumer: Consumer, paused: boolean): void {
+    const room = signalingRoom
+    if (!room) {
+      return
+    }
+    if (consumer.closed || consumer.kind !== 'video') {
+      return
+    }
+    const isCurrentlyMarkedPaused = pausedConsumerIds.has(consumer.id)
+    if (isCurrentlyMarkedPaused === paused) {
+      return
+    }
+    try {
+      room.sendJson({
+        type: 'set-consumer-paused',
+        payload: { consumerId: consumer.id, paused },
+      })
+      if (paused) {
+        pausedConsumerIds.add(consumer.id)
+      } else {
+        pausedConsumerIds.delete(consumer.id)
+      }
+    } catch (err) {
+      
+      pausedConsumerIds.delete(consumer.id)
+      if (import.meta.env.DEV) {
+        console.warn('[consumer-pause] send failed', { consumerId: consumer.id, paused, err })
+      }
+    }
+  }
+
+  /**
+   * Walk every active video consumer and align its server-side pause state with the
+   * effective hidden flag for its peer. Audio consumers are skipped.
+   */
+  function reconcileConsumerPauseStates(): void {
+    if (!signalingRoom) {
+      return
+    }
+    for (const [producerId, consumer] of consumersByProducerId.entries()) {
+      if (consumer.closed || consumer.kind !== 'video') {
+        continue
+      }
+      const info = producerInfoById.get(producerId)
+      if (!info) continue
+      const shouldPause = isPeerVideoConsumerEffectivelyHidden(info.peerId)
+      sendConsumerPauseTransition(consumer, shouldPause)
+    }
+  }
+
+  function attachDocumentVisibilityListener(): void {
+    if (typeof document === 'undefined' || documentVisibilityHandler) {
+      return
+    }
+    documentHiddenCached = document.visibilityState === 'hidden'
+    documentVisibilityHandler = (): void => {
+      const next = document.visibilityState === 'hidden'
+      if (next === documentHiddenCached) {
+        return
+      }
+      documentHiddenCached = next
+      reconcileConsumerPauseStates()
+    }
+    document.addEventListener('visibilitychange', documentVisibilityHandler)
+  }
+
+  function detachDocumentVisibilityListener(): void {
+    if (documentVisibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', documentVisibilityHandler)
+    }
+    documentVisibilityHandler = null
+    documentHiddenCached = false
+  }
+
   function bumpRemotePeerPlayRev(peerId: string): void {
     const pr = new Map(remotePeerPlayRevs.value)
     pr.set(peerId, (pr.get(peerId) ?? 0) + 1)
@@ -900,6 +1030,10 @@ export function useRemoteMedia() {
         void logInboundVideoDebug(consumer, peerId)
         flushPreferredLayersToServer()
         schedulePreferredLayersUpdate()
+        
+        if (isPeerVideoConsumerEffectivelyHidden(peerId)) {
+          sendConsumerPauseTransition(consumer, true)
+        }
       }
     } catch (err) {
       consumeLifecycle.releaseReservation(producerId)
@@ -988,6 +1122,7 @@ export function useRemoteMedia() {
     for (const consumer of consumersByProducerId.values()) {
       if (!consumer.closed) {
         lastSentPreferredLayersByConsumerId.delete(consumer.id)
+        pausedConsumerIds.delete(consumer.id)
         consumer.close()
       }
     }
@@ -1165,6 +1300,7 @@ export function useRemoteMedia() {
       const consumer = consumersByProducerId.get(producerId)
       if (consumer && !consumer.closed) {
         lastSentPreferredLayersByConsumerId.delete(consumer.id)
+        pausedConsumerIds.delete(consumer.id)
         consumer.close()
       }
       consumersByProducerId.delete(producerId)
@@ -1221,16 +1357,36 @@ export function useRemoteMedia() {
     await initialApplyDone
     schedulePreferredLayersUpdate()
     startReceivePressureMonitor()
+    attachDocumentVisibilityListener()
+    
+    reconcileConsumerPauseStates()
   }
 
   function setPeerVisible(peerId: string, visible: boolean): void {
     if (import.meta.env.DEV) {
       console.log('[call-qa:peer-visibility] setPeerVisible', { peerId, visible })
     }
+    const prev = peerVisibility.value.get(peerId)
+    if (prev === visible) {
+      return
+    }
     const next = new Map(peerVisibility.value)
     next.set(peerId, visible)
     peerVisibility.value = next
     schedulePreferredLayersUpdate()
+    
+    
+    const shouldPause = isPeerVideoConsumerEffectivelyHidden(peerId)
+    for (const [producerId, consumer] of consumersByProducerId.entries()) {
+      if (consumer.closed || consumer.kind !== 'video') {
+        continue
+      }
+      const info = producerInfoById.get(producerId)
+      if (!info || info.peerId !== peerId) {
+        continue
+      }
+      sendConsumerPauseTransition(consumer, shouldPause)
+    }
   }
 
   function setPeerConsumePriority(peerId: string, priority: number): void {
@@ -1289,6 +1445,7 @@ export function useRemoteMedia() {
       const consumer = consumersByProducerId.get(producerId)
       if (consumer && !consumer.closed) {
         lastSentPreferredLayersByConsumerId.delete(consumer.id)
+        pausedConsumerIds.delete(consumer.id)
         consumer.close()
       }
       consumersByProducerId.delete(producerId)
@@ -1369,6 +1526,8 @@ export function useRemoteMedia() {
 
   function stopRemoteMedia(): void {
     stopReceivePressureMonitor()
+    detachDocumentVisibilityListener()
+    pausedConsumerIds.clear()
     videoSpatialLayerSignalingEnabled.value = false
     networkQualityOverride.value = 'auto'
     networkQualityFromStats.value = 'good'

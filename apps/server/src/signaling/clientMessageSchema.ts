@@ -133,6 +133,19 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       temporalLayer: z.number().int().min(0).max(2).optional(),
     }),
   }),
+  /**
+   * Receiver-driven consumer pause/resume. Used by the client to ask the SFU to stop
+   * forwarding RTP for a specific consumer when the corresponding tile is hidden /
+   * offscreen / the tab is in the background. Audio consumers MUST NOT be paused
+   * (preserves active speaker + mixing); the server enforces this guard.
+   */
+  z.object({
+    type: z.literal('set-consumer-paused'),
+    payload: z.object({
+      consumerId: z.string().min(1),
+      paused: z.boolean(),
+    }),
+  }),
   /** App-level keepalive so proxies / CDNs do not close idle signaling (background tabs). */
   z.object({
     type: z.literal('client-ping'),
