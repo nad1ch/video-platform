@@ -7,19 +7,19 @@ import {
 } from './audioPlaybackUnlock'
 
 const RESUME_POLL_MS = 2000
-/** RMS at or above → can become / stay active speaker (hysteresis on). */
+
 const SPEAK_ON = 0.05
-/** RMS below this for current speaker → allow handoff / clear (hysteresis off). */
+
 const SPEAK_OFF = 0.02
 
 export type ActiveSpeakerTile = {
   peerId: string
   stream: MediaStream | null
   audioEnabled: boolean
-  /**
-   * Skip Web Audio tap (e.g. local preview: same USB composite device as getUserMedia video
-   * can glitch when the shared stream is also connected to an AudioContext).
-   */
+  
+
+
+
   excludeFromLevelAnalysis?: boolean
 }
 
@@ -45,7 +45,7 @@ function rmsTimeDomain(analyser: AnalyserNode): number {
 
 export function useActiveSpeaker(
   tiles: ComputedRef<ActiveSpeakerTile[]>,
-  /** Call session / room flag; `Ref` or `ComputedRef` (both have `.value`). */
+  
   inCall: Ref<boolean>,
 ) {
   const activeSpeakerPeerId = shallowRef<string | null>(null)
@@ -115,8 +115,8 @@ export function useActiveSpeaker(
         teardownPeer(t.peerId)
       }
       try {
-        // Audio-only stream: tapping the same composite {video+audio} MediaStream that feeds
-        // <video> can glitch the camera on some USB webcams; same track, wrapper stream only.
+        
+        
         const audioOnlyStream = new MediaStream([track])
         const source = ctx.createMediaStreamSource(audioOnlyStream)
         const analyser = ctx.createAnalyser()

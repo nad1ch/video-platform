@@ -15,10 +15,10 @@ const router = useRouter()
 const { t } = useI18n()
 const { isAdmin } = useAuth()
 
-/** На головній дублювати «дім» не потрібно; на інших сторінках — швидкий перехід на лобі. */
+
 const showHomeLink = computed(() => route.name !== 'home')
 
-/** У Eat на підвидах (не join) показуємо «Назад». */
+
 const showEatBack = computed(
   () => route.path.startsWith('/app/eat') && eatViewFromRoute(route) !== 'join',
 )
@@ -251,7 +251,6 @@ function goEatBack() {
   font: inherit;
 }
 
-/* Телефон / вузький планшет: як у другому рядку шапки — ліворуч іконка, по центру посилання, справа баланс */
 @media (max-width: 640px) {
   .stream-nav {
     display: grid;

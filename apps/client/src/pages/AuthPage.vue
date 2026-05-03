@@ -83,14 +83,14 @@ watch([loaded, isAuthenticated], () => {
 </template>
 
 <style scoped>
-/* Spacing scale: 8 / 12 / 16 / 24 px → 0.5 / 0.75 / 1 / 1.5 rem */
+
 .auth-page {
   --auth-space-2: 0.5rem;
   --auth-space-3: 0.75rem;
   --auth-space-4: 1rem;
   --auth-space-6: 1.5rem;
 
-  /* Same shell stack as `AppShellLayout` — backdrops sit behind content */
+  
   position: relative;
   min-height: 100vh;
   display: flex;
@@ -125,7 +125,7 @@ watch([loaded, isAuthenticated], () => {
   gap: var(--auth-space-6);
 }
 
-/* Title centered; back link does not shift the heading */
+
 .auth-page__head {
   position: relative;
   flex-shrink: 0;

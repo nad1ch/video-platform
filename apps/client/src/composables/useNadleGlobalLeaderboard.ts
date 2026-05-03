@@ -23,7 +23,7 @@ export function useNadleGlobalLeaderboard(options: {
   const globalLbTab = ref<'wins' | 'streak' | 'rating'>('rating')
   const globalLbWinsRows = ref<NadleGlobalWinsRow[]>([])
   const globalLbStreakRows = ref<NadleGlobalStreakRow[]>([])
-  /** Set only after a successful streak fetch; `undefined` while not loaded on streak tab. */
+  
   const globalLbViewerMaxStreak = ref<number | undefined>(undefined)
   const globalLbRatingRows = ref<NadleGlobalRatingRow[]>([])
   const globalLbLoading = ref(false)
@@ -176,7 +176,7 @@ export function useNadleGlobalLeaderboard(options: {
     }))
   })
 
-  /** Signed-in viewer’s best streak on this channel (server); shown above the streak table. */
+  
   const globalLbSelfStreakSummary = computed((): string | null => {
     void locale.value
     if (globalLbTab.value !== 'streak' || !user.value) {

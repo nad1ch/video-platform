@@ -12,18 +12,18 @@ const props = defineProps({
   isMuted: { type: Boolean, default: false },
   isSpeaking: { type: Boolean, default: false },
   volume: { type: Number, default: 1 },
-  /** Компактний режим для вбудови в картку гравця */
+  
   embed: { type: Boolean, default: false },
-  /** Повна клітинка сітки / шар під оверлеєм */
+  
   layer: { type: Boolean, default: false },
-  /** Персональний повноекранний фон (без radius) */
+  
   soloFill: { type: Boolean, default: false },
-  /**
-   * Глобальна мозаїка: відео вміщується в область над підписом/гучністю (object-fit: contain — без обрізки кадру).
-   * Зелена «говоряча» рамка на батьківській клітинці (inset), не на ptile.
-   */
+  
+
+
+
   mosaicMode: { type: Boolean, default: false },
-  /** Optional profile image when `showVideo` is false (stable HTTPS URL; no generated URLs). */
+  
   avatarUrl: { type: String, default: '' },
 })
 
@@ -106,7 +106,7 @@ const showAvatarImage = computed(() => {
   return typeof u === 'string' && u.trim().length > 0
 })
 
-/** Stable src for `<img>` (trimmed once). */
+
 const avatarSrc = computed(() => (showAvatarImage.value ? props.avatarUrl.trim() : ''))
 </script>
 
@@ -116,7 +116,7 @@ const avatarSrc = computed(() => (showAvatarImage.value ? props.avatarUrl.trim()
     <template v-if="mosaicMode && layer">
       <div class="ptile__video-stage" :class="{ 'ptile__video-stage--avatar-only': !showVideo }">
         <template v-if="showVideo">
-          <!-- v-memo: name/volume row can update without touching <video> bindings. -->
+          
           <div class="ptile__video-wrap" v-memo="[mediaStream, showVideo, avatarSrc]">
             <video
               ref="videoRef"
@@ -234,7 +234,7 @@ const avatarSrc = computed(() => (showAvatarImage.value ? props.avatarUrl.trim()
   opacity: 0;
   pointer-events: none;
 }
-/* Fills tile like the former absolutely-positioned <video> (wrapper for v-memo + v-show). */
+
 .ptile__media-slot {
   position: absolute;
   inset: 0;

@@ -10,7 +10,7 @@ const props = withDefaults(
     title?: string
     logoSrc: string
     coinHubTo: RouteLocationRaw
-    /** Formatted balance (Coin Hub); placeholder when guest. */
+    
     coinBalanceLabel: string
     authLoading?: boolean
     isAuthenticated?: boolean
@@ -30,7 +30,7 @@ const props = withDefaults(
      */
     isProActive?: boolean
     proLinkTo?: RouteLocationRaw
-    /** Tooltip + accessible label for the Pro pill (e.g. "Pro until …"). */
+    
     proLabel?: string
   }>(),
   {
@@ -587,7 +587,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   border-color: rgba(255, 255, 255, 0.24);
 }
 
-/* —— Gold "PRO" pill (visible only when subscription is active) —— */
+
 .app-landing-header__pro {
   position: relative;
   display: inline-flex;

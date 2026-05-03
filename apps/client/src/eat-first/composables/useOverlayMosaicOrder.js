@@ -60,7 +60,7 @@ export function useOverlayMosaicOrder(playersRef, speakingIdentitiesRef) {
 
   recomputeMosaicOrder()
 
-  /** Для useMosaicPlayerOrder: стабільне посилання, поки порядок не змінився. */
+  
   const defaultOrderedPlayers = computed(() => playersOrderedForGlobalMosaic.value)
 
   return {

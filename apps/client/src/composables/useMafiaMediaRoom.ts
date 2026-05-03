@@ -20,7 +20,7 @@ export function mafiaSignalingRoomId(baseRoomId: string): string {
   return `${MAFIA_SIGNALING_ROOM_PREFIX}${b}`
 }
 
-/** Human / URL room segment (no `mafia:`) for copy, `?room=`, and header display. */
+
 export function mafiaBaseRoomIdFromSignaling(signalingRoomId: string): string {
   const s = normalizeDisplayName(signalingRoomId) || 'demo'
   if (s.startsWith(MAFIA_SIGNALING_ROOM_PREFIX)) {

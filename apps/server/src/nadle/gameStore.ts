@@ -292,7 +292,7 @@ export function adminStartNewGame(
   }
 }
 
-/** Snapshot for DB persistence after a winning guess (in-memory store still holds all participants). */
+
 export function buildNadleRoundPersistencePayload(
   streamerId: string,
   winnerUserId: string,

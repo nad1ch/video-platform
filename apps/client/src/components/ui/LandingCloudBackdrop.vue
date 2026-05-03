@@ -15,7 +15,7 @@ import { landingDesignPx as px } from '@/utils/landingDesignPx'
 
 const props = withDefaults(
   defineProps<{
-    /** Full animation/blend mode for routes where the backdrop is a primary visual element. */
+    
     active?: boolean
     variant?: 'landing' | 'app'
   }>(),

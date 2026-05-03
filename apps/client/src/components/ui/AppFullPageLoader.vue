@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
-/**
- * Full-screen loader (Teleport → body). Uses global `--sa-*` tokens so it works outside `.eat-first-root`.
- */
+
+
+
 withDefaults(
   defineProps<{
     visible?: boolean
-    /** Visible line under the spinner; empty = spinner only. */
+    
     label?: string
-    /** Screen-reader label when `label` is empty. */
+    
     ariaLabel?: string
-    /** When `false`, render inside the parent (e.g. route) so the page is already in the same subtree under the fixed overlay. */
+    
     teleport?: boolean
   }>(),
   {
@@ -62,7 +62,7 @@ const { t } = useI18n()
   gap: 1.35rem;
   padding: 2rem;
   box-sizing: border-box;
-  /* Let the route paint underneath; scrim is light enough to read layout through the blur. */
+  
   background: color-mix(in srgb, var(--sa-color-bg-hud-deep) 32%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -70,7 +70,7 @@ const { t } = useI18n()
 
 .app-full-page-loader--docked {
   pointer-events: auto;
-  /* Same viewport-fixed overlay; docked in route tree for clearer paint / stacking with page content. */
+  
 }
 
 .app-full-page-loader--no-label {

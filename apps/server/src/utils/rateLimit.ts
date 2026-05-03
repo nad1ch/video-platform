@@ -30,13 +30,13 @@ const DEFAULT_REAP_MIN_MS = 60_000
 type Bucket = { count: number; resetAt: number }
 
 export type RateLimitOptions = {
-  /** Rolling window length in milliseconds. */
+  
   windowMs: number
-  /** Maximum allowed hits per window. */
+  
   limit: number
-  /** Human label for debug logs (e.g. `auth:login:ip`). */
+  
   label: string
-  /** Optional: how often the reaper prunes expired entries. Defaults to windowMs (min 60s). */
+  
   reapEveryMs?: number
 }
 
@@ -46,9 +46,9 @@ export type RateLimitResult =
 
 export type RateLimiter = {
   tryConsume(key: string): RateLimitResult
-  /** Forget this key (e.g. on a successful verified action that should reset the budget). */
+  
   reset(key: string): void
-  /** Stop the reaper; mainly for tests / graceful shutdown. */
+  
   stop(): void
 }
 

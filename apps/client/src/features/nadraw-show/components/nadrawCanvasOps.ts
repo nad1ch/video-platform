@@ -1,4 +1,4 @@
-/** Parse #rrggbb or #rgb to RGBA bytes (alpha 255). */
+
 export function hexToRgb(hex: string): { r: number; g: number; b: number; a: number } | null {
   const h = hex.trim().replace(/^#/, '')
   if (h.length === 3) {
@@ -22,9 +22,9 @@ export function hexToRgb(hex: string): { r: number; g: number; b: number; a: num
   return null
 }
 
-/**
- * Stack flood fill on ImageData (device pixels). Replaces contiguous region matching seed color.
- */
+
+
+
 export function floodFillImageData(
   data: Uint8ClampedArray,
   width: number,

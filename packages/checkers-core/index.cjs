@@ -1,4 +1,4 @@
-/* global module */
+
 
 const BOARD_SIZE = 8
 const PLAYER_1 = 'player1'

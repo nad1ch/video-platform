@@ -14,7 +14,7 @@ const brandLinkLog = createLogger('streamer-brand-link')
 const props = defineProps({
   ariaLabel: { type: String, required: true },
   logoSize: { type: Number, default: 32 },
-  /** When false, only the channel mark is shown (link still goes to Twitch). */
+  
   showNick: { type: Boolean, default: false },
 })
 

@@ -12,14 +12,14 @@ export const DEFAULT_CALL_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   autoGainControl: true,
 }
 
-/** @deprecated Prefer `getCallVideoConstraints(tier)` — implicit multi-user auto profile. */
+
 export const DEFAULT_CALL_VIDEO_CONSTRAINTS: MediaTrackConstraints = getCallVideoConstraints('auto_large_room')
 
 export function getVideoConstraintsForPreset(preset: VideoQualityPreset): MediaTrackConstraints {
   return getCallVideoConstraints(preset)
 }
 
-/** Hint to the encoder pipeline (motion vs detail); safe no-op if unsupported. */
+
 export function applyWebcamContentHint(track: MediaStreamTrack): void {
   if (track.kind !== 'video') {
     return

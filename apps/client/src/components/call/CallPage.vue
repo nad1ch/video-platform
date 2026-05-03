@@ -84,12 +84,12 @@ const isMafiaRoute = computed(() => route.name === 'mafia')
 
 const props = withDefaults(
   defineProps<{
-    /** Mafia `?mode=view` from parent: minimal UI for stream capture. */
+    
     mafiaStreamView?: boolean
   }>(),
   { mafiaStreamView: false },
 )
-/** Mafia stream layout: no dock, no host tile actions, no per-tile menus / rename. */
+
 const mafiaViewUi = computed(() => isMafiaRoute.value && props.mafiaStreamView)
 
 /**
@@ -107,7 +107,7 @@ watch(
   { immediate: true },
 )
 
-/** Manual video quality: backend `role === 'admin'` (see ADMIN_EMAILS / ADMIN_TWITCH_IDS on server). */
+
 const allowManualVideoQuality = computed(() => isAdmin.value)
 
 /** Sent with `join-room` and used as local tile `avatarUrl` SSOT (same URL remotes receive via roster). */
@@ -120,7 +120,7 @@ const joinUserId = computed(() => {
   return typeof id === 'string' && id.trim().length > 0 ? id.trim() : undefined
 })
 
-/** Debug overlay UI: admins always; in dev also local engineers (no secret in URL). */
+
 const showCallDebugControls = computed(() => isAdmin.value || import.meta.env.DEV)
 
 const {
@@ -165,7 +165,7 @@ const {
   playbackRenderFpsPressureByPeerId,
 } = useCallOrchestrator({ allowManualVideoQuality, joinAvatarUrl, joinUserId, role: callEngineRole })
 
-/** Peers with an active `<video>` `waiting` stall (fast signal — see StreamVideo). */
+
 const remotePlaybackWaitingPeerIds = shallowRef(new Set<string>())
 
 function onRemotePlaybackStall(payload: { peerId: string; stalling: boolean }): void {
@@ -213,10 +213,10 @@ const isSystemHealthy = computed(() => {
   return true
 })
 
-/**
- * Full-power unlock applies only on `strong` receive profile (Step 2).
- * Enter after sustained health; exit immediately on any non-`good` pressure (Step 6).
- */
+
+
+
+
 const FULL_POWER_ENTER_AFTER_MS = 4000
 const isFullPowerMode = shallowRef(false)
 let fullPowerEnterTimer: ReturnType<typeof setTimeout> | null = null
@@ -340,12 +340,12 @@ watch(
   },
 )
 
-/** SSOT for call UI names: tiles + remote-only peers (see `buildCallParticipantMap`). */
+
 const participantsByPeerId = computed(() =>
   buildCallParticipantMap(tiles.value, { ...remoteDisplayNames.value }, selfPeerId.value),
 )
 
-/** Precomputed labels per known peer — avoids N× `resolvePeerDisplayNameForUi` on unrelated re-renders (large grids). */
+
 const displayNameUiByPeerId = computed(() =>
   buildDisplayNameUiMap(participantsByPeerId.value, {
     selfPeerId: selfPeerId.value,
@@ -353,7 +353,7 @@ const displayNameUiByPeerId = computed(() =>
   }),
 )
 
-/** Local-only tile labels (persists in localStorage). */
+
 const localTileDisplayOverrides = shallowRef<Record<string, string>>(loadCallTileLocalDisplayOverrides())
 
 function onCommitLocalTileDisplayName(payload: { peerId: string; name: string | null }): void {
@@ -372,7 +372,7 @@ function onCommitLocalTileDisplayName(payload: { peerId: string; name: string | 
   saveCallTileLocalDisplayOverrides(next)
 }
 
-/** Single resolver: cache hit for peers in map; fallback for chat lines whose peer left the map. */
+
 function peerDisplayName(peerId: string): string {
   const o = localTileDisplayOverrides.value[peerId]
   if (typeof o === 'string' && normalizeDisplayName(o)) {
@@ -416,11 +416,11 @@ function remoteListenMutedHandler(peerId: string) {
   return h
 }
 
-/** Deduplicated tile IntersectionObserver; fixed-quality calls keep all remote videos active. */
+
 const callTileViewportVisibleByPeer = shallowRef(new Map<string, boolean>())
 
 const remoteVideoSuppressDelayTimerByPeer = new Map<string, ReturnType<typeof setTimeout>>()
-/** Why a pending suppress timer was scheduled — reschedule if offscreen vs budget flips. */
+
 const remoteVideoSuppressPendingKind = new Map<string, 'offscreen' | 'outside-budget'>()
 const remoteVideoPlaybackSuppressed = shallowRef(new Map<string, boolean>())
 
@@ -585,7 +585,7 @@ type CallToast = { id: string; text: string; kind: 'join' | 'leave' }
 const callToasts = ref<CallToast[]>([])
 let lastPresenceToastSourceId = ''
 
-/** Only the last presence event drives toasts; avoid deep watch on the whole array. */
+
 watch(
   () => callPresenceMessages.value[callPresenceMessages.value.length - 1]?.id,
   () => {
@@ -595,7 +595,7 @@ watch(
       return
     }
     lastPresenceToastSourceId = last.id
-    /** Snapshot from engine at event time (stable for leave toasts if map updates before toast). */
+    
     const name = last.displayName
     const text =
       last.kind === 'join'
@@ -678,7 +678,7 @@ const callControlsDockRef = ref<CallControlsDockExpose | null>(null)
 const roomJoinDraft = ref('')
 const roomCopyFlash = ref(false)
 let roomCopyFlashTimer: ReturnType<typeof setTimeout> | null = null
-/** Join only after auth is ready (same ordering as the old pre-join form). */
+
 const callAuthReady = ref(false)
 
 const callRoomHeaderJoin = useCallRoomHeaderJoinStore()
@@ -693,7 +693,7 @@ watch(
   { immediate: true },
 )
 
-/** Shown in UI, copied, and in `?room=` — without `mafia:` (Mafia still joins `mafia:` + this in the session). */
+
 function displayCallOrMafiaRoomCode(): string {
   const raw = normalizeDisplayName(session.roomId) || 'demo'
   if (isMafiaRoute.value) {
@@ -941,7 +941,7 @@ watch(
   { flush: 'pre' },
 )
 
-/** 1-based seat for each `peerId` (numbering from game store, or join order before reshuffle). */
+
 const mafiaNumberByPeer = computed(() => {
   if (!isMafiaRoute.value) {
     return new Map<string, number>()
@@ -1052,14 +1052,14 @@ function togglePin(peerId: string): void {
   pinnedPeerId.value = pinnedPeerId.value === peerId ? null : peerId
 }
 
-/** Pixels; must match `gap` in `gridStyle`. */
+
 const GAP = 12
 const MIN_TILE_WIDTH = 180
 
-/**
- * Matches `.call-page__grid { padding: 6px }` — total inset per axis (left+right / top+bottom)
- * so tile layout matches the content box inside padded grid (room for drag/hover ring).
- */
+
+
+
+
 const GRID_CONTENT_INSET_PX = 12
 
 function getGrid(n: number, width: number, height: number) {
@@ -1080,7 +1080,7 @@ function getGrid(n: number, width: number, height: number) {
   return g
 }
 
-/** Call stage (not the inner grid) — ResizeObserver + content-box size matches real tile area. */
+
 type TileRectMap = Map<string, DOMRectReadOnly>
 
 const TILE_LAYOUT_FLIP_MS = 220
@@ -1288,7 +1288,7 @@ if (import.meta.env.DEV) {
   )
 }
 
-/** One name-resolution pass per grid row when order/tiles/participants change (large grids). */
+
 const orderedGridRows = computed(() => {
   const participants = participantsByPeerId.value
   const opts = {
@@ -1341,12 +1341,12 @@ function isRemoteVoiceDucked(peerId: string): boolean {
   return dominant !== null && dominant !== peerId
 }
 
-/** User gesture: keep shared analysis AudioContext un-suspended so VAD + local RMS work after join. */
+
 function resumeCallAudioAnalysisFromGesture(): void {
   void getAudioAnalysisAudioContext().resume().catch(() => {})
 }
 
-/** Explicit deps so host tile highlight updates immediately when `nightActions` / queue refs change. */
+
 const mafiaHostNightActionSeatSet = computed(() => {
   const a = mafiaGameStore.nightActions
   const s = new Set<number>()
@@ -1544,7 +1544,7 @@ function tileLayoutStyle(row: (typeof orderedGridRows.value)[number]) {
   }
 }
 
-/** Повна ширина вьюпорта для сітки тільки коли хоча б один учасник з увімкненим відео. */
+
 const stageFullBleed = computed(() => session.inCall && tiles.value.some((t) => t.videoEnabled))
 
 function isTileControlDragTarget(target: EventTarget | null): boolean {
@@ -1644,7 +1644,7 @@ onBeforeUnmount(() => {
   callRoomHeaderJoin.reset()
   mafiaPlayersStore.reset()
   mafiaGameStore.fullReset()
-  /* Вихід з маршруту /call (навігація по сайту) має закривати кімнату й зупиняти медіа, інакше Pinia-сесія лишається inCall. */
+  // Leaving /call must teardown media; otherwise Pinia session stays inCall.
   leaveCall()
 })
 

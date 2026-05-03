@@ -31,10 +31,10 @@ async function resolveDbUserId(
   return byTwitch?.id ?? null
 }
 
-/**
- * Persists a finished nadle round (winner known), updates {@link UserStreamerStats} for registered users.
- * Swallows errors — must never break live game / websocket flow.
- */
+
+
+
+
 export async function persistNadleRound(input: PersistNadleRoundInput): Promise<void> {
   if (!isDatabaseConfigured()) {
     return

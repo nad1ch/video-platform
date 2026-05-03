@@ -3,10 +3,10 @@ import { isDatabaseConfigured, prisma } from '../prisma'
 import { normalizeTwitchLogin } from '../streamerIdentity'
 import { DEV_FALLBACK_STREAMER_ID } from './streamerContext'
 
-/**
- * Public streamer card for routing + WebSocket `streamerId`.
- * `GET /api/streamer/:username`
- */
+
+
+
+
 export function mountStreamerApiRoutes(app: Express): void {
   app.get('/api/streamer/:username', async (req: Request, res: Response) => {
     const username = normalizeTwitchLogin(String(req.params.username ?? ''))

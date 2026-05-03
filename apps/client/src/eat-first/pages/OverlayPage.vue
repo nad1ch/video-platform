@@ -50,7 +50,7 @@ const personalPlayerId = computed(() => {
 
 const isPersonal = computed(() => personalPlayerId.value != null)
 
-/** Унікальний peer id для глобального оверлею (spectator), щоб не зіткнутися з іншим учасником у кімнаті. */
+
 const overlayPeerId = computed(() => {
   if (personalPlayerId.value) return normalizePlayerSlotId(personalPlayerId.value)
   const dev = getOrCreateDeviceId().replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)
@@ -65,7 +65,7 @@ const gameRoom = ref({})
 const votes = ref([])
 const aliveForCinema = ref(0)
 
-/** Якщо в URL є ?token= і він не збігається з joinToken у Firestore — приховуємо картку. Без token — як раніше (OBS). */
+
 const overlayTokenGateBlocks = computed(() => {
   if (!isPersonal.value) return false
   const urlTok = String(route.query.token ?? '').trim()
@@ -297,7 +297,7 @@ const {
 
 const { speakerTimeLeft, speakerTimerTotal } = useOverlaySpeakerCountdown(gameRoom, gameId)
 
-/** Банер лише при зміні раунду в кімнаті (не прив’язано до фази) */
+
 const roundBannerVisible = ref(false)
 let roundBannerTimer = null
 const lastSeenRoundBanner = ref(null)
@@ -402,7 +402,7 @@ watch(roomRound, (r, prev) => {
   }, 260)
 })
 
-/** Персональний оверлей: тихий стан «ніхто не говорить» (не під час голосування). */
+
 const showIdleWaitingCue = computed(
   () =>
     isPersonal.value &&

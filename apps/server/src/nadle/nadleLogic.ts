@@ -34,14 +34,14 @@ export function generateWord(length: NadleWordLength = 5): string {
   return pool[Math.floor(Math.random() * pool.length)]!
 }
 
-/**
- * NFC keeps ї / є / і / ґ stable vs decomposed sequences; uk-UA lowercases correctly.
- */
+
+
+
 export function normalizeWord(s: string): string {
   return s.trim().normalize('NFC').toLocaleLowerCase('uk-UA')
 }
 
-/** Grapheme length matches secret; only Unicode letters. */
+
 export function isValidGuessShape(guess: string, wordLength: number): boolean {
   const g = normalizeWord(guess)
   if (wordGraphemeCount(g) !== wordLength) {

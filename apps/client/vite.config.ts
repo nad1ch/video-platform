@@ -29,7 +29,7 @@ function manualAppChunks(id: string): string | undefined {
   return undefined
 }
 
-/** Map `/slug` and `/slug/` → `/slug/index.html` so `public/` marketing pages load instead of SPA `index.html`. */
+
 function seoPublicMarketingIndexPlugin(): Plugin {
   const slugs = ['video-calls-for-streamers', 'twitch-nadle-game', 'stream-overlay-tools'] as const
   return {
@@ -57,7 +57,7 @@ function seoPublicMarketingIndexPlugin(): Plugin {
 
 // https://vite.dev/config/
 // App is deployed at the site root (e.g. https://app.streamassist.net/), so assets must be `/assets/*`, not `/app/assets/*`.
-// If you ever host the SPA under a subpath, set `base` to that path and match Pages/nginx routing.
+
 export default defineConfig({
   base: '/',
   plugins: [vue(), seoPublicMarketingIndexPlugin()],
@@ -67,7 +67,7 @@ export default defineConfig({
         target: devApiProxyTarget,
         changeOrigin: true,
       },
-      // SPA under /app (e.g. reverse proxy): browser calls /app/api/* → same backend /api/*
+      
       '/app/api': {
         target: devApiProxyTarget,
         changeOrigin: true,
@@ -114,10 +114,10 @@ export default defineConfig({
     },
   },
   build: {
-    // Avoid Lightning CSS native `.node` bindings on Linux CI (e.g. Cloudflare Pages).
-    // Requires `esbuild` in devDependencies (Vite 8 does not ship it for this path).
+    
+    
     cssMinify: 'esbuild',
-    /** Map prod stack traces to sources (disable later if you want smaller uploads). */
+    
     sourcemap: true,
     rollupOptions: {
       output: {
@@ -126,11 +126,11 @@ export default defineConfig({
     },
   },
   resolve: {
-    // One physical copy of Vue/Pinia for the app + aliased call-core sources (avoids getActivePinia() === undefined / reading '_s').
+    
     dedupe: ['vue', 'pinia'],
     alias: {
       '@': path.resolve(__dirname, 'src'),
-      // Hoisted to repo root node_modules; Vite dev resolves from apps/client and misses it without an alias.
+      
       'nadle-core/dictionary': path.resolve(__dirname, '../../packages/nadle-core/dictionary.mjs'),
       'nadle-core': path.resolve(__dirname, '../../packages/nadle-core/index.mjs'),
       'ui-theme': path.resolve(__dirname, '../../packages/ui-theme/src/index.css'),

@@ -20,7 +20,7 @@ export type CheckersEloSnapshot = {
   losses: number
 }
 
-/** Resolve `?streamerId=` or Twitch login `?streamer=` to an active Streamer id. */
+
 async function resolveStreamerScopeFromQuery(req: Request): Promise<string | null> {
   const q = req.query
   const sid = typeof q.streamerId === 'string' ? q.streamerId.trim() : ''
@@ -67,10 +67,10 @@ async function buildParticipantDisplayMap(
   return map
 }
 
-/**
- * Longest run of consecutive wins, in chronological round order (one entry per round the user played).
- * Losses reset the running count but not the recorded maximum.
- */
+
+
+
+
 function maxConsecutiveWinStreakChronological(rows: { isWinner: boolean }[]): number {
   let run = 0
   let best = 0
@@ -168,7 +168,7 @@ async function streakFromRows(
   })
 }
 
-/** Best consecutive-win streak for this viewer on this streamer (matches `GameResult.userId` to prisma `id` or `twitchId`). */
+
 async function viewerMaxWinStreakForStreamer(streamerId: string, prismaUserId: string): Promise<number> {
   const u = await prisma.user.findUnique({
     where: { id: prismaUserId },
@@ -294,10 +294,10 @@ async function computeCheckersEloSnapshotsUncached(): Promise<Map<string, Checke
   }
 
   for (const round of rounds) {
-    // Strict round validation: exactly 2 distinct non-empty userIds with
-    // exactly 1 isWinner=true. Any corruption (3+ results, 2 winners, a
-    // user recorded against themselves) silently skips the round rather
-    // than credit ELO to the wrong side.
+    
+    
+    
+    
     const results = round.results.filter((r) => r.userId.length > 0)
     if (results.length !== 2 || results[0]!.userId === results[1]!.userId) {
       if (process.env.NODE_ENV !== 'production') {
@@ -341,8 +341,8 @@ async function computeCheckersEloSnapshots(): Promise<Map<string, CheckersEloSna
   const pending = computeCheckersEloSnapshotsUncached()
   checkersEloCachedPromise = pending
   checkersEloCacheAt = now
-  // On error, drop the cache so the next caller retries. Otherwise a one-off
-  // DB hiccup would pin the rejection for the whole TTL.
+  
+  
   pending.catch(() => {
     if (checkersEloCachedPromise === pending) {
       invalidateCheckersEloCache()
@@ -389,7 +389,7 @@ export async function recordCheckersMatchResult(input: {
       ],
     })
   })
-  // New round — force the next leaderboard read to recompute from DB so the
+  
   // just-played match appears without a 5 s stale cache window.
   invalidateCheckersEloCache()
 }
@@ -464,7 +464,7 @@ async function checkersStreakLeaderboard(): Promise<
   return streakFromRows(raw)
 }
 
-/** Best consecutive-win streak for rated Checkers rounds (`GameRound.streamerId` is null). */
+
 async function viewerMaxWinStreakForCheckers(prismaUserId: string): Promise<number> {
   const u = await prisma.user.findUnique({
     where: { id: prismaUserId },
@@ -504,10 +504,10 @@ async function viewerMaxWinStreakForCheckers(prismaUserId: string): Promise<numb
 }
 
 export function mountLeaderboardRoutes(app: Express): void {
-  /**
-   * Nadle results must be written by the server-side WebSocket round flow.
-   * Client-local solo boards cannot prove the secret word or terminal state.
-   */
+  
+
+
+
   app.post('/api/wins', (_req: Request, res: Response) => {
     res.status(410).json({ error: 'server_authority_required' })
   })
@@ -568,7 +568,7 @@ export function mountLeaderboardRoutes(app: Express): void {
     }
   })
 
-  /** Rating: Nadle legacy score, or Checkers ELO with `?game=checkers`. */
+  
   app.get('/api/leaderboard/rating', async (req: Request, res: Response) => {
     if (!isDatabaseConfigured()) {
       res.json({ entries: [] })

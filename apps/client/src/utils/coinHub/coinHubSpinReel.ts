@@ -10,12 +10,12 @@ export type SpinStripCell = {
   rarity: SpinRarity
   kind: 'coins' | 'bonus'
   bonusType?: 'boost' | 'case' | 'multiplier'
-  /** Tease cell: user’s eye catches a “big” symbol just before the real result. */
+  
   nearMiss?: boolean
 }
 
 export type BuildSpinReelOpts = {
-  /** Incremented client-side when last several spins were below “big” threshold (e.g. &lt; 50 coins). */
+  
   spinsSinceBigWin?: number
   rng?: () => number
 }
@@ -24,7 +24,7 @@ const WAVE_PASSES = 5
 const FILLER_LEN = 24
 const RIGHT_PAD_AFTER_WIN = 14
 
-/** Server win is “big” enough to reset dry counter (epic / legendary coin line). */
+
 export const SPIN_BIG_WIN_MIN_COINS = 50
 
 const POOL_VALUES: readonly number[] = [5, 8, 10, 12, 15, 20, 25, 50, 100]
@@ -65,12 +65,12 @@ function pickIn<T extends readonly number[]>(arr: T, rng: () => number): number 
   return arr[Math.floor(rng() * arr.length)]!
 }
 
-/**
- * Tier pick: base 60 / 25 / 10 / 5, nudged toward high tiers when `dry` grows (capped).
- */
+
+
+
 export function pickRarityWithBias(dry: number, rng: () => number): SpinRarity {
   const d = Math.min(24, Math.max(0, dry))
-  /** Up to ~9% mass moved from common toward rarer tiers. */
+  
   const shift = Math.min(0.09, d * 0.0035)
   let pC = 0.52 - shift
   let pU = 0.1 + shift * 0.2
@@ -135,7 +135,7 @@ function bonusCell(kind: BonusKind): SpinStripCell {
   }
 }
 
-/** Filler: mostly weighted coins; ~9% bonus tokens (theatre only). */
+
 function pickFillerCell(dry: number, rng: () => number): SpinStripCell {
   if (rng() < 0.09) {
     return bonusCell(BONUS_TYPES[Math.floor(rng() * BONUS_TYPES.length)]!)
@@ -144,9 +144,9 @@ function pickFillerCell(dry: number, rng: () => number): SpinStripCell {
   return coinCell(coinValueForRarity(tier, rng))
 }
 
-/**
- * ~25%: extra “passed the 100” beat for non-legendary server outcomes (psychological near-miss).
- */
+
+
+
 function useExtendedNearMissTease(targetPayout: number, rng: () => number): boolean {
   if (getSpinRarity(targetPayout) === 'legendary') {
     return false
@@ -179,9 +179,9 @@ function buildTeaseCells(targetPayout: number, rng: () => number): SpinStripCell
   return [coinCell(100), coinCell(50), coinCell(targetPayout)]
 }
 
-/**
- * Builds the full strip. `landIndex` points at the server coin result (last tease cell before right padding).
- */
+
+
+
 export function buildSpinStripFromPayout(targetPayout: number, opts?: BuildSpinReelOpts): {
   cells: SpinStripCell[]
   landIndex: number
@@ -214,7 +214,7 @@ export function buildSpinStripFromPayout(targetPayout: number, opts?: BuildSpinR
   return { cells: out, landIndex }
 }
 
-/** @deprecated use `cell.display` */
+
 export function stripCellToLabel(cell: SpinStripCell): string {
   return cell.display
 }

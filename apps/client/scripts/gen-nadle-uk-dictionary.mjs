@@ -25,7 +25,7 @@ const ZIP_URL =
 
 const UK_LETTERS = /^[абвгґдеєжзиіїйклмнопрстуфхцчшщьюя]+$/u
 const UK_VOWELS = new Set([...'аеєиіїоуюя'])
-/** ~1000 секретів загалом: 333 + 333 + 334 */
+
 const SECRET_CAP_BY_LEN = { 5: 333, 6: 333, 7: 334 }
 const RNG_SEED = 0xbeefcafe
 
@@ -136,7 +136,7 @@ function hasVowelTripletInFive(word, L) {
   return false
 }
 
-/** Легкий фільтр для слів, відібраних з частотного списку + Hunspell. */
+
 function isOkSecretFromFrequency(word, L) {
   if (badSecretEnding(word, L)) {
     return false
@@ -147,7 +147,7 @@ function isOkSecretFromFrequency(word, L) {
   return true
 }
 
-/** Добір з евристик Hunspell, якщо частотного перетину не вистачає. */
+
 function isFriendlySecretLemma(word, L) {
   if (!isOkSecretFromFrequency(word, L)) {
     return false
@@ -222,10 +222,10 @@ function parseDic(content, targetLen) {
   return { allowed, secretEligible }
 }
 
-/**
- * Упорядкований список слів за частотою (перше входження = вища частота).
- * Формат рядка: `<слово> <лічильник>`.
- */
+
+
+
+
 function loadFrequencyWordsOrdered() {
   const txt = fs.readFileSync(freqPath, 'utf8')
   const seen = new Set()

@@ -7,9 +7,9 @@ import {
   RECEIVE_DEVICE_DEFAULT_MAX_MEDIUM,
 } from './receiveDeviceProfile'
 
-/** @deprecated Use {@link RECEIVE_DEVICE_DEFAULT_MAX_HIGH} or profile limits. */
+
 export const MAX_HIGH_STREAMS = RECEIVE_DEVICE_DEFAULT_MAX_HIGH
-/** @deprecated Use {@link RECEIVE_DEVICE_DEFAULT_MAX_MEDIUM} or profile limits. */
+
 export const MAX_MEDIUM_STREAMS = RECEIVE_DEVICE_DEFAULT_MAX_MEDIUM
 
 export type AdaptiveVideoLayerSlotLimits = {
@@ -24,12 +24,12 @@ export function assignAdaptivePreferredLayersByPeerId(input: {
   videoPeerIds: string[]
   /** SFU / signaling dominant speaker (may lag local VAD). */
   activeSpeakerPeerId: string | null
-  /** Local Web Audio dominant talker; listed first so layers track perceived speaker before SFU catches up. */
+  
   uiActiveSpeakerPeerId?: string | null
   /** Ignored while fixed-quality single-layer video is enforced. */
   recentSpeakerPeerIds?: readonly string[]
   pinnedPeerId: string | null
-  /** `false` = explicitly off-viewport; missing key = treat as visible (on-screen) for Mafia/IO. */
+  
   peerVisibility: ReadonlyMap<string, boolean>
   /** Ignored while fixed-quality single-layer video is enforced. */
   layerSlots?: Partial<AdaptiveVideoLayerSlotLimits>

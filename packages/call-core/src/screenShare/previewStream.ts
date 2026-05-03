@@ -30,9 +30,9 @@ function localCameraPreviewStream(localStream: MediaStream | null): MediaStream 
   return new MediaStream([primary, ...rest, ...audios])
 }
 
-/**
- * Pure preview selection: **outbound source is authoritative**, not presence of display stream.
- */
+
+
+
 export function localPreviewStreamForOutbound(
   outboundVideoSource: OutboundVideoSource,
   screenShareStream: MediaStream | null,

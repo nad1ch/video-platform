@@ -7,9 +7,9 @@ import { computed } from 'vue'
 import OverlayParticipantTile from './OverlayParticipantTile.vue'
 
 const props = defineProps({
-  /** 'grid' — сітка слотів; 'solo' — одне відео на весь кадр */
+  
   mode: { type: String, required: true },
-  /** true: лише камери на всю ширину, без підкладки під HUD-картки */
+  
   camGridOnly: { type: Boolean, default: false },
   cinema: { type: Boolean, default: false },
   players: { type: Array, default: () => [] },

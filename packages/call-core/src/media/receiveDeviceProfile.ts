@@ -9,19 +9,19 @@ export type ReceiveDeviceProfile = {
   profile: ReceiveDeviceProfileKind
   maxHighStreams: number
   maxMediumStreams: number
-  /**
-   * Phase 2: permit soft `<video>` playback suppression for off-screen tiles (not used in Phase 1).
-   */
+  
+
+
   allowRenderSuppression: boolean
   /**
    * Phase 3: max remote tiles allowed to keep `<video>` playing when {@link allowRenderSuppression} is true
    * and visible grid exceeds budget (speakers still ranked first; see client playback budget helper).
    */
   maxActiveRemoteVideos: number
-  /**
-   * Inbound-stats bad streaks required before `receiveQualityPressure` shifts tier.
-   * Lower = react sooner on weak devices (may downgrade layers slightly faster).
-   */
+  
+
+
+
   pressureBadStreakToShift: number
 }
 
@@ -86,7 +86,7 @@ function isLikelyHandheldUa(ua: string): boolean {
   if (/iPhone|iPod|iPad/i.test(ua)) {
     return true
   }
-  // Most Android phones and tablets; excludes rare desktop UA quirks by keeping it simple.
+  
   if (/Android/i.test(ua)) {
     return true
   }
@@ -132,7 +132,7 @@ export function resolveReceiveDeviceProfile(input?: ReceiveDeviceProfileInput): 
   }
 
   const strongCpu = cores >= 8
-  /** Large core count: treat as strong even when `deviceMemory` is missing (common on desktop browsers). */
+  
   const strongManyCores = cores >= 12
   const strongRam = mem !== undefined && mem >= 8
   if (strongCpu && (strongManyCores || strongRam || mem === undefined)) {
@@ -142,9 +142,9 @@ export function resolveReceiveDeviceProfile(input?: ReceiveDeviceProfileInput): 
   return fallback
 }
 
-/**
- * Snapshot of navigator fields for {@link resolveReceiveDeviceProfile} (browser only).
- */
+
+
+
 export function readNavigatorDeviceProfileInput(): ReceiveDeviceProfileInput | undefined {
   if (typeof globalThis === 'undefined' || typeof (globalThis as { navigator?: Navigator }).navigator === 'undefined') {
     return undefined

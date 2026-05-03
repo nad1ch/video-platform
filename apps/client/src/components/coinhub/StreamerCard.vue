@@ -6,7 +6,7 @@ withDefaults(
   defineProps<{
     name: string
     statusLabel?: string
-    /** e.g. viewer count */
+    
     viewersLabel?: string
     live?: boolean
   }>(),

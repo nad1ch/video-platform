@@ -27,14 +27,14 @@ const freqPath = path.join(rawDir, 'uk_opensubtitles_50k.txt')
 
 const UK_LETTERS = /^[абвгґдеєжзиіїйклмнопрстуфхцчшщьюя]+$/u
 const RU_ORTHO = /[ёЁъЪыЫэЭ]/u
-/** Якщо є типові укр. літери — не відкидаємо лише через ru_50k (спільні корені без і/ї/є/ґ). */
+
 const UK_MARK = /[іїєґ]/u
 
 const RU_FREQ_URL =
   'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/ru/ru_50k.txt'
 const RU_TOP_LINES = 9000
 
-/** stopword: rus minus ukr, мінус форми, нормальні в українських субтитрах. */
+
 const RUS_STOP_MINUS_UKR = [
   'и',
   'во',
@@ -165,10 +165,10 @@ const STOP_OK_IN_UK_SUBS = new Set([
   'им',
 ])
 
-/**
- * Русизми, що потрапляють у uk_UA.dic, але для частотника їх прибираємо
- * (ето/он/был тощо).
- */
+
+
+
+
 const RUSISM_FORCE_DROP_LIST = [
     'он',
     'она',

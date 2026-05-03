@@ -25,12 +25,12 @@ const NARRATIVE_EFFECTS = new Set([
   ACTIVE_CARD_EFFECT_IDS.CANCEL_LAST_DECISION,
 ])
 
-/**
- * @param {string} gameId
- * @param {string} playerId
- * @param {string} effectId
- * @param {string} scenarioId
- */
+
+
+
+
+
+
 export async function applyActiveCardEffect(gameId, playerId, effectId, scenarioId) {
   const sid = scenarioId || 'classic_crash'
 

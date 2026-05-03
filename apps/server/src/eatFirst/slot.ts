@@ -1,4 +1,4 @@
-/** Match client `normalizePlayerSlotId` (eat-first). */
+
 export function normalizeEatFirstSlot(raw: unknown): string {
   const s = String(raw ?? 'p1').trim()
   if (!s) return 'p1'

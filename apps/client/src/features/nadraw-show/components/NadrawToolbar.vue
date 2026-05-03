@@ -100,7 +100,7 @@ const customSelected = computed(() => {
     <div
       class="grid w-full min-w-0 gap-x-2 gap-y-1.5 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:gap-x-3"
     >
-      <!-- Tools: icons only -->
+      
       <div
         class="flex flex-wrap items-center gap-1 border-b border-[color:var(--border-subtle,rgba(255,255,255,0.08))] pb-1.5 lg:border-b-0 lg:pb-0"
         role="group"
@@ -267,7 +267,7 @@ const customSelected = computed(() => {
 </template>
 
 <style scoped>
-/* Square icon buttons: override compact chip padding/min-height so SVGs stay centered. */
+
 .nadraw-toolbar__icon-btn {
   box-sizing: border-box;
   display: inline-flex;

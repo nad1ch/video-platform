@@ -31,12 +31,12 @@ type WsWithAlive = WsType & { isAlive?: boolean }
 export type WsHeartbeatOptions = {
   /** Interval between WS ping frames. Default 45s (matches signaling). */
   intervalMs?: number
-  /** Optional label used in DEV logs when a terminate fires. */
+  
   logLabel?: string
 }
 
 export type WsHeartbeatHandle = {
-  /** Stop the interval and detach `'connection'` / `'close'` listeners. */
+  
   stop(): void
 }
 
@@ -58,9 +58,9 @@ export function attachWsHeartbeat(
     })
   }
 
-  // Attach to sockets that connected BEFORE we were wired up (unlikely in
-  // practice — helper is called from `attachX` which also registers the
-  // app's own `'connection'` handler — but belt-and-suspenders for tests).
+  
+  
+  
   for (const socket of wss.clients) {
     onConnection(socket as WebSocket)
   }
@@ -77,7 +77,7 @@ export function attachWsHeartbeat(
         if (process.env.NODE_ENV !== 'production') {
           // No detailed identity here — the socket's own `'close'` handler
           // (registered by the game socket) logs the specific subscription
-          // being cleaned up.
+          
           console.warn(`[${logLabel}] terminating unresponsive socket`)
         }
         s.terminate()

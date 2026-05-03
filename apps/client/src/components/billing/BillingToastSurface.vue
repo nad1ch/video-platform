@@ -31,7 +31,7 @@ watch(
       startBillingNotifier()
     } else {
       stopBillingNotifier()
-      // Drop the in-memory baseline so a new sign-in starts fresh.
+      
       if (wasAuthed) {
         resetBillingNotifierState()
       }

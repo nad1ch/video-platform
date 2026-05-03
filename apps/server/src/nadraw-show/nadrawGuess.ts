@@ -1,9 +1,9 @@
 export type GuessHeat = 'cold' | 'warm' | 'hot'
 
-/**
- * Normalize chat / guess text for comparison:
- * trim, lowercase, strip diacritics, drop punctuation, collapse spaces.
- */
+
+
+
+
 export function normalizeNadrawText(raw: string): string {
   const s = raw
     .normalize('NFD')
@@ -15,7 +15,7 @@ export function normalizeNadrawText(raw: string): string {
   return s
 }
 
-/** Alias for prompt dedupe keys (same rules as guess normalization). */
+
 export function normalizeNadrawPromptKey(raw: string): string {
   return normalizeNadrawText(raw)
 }
@@ -48,10 +48,10 @@ function levenshtein(a: string, b: string): number {
   return v1[b.length]
 }
 
-/**
- * Similarity heat after normalization, or `exact`.
- * Short words avoid aggressive "hot"; uses prefix / length hints before Levenshtein.
- */
+
+
+
+
 export function classifyGuessHeat(guess: string, target: string): GuessHeat | 'exact' {
   const g = normalizeNadrawText(guess)
   const t = normalizeNadrawText(target)

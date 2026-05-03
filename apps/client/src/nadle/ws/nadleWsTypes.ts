@@ -1,9 +1,9 @@
 import type { Feedback } from '../nadleLogic'
 
-/** Browser WebSocket UI state for the nadle stream room. */
+
 export type NadleWsConnectionState = 'idle' | 'open' | 'closed' | 'error'
 
-/** Twitch IRC relay status from server (`nadle:irc-status`). */
+
 export type NadleIrcRelayState =
   | 'idle'
   | 'connected'
@@ -12,7 +12,7 @@ export type NadleIrcRelayState =
   | 'connecting'
   | 'error'
 
-/** Must match `apps/server/src/nadle/wsProtocol.ts` (NadleWs). */
+
 export const NadleWs = {
   state: 'nadle:state',
   leaderboard: 'nadle:leaderboard',

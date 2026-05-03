@@ -1,4 +1,4 @@
-/** Дуже тихий клік після відправки голосу (лише клієнт, без файлів). */
+
 export function playVoteSubmitSound(volume = 0.15) {
   try {
     const AC = window.AudioContext || window.webkitAudioContext
@@ -21,7 +21,7 @@ export function playVoteSubmitSound(volume = 0.15) {
   }
 }
 
-/** Легкий «переворот карти» при відкритті/закритті характеристики (клієнт). */
+
 export function playRevealFlipSound(volume = 0.1) {
   try {
     const AC = window.AudioContext || window.webkitAudioContext

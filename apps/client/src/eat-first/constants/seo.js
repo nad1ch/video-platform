@@ -1,7 +1,7 @@
 import { i18n } from '../i18n/index.js'
 import { STREAMER_NICK } from './brand.js'
 
-/** @deprecated Використовуйте ensureMetaDescription() — текст з i18n `seo.metaDescription`. */
+
 export const META_DESCRIPTION = ''
 
 export function ensureMetaDescription() {

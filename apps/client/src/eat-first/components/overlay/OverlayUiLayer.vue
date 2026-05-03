@@ -92,7 +92,7 @@ function slotNumForBanner() {
   return props.slotNumFromIdFn(props.votingTargetId)
 }
 
-/** Cached fns per slot — avoids new drag handler closures every mosaic re-render. */
+
 const mosaicDragOverBySlot = new Map()
 const mosaicDropBySlot = new Map()
 

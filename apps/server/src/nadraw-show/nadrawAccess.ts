@@ -2,10 +2,10 @@ import { isDatabaseConfigured, prisma } from '../prisma'
 import type { SessionPayload } from '../auth/session/sessionJwt'
 import { resolvePrismaUserIdFromSession } from '../auth/resolvePrismaUserFromSession'
 
-/**
- * Streamer may control the room if they own the streamer row, are linked as channel Twitch id,
- * or are a member user assigned to this streamer (same rules as nadle streamer context).
- */
+
+
+
+
 export async function canUserControlNadrawRoom(
   session: SessionPayload | null,
   streamerId: string,

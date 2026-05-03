@@ -17,7 +17,7 @@ export function useControlFirestoreRoom({
 }) {
   const gameRoom = ref({})
   const allPlayers = ref([])
-  /** Останній сирий список з onSnapshot(players) — до маски pending delete. */
+  
   const lastPlayersFirestoreList = ref([])
   const pendingPlayerDeletes = ref([])
   const antiGhostPlayerUntil = ref({})

@@ -1,6 +1,6 @@
-/**
- * Phase 3.5: inbound-rtp drop heuristics → render FPS multiplier (local-only, no protocol).
- */
+
+
+
 
 import type { VideoInboundStatsRow } from './receiveVideoQualityPressure'
 
@@ -59,10 +59,10 @@ export function aggregateInboundVideoStatsByPeerId(
   return out
 }
 
-/**
- * Instantaneous pressure from aggregated inbound-rtp counters for one peer.
- * `unknown` = warmup / missing stats — keep hysteresis state unchanged.
- */
+
+
+
+
 export function evaluateInboundFpsRenderPressure(
   stats: VideoInboundStatsRow | undefined,
 ): FpsRenderPressure | 'unknown' {
@@ -85,7 +85,7 @@ export function evaluateInboundFpsRenderPressure(
   return 'good'
 }
 
-/** Floor for throttled remote tiles; never ask playback pacing below 12fps. */
+
 export const FPS_RENDER_PRESSURE_MIN_FPS = 12
 
 export function applyFpsRenderPressure(baseFps: number, pressure: FpsRenderPressure): number {
@@ -102,10 +102,10 @@ export function applyFpsRenderPressure(baseFps: number, pressure: FpsRenderPress
 
 export type FpsRenderPressureHysteresis = { bad: number; good: number; stable: FpsRenderPressure }
 
-/**
- * Advances per-peer stable {@link FpsRenderPressure} using the same poll cadence as inbound stats.
- * Mutates `hysteresisByPeer` (bad/good streaks + stable tier).
- */
+
+
+
+
 export function advancePlaybackRenderFpsPressureByPeer(input: {
   videoPeerIds: readonly string[]
   inboundRows: ReadonlyArray<InboundVideoStatsRowInput>

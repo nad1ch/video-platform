@@ -69,7 +69,7 @@ export type DispatchEmailInput = {
   subject: string
   text: string
   html: string
-  /** Resolved "From:" header. Use `getEmailFromOrThrow()` to derive. */
+  
   from: string
 }
 
@@ -98,14 +98,14 @@ export async function dispatchEmail(input: DispatchEmailInput): Promise<void> {
 }
 
 export type SendEmailInput = Omit<DispatchEmailInput, 'from'> & {
-  /** Optional override; falls back to EMAIL_FROM. */
+  
   fromOverride?: string | null
 }
 
 export type SendEmailIfConfiguredOptions = {
-  /** When true, throw in production if SMTP is not configured (auth contract). */
+  
   throwInProduction: boolean
-  /** Log tag for the dev "skipped" info line, e.g. `[auth][email]`. */
+  
   devLogTag: string
 }
 

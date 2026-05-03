@@ -20,30 +20,30 @@ export type Participant = {
   isLocal?: boolean
 }
 
-/** Minimal tile shape (matches `CallTile` fields needed for mapping). */
+
 export type ParticipantTileInput = {
   peerId: string
   displayName: string
   stream: MediaStream | null
-  /** When omitted, tile is treated as remote (`false`). */
+  
   isLocal?: boolean
 }
 
-/** Back-compat alias — prefer `Participant`. */
+
 export type CallParticipant = Participant
 
-/** Back-compat alias — prefer `ParticipantTileInput`. */
+
 export type TileLike = ParticipantTileInput
 
-/** Remote peer with no tile name and no server row — matches legacy `labelFor` guest string. */
+
 export function guestDisplayNameForPeerId(peerId: string): string {
   return `Guest ${peerId.length > 6 ? peerId.slice(-6) : peerId}`
 }
 
-/**
- * Resolve display name from tile string, optional Pinia `remoteDisplayNames`, and local/remote role.
- * Pure — pass `session.remoteDisplayNames` (or a plain object snapshot) from the caller.
- */
+
+
+
+
 export function resolveParticipantDisplayName(
   peerId: string,
   tileDisplayName: string,

@@ -1,4 +1,4 @@
-/** Client-only premium “monthly” grant until real payments (Coin Hub). */
+
 export const PREMIUM_PLUS_MONTHLY_COINS = 100
 export const PREMIUM_PRO_MONTHLY_COINS = 200
 

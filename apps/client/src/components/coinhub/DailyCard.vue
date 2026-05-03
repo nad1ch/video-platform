@@ -13,7 +13,7 @@ const props = withDefaults(
     stateLabelAvailable: string
     stateLabelLocked: string
     stateLabelCooldown: string
-    /** Visual treatment: free = violet, subscriber = gold premium. */
+    
     visualTier?: 'free' | 'subscriber'
   }>(),
   { state: 'available', actionLabel: undefined, visualTier: 'free' },

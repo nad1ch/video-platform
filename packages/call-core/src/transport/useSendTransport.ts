@@ -82,7 +82,7 @@ export type PublishLocalMediaOptions = {
    * Back-compat option. Fixed-quality calls always publish one 480p layer.
    */
   videoSimulcast?: boolean
-  /** Capture/encode ladder; defaults to `balanced` for API callers that omit it. */
+  
   videoPublishTier?: VideoPublishTier
 }
 
@@ -123,7 +123,7 @@ async function forceOutboundVideoSenderParameters(producer: Producer): Promise<v
   await sender.setParameters(params)
 }
 
-/** Mild Opus cap — stable voice, not aggressive throttling. */
+
 const OUTBOUND_AUDIO_OPUS_MAX_AVG_BITRATE_BPS = 96_000
 
 type OutboundVideoPublishSnapshot = {

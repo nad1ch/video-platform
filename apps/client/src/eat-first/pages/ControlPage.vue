@@ -1070,7 +1070,6 @@ const {
   transform: rotate(0deg);
   transform-origin: center center;
   transition: transform 0.45s cubic-bezier(0.32, 0.72, 0, 1);
-  /* вирівнювання гліфа ▶ відносно шрифтового центру */
   margin-top: 0.06em;
 }
 
@@ -1105,7 +1104,6 @@ const {
 
 .host-fold-anim--open {
   grid-template-rows: 1fr;
-  /* лише для відкритого: відступ від смуги згортання; у закритому — margin-top: 0 на .host-fold-anim */
   margin-top: 0.5rem;
 }
 
@@ -1141,7 +1139,6 @@ const {
   }
 }
 
-/* як інші згортання: уся смуга клікабельна */
 .host-block-fold--editor {
   color: var(--editor-trait-label, var(--text-muted-soft));
 }
@@ -1263,7 +1260,7 @@ const {
   font-family: var(--sa-font-display);
 }
 
-/* .zone-kicker нижче перебивав margin: 0 у --fold (лішнє місце знизу в смузі згортання) */
+
 .zone-kicker.zone-kicker--fold {
   margin: 0;
 }
@@ -1676,7 +1673,7 @@ const {
   min-width: 0;
 }
 
-/* Дві колонки: без container queries (уникаємо хибного max-width у scoped / containment) */
+
 .player-char-grid__traits.player-traits-cols {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

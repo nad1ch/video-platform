@@ -1,4 +1,4 @@
-/** Ten core swatches; custom color via color picker in toolbar. */
+
 export const NADRAW_TOOLBAR_COLORS = [
   '#000000',
   '#ffffff',

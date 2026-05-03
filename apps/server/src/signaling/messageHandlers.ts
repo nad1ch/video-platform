@@ -38,7 +38,7 @@ export type TransportOptionsPayload = {
   iceParameters: IceParameters
   iceCandidates: IceCandidate[]
   dtlsParameters: DtlsParameters
-  /** Passed to RTCPeerConnection; set via ICE_SERVERS_JSON or TURN_* env. */
+  
   iceServers?: ClientIceServer[]
   iceTransportPolicy?: 'relay' | 'all'
 }
@@ -56,11 +56,11 @@ export type ExistingProducerInfo = {
 export type RoomPeerInfo = {
   peerId: string
   displayName: string
-  /** Stable authenticated user id; present when the client joined while authenticated. */
+  
   userId?: string
-  /** Omitted when empty (no avatar at join). */
+  
   avatarUrl?: string
-  /** UI metadata: true when this peer has locally muted their outbound mic. */
+  
   audioMuted?: boolean
 }
 
@@ -421,8 +421,8 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
     detachPeerAudioProducersFromLevelObserver(peer, room)
   }
   // Suppress per-producer `producer-closed` fan-out triggered by the
-  // `transportclose` listeners while we close this peer's transports. The
-  // single `peer-left` broadcast below is sufficient for clients to drop
+  
+  
   // every consumer/track owned by this peer. See `Peer.isTearingDown`.
   peer.isTearingDown = true
   peer.closeAllMedia()
@@ -436,9 +436,9 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
   }
   broadcastPeerLeftToRoom(room, peer.id)
   broadcastMafiaHostUpdated(room)
-  // Mafia speaking queue hygiene: seat indices > current peer count are
+  
   // stale after a leave. The host's next `mafia:players-update` will
-  // republish authoritative state, but until then we publish a pruned
+  
   // queue so UIs do not render a seat that no longer has a player.
   if (isMafiaRoomId(room.id)) {
     const changed = room.pruneMafiaSpeakingQueueToMaxSeat(room.getPeers().length)
@@ -500,7 +500,7 @@ function replaceDuplicatePeerId(
   }
 
   // Only finalize (and therefore dispose the Room) when the eviction actually
-  // emptied the room. Report this back so the join path can re-create.
+  
   if (room.getPeers().length === 0) {
     room.dispose()
     deps.roomManager.removeRoom(room.id)
@@ -540,18 +540,18 @@ export async function handleJoinRoom(
 
   let room = await deps.roomManager.getOrCreateRoom(roomId)
   const { roomFinalized } = replaceDuplicatePeerId(room, socket, peerId, deps)
-  // Re-fetch only if the duplicate eviction finalized (disposed) the room.
-  // Previously this was called unconditionally, paying a Map lookup + async
-  // hop per join; now the happy path takes the fast branch.
+  
+  
+  
   if (roomFinalized) {
     room = await deps.roomManager.getOrCreateRoom(roomId)
   }
 
   const name = sanitizeDisplayName(displayName, peerId)
   const avatarUrlSafe = sanitizeAvatarUrl(avatarUrlRaw)
-  // Server-authoritative user id for Mafia host scoping.
-  // Prefer the id resolved from the HTTP-upgrade session cookie; ignore the
-  // client-supplied field entirely — trusting it would let anonymous sockets
+  
+  
+  
   // spoof any Mafia host's user id via a forged `join-room` payload.
   // Anonymous sockets get `''`, which every Mafia authority check already rejects.
   const sessionUserId = deps.socketSessionUserId?.get(socket) ?? ''
@@ -567,10 +567,10 @@ export async function handleJoinRoom(
     }
   }
   const peer = new Peer(peerId, socket, room.id, name, avatarUrlSafe, userId)
-  // Restore Mafia host enforcement that survives reconnect — `Peer.forced*`
+  
   // resets on every new socket, so the room remembers the active state and
-  // re-applies it here. Without this, a forced peer could reconnect to
-  // bypass the host's mute / camera-off decision.
+  
+  
   if (isMafiaRoomId(room.id)) {
     if (room.isMafiaForceMuteAllActive()) {
       peer.forcedAudioMuted = true
@@ -581,11 +581,11 @@ export async function handleJoinRoom(
   }
   room.addPeer(peer)
   deps.socketPeer.set(socket, peer)
-  // Only `mafia:`-prefixed rooms maintain Mafia host state. Previously this
-  // ran unconditionally, so any authenticated user joining a plain `/app/call`
-  // room would silently become a "Mafia host" of that call room — harmless
-  // for non-Mafia UI (which never reads the field) but a cross-feature leak
-  // that pollutes room state and broadcasts.
+  
+  
+  
+  
+  
   const isMafiaRoom = isMafiaRoomId(room.id)
   let mafiaHostAssignedOnJoin = false
   if (isMafiaRoom && room.getMafiaHostUserId() == null && userId.length > 0) {
@@ -640,8 +640,8 @@ export async function handleJoinRoom(
     broadcastMafiaHostUpdated(room)
   }
 
-  // Mafia state snapshots — only valid for Mafia rooms. Non-Mafia joiners
-  // previously received a series of empty `mafia:*` messages on every join.
+  
+  
   if (isMafiaRoom) {
     sendServerMessage(socket, {
       type: MafiaWs.hostUpdated,
@@ -747,11 +747,11 @@ export async function handleSetAudioMuted(
     return
   }
   // After the host's `force-mute-all` is lifted, the audio producer may be
-  // left paused if the user had their own mute on at lift-time. The user's
-  // next unmute must restore audio. Pre-fix `set-audio-muted` was a UI-only
+  
+  
   // signal; we only touch the producer when both: (1) user is unmuting,
-  // (2) host-force is NOT active. The pause path stays UI-only — the local
-  // `track.enabled = false` continues to be the user-mute mechanism.
+  
+  
   if (!muted && !peer.forcedAudioMuted) {
     for (const p of peer.getProducers()) {
       if (p.kind === 'audio' && !p.closed && p.paused) {
@@ -766,9 +766,9 @@ export async function handleSetAudioMuted(
       }
     }
   }
-  // Host-forced mute always wins for the UI signal — this guarantees remote
-  // peers continue to see "muted" even if the user clears their own mute
-  // while `forcedAudioMuted` is still active server-side.
+  
+  
+  
   const effectiveMuted = peer.audioMuted || peer.forcedAudioMuted
   const msg: ServerMessage = {
     type: 'peer-audio-muted',
@@ -849,9 +849,9 @@ export function handleMafiaTransferHost(
   broadcastMafiaHostUpdated(room)
 }
 
-/**
- * Only the current Mafia host may update the shared speaking queue; server republishes to the room.
- */
+
+
+
 export function handleMafiaQueueUpdate(
   socket: WsSocket,
   payload: { speakingQueue: unknown } | null | undefined,
@@ -872,9 +872,9 @@ export function handleMafiaQueueUpdate(
   broadcastMafiaQueueUpdate(room)
 }
 
-/**
- * Only the Mafia host may broadcast a post-reshuffle snapshot; server republishes to the room.
- */
+
+
+
 export function handleMafiaReshuffle(
   socket: WsSocket,
   payload: {
@@ -949,9 +949,9 @@ function broadcastMafiaForceMuteAll(room: Room, payload: { muted?: boolean }): v
   }
 }
 
-/**
- * Only the Mafia host may mark a player eliminated; server republishes to the room.
- */
+
+
+
 export function handleMafiaPlayerKick(
   socket: WsSocket,
   payload: { peerId: string },
@@ -981,9 +981,9 @@ export function handleMafiaPlayerKick(
   broadcastMafiaPlayerKick(room, { peerId: targetId })
 }
 
-/**
- * Only the Mafia host may soft-revive a player; this updates overlay state only.
- */
+
+
+
 export function handleMafiaPlayerRevive(
   socket: WsSocket,
   payload: { peerId: string },
@@ -1030,17 +1030,17 @@ export async function handleMafiaForceCameraOff(
   if (!target) {
     return
   }
-  // Default `true` keeps semantics for older clients that send no `paused`
-  // field.
+  
+  
   const paused = payload.paused !== false
 
   // Server-side enforcement: pause/resume every video producer for the
-  // target — both `camera` and `screen` sources. Pausing the screen
+  
   // producer too is intentional: a non-cooperating target that spoofed the
   // `producer-video-source` tag would otherwise bypass the host's "no
-  // video" decision. In the cooperating case a Mafia host invoking
-  // force-camera-off on a target that is screen-sharing means "stop all
-  // their video" anyway.
+  
+  
+  
   target.forcedCameraOff = paused
   room.setMafiaPeerForcedCameraOff(targetId, paused)
   for (const p of target.getProducers()) {
@@ -1063,9 +1063,9 @@ export async function handleMafiaForceCameraOff(
     }
   }
 
-  // Mirror the camera-off state on the room's UI bus so remote tiles flip
-  // to the avatar/initials view (this is the same notice path as the
-  // user's own `set-outbound-video-paused`).
+  
+  
+  
   const videoMsg: ServerMessage = {
     type: 'peer-outbound-video-paused',
     payload: { peerId: target.id, paused },
@@ -1092,16 +1092,16 @@ export async function handleMafiaForceMuteAll(
   }
   const muted = payload.muted !== false
 
-  // Persist on the room so reconnecting peers re-enter the forced state
-  // (handled in `handleJoinRoom`).
+  
+  
   room.setMafiaForceMuteAllActive(muted)
 
-  // Server-side enforcement: pause/resume every non-host peer's audio
-  // producers, then flip `forcedAudioMuted` so a non-cooperating client
-  // cannot resume audio via its own `set-audio-muted` (which now also
-  // re-broadcasts the effective state). The legacy `mafia:force-mute-all`
-  // broadcast is still sent below so cooperating clients can update UI/mic
-  // state in addition to the SFU-level guarantee.
+  
+  
+  
+  
+  
+  
   for (const target of room.getPeers()) {
     if (target.id === hostPeer.id) {
       continue
@@ -1117,8 +1117,8 @@ export async function handleMafiaForceMuteAll(
             await p.pause()
           }
         } else if (p.paused && !target.audioMuted) {
-          // Resume only if the user has not separately muted themselves —
-          // otherwise leave paused so the user keeps their own mute.
+          
+          
           await p.resume()
         }
       } catch (e) {
@@ -1128,8 +1128,8 @@ export async function handleMafiaForceMuteAll(
         }, e)
       }
     }
-    // Mirror the effective mute state on the room's UI bus so remote tiles
-    // flip the mic icon even for non-cooperating targets.
+    
+    
     const effectiveMuted = target.audioMuted || target.forcedAudioMuted
     const audioMsg: ServerMessage = {
       type: 'peer-audio-muted',
@@ -1198,9 +1198,9 @@ function broadcastMafiaPageBackgroundSettings(
   }
 }
 
-/**
- * Only the Mafia host may push numbering / night + speaking state; server republishes to the room.
- */
+
+
+
 export function handleMafiaPlayersUpdate(
   socket: WsSocket,
   payload: {
@@ -1315,8 +1315,8 @@ export function handleMafiaPageBackgroundSettings(
   },
   deps: SignalingDeps,
 ): void {
-  // Previous logic: `if (isMafiaRoom && !isMafiaHostPeer) return` — inverted,
-  // which let NON-Mafia rooms broadcast background settings from any peer.
+  
+  
   // The correct invariant: must be a Mafia room AND must be the host.
   const rp = resolveMafiaPeerAndRoom(socket, deps)
   if (!rp) {
@@ -1353,9 +1353,9 @@ function broadcastMafiaTimerStop(room: Room): void {
   }
 }
 
-/**
- * Only the Mafia host may start the shared room timer; server stores it for late joiners and republishes.
- */
+
+
+
 export function handleMafiaTimerStart(
   socket: WsSocket,
   payload: { startedAt: number; duration: number; isRunning?: boolean },
@@ -1384,7 +1384,7 @@ export function handleMafiaTimerStart(
   broadcastMafiaTimerStart(room, { startedAt, duration, isRunning: true })
 }
 
-/** Only the Mafia host may clear the shared room timer. */
+
 export function handleMafiaTimerStop(socket: WsSocket, deps: SignalingDeps): void {
   const rp = resolveMafiaPeerAndRoom(socket, deps)
   if (!rp) {
@@ -1542,26 +1542,26 @@ export async function handleSetOutboundVideoPaused(
   if (!peer) {
     return
   }
-  // Mafia host enforcement: while `forcedCameraOff` is set, ignore the
-  // peer's own attempts to resume their video producers. The pause path is
-  // always allowed (the user can still hide their camera even when the
+  
+  
+  
   // host has not forced anything; pausing an already-paused producer is a
-  // no-op below).
+  
   if (!paused && peer.forcedCameraOff) {
     return
   }
-  // Camera mute/off must only affect CAMERA video producers — never the active
+  
   // screen-share producer. The room still receives `peer-outbound-video-paused`
-  // below so remote UIs flip the peer's camera-off state as before.
-  //
-  // `getVideoProducerSource` returns 'camera' | 'screen' | undefined:
-  //   - `camera`   → pause/resume (intended mute).
-  //   - `screen`   → SKIP (never silence an active share via a camera-off msg).
-  //   - undefined  → treat as camera-like. `Peer.addProducer` defaults new
-  //                  video producers to `'camera'` and `handleProduce` calls
-  //                  `setVideoProducerSource` right after `addProducer`, so
-  //                  `undefined` only exists in a vanishingly short window
-  //                  during produce; pausing it there is safe (matches the
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   //                  pre-fix behavior for that single producer).
   for (const p of peer.getProducers()) {
     if (p.closed || p.kind !== 'video') {
@@ -1663,9 +1663,9 @@ export async function handleProduce(
         ? { appData: { source: initialVideoSource } as Record<string, unknown> }
         : {}),
     })
-    // Mafia host enforcement persists across reconnect: if the peer is
+    
     // currently host-forced for audio (or video), keep the new producer
-    // paused so the resumed flow does not bypass the host's decision.
+    
     const keepPausedForForced =
       (producer.kind === 'audio' && peer.forcedAudioMuted) ||
       (producer.kind === 'video' && peer.forcedCameraOff)
@@ -1706,7 +1706,7 @@ export async function handleProduce(
     // If the underlying transport goes away while the peer is still connected
     // (e.g. ICE failure on a single direction), mediasoup emits `transportclose`
     // on the Producer. Tell the room so consumers can drop it without waiting
-    // for a full `peer-left`. Listener is one-shot by design.
+    
     producer.on('transportclose', () => {
       // During `removePeerFromNetwork` → `closeAllMedia()` every transport
       // closes in a loop and would fire this listener once per producer;
@@ -1846,7 +1846,7 @@ export async function handleConsume(
 
   try {
     // Never resume a paused outbound producer here. Camera-off intentionally keeps the SFU producer paused;
-    // resuming would restart RTP for everyone and breaks Meet-style mute. Consumers are still created fine.
+    
 
     const baseConsume = {
       producerId,
@@ -1909,7 +1909,7 @@ export async function handleConsume(
     })
 
     // Resume after signaling so the browser can apply `transport.consume()` first; reduces stuck
-    // `track.muted` / no inbound RTP when SFU starts forwarding slightly before the recv path is ready.
+    
     await consumer.resume()
 
     if (consumer.kind === 'video') {

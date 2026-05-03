@@ -196,9 +196,9 @@ function safeAccepted(res: Response): void {
 }
 
 export function mountClientEventRoutes(app: Express): void {
-  // Tight per-route body cap (the global `express.json()` accepts 100 KB by
-  // default — way larger than any legitimate analytics/error event). Field
-  // truncation in `sanitizeMetadata` / `truncateString` already protects DB
+  
+  
+  
   // writes; this blocks oversized POSTs at the transport layer.
   const clientEventsJson = express.json({ limit: '16kb' })
 
@@ -210,8 +210,8 @@ export function mountClientEventRoutes(app: Express): void {
       path,
       clientEventsJson,
       (err: unknown, _req: Request, res: Response, next: (err?: unknown) => void): void => {
-        // express.json error path: payload too large → 413 without touching
-        // the downstream handler.
+        
+        
         const e = err as { type?: string; status?: number } | null | undefined
         if (e && e.type === 'entity.too.large') {
           res.status(413).json({ error: 'payload_too_large' })

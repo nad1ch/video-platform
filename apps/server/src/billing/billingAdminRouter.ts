@@ -42,7 +42,7 @@ export function mountBillingAdminRoutes(app: Express): void {
     if (typeof body.adminNote !== 'string') return null
     const trimmed = body.adminNote.trim()
     if (trimmed.length === 0) return null
-    // Cap to avoid unbounded text in audit fields.
+    
     return trimmed.slice(0, 500)
   }
 
@@ -96,7 +96,7 @@ export function mountBillingAdminRoutes(app: Express): void {
     })()
   })
 
-  // Admin: list every Subscription (active first). Read-only — never mutates.
+  
   app.get(`${base}/subscriptions`, (req, res) => {
     void (async () => {
       try {
@@ -113,12 +113,12 @@ export function mountBillingAdminRoutes(app: Express): void {
     })()
   })
 
-  // Admin: force re-poll monobank statement now. Bypasses the in-process
-  // 60s cool-down for ONE call (the cool-down for subsequent automatic calls
-  // is preserved). Useful for unblocking a `checking` request stuck behind
-  // the rate limiter or to verify configuration after changing
-  // MONO_ACCOUNT_ID. Matching logic is unchanged — same pipeline as the
-  // automatic path.
+  
+  
+  
+  
+  
+  
   app.post(`${base}/poll-mono`, (req, res) => {
     void (async () => {
       try {

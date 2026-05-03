@@ -77,7 +77,7 @@ type ClientMsg =
   | { type: typeof CheckersWs.timeout; roomId?: string; revision?: number }
   | { type: typeof CheckersWs.rematch; roomId?: string }
 
-/* safeSend is now `safeSendJson` from `../utils/wsSafeSend` (imported above). */
+
 
 function pingAllCheckersClients(): void {
   for (const set of clientsByRoom.values()) {
@@ -313,9 +313,9 @@ export function reserveCheckersMatchRoom(
   meta.rated = true
   meta.player1 = player1ClientId
   meta.player2 = player2ClientId
-  // Snap session-resolved user ids into the room so WS joiners can be
-  // identity-bound even if the reserved clientId has not yet connected
-  // (prevents a racer from stealing the seat during the join delay).
+  
+  
+  
   const p1 = typeof opts?.player1UserId === 'string' ? opts.player1UserId.trim() : ''
   const p2 = typeof opts?.player2UserId === 'string' ? opts.player2UserId.trim() : ''
   meta.player1UserId = p1.length > 0 ? p1 : undefined
@@ -381,9 +381,9 @@ function roomHasClient(roomId: string, clientId: string): boolean {
 function pruneInactiveRoomRoles(roomId: string): void {
   const meta = metaForRoom(roomId)
   // Rated matchmaking rooms MUST NOT release seats on a transient disconnect —
-  // that allowed clientId theft during a brief reconnect. The seat is
-  // identity-bound via `player1UserId`/`player2UserId`; legitimate reclaim
-  // happens in `assignRole` via `rebindRatedSeatIfOwner` on the next join.
+  
+  
+  
   if (meta.rated) {
     return
   }
@@ -470,11 +470,11 @@ function assignRole(roomId: string, clientId: string): CheckersRole {
   if (meta.player1 === clientId || meta.player2 === clientId) {
     return roleForClient(roomId, clientId)
   }
-  // Rated rooms have identity-bound seats populated by matchmaking. A joiner
-  // whose clientId does not match either seat AFTER `rebindRatedSeatIfOwner`
-  // is not the reserved player — downgrade to spectator rather than taking
-  // an empty seat (seats are never empty in rated rooms because prune is
-  // disabled and reservation runs before WS join).
+  
+  
+  
+  
+  
   if (meta.rated) {
     return 'spectator'
   }
@@ -732,8 +732,8 @@ export function attachCheckersSocketServer(wss: WebSocketServer): void {
     let roomId: string | null = null
 
     // Capture cookie header once (WS frames do not re-send cookies). The
-    // lazy `resolveSessionUserIdForSocket` reads it on the first rated
-    // `join` to look up the Prisma userId.
+    
+    
     cookieHeaderBySocket.set(ws, req.headers.cookie)
 
     ws.on('message', (buf) => {
@@ -753,9 +753,9 @@ export function attachCheckersSocketServer(wss: WebSocketServer): void {
           }
           setClientDisplayName(msg.roomId, msg.clientId, msg.displayName)
           registerClient(roomId, ws)
-          // Rated rooms: bind the seat to the session user id. If the joiner
-          // is the reserved player, rebind their seat's clientId; otherwise
-          // `assignRole` returns 'spectator' for rated rooms with no open seats.
+          
+          
+          
           if (metaForRoom(roomId).rated) {
             const sessionUserId = await resolveSessionUserIdForSocket(ws)
             rebindRatedSeatIfOwner(roomId, msg.clientId, sessionUserId)
@@ -849,12 +849,12 @@ export function attachCheckersSocketServer(wss: WebSocketServer): void {
         return
       }
 
-      // Human moves MUST carry the client-known `revision`. Without it, the
+      
       // stale-revision guard in `applyCheckersRoomMove` silently skips its
-      // check — a reconnecting client with a cached out-of-date board could
-      // commit a move against a newer server state. The bot path calls
-      // `applyCheckersRoomMove` directly (not via this handler) and always
-      // passes the current revision, so rejecting here is safe.
+      
+      
+      
+      
       if (typeof msg.revision !== 'number') {
         sendState(ws, targetRoomId)
         return

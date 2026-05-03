@@ -15,6 +15,7 @@
     "ci": "npm run test:ci && npm run lint && npm run build -w client",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "comments:prune": "node scripts/prune-low-signal-comments.mjs",
     "db:migrate:dev": "npm run db:migrate:dev -w server",
     "db:migrate:prod": "npm run db:migrate:prod -w server",
     "db:migrate:dev:raw": "npm run db:migrate:dev:raw -w server",

@@ -29,8 +29,8 @@ async function resolveSessionContext(cookieHeader: string | undefined): Promise<
   const envAdmin = resolveUserRole(roleInput(session)) === 'admin'
   const prismaUserId = await resolvePrismaUserIdFromSession(session)
   if (!prismaUserId) {
-    // Env-allowlist admin without a Prisma row (rare: e.g. no DB). Allow
-    // operating but no per-game ownership is possible.
+    
+    
     return envAdmin ? { isAdmin: true, prismaUserId: null, isHostRole: false } : null
   }
   const u = await prisma.user.findUnique({
@@ -77,11 +77,11 @@ export async function eatFirstSessionCanOperateGame(
   if (ctx.isAdmin) return true
   if (!ctx.isHostRole) return false
   if (!isDatabaseConfigured()) {
-    // No DB → per-game ownership cannot be verified. Production MUST fail
-    // closed: returning true here would let any host-role session operate any
-    // game on transient DB-unavailability or misconfigured deploys. Dev/test
-    // without DATABASE_URL is allowed to fall back to the role check for
-    // local iteration only.
+    
+    
+    
+    
+    
     return process.env.NODE_ENV !== 'production'
   }
   const row = await prisma.eatFirstGame.findUnique({
@@ -89,7 +89,7 @@ export async function eatFirstSessionCanOperateGame(
     select: { room: true },
   })
   if (!row) {
-    // No row yet — `ensureGame` will create it and stamp the owner on this call.
+    
     return true
   }
   const room =
@@ -102,13 +102,13 @@ export async function eatFirstSessionCanOperateGame(
       ? ownerUserIdRaw.trim()
       : ''
   if (ownerUserId.length === 0) {
-    // Legacy game with no stamped owner — back-compat fallback. This is also
-    // the natural transition path: the first authenticated host action that
-    // flows through a mutation handler backfills ownership in
-    // `eatFirstEnsureGame`, after which only that host (or admins) can
-    // continue to operate the room ("first-owner-claim"). New rows are
-    // always stamped on first creation, so this branch is reachable only for
-    // pre-existing rows from before ownership was introduced.
+    
+    
+    
+    
+    
+    
+    
     return true
   }
   return ctx.prismaUserId === ownerUserId

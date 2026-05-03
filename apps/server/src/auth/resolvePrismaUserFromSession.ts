@@ -4,9 +4,9 @@ import type { AuthStreamerContext } from './session/types'
 
 const STREAMER_OWNER_ROLE = 'OWNER'
 
-/**
- * Maps a signed-in session to a `User.id` in Postgres (OAuth rows use provider ids in JWT, not Prisma cuid).
- */
+
+
+
 export async function resolvePrismaUserIdFromSession(session: SessionPayload): Promise<string | null> {
   if (!isDatabaseConfigured()) {
     return null
@@ -95,7 +95,7 @@ export async function resolveUserStreamerContext(userId: string): Promise<AuthSt
   return row
 }
 
-/** Nadle room + IRC context derived from the backend-owned streamer resolver. */
+
 export async function resolveNadleStreamerContextForUserId(
   userId: string,
 ): Promise<{ nadleStreamerId: string; nadleStreamerName: string } | null> {

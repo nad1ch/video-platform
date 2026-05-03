@@ -8,10 +8,10 @@ import {
 } from '@/admin/state/adminStatePure'
 import { apiFetch } from '@/utils/apiFetch'
 
-/**
- * Streamers-room GETs: `apiFetch` + `r.json()` on any non-403 (same as previous inline code).
- * On 403, returns `forbidden` so callers can `throw new Error('forbidden')` like before.
- */
+
+
+
+
 async function fetchLooseAdminJson<T>(path: string): Promise<{ tag: 'forbidden' } | { tag: 'ok'; data: T }> {
   const r = await apiFetch(path)
   if (r.status === 403) {
@@ -20,7 +20,7 @@ async function fetchLooseAdminJson<T>(path: string): Promise<{ tag: 'forbidden' 
   return { tag: 'ok', data: (await r.json()) as T }
 }
 
-/** Users table row — same fields as `/api/admin/users` mapping in AdminUsers. */
+
 export type AdminUserRow = {
   id: string
   displayName: string

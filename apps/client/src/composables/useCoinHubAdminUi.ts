@@ -6,13 +6,13 @@ import type { CoinHubCaseState } from '@/types/coinHub'
 import { formatMmSsRemaining } from '@/utils/coinHub/coinHubFormat'
 
 type AdminUi = {
-  /** Spin button + strip treat spin as available. */
+  
   effectiveDailySpinAvailable: ComputedRef<boolean>
-  /** Free / subscriber / luck rows: all visible as `available` when admin. */
+  
   effectiveFreeCaseState: ComputedRef<CoinHubCaseState>
   effectiveSubscriberCaseState: ComputedRef<CoinHubCaseState>
   effectiveCaseStates: ComputedRef<CoinHubCaseState[]>
-  /** `spinNextIn` line; hidden in admin. */
+  
   effectiveSpinCooldownHint: ComputedRef<string | undefined>
 }
 

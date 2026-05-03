@@ -1,4 +1,4 @@
-/** Resolves when `predicate()` is true or rejects after `timeoutMs`. */
+
 export function waitForCondition(
   predicate: () => boolean,
   timeoutMs: number,

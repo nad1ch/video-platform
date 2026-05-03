@@ -66,6 +66,18 @@ export default tseslint.config(
     },
   },
   {
+    files: ['packages/checkers-core/**/*.cjs'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
     files: ['apps/client/src/eat-first/pages/ControlPage.vue'],
     rules: {
       // Orchestrator exposes a wide surface; this page’s template uses a subset. Trimming destructuring is high-churn.

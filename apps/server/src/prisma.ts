@@ -9,11 +9,11 @@ export function isDatabaseConfigured(): boolean {
   return typeof u === 'string' && u.trim().length > 0
 }
 
-/** Singleton Prisma client (avoid exhausting connections in dev hot-reload). */
+
 export const prisma: PrismaClient =
   globalForPrisma.prisma ??
   new PrismaClient({
-    // Production: errors only. Dev: warn helps catch schema/client mismatches without query spam.
+    
     log: isProd ? ['error'] : ['error', 'warn'],
   })
 

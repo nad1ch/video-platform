@@ -58,10 +58,10 @@ export const i18n = createI18n({
 
 const loadedLocales = new Set()
 
-/**
- * Loads one locale JSON (dynamic import = separate chunk per locale).
- * @param {string} code
- */
+
+
+
+
 export async function loadLocaleMessages(code) {
   if (!VALID.has(code) || loadedLocales.has(code)) return
   const mod = await import(`../locales/${code}.json`)
@@ -70,9 +70,9 @@ export async function loadLocaleMessages(code) {
   loadedLocales.add(code)
 }
 
-/**
- * Load active locale + fallback (`uk`) so `t()` never misses keys on first paint.
- */
+
+
+
 export async function preloadInitialLocales() {
   await loadLocaleMessages(initialLocale)
   if (initialLocale !== 'uk') {

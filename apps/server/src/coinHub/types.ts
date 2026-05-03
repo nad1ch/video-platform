@@ -1,6 +1,6 @@
-/**
- * API reward payload (JSON stored in `Spin.lastReward` / `CoinCase.lastReward`).
- */
+
+
+
 export type CoinRewardJson = {
   kind: 'coins'
   amount: number

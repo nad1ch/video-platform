@@ -43,10 +43,10 @@ function stopAllTracks(stream: MediaStream | null): void {
   }
 }
 
-/**
- * Screen-share controller: explicit {@link OutboundVideoSource}, serialized transitions,
- * single `ended` listener, preview derived from outbound + streams only ({@link activePreviewStream}).
- */
+
+
+
+
 export function useCallScreenShare(deps: UseCallScreenShareDeps) {
   const outboundVideoSource = ref<OutboundVideoSource>('none')
   const screenShareStream = shallowRef<MediaStream | null>(null)
@@ -95,10 +95,10 @@ export function useCallScreenShare(deps: UseCallScreenShareDeps) {
     }
   }
 
-  /**
-   * Keeps SSOT in sync when not screen-sharing (wire, cam toggle, device change).
-   * Does nothing while outbound is `screen`.
-   */
+  
+
+
+
   function applyCamStateForOutbound(): void {
     if (outboundVideoSource.value === 'screen') {
       return
@@ -150,7 +150,7 @@ export function useCallScreenShare(deps: UseCallScreenShareDeps) {
             ? 'camera'
             : 'none'
       } else {
-        /** No **live** local camera track after `ensureOutboundCameraTrack` — last resort null (see useSendTransport note). */
+        
         const producerId = await deps.replaceOutboundVideoTrack(null)
         await nextTick()
         deps.notifyProducerVideoSource(producerId, 'camera')
@@ -191,7 +191,7 @@ export function useCallScreenShare(deps: UseCallScreenShareDeps) {
           outboundVideoSource.value =
             deps.camEnabled.value && liveCam.enabled ? 'camera' : 'none'
         } else {
-          /** Same as main stop path: null only when no live camera track exists. */
+          
           const producerId = await deps.replaceOutboundVideoTrack(null)
           deps.notifyProducerVideoSource(producerId, 'camera')
           outboundVideoSource.value = 'none'

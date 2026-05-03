@@ -1,4 +1,4 @@
-/** Remaining time as `mm:ss` (minutes may exceed 59). */
+
 export function formatMmSsRemaining(remainingMs: number): string {
   if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
     return '00:00'

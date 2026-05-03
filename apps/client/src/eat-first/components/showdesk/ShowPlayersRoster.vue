@@ -13,26 +13,26 @@ const props = defineProps({
   speakerId: { type: String, default: '' },
   votingTargetId: { type: String, default: '' },
   votingActive: { type: Boolean, default: false },
-  /** Нормалізовані номінації [{ target, by }] */
+  
   nominations: { type: Array, default: () => [] },
-  /** games/{gameId}.playersReady — слот → true */
+  
   playersReadyMap: { type: Object, default: () => ({}) },
-  /** Вибраний слот для панелі дій */
+  
   selectedPlayerId: { type: String, default: '' },
-  /** Режим ведучого: сітка + панель без модалки */
+  
   useHostPanel: { type: Boolean, default: false },
-  /** Слоти для чипів «кого номінують» (ціль номінації) */
+  
   playerSlots: { type: Array, default: () => [] },
-  /** Слоти, позначені чекбоксом для масових дій (ведучий) */
+  
   bulkSelectedIds: { type: Array, default: () => [] },
-  /** Підказка порядку номінацій / черги голосування */
+  
   orderHint: { type: String, default: '' },
-  /** Список слотів, що вже віддали голос у поточному раунді */
+  
   votedPlayerIdsThisRound: { type: Array, default: () => [] },
-  /**
-   * Останній слот черги = останній за номінаціями: спочатку показуємо тих, хто ще не голосував
-   * (руки / порядок карток).
-   */
+  
+
+
+
   prioritizeNonVoterHands: { type: Boolean, default: false },
 })
 
@@ -75,7 +75,7 @@ function playerDisplayName(p) {
   return nm.length ? nm : ''
 }
 
-/** Під номером слота: нік (якщо є), інакше статуси / «—». */
+
 function cardSubtitle(p) {
   if (p.eliminated === true) return t('roster.eliminated')
   const nm = playerDisplayName(p)
@@ -178,7 +178,7 @@ const speakerOnSelected = computed(
 
 function onCardClick(p) {
   if (props.useHostPanel) {
-    // Без toggle в «порожнечу»: один клік = вибір слота; зняти вибір можна лише обравши іншого гравця.
+    
     emit('update:selectedPlayerId', String(p.id))
     return
   }
@@ -196,7 +196,7 @@ function cmd(type) {
   emit('host-command', { type, playerId: id })
 }
 
-/** Обрана картка = хто виставляє (by); chip = кого виставляють (target). */
+
 function pairActive(slot) {
   const by = String(props.selectedPlayerId || '').trim()
   const tgt = String(slot || '').trim()
@@ -455,7 +455,6 @@ const aliveSlotsForNom = computed(() => {
 
 .pcard-shell {
   position: relative;
-  /* Не даємо слоту стиснутись у «смужку» поруч з панеллю ведучого. */
   min-width: min(100%, 7.25rem);
 }
 
@@ -532,11 +531,9 @@ const aliveSlotsForNom = computed(() => {
   gap: 0.45rem;
 }
 
-/* Запас під scale(1.03) при hover, щоби світіння рамки не ловив overflow батьківського блоку. */
 .roster-grid--host-panel {
   padding: 0.4rem 0.3rem;
   margin: -0.15rem -0.1rem 0;
-  /* Більші клітинки → 3–4 рядки при ~10 слотах замість одного довгого ряду. */
   grid-template-columns: repeat(auto-fill, minmax(9.75rem, 1fr));
   gap: 0.55rem 0.5rem;
 }
@@ -736,7 +733,6 @@ const aliveSlotsForNom = computed(() => {
   pointer-events: none;
 }
 
-/* Чекбокс масового виділення зліва зверху — руку зсуваємо, щоб не ховалась під ним. */
 .pcard-shell--host-bulk .pcard-hand-corner {
   left: 1.4rem;
   top: 0.14rem;
@@ -837,13 +833,13 @@ const aliveSlotsForNom = computed(() => {
   pointer-events: none;
 }
 
-/* Не робимо relative абсолютні кутки / бейдж — інакше «ВИБУВ» потрапляє в потік і зсуває .num */
+
 .pcard.elim > *:not(.elim-badge):not(.card-ico):not(.pcard-hand-corner):not(.pcard-ready-corner) {
   position: relative;
   z-index: 1;
 }
 
-/** Після базового .pcard.elim — вибір / редактор на вибулих без зовнішнього glow за край картки. */
+
 .pcard.elim.pick {
   border-color: rgba(45, 212, 191, 0.45);
   box-shadow:

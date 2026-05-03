@@ -4,7 +4,7 @@ import { getPersistedGameId } from './utils/persistedGameId.js'
 import { trackPageView } from './analytics/bootstrap.js'
 import { normalizeEatView } from './state/eatFirstRouteUtils.js'
 
-/** Instant transition between admin and control views (no login form flash). */
+
 export const adminControlTransitionInstant = ref(false)
 
 function resolveAdminGateGameId(query) {
@@ -24,9 +24,9 @@ function isAdminOrControlQuery(query) {
   return v === 'admin' || v === 'control'
 }
 
-/**
- * @param {import('vue-router').Router} router
- */
+
+
+
 export function registerEatFirstRouterGuards(router) {
   router.beforeEach((to, from) => {
     if (!isEatPath(to.path) && !isEatPath(from.path)) return

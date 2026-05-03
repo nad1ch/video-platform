@@ -1,4 +1,4 @@
-/** Повна форма для ефіру / UI (старі дані могли бути «Чол.» / «Жін.»). */
+
 export function formatGenderDisplay(gender) {
   const s = String(gender ?? '').trim()
   if (!s) return '—'
@@ -8,7 +8,7 @@ export function formatGenderDisplay(gender) {
   return s
 }
 
-/** Для збереження в Firestore та полів форми — завжди повні «Чоловік» / «Жінка» де застосовно. */
+
 export function normalizeGenderForStorage(gender) {
   const s = String(gender ?? '').trim()
   if (!s) return ''

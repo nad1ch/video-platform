@@ -16,12 +16,12 @@ export type ProducerSyncParsed = {
   peers?: RoomPeerInfo[]
 }
 
-/** Inbound recovery signals the recv orchestrator may map from WS / setup. */
+
 export type RecoveryEvent =
   | {
       type: 'producer-sync'
       producers: RemoteProducerInfo[]
-      /** `client-refresh` ⇒ reset recv consumers before applying the list (matches `forceResync`). */
+      
       reason?: 'client-refresh' | 'recv-connected'
     }
   | { type: 'new-producer'; producer: RemoteProducerInfo }
@@ -40,7 +40,7 @@ export type RecoveryDecision = {
   producersToApply: RemoteProducerInfo[]
 }
 
-/** Back-compat shape from `planProducerSyncRecovery` (maps to `RecoveryDecision`). */
+
 export type ProducerSyncRecvPlan = {
   teardownRecvConsumers: boolean
   producersToConsume: RemoteProducerInfo[]
@@ -97,7 +97,7 @@ export function createRecoveryCoordinator() {
     onEvent,
     markResetDone,
     markSyncApplied,
-    /** DEV/tests: last signature passed to `markSyncApplied`. */
+    
     get lastSyncSignature(): string | null {
       return lastSyncAppliedSignature
     },

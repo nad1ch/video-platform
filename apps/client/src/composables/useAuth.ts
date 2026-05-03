@@ -4,7 +4,7 @@ import { apiBase, apiUrl } from '@/utils/apiUrl'
 import { createLogger } from '@/utils/logger'
 import { safeOAuthRedirectPath } from '@/utils/safeOAuthRedirectPath'
 
-/** Global auth user (GET /api/auth/me). */
+
 export type AppSystemRole = 'USER' | 'ADMIN' | 'STREAMER'
 export type AppFeaturePermission = 'EAT_FIRST_OPERATOR'
 
@@ -24,7 +24,7 @@ export type AppStreamerContext = {
 
 export type AppUser = {
   id: string
-  /** Prisma `User.id` when linked; leaderboard `userId` for wins/rating matches this. */
+  
   dbUserId?: string
   displayName: string
   avatar?: string
@@ -33,15 +33,15 @@ export type AppUser = {
   emailVerified?: boolean
   emailVerifiedAt?: string | null
   role: 'admin' | 'user'
-  /** Backend-authoritative system roles from GET /api/auth/me. */
+  
   roles?: AppSystemRole[]
-  /** Backend-authoritative feature permissions from GET /api/auth/me. */
+  
   permissions?: AppFeaturePermission[]
-  /** Helix user id when provider is Twitch (same as `id`). */
+  
   twitchId?: string
-  /** Backend-authoritative streamer context when this user owns a Streamer row. */
+  
   streamer?: AppStreamerContext
-  /** Linked Nadle streamer row (owner or same Twitch channel). */
+  
   nadleStreamerId?: string
   nadleStreamerName?: string
 }
@@ -52,11 +52,11 @@ const user: Ref<AppUser | null> = ref(null)
 const loaded = ref(false)
 let inflight: Promise<void> | null = null
 
-/** Display-only cache (no tokens). Speeds up first paint after reload; always revalidated over the network. */
+
 /** Bump when `AppUser` shape changes (e.g. `dbUserId`) so stale sessionStorage entries re-fetch. */
 const DISPLAY_CACHE_KEY = 'streamassist_auth_display_v5'
 const DISPLAY_CACHE_TTL_MS = 5 * 60 * 1000
-/** Dev-only: log Twitch numeric id once per tab session (cleared on logout). */
+
 const DEV_TWITCH_ID_LOG_KEY = 'streamassist_dev_twitch_id_logged'
 
 function readDisplayCache(): AppUser | null {
@@ -234,7 +234,7 @@ async function readErrorCode(res: Response): Promise<string> {
 }
 
 export type RefreshAuthOptions = {
-  /** Skip reading display cache before fetch (e.g. after explicit logout elsewhere). */
+  
   force?: boolean
 }
 
@@ -262,9 +262,9 @@ async function refreshOnce(options?: RefreshAuthOptions): Promise<void> {
 
   try {
     const r = await apiFetch('/api/auth/me')
-    // Confirmed-unauthenticated: clear user. Any other non-OK status
-    // (5xx, 502 from a proxy blip, 0/CORS/network when this path returns
-    // something unexpected) keeps the previous user state — a transient
+    
+    
+    
     // backend error must not falsely flip the UI to "logged out".
     if (r.status === 401 || r.status === 403) {
       user.value = null
@@ -272,7 +272,7 @@ async function refreshOnce(options?: RefreshAuthOptions): Promise<void> {
       return
     }
     if (!r.ok) {
-      // 5xx or similar: keep whatever we showed before. Mark loaded so
+      
       // gates like `ensureAuthLoaded()` do not hang.
       return
     }
@@ -298,8 +298,8 @@ async function refreshOnce(options?: RefreshAuthOptions): Promise<void> {
         }
       }
     } else {
-      // Server responded 2xx but said `authenticated: false`. Intentional
-      // logout from the server side, clear local state.
+      
+      
       user.value = null
       writeDisplayCache(null)
     }
@@ -326,10 +326,10 @@ export function ensureAuthLoaded(): Promise<void> {
   if (loaded.value) {
     return Promise.resolve()
   }
-  // `refresh()` now self-dedupes, so `ensureAuthLoaded` callers transparently
-  // share the same inflight with any other `refresh()` caller (App mount,
-  // router guards, etc). The local `inflight` here stays as a small
-  // redundancy in case `refresh()` resolves synchronously in tests.
+  
+  
+  
+  
   if (!inflight) {
     inflight = refresh().finally(() => {
       inflight = null
@@ -359,7 +359,7 @@ export function useAuth() {
     window.location.assign(target)
   }
 
-  /** Full browser navigation; session is httpOnly cookie only (no localStorage tokens). */
+  
   function loginWithGoogle(redirectPath?: string): void {
     const q = encodeURIComponent(safeOAuthRedirectPath(redirectPath))
     const target = apiUrl(`/api/auth/google?redirect=${q}`)
@@ -390,15 +390,15 @@ export function useAuth() {
     }
   }
 
-  /** Cached user from the last GET /api/auth/me (via `refresh` / `ensureAuthLoaded`). */
+  
   function getCurrentUser(): AppUser | null {
     return user.value
   }
 
-  /**
-   * Email + password: try register, then login if email already exists (single UX flow).
-   * Sets httpOnly session cookie on success; call refresh() after to update client state.
-   */
+  
+
+
+
   async function loginOrRegisterWithEmail(
     email: string,
     password: string,
@@ -457,7 +457,7 @@ export function useAuth() {
     return { ok: false, error: 'server' }
   }
 
-  /** POST /api/auth/login only — for dedicated login tab. */
+  
   async function loginWithEmail(
     email: string,
     password: string,
@@ -490,7 +490,7 @@ export function useAuth() {
     return { ok: false, error: 'server' }
   }
 
-  /** POST /api/auth/register only — for dedicated signup tab (no auto-login fallback). */
+  
   async function registerWithEmail(
     email: string,
     password: string,

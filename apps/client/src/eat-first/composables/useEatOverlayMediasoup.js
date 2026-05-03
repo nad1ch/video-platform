@@ -39,12 +39,12 @@ export function useEatOverlayMediasoup(options) {
     toggleCam,
   } = engine
 
-  /** Same SSOT as Call page: tiles + remote-only peers → single map for names. */
+  
   const participantsByPeerId = computed(() =>
     buildCallParticipantMap(tiles.value, { ...remoteDisplayNames.value }, selfPeerId.value),
   )
 
-  /** One resolve pass per participants change; watch reads `.get(id)` instead of N separate resolves. */
+  
   const displayNameUiByPeerId = computed(() =>
     buildDisplayNameUiMap(participantsByPeerId.value, {
       selfPeerId: selfPeerId.value,
@@ -55,7 +55,7 @@ export function useEatOverlayMediasoup(options) {
   const tileMapRef = shallowRef(new Map())
   const orderTilesRef = shallowRef([])
 
-  /** DEV: throttled hint when UI name map misses often (investigate participant SSOT). */
+  
   let devNameFallbackLastLog = 0
 
   watch(
@@ -129,10 +129,10 @@ export function useEatOverlayMediasoup(options) {
       orderTilesRef.value = order
       triggerRef(tileMapRef)
     },
-    /**
-     * Shallow sources only: `tiles` is a fresh array from `useCallEngine` when deps change;
-     * reuse Map entries + `triggerRef` so MediaStream-backed rows are not reallocated every tick.
-     */
+    
+
+
+
     { immediate: true, flush: 'post' },
   )
 
@@ -147,7 +147,7 @@ export function useEatOverlayMediasoup(options) {
   const voiceUi = reactive({
     configured: false,
     connectionState: 'idle',
-    joinError: /** @type {string | null} */ (null),
+    joinError:  (null),
     inCall: false,
     joining: false,
     micEnabled: false,

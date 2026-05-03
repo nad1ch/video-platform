@@ -15,7 +15,7 @@ export type CallVideoGridResult = {
 export type CallVideoGridParams = {
   gapPx: number
   minTileWidthPx: number
-  /** Total horizontal/vertical inset subtracted from stage (matches GRID_CONTENT_INSET_PX). */
+  
   contentInsetPx: number
 }
 
@@ -67,9 +67,9 @@ function tryColsRows(
   return { tileWidth, tileHeight, score }
 }
 
-/**
- * Picks grid dimensions and tile size for the call stage.
- */
+
+
+
 export function computeCallVideoGridLayout(
   participantCount: number,
   stageWidth: number,

@@ -110,7 +110,7 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-/* Mirrored from NadleStreamPage.vue; :deep targets AppButton merged classes. Parent :deep kept until dedup. */
+
 @media (min-width: 1201px) {
   .nadle-page__kbd {
     min-width: 0;
@@ -158,7 +158,7 @@ const emit = defineEmits<{
   container-type: inline-size;
   container-name: nadle-kbd;
   width: 100%;
-  /* Ширина поля слова < мінімуму рядка клавіатури (11 літер) — не обмежувати клавіатуру сіткою, інакше flex + min-width ріжуть краї. */
+  
   max-width: 100%;
   margin-inline: auto;
   display: flex;

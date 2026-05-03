@@ -1,9 +1,9 @@
 import { createLogger } from '@/utils/logger'
 
-/**
- * Єдиний формат логів для відвалювання слухачів Firestore та інших збоїв.
- * У проді — лише errors через `log.error`; listener detach — warn (dev-only у createLogger).
- */
+
+
+
+
 const log = createLogger('eat-first')
 
 function payload(error, extra) {

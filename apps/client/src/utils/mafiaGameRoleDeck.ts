@@ -10,15 +10,15 @@ export class MafiaPlayerCountError extends Error {
   }
 }
 
-const SPECIAL = 1 + 1 // sheriff + doctor
+const SPECIAL = 1 + 1 
 
-/**
- * Role counts by rules:
- * 5–6 → 1 mafia
- * 7–8 → 1 mafia + 1 don
- * 9–12 → 2 mafia + 1 don
- * Always: 1 sheriff, 1 doctor. Remainder: civilians.
- */
+
+
+
+
+
+
+
 export function buildMafiaRoleDeck(n: number): MafiaRole[] {
   if (n < 5 || n > 12) {
     throw new MafiaPlayerCountError(n)

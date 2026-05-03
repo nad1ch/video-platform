@@ -1,7 +1,7 @@
-/** WebSocket pill state for the Twitch IRC relay UI. */
+
 export type TwitchRelayChatWsStatus = 'idle' | 'open' | 'closed' | 'error'
 
-/** One line in the relay chat feed (nadle guesses + generic Twitch chat). */
+
 export type TwitchRelayChatLine = {
   _cid: number
   displayName: string
@@ -10,12 +10,12 @@ export type TwitchRelayChatLine = {
   rateLimited?: boolean
   cooldownMs?: number
   guessFeedback?: ('correct' | 'present' | 'absent')[]
-  /** System / feedback line (no avatar row). */
+  
   system?: boolean
 }
 
-/** @deprecated Use TwitchRelayChatLine */
+
 export type NadleChatPanelLine = TwitchRelayChatLine
 
-/** @deprecated Use TwitchRelayChatWsStatus */
+
 export type NadleChatPanelWsStatus = TwitchRelayChatWsStatus

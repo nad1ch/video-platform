@@ -1,7 +1,7 @@
 import { normalizePlayerSlotId } from './playerSlot.js'
 import { readStorageJson, writeStorageJson } from '@/utils/storageJson.js'
 
-/** Як довго пам’ятати останній слот гравця для кімнати. */
+
 export const PLAYER_SLOT_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 const PREFIX = 'eat-first:player-slot-v1:'

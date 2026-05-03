@@ -10,26 +10,26 @@ const props = withDefaults(
     muted?: boolean
     playRev?: number
     fill?: boolean
-    /** When `fill` is true: `false` → object-fit contain (screens), `true` → cover (local webcam in grid). */
+    
     fillCover?: boolean
-    /** When false, skip videoUi events (local preview). */
+    
     reportVideoUi?: boolean
-    /** Local preview: `none` = no outbound video (paused / no track). Remotes omit this prop. */
+    
     videoPresentation?: 'camera' | 'screen' | 'none'
-    /**
-     * Remote tiles: pause element playback only (keeps `srcObject`); does not stop consumers.
-     * When false, resumes `play()` after bind / tab visible.
-     */
+    
+
+
+
     playbackSuppressed?: boolean
     /**
      * Phase 3.5: soft cap on element presentation rate (remote grid). Omit or use ≥28 for native cadence.
      * Ignored when {@link playbackSuppressed} is true. Does not change WebRTC decode/consume.
      */
     targetPlaybackFps?: number
-    /**
-     * Remote grid: when set, `waiting` on the element emits `remotePlaybackStall` for CallPage
-     * (fast signal — complements inbound getStats pressure).
-     */
+    
+
+
+
     remotePlaybackStallPeerId?: string | null
   }>(),
   {
@@ -120,10 +120,10 @@ async function applyPlaybackSuppression(v: HTMLVideoElement): Promise<void> {
   await playIgnoringAbort(v)
 }
 
-/** Aligned with `FPS_RENDER_PRESSURE_MIN_FPS` / call video max fps in call-core. */
+
 const PLAYBACK_FPS_THROTTLE_MIN = 12
 const PLAYBACK_FPS_THROTTLE_MAX_EXCLUSIVE = 25
-/** Fast local signal before inbound getStats catches up (buffer underrun / decode stall). */
+
 const LOCAL_WAITING_FPS_STALL_MS = 1500
 const LOCAL_WAITING_FPS_RELATIVE = 0.85
 
@@ -131,7 +131,7 @@ const CAN_USE_PLAYBACK_RVFC =
   typeof HTMLVideoElement !== 'undefined' &&
   typeof HTMLVideoElement.prototype.requestVideoFrameCallback === 'function'
 
-/** Invalidates in-flight RVFC / pulse closures after bind or prop changes. */
+
 let playbackFpsPacingGen = 0
 let playbackFpsThrottleInterval: ReturnType<typeof setInterval> | null = null
 let playbackFpsThrottlePlayTimer: ReturnType<typeof setTimeout> | null = null
@@ -142,7 +142,7 @@ let rvfcSkipPlayTimer: ReturnType<typeof setTimeout> | null = null
 let localWaitingStallUntil = 0
 let localWaitingRestoreTimer: ReturnType<typeof setTimeout> | null = null
 
-/** Dedupe `remotePlaybackStall` emissions across timer / detach. */
+
 let remotePlaybackStallActive = false
 
 function notifyRemotePlaybackStall(stalling: boolean): void {
@@ -350,9 +350,9 @@ function startPulsePlaybackFpsThrottle(v: HTMLVideoElement, token: number): void
   }, period)
 }
 
-/**
- * Remote grid: RVFC pacing when supported, else pulse. Local preview (`reportVideoUi`) never throttles.
- */
+
+
+
 function syncPlaybackFpsThrottle(v: HTMLVideoElement): void {
   clearPlaybackFpsThrottle()
   if (props.reportVideoUi) {
@@ -386,7 +386,7 @@ let detachUiListeners: (() => void) | null = null
 let detachInboundVideoListeners: (() => void) | null = null
 let detachLocalVideoEndedListener: (() => void) | null = null
 
-/** Cancels in-flight bind after `playRev`/stream churn (rapid cam toggle). */
+
 let bindStreamGeneration = 0
 
 function clearLocalVideoEndedListener(): void {
@@ -404,7 +404,7 @@ function detachVideoUi(): void {
   detachUiListeners = null
 }
 
-/** Inbound tile: `waiting` → short lower effective FPS (before getStats reflects pressure). */
+
 function attachInboundVideoTrackListeners(): void {
   clearInboundVideoTrackListeners()
   const v = el.value
@@ -529,7 +529,7 @@ async function bindStream(): Promise<void> {
       return
     }
     syncPlaybackFpsThrottle(v)
-    // Same bound track can go muted→unmuted (RTP start); re-emit so tiles leave “connecting” / frozen UI.
+    
     if (props.reportVideoUi) {
       emit('videoUi', {
         readyState: v.readyState,
@@ -699,7 +699,7 @@ onUnmounted(() => {
   object-position: center;
   border: none;
   overflow: hidden;
-  /* Смуги, які не закриває кадр (contain), — чорні, без «просвічування» фону сторінки. */
+  
   background: #000;
 }
 

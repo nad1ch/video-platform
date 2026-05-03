@@ -26,8 +26,8 @@ import { NadrawWs } from '../core/nadrawWsProtocol'
 
 const log = createLogger('nadraw-show:orch')
 
-// Local alias kept to minimize the call-site diff. The canonical source is
-// `../core/nadrawWsProtocol.ts`, which mirrors the server's `NadrawWs` table.
+
+
 const WS = NadrawWs
 
 export type NadrawPromptRow = {
@@ -46,9 +46,9 @@ export type NadrawDrawToolMeta = {
   color: string
   lineWidth: number
   erase: boolean
-  /** Defaults to stroke (freehand). */
+  
   op?: NadrawDrawOp
-  /** Second corner normalized 0–1 (shapes, `phase === 'end'`). */
+  
   x2?: number
   y2?: number
 }
@@ -60,7 +60,7 @@ export type RemoteDrawPayload = {
   y: number
   color?: string
   lineWidth?: number
-  /** When true, receivers use globalCompositeOperation destination-out. */
+  
   erase?: boolean
   op?: NadrawDrawOp
   x2?: number
@@ -118,7 +118,7 @@ export function useNadrawShowOrchestrator(options: {
     roundsPlanned?: number,
   ) => void
   clearRound: () => void
-  /** Broadcast canvas wipe to all viewers; round timer and word stay active. */
+  
   clearCanvasOnly: () => void
   ackNextRound: (word?: string) => void
   sendDrawStart: (strokeId: string, x: number, y: number, meta?: NadrawDrawToolMeta) => void
@@ -327,7 +327,7 @@ export function useNadrawShowOrchestrator(options: {
     wsStatus.value = 'idle'
   }
 
-  /** @param fromScheduledReconnect when true, keep exponential backoff counter across attempts */
+  
   function connectWs(fromScheduledReconnect = false): void {
     const id = streamerProfile.value?.id
     if (!id || disposed) {

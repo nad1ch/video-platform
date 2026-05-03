@@ -10,10 +10,10 @@ export type PersistTwitchOAuthUserOptions = {
   streamStatus?: TwitchStreamStatus | null
 }
 
-/**
- * Upsert OAuth user in Postgres. Failures are logged only — JWT/session must still succeed without DB.
- * If `DATABASE_URL` is unset, skips persistence (local dev without Postgres).
- */
+
+
+
+
 export async function persistTwitchOAuthUser(
   profile: TwitchProfileForSession,
   options: PersistTwitchOAuthUserOptions = {},

@@ -80,7 +80,7 @@ function readJarUrl(): string {
 }
 
 function fmtUahLabel(amountKopecks: number): string {
-  // Always 2-decimal so the FE can render it verbatim without locale guessing.
+  
   return (amountKopecks / 100).toFixed(2)
 }
 
@@ -108,9 +108,9 @@ function deriveSubscriptionDto(
     }
   }
   const expiresMs = row.expiresAt.getTime()
-  // Reconcile lazily on read: an `active` row with `expiresAt <= now` is
+  
   // surfaced as `expired`. We deliberately do NOT mutate the DB on read paths
-  // — `isActive` is the authoritative answer for callers anyway.
+  
   let status: SubscriptionStatus
   if (row.status === 'active') {
     status = expiresMs > now.getTime() ? 'active' : 'expired'
@@ -198,13 +198,13 @@ export async function getSubscriptionDtoForUser(userId: string): Promise<Subscri
     },
   })
   const now = new Date()
-  // Lazy expiry-email: only when the row is `active`-in-DB but past expiresAt.
-  // The single-flight `updateMany` filter (still null) prevents double sending.
-  //
+  
+  
+  
   // Important: only claim the timestamp when the user actually has a deliverable
-  // address. Otherwise a Twitch sign-up without auth email would burn the claim
-  // and never receive the expiry email later, even after configuring
-  // `User.billingEmail` via POST /api/billing/billing-email.
+  
+  
+  
   if (
     row &&
     row.status === 'active' &&
@@ -218,13 +218,13 @@ export async function getSubscriptionDtoForUser(userId: string): Promise<Subscri
         data: { expiredEmailSentAt: now },
       })
       if (claim.count > 0) {
-        // Fire-and-forget: failure is logged by the mailer, billing path is
-        // never blocked by SMTP.
+        
+        
         void sendUserBillingNotification({
           event: 'subscription_expired',
           to,
           displayName: userRow?.displayName ?? 'StreamAssist',
-          // Subscription expiry has no payment-request context — pass plan-level info only.
+          
           amountKopecks: 0,
           currency: '',
           subscriptionExpiresAt: row.expiresAt,
@@ -251,8 +251,8 @@ export async function setUserBillingEmail(
 ): Promise<SubscriptionDto> {
   ensureDatabase()
   const trimmed = typeof rawEmail === 'string' ? rawEmail.trim() : ''
-  // Empty → clear the override. Otherwise validate a minimal email shape so
-  // `console.warn` from the mailer isn't the first feedback the user gets.
+  
+  
   let nextValue: string | null
   if (trimmed.length === 0) {
     nextValue = null
@@ -288,8 +288,8 @@ export async function getOwnedPaymentRequestSnapshot(
   if (typeof paymentRequestId !== 'string' || paymentRequestId.length === 0) {
     throw new BillingHttpError(400, 'BAD_REQUEST', 'paymentRequestId is required')
   }
-  // Sweep before reading so a row past `expiresAt` reports as `expired` even
-  // when no other call has touched the table since the deadline passed.
+  
+  
   await sweepExpiredRequests(new Date())
   const row = await prisma.paymentRequest.findUnique({
     where: { id: paymentRequestId },
@@ -351,7 +351,7 @@ function buildPublicDto(
  */
 export async function createOrReusePaymentRequest(userId: string): Promise<PaymentRequestDto> {
   ensureDatabase()
-  const jarUrl = readJarUrl() // throw early if jar URL missing
+  const jarUrl = readJarUrl() 
   const now = new Date()
   await sweepExpiredRequests(now)
 
@@ -420,11 +420,11 @@ export async function markPaymentRequestAsPaid(
     throw new BillingHttpError(404, 'NOT_FOUND', 'Payment request not found')
   }
   if (req.userId !== userId) {
-    // Always 404 — never leak existence of someone else's row.
+    
     throw new BillingHttpError(404, 'NOT_FOUND', 'Payment request not found')
   }
 
-  // Transition to `checking` only from `waiting_payment` (single-flight via filter).
+  
   if (req.status === 'waiting_payment' && req.expiresAt.getTime() > now.getTime()) {
     await prisma.paymentRequest.updateMany({
       where: { id: req.id, status: 'waiting_payment' as PaymentRequestStatus },
@@ -435,15 +435,15 @@ export async function markPaymentRequestAsPaid(
       },
     })
   } else if (req.status === 'checking') {
-    // Repeated click — bump checkedAt only.
+    
     await prisma.paymentRequest.updateMany({
       where: { id: req.id, status: 'checking' as PaymentRequestStatus },
       data: { checkedAt: now },
     })
   }
 
-  // Best-effort statement pull + matching pass. Both swallow errors internally
-  // so a Mono outage cannot crash mark-paid.
+  
+  
   const cfg = readPersonalConfig()
   if (cfg) {
     try {
@@ -453,7 +453,7 @@ export async function markPaymentRequestAsPaid(
     }
   }
 
-  // Re-read terminal state for response.
+  
   const fresh = await prisma.paymentRequest.findUnique({
     where: { id: req.id },
     select: { id: true, status: true, expiresAt: true, amount: true, autoMatchedAt: true },
@@ -461,9 +461,9 @@ export async function markPaymentRequestAsPaid(
   const finalReq = fresh ?? req
   const subscription = await getSubscriptionDtoForUser(userId)
 
-  // Best-effort outbound email when this exact transition just landed in
-  // `auto_matched`. We persist the timestamp first (single-flight) so retries
-  // never double-send.
+  
+  
+  
   if (fresh && fresh.status === 'auto_matched') {
     await sendStatusEmailIfNotSent(fresh.id, 'auto_matched')
   }
@@ -486,7 +486,7 @@ async function persistAndMatchStatementItem(
   accountId: string,
   now: Date,
 ): Promise<void> {
-  // Upsert — repeated webhooks for the same id collapse to a no-op update.
+  
   let stored: { id: string }
   try {
     const rawPayloadJson = item.raw as unknown as Prisma.InputJsonValue
@@ -503,7 +503,7 @@ async function persistAndMatchStatementItem(
         rawPayload: rawPayloadJson,
       },
       update: {
-        // Refresh forensic fields only — never mutate matchedPaymentRequestId here.
+        
         amount: item.amount,
         direction: item.direction,
         currency: item.currency,
@@ -521,7 +521,7 @@ async function persistAndMatchStatementItem(
   const personalCfg = readPersonalConfig()
   if (!personalCfg) {
     // We have a transaction row but no account-id authority — leave it
-    // unmatched; admin can still review.
+    
     return
   }
 
@@ -547,10 +547,10 @@ async function pollAndMatchOnce(now: Date): Promise<void> {
   const cfg = readPersonalConfig()
   if (!cfg) return
   for (const item of result.items) {
-    // Per-item try/catch so a Postgres serialization failure (or any other
-    // throw inside `tryAutoMatchTransaction`) on one transaction does NOT
-    // abort the whole loop and leave subsequent items unmatched until the
-    // next poll cycle. Each item is independent.
+    
+    
+    
+    
     try {
       await persistAndMatchStatementItem(item, cfg.accountId, now)
     } catch (err) {
@@ -602,7 +602,7 @@ export async function forceAdminPollAndMatch(): Promise<AdminForcePollResult> {
   }
   for (const item of result.items) {
     // Per-item try/catch — see `pollAndMatchOnce`. One bad item must not
-    // bubble up and 500 the admin force-poll endpoint.
+    
     try {
       await persistAndMatchStatementItem(item, cfg.accountId, now)
     } catch (err) {
@@ -628,25 +628,25 @@ export async function ingestStatementWebhook(rawBody: unknown): Promise<{ accept
   ensureDatabase()
   const { accountId, item } = normalizeWebhookStatementItem(rawBody)
   if (!item || !accountId) {
-    // Always respond 200 in the router so monobank doesn't retry-storm us, but
-    // signal "not accepted" for logging.
+    
+    
     return { accepted: false }
   }
-  // Persist using the webhook-reported account id. The matcher's eligibility
-  // gate (`t.accountId !== expectedAccountId`) then rejects any transaction
-  // whose account does not match our configured `MONO_ACCOUNT_ID`, so a
-  // forged webhook claiming `data.account = "anything"` is stored for
-  // forensic review but cannot trigger auto-activation. (Stamping
-  // `cfg.accountId` here would silently override the gate — anyone who knew
-  // the public webhook URL could otherwise mint payments by POSTing a
-  // StatementItem with the matching amount.)
+  
+  
+  
+  
+  
+  
+  
+  
   await persistAndMatchStatementItem(item, accountId, new Date())
   return { accepted: true }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Email helpers                                                              */
-/* -------------------------------------------------------------------------- */
+
+
+
 
 /**
  * Send the per-event admin notification, exactly once per (PaymentRequest, event)
@@ -670,17 +670,17 @@ async function sendStatusEmailIfNotSent(
           ? 'approvedEmailSentAt'
           : 'rejectedEmailSentAt'
 
-  // Single-flight claim: only the first concurrent call clears the null and
-  // proceeds. Repeated webhook/polling/admin clicks return `count: 0` here.
+  
+  
   const claim = await prisma.paymentRequest.updateMany({
     where: { id: paymentRequestId, [sentFieldName]: null },
     data: { [sentFieldName]: new Date() },
   })
   if (claim.count === 0) return
 
-  // Read full snapshot from DB AFTER claim so retries (admin replays) cannot
-  // produce inconsistent context. Errors here just log and bail — the email
-  // is best-effort and we already have the audit row.
+  
+  
+  
   let row
   try {
     row = await prisma.paymentRequest.findUnique({
@@ -730,9 +730,9 @@ async function sendStatusEmailIfNotSent(
   }
   if (!row) return
 
-  // Subscription is per-user; fetch separately so we don't widen the include
-  // graph above. Only meaningful for activation events but we always include
-  // it so `expired` / `inactive` is visible to ops on rejected/needs_review too.
+  
+  
+  
   const sub = await prisma.subscription.findUnique({
     where: { userId: row.userId },
     select: { plan: true, expiresAt: true, status: true },
@@ -783,17 +783,17 @@ async function sendStatusEmailIfNotSent(
 
   await sendBillingAdminNotification(ctx)
 
-  // User-facing notification — best-effort. Skipped silently when:
-  //   - the user has no email on record (e.g. Twitch login without email);
+  
+  
   //   - SMTP is not configured (logged once by the shared transport).
-  // Both admin and user emails are gated by the same single-flight claim
-  // above, so repeated webhook deliveries / repeated admin approve/reject
-  // clicks cannot cause a duplicate user email. SMTP failure here is
-  // swallowed by the mailer — billing state never rolls back on email loss.
-  // Effective billing email: explicit `billingEmail` override (set via
-  // POST /api/billing/billing-email) wins, otherwise the user's auth email.
-  // Twitch sign-ups without either still get the admin-side email; they just
-  // don't receive a user-facing copy.
+  
+  
+  
+  
+  
+  
+  
+  
   const userEmail = row.user?.billingEmail ?? row.user?.email ?? null
   if (userEmail) {
     await sendUserBillingNotification({
@@ -802,9 +802,9 @@ async function sendStatusEmailIfNotSent(
       displayName: row.user?.displayName ?? 'StreamAssist',
       amountKopecks: row.amount,
       currency: row.currency,
-      // Activation events: pass the freshly-activated subscription expiry so
-      // the user's email shows "active until …". needs_review/rejected pass
-      // null — the templates omit the expiry line.
+      
+      
+      
       subscriptionExpiresAt:
         (kind === 'auto_matched' || kind === 'approved') &&
         subscriptionCtx?.isActive
@@ -815,7 +815,7 @@ async function sendStatusEmailIfNotSent(
   }
 }
 
-/** Type alias purely so the field-name lookup above stays type-safe. */
+
 type BillingAdminNotificationClaimFields = {
   autoMatchedEmailSentAt: Date | null
   needsReviewEmailSentAt: Date | null
@@ -823,9 +823,9 @@ type BillingAdminNotificationClaimFields = {
   rejectedEmailSentAt: Date | null
 }
 
-/* -------------------------------------------------------------------------- */
-/* Admin helpers                                                              */
-/* -------------------------------------------------------------------------- */
+
+
+
 
 function transactionToAdminRow(t: {
   id: string
@@ -910,7 +910,7 @@ export async function listAdminPaymentRequests(
     },
   })
 
-  // Bulk fetch candidate transactions for every distinct amount/window.
+  
   const candidatesByRequest = new Map<string, AdminTransactionRow[]>()
   for (const row of rows) {
     const candidates = await prisma.monoTransaction.findMany({
@@ -956,8 +956,8 @@ export async function listAdminPaymentRequests(
     candidateTransactions: candidatesByRequest.get(r.id) ?? [],
   }))
 
-  // Recent overall unmatched transactions for forensic context (e.g. someone
-  // paid an unrelated amount).
+  
+  
   const unmatched = await prisma.monoTransaction.findMany({
     where: { matchedPaymentRequestId: null },
     orderBy: { operationTime: 'desc' },
@@ -1004,7 +1004,7 @@ export async function adminRejectPaymentRequest(
   if (typeof paymentRequestId !== 'string' || paymentRequestId.length === 0) {
     throw new BillingHttpError(400, 'BAD_REQUEST', 'paymentRequestId is required')
   }
-  // Block reject when already activated (no refund/revoke flow in MVP).
+  
   const existing = await prisma.paymentRequest.findUnique({
     where: { id: paymentRequestId },
     select: { status: true },
@@ -1019,10 +1019,9 @@ export async function adminRejectPaymentRequest(
       'Cannot reject an already-activated request (no revoke flow in MVP)',
     )
   }
-  // Block reject of already-`expired` requests too: the user has already seen
-  // the "Час на оплату вийшов" terminal state in the modal/toast — sending
-  // them a follow-up "Платіж відхилено" email would be misleading. Admin can
-  // simply leave the row as `expired`; it is already terminal.
+  
+  
+  
   if (existing.status === 'expired') {
     throw new BillingHttpError(
       409,
@@ -1038,9 +1037,9 @@ export async function adminRejectPaymentRequest(
   return { status: result.finalStatus, rejected: result.rejected }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Admin: subscription management                                             */
-/* -------------------------------------------------------------------------- */
+
+
+
 
 function subscriptionToAdminRow(
   s: {
@@ -1129,10 +1128,10 @@ export async function cancelAdminSubscription(
   }
   const now = new Date()
 
-  // Single-flight: only an active+future-expiry row gets transitioned. Already
+  
   // inactive / past-expiry rows return count=0 → idempotent no-op below.
-  // We also claim `cancelledEmailSentAt` in the same update so the user
-  // notification fires at most once per actual cancellation.
+  
+  
   const updated = await prisma.subscription.updateMany({
     where: { id: subscriptionId, status: 'active', expiresAt: { gt: now } },
     data: { status: 'inactive', expiresAt: now, cancelledEmailSentAt: now },
@@ -1157,8 +1156,8 @@ export async function cancelAdminSubscription(
     throw new BillingHttpError(404, 'NOT_FOUND', 'Subscription not found')
   }
   if (cancelledNow) {
-    // Best-effort admin notification — failures are swallowed by the mailer
-    // so the cancellation is never rolled back by an SMTP outage.
+    
+    
     void sendSubscriptionCancelledNotification({
       subscription: {
         id: row.id,
@@ -1174,9 +1173,9 @@ export async function cancelAdminSubscription(
         displayName: row.user?.displayName ?? null,
       },
     })
-    // User-facing notification — uses the effective billing email (override
-    // first, then auth email). Twitch sign-ups without either still get the
-    // admin-side email above; the user just doesn't receive one.
+    
+    
+    
     const userTo = row.user?.billingEmail ?? row.user?.email ?? null
     if (userTo) {
       void sendUserBillingNotification({

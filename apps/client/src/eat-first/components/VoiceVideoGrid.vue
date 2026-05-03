@@ -4,9 +4,9 @@ import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   overlayReady: { type: Boolean, default: false },
-  /** Чи можна публікувати аудіо/відео (слот гравця, не spectator, не елімінація). */
+  
   canPublish: { type: Boolean, default: false },
-  /** Глобальний оверлей без ?player= — лише перегляд. */
+  
   spectatorMode: { type: Boolean, default: false },
   speakerSlot: { type: String, default: '' },
   spotlightUnmuteMode: { type: Boolean, default: false },
@@ -19,7 +19,7 @@ const { t } = useI18n()
 /** Mediasoup / call-core: provide з OverlayPage (`useEatOverlayMediasoup`). */
 const eatVoice = inject('eatOverlayVoiceUi', null)
 
-/** Браузер блокує AudioContext до першого кліку — після unlock ховаємо CTA. */
+
 const remoteAudioUnlocked = ref(false)
 
 const isDev = import.meta.env.DEV
@@ -85,7 +85,7 @@ async function unlockRemoteAudio() {
   }
 }
 
-/** Будь-який pointerdown на сторінці — валідний жест для AudioContext. */
+
 let gestureUnlockTeardown = null
 
 function armGestureUnlockIfNeeded() {

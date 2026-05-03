@@ -35,9 +35,9 @@ import { createLogger } from '@/utils/logger'
 
 const log = createLogger('billing-notify')
 
-/* -------------------------------------------------------------------------- */
-/* Toast queue                                                                */
-/* -------------------------------------------------------------------------- */
+
+
+
 
 export type BillingToastKind = 'success' | 'info' | 'warning' | 'error'
 
@@ -65,9 +65,9 @@ export function dismissToast(id: number): void {
   toasts.value = toasts.value.filter((t) => t.id !== id)
 }
 
-/* -------------------------------------------------------------------------- */
-/* Pending payment-request id (localStorage)                                  */
-/* -------------------------------------------------------------------------- */
+
+
+
 
 const PENDING_KEY = 'streamassist_billing_pending_request_v1'
 
@@ -94,9 +94,9 @@ export function readPendingPaymentRequestId(): string | null {
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Event de-duplication                                                       */
-/* -------------------------------------------------------------------------- */
+
+
+
 
 /**
  * In-memory cache of (event-key) we have already shown a toast for. Cleared
@@ -169,7 +169,7 @@ function emitSubscriptionTransitionToast(
   prev: SubscriptionDto,
   next: SubscriptionDto,
 ): void {
-  // Active → not active: cancellation OR natural expiry.
+  
   if (prev.isActive && !next.isActive) {
     if (next.status === 'inactive') {
       const key = `sub:cancelled:${next.expiresAt ?? ''}`
@@ -183,7 +183,7 @@ function emitSubscriptionTransitionToast(
       })
       return
     }
-    // 'expired' — natural end of paid window.
+    
     const expKey = `sub:expired:${next.expiresAt ?? ''}`
     if (seenEventKeys.has(expKey)) return
     seenEventKeys.add(expKey)
@@ -194,8 +194,8 @@ function emitSubscriptionTransitionToast(
     })
     return
   }
-  // Inactive → active: covers any path that activated Pro while modal was
-  // closed (admin approve, auto-match via webhook).
+  
+  
   if (!prev.isActive && next.isActive) {
     const key = `sub:active:${next.expiresAt ?? ''}`
     if (seenEventKeys.has(key)) return
@@ -222,16 +222,16 @@ export function notifyTerminalRequestStatus(
   status: PaymentRequestStatus,
 ): void {
   emitTerminalRequestToast(paymentRequestId, status)
-  // Always clear pending storage on terminal — even if the toast was a
-  // duplicate, the request is no longer interesting to poll.
+  
+  
   if (readPendingPaymentRequestId() === paymentRequestId) {
     writePendingPaymentRequestId(null)
   }
 }
 
-/* -------------------------------------------------------------------------- */
+
 /* Polling lifecycle                                                          */
-/* -------------------------------------------------------------------------- */
+
 
 const POLL_INTERVAL_MS = 20_000
 
@@ -266,13 +266,13 @@ async function tick(): Promise<void> {
           if (isTerminal) {
             const shown = emitTerminalRequestToast(pendingId, status)
             writePendingPaymentRequestId(null)
-            // Suppress a subsequent subscription "active" toast for the same
-            // tick to avoid showing two success toasts on `auto_matched`/
-            // `approved`. Other statuses don't flip subscription anyway.
+            
+            
+            
             pendingResolvedThisTick = shown && (status === 'auto_matched' || status === 'approved')
           }
         } else if (r.status === 404) {
-          // Request gone (purged or now belongs to another user) — stop polling it.
+          
           writePendingPaymentRequestId(null)
         }
       } catch (err) {
@@ -280,10 +280,10 @@ async function tick(): Promise<void> {
       }
     }
 
-    // Update the shared subscription singleton so the global header Pro
+    
     // badge (and any other consumer of `useProSubscription()`) stays fresh
-    // off the same poll. We then read the singleton ref to compute the
-    // transition — single source of truth for FE subscription state.
+    
+    
     try {
       await refreshProSubscription()
       const next = subscriptionRef.value
@@ -332,7 +332,7 @@ export function startBillingNotifier(): void {
     visibilityListenerInstalled = true
   }
   if (pollTimer) return
-  // Boot baseline first (silent — no transition compared yet), then interval.
+  
   void tick()
   pollTimer = setInterval(() => {
     void tick()

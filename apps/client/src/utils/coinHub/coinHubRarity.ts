@@ -1,13 +1,13 @@
-/**
- * Rarity tiers for daily spin / strip visuals (coin value → tier).
- * Shared by `coinHubStripMath`, `coinHubSpinReel`, and UI.
- */
+
+
+
+
 export type SpinRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 
-/**
- * Value bands (clear hierarchy for strip + win VFX + audio).
- * &lt;10 common · 10–19 uncommon · 20–49 rare · 50–99 epic · 100+ legendary
- */
+
+
+
+
 export function getSpinRarity(value: number): SpinRarity {
   if (!Number.isFinite(value) || value < 0) {
     return 'common'

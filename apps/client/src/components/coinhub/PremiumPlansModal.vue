@@ -12,11 +12,11 @@ type PlanId = 'basic' | 'plus' | 'pro'
 
 type FakePhase = 'idle' | 'purchasing' | 'success'
 
-/** After purchase: celebration overlay stacks above modal; modal fades out underneath. */
+
 type UxPhase = 'modal' | 'celebration'
 
 type BalanceSpot = {
-  /** Viewport center of #coinhub-balance-fly-target (px). */
+  
   cx: number
   cy: number
   w: number
@@ -38,7 +38,7 @@ const MODAL_FADE_OUT_MS = 600
 const CELEBRATION_FLY_DELAY_MS = 450
 const FLY_COIN_COUNT = 20
 const FLY_STAGGER_MS = 40
-/** Longest coin: start delay (n-1)*stagger + ~max duration (~1s). */
+
 const FLY_TO_BALANCE_MS = 900 + (FLY_COIN_COUNT - 1) * FLY_STAGGER_MS + 200
 const POST_FLY_HOLD_MS = 1800
 const CELEBRATION_OVERLAY_FADE_OUT_MS = 520
@@ -65,7 +65,7 @@ const planOrder: PlanId[] = ['basic', 'plus', 'pro']
 const fakePhase = ref<FakePhase>('idle')
 const targetPlan = ref<PlanId | null>(null)
 const uxPhase = ref<UxPhase>('modal')
-/** While true, modal teleport stays mounted under celebration overlay (fades with --exit). */
+
 const modalShellDuringCelebration = ref(false)
 const celebrationExiting = ref(false)
 const celebrationFlySourceRef = ref<HTMLElement | null>(null)
@@ -635,7 +635,7 @@ watch(
   }
 }
 
-/* Backdrop: radial mood lighting + strong vignette, 8px glass blur (AAA) */
+
 .prem-modal__backdrop {
   background:
     radial-gradient(ellipse 78% 65% at 50% 32%, rgba(45, 32, 95, 0.42) 0%, transparent 58%),
@@ -645,7 +645,7 @@ watch(
   backdrop-filter: blur(8px);
 }
 
-/* AAA — premium dialog title: soft white→lavender gradient + breathing glow */
+
 .prem-modal__title {
   font-size: clamp(1.65rem, 3.8vw, 2rem);
   font-weight: 800;
@@ -726,7 +726,7 @@ watch(
   }
 }
 
-/* Fullscreen post-purchase celebration (replaces in-modal reward card). */
+
 .prem-upgrade-overlay {
   position: fixed;
   inset: 0;
@@ -746,7 +746,7 @@ watch(
   transition: opacity 0.52s cubic-bezier(0.33, 1, 0.68, 1);
 }
 
-/* Backplate + mask stay at full opacity: fade only inner decoration/text (avoids page flash). */
+
 .prem-upgrade-overlay--fade-in .prem-upgrade-overlay__glow,
 .prem-upgrade-overlay--fade-in .prem-upgrade-overlay__sparks,
 .prem-upgrade-overlay--fade-in .prem-upgrade-overlay__content {
@@ -898,7 +898,7 @@ watch(
 .prem-modal__fly-layer {
   position: fixed;
   inset: 0;
-  /* Above .prem-upgrade-overlay (10040) and lifted #coinhub-hero-root (10060) so coins land on the real balance. */
+  
   z-index: 10070;
   pointer-events: none;
 }

@@ -18,10 +18,10 @@ function parseUrl(req: IncomingMessage): URL | null {
   }
 }
 
-/**
- * `?streamerId=` — required on `/nadle-ws` and `/nadraw-show-ws`. Returns
- * the trimmed value when it is at least 4 characters, otherwise `null`.
- */
+
+
+
+
 export function parseStreamerIdFromUpgrade(req: IncomingMessage): string | null {
   const u = parseUrl(req)
   if (!u) return null
@@ -32,10 +32,10 @@ export function parseStreamerIdFromUpgrade(req: IncomingMessage): string | null 
   return id.trim()
 }
 
-/**
- * Optional client-tab id for debug logs. Each tab is expected to send a
- * unique value. Bounds mirror the original implementation.
- */
+
+
+
+
 export function parseOptionalPeerIdFromUpgrade(req: IncomingMessage): string | null {
   const u = parseUrl(req)
   if (!u) return null

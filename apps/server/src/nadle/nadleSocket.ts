@@ -73,8 +73,8 @@ function ensureNadleJsonPingTimer(wss: WebSocketServer): void {
   if (typeof nadleJsonPingTimer.unref === 'function') {
     nadleJsonPingTimer.unref()
   }
-  // Stop the app-level JSON ping when the WS server shuts down to prevent
-  // orphan intervals on hot-reload / graceful exit.
+  
+  
   wss.on('close', () => {
     if (nadleJsonPingTimer !== null) {
       clearInterval(nadleJsonPingTimer)
@@ -107,7 +107,7 @@ function unregisterClient(streamerId: string, ws: WebSocket): void {
   }
 }
 
-/* safeSend is now `safeSendJson` from `../utils/wsSafeSend` (imported above). */
+
 
 function broadcastNadleToStreamer(streamerId: string, obj: unknown): void {
   const set = clientsByStreamer.get(streamerId)
@@ -223,13 +223,13 @@ function parseClientMsg(raw: string): ClientMsg | null {
   return null
 }
 
-/* parseStreamerId / parseOptionalPeerId are now shared helpers in
- * `../utils/wsUpgradeQuery` (identical byte-for-byte behavior). */
+
+
 
 export function attachNadleSocketServer(wss: WebSocketServer): void {
   ensureNadleJsonPingTimer(wss)
-  // WS-level ping-frame heartbeat reaps half-open TCP clients the JSON ping
-  // cannot detect; shared with Nadraw / Checkers / EatFirst.
+  
+  
   attachWsHeartbeat(wss, { logLabel: 'nadle-ws' })
 
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
@@ -306,12 +306,12 @@ export function attachNadleSocketServer(wss: WebSocketServer): void {
       }
 
       void (async () => {
-        // Any state-mutating path (guess / next-word) must see the real
-        // persisted round. Hydration is memoized via `hydratedStores` +
-        // `hydrationByStreamer`, so repeated calls after the first are
+        
+        
+        
         // effectively free — but awaiting here closes the pre-hydration race
-        // that would otherwise let `storeFor` return a default and clobber
-        // the DB with a brand-new word.
+        
+        
         await hydrateNadleLiveGame(streamerId)
 
         if (msg.type === NadleWs.clientGuess) {

@@ -46,13 +46,13 @@ const {
 const hasPending = computed(() => pending.value > 0)
 const flowFocal = computed(() => (hasPending.value ? 'claim' : 'daily'))
 
-/** Minimum time the first-load ring is visible — avoids a sub-100ms flash when the API is very fast. */
+
 const COINHUB_FIRST_LOAD_MIN_MS = 500
 
-/**
- * True while the first GET has not completed. Initialized from the store so the first client paint
- * can show the overlay *over* the already-mounted route (not an empty area before the page exists).
- */
+
+
+
+
 const showPageLoader = ref(!initialHydrated.value)
 const firstLoadStartedAt = ref<number | null>(!initialHydrated.value ? Date.now() : null)
 let firstLoadMinHoldTimer: ReturnType<typeof setTimeout> | null = null
@@ -173,10 +173,10 @@ onMounted(() => {
   void coinHub.loadSnapshot()
 })
 
-/**
- * When the first load finishes, the full page (including hero) mounts at once. Scroll anchoring
- * can bump `window.scrollY` — reset to top after the loader hides.
- */
+
+
+
+
 watch(showPageLoader, (loading) => {
   if (loading) {
     return
@@ -325,7 +325,7 @@ function luckCaseTitle(index: number): string {
           :aria-label="t('coinHub.dailySpin')"
         >
           <div class="mx-auto w-full max-w-[1300px] min-w-0">
-            <!-- :section-description="t('coinHub.dailySectionHint')" -->
+            
             <SpinModule
               variant="hero"
               :tag-label="t('coinHub.labelDaily')"
@@ -517,7 +517,7 @@ function luckCaseTitle(index: number): string {
 <style scoped>
 .coin-hub--game-ui {
   isolation: isolate;
-  /* With large blocks mounting above the fold, default scroll anchoring can fight explicit scroll. */
+  
   overflow-anchor: none;
 }
 .coin-hub--game-ui :deep(.coin-hub__inner) {
@@ -555,7 +555,7 @@ function luckCaseTitle(index: number): string {
   z-index: 1;
 }
 
-/* One row with upgrade: align with grid padding; no double horizontal margin on hero */
+
 @media (min-width: 768px) {
   .coinhub-hero-and-upgrade :deep(.hero-wrapper) {
     margin-top: 0;

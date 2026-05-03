@@ -27,7 +27,7 @@ function applyDotEnvFile(filePath: string): void {
       continue
     }
 
-    // Docker often injects `KEY=` (empty string). Treat as unset so a bind-mounted `.env` can still apply.
+    
     const existing = process.env[key]
     if (existing === undefined || existing === '') {
       process.env[key] = value
@@ -35,7 +35,7 @@ function applyDotEnvFile(filePath: string): void {
   }
 }
 
-// Prefer apps/server/.env regardless of where the process is started from.
+
 const repoRelative = path.resolve(process.cwd(), 'apps', 'server', '.env')
 const hereRelative = path.resolve(__dirname, '..', '.env')
 const cwdRelative = path.resolve(process.cwd(), '.env')
@@ -44,7 +44,7 @@ applyDotEnvFile(repoRelative)
 applyDotEnvFile(hereRelative)
 applyDotEnvFile(cwdRelative)
 
-// Optional local overrides (host Prisma + `npm run dev`); same paths with `.env.local`.
+
 const repoLocal = path.resolve(process.cwd(), 'apps', 'server', '.env.local')
 const hereLocal = path.resolve(__dirname, '..', '.env.local')
 const cwdLocal = path.resolve(process.cwd(), '.env.local')

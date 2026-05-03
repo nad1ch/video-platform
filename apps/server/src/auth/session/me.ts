@@ -24,7 +24,7 @@ function buildFeaturePermissions(dbRole: string | null): FeaturePermission[] | u
   return dbRole === 'host' ? ['EAT_FIRST_OPERATOR'] : undefined
 }
 
-/** GET /api/auth/me — global camelCase user. */
+
 export async function handleGetApiAuthMe(req: Request, res: Response): Promise<void> {
   const session = readSessionFromCookie(req.headers.cookie)
   if (!session) {
@@ -85,7 +85,7 @@ export async function handleGetApiAuthMe(req: Request, res: Response): Promise<v
   }
 }
 
-/** GET /api/me — deprecated shape; kept for backward compatibility. */
+
 export function handleGetApiMeLegacy(req: Request, res: Response): void {
   const session = readSessionFromCookie(req.headers.cookie)
   if (!session) {
@@ -98,9 +98,9 @@ export function handleGetApiMeLegacy(req: Request, res: Response): void {
   })
 }
 
-/**
- * GET /api/nadle/me — historical flat body (no `authenticated` wrapper).
- */
+
+
+
 export function handleGetNadleMe(req: Request, res: Response): void {
   const session = readSessionFromCookie(req.headers.cookie)
   if (!session) {

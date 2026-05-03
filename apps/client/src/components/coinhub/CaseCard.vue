@@ -9,14 +9,14 @@ const props = withDefaults(
   defineProps<{
     title?: string
     actionLabel: string
-    /** Optional coin cost line (marketplace). */
+    
     priceLabel?: string
     state?: CaseState
     stateLabelLocked: string
     stateLabelCooldown: string
     detailLabel?: string
     isRemoteBusy?: boolean
-    /** 0=Common, 1=Rare (cyan), 2=Epic (violet), 3=Legendary (gold) */
+    
     rarityId?: number
   }>(),
   {
@@ -293,7 +293,7 @@ function onSelectClick() {
   box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
-/* Common — muted steel (glass + tint) */
+
 .coinhub-rarity--common {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
@@ -320,7 +320,7 @@ function onSelectClick() {
   background: linear-gradient(180deg, rgba(35, 40, 48, 0.9) 0%, rgb(10 12 16 / 0.96) 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.35);
 }
-/* Rare — cyan */
+
 .coinhub-rarity--rare {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
@@ -348,7 +348,7 @@ function onSelectClick() {
   background: linear-gradient(180deg, rgba(8, 45, 65, 0.9) 0%, rgb(4 10 20 / 0.96) 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 12px -4px rgba(0, 0, 0, 0.45);
 }
-/* Epic — violet */
+
 .coinhub-rarity--epic {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
@@ -376,7 +376,7 @@ function onSelectClick() {
   background: linear-gradient(180deg, rgba(60, 25, 95, 0.88) 0%, rgb(8 4 20 / 0.97) 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 12px -4px rgba(0, 0, 0, 0.5);
 }
-/* Legendary — gold, dominates */
+
 .coinhub-rarity--legendary,
 .coinhub-loot--legendary {
   min-height: 12rem;

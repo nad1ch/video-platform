@@ -3,7 +3,7 @@ import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 
 const log = createLogger('eat-first:sync')
 
-/** @type {Map<string, { ws: WebSocket | null, refs: number, roomCbs: Set<Function>, playersCbs: Set<Function>, votesCbs: Set<Function>, reconnectTimer: ReturnType<typeof setTimeout> | null }>} */
+
 const hubs = new Map()
 
 function wsPath() {
@@ -127,12 +127,12 @@ function scheduleReconnect(gameId) {
   }, 1500)
 }
 
-/**
- * @param {string} gameId
- * @param {'room'|'players'|'votes'} channel
- * @param {(payload: unknown) => void} cb
- * @returns {() => void}
- */
+
+
+
+
+
+
 export function subscribeEatFirstChannel(gameId, channel, cb) {
   if (typeof window === 'undefined') {
     queueMicrotask(() => {

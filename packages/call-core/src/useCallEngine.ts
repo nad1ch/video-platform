@@ -31,29 +31,29 @@ import { newCallTabPeerId } from './utils/callTabPeerId'
 import { pickOutboundCameraVideoTrack } from './screenShare/outboundCameraTrack'
 import { useCallScreenShare } from './screenShare/useCallScreenShare'
 
-/** Pinia session store from this package (or a compatible drop-in). */
+
 export type CallSessionStore = ReturnType<typeof useCallSessionStore>
 
-/** `viewer` = recv-only (e.g. OBS overlay); `participant` = publish camera/mic after join. */
+
 export type CallEngineRole = 'participant' | 'viewer'
 
 export type CallEngineOptions = {
-  /** Overrides `VITE_SIGNALING_URL`. Use a DNS-only host (e.g. media.example.com) if the SPA is behind a CDN proxy. */
+  
   signalingUrl?: string
-  /**
-   * Identity / room UI state. Omit to use `useCallSessionStore()` from this package.
-   * Pass your own store when reusing the engine outside this app or with a custom Pinia slice.
-   */
+  
+
+
+
   session?: CallSessionStore
-  /**
-   * Read on each `joinCall()` and when computing `tiles`. Use a computed for modes that switch
-   * between publish and recv-only (e.g. Eat overlay spectator vs player).
-   */
+  
+
+
+
   role?: Ref<CallEngineRole> | ComputedRef<CallEngineRole>
-  /**
-   * When true, manual economy/balanced/hd controls apply. Regular users should omit or pass false
-   * so outbound quality follows automatic room profiles only.
-   */
+  
+
+
+
   allowManualVideoQuality?: Ref<boolean> | ComputedRef<boolean>
   /**
    * Http(s) profile URL mirrored in `join-room` for other participants; also used as local tile `avatarUrl` SSOT.
@@ -61,7 +61,7 @@ export type CallEngineOptions = {
   joinAvatarUrl?: Ref<string | undefined> | ComputedRef<string | undefined>
   /** Stable authenticated user id mirrored in `join-room` for room-level authority features. */
   joinUserId?: Ref<string | undefined> | ComputedRef<string | undefined>
-  /** Defaults to `audio-video`; Checkers uses `audio-only` to reuse voice without camera capture. */
+  
   mediaMode?: Ref<'audio-video' | 'audio-only'> | ComputedRef<'audio-video' | 'audio-only'>
 }
 
@@ -83,13 +83,13 @@ export type CallTile = {
    * Screen share and all remote tiles use `contain` (default false).
    */
   videoFillCover?: boolean
-  /** Local-only listening gain for this remote peer (0..2 → 0–200%). */
+  
   remoteListenVolume?: number
-  /** Local-only mute for this remote peer (does not affect their mic). */
+  
   remoteListenMuted?: boolean
-  /** Signaled “raise hand” for this peer. */
+  
   handRaised?: boolean
-  /** Local outbound / remote inbound presentation (outbound SSOT or `remoteVideoSourceByPeerId`). */
+  
   videoPresentation?: 'camera' | 'screen' | 'none'
   /** Profile image when video is off (`join-room` for local; server roster for remotes). */
   avatarUrl?: string
@@ -115,7 +115,7 @@ function stringValue(v: unknown): string {
   return String(v)
 }
 
-/** `undefined` = not this message; `null` = silence (clear highlight / layers). */
+
 function parseActiveSpeakerFromServer(data: unknown): string | null | undefined {
   if (!data || typeof data !== 'object') {
     return undefined
@@ -248,7 +248,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     mediaMode: () => readMediaMode(options),
   })
 
-  /** When `getSettings().deviceId` is empty (some drivers), keep menu highlight on last explicit pick. */
+  
   const lastPickedAudioInputId = ref('')
   const lastPickedVideoInputId = ref('')
 
@@ -313,7 +313,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   const callChatMessages = ref<CallChatLine[]>([])
   const peerHandRaised = ref<Record<string, boolean>>({})
   const remoteAudioMutedByPeerId = ref<Record<string, boolean>>({})
-  /** Local user's raised-hand flag (also echoed from server). */
+  
   const handRaised = ref(false)
 
   /**
@@ -614,7 +614,7 @@ export function useCallEngine(options?: CallEngineOptions) {
   let reconnectFailures = 0
   const MAX_AUTO_RECONNECT = 20
 
-  /** Snapshot after last successful `wireCallMediaAfterRoomState` (for debug overlay). */
+  
   const lastWirePeerCount = ref(0)
   const lastWireVideoSimulcast = ref(false)
 
@@ -727,10 +727,10 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
 
     // Resync UI-state messages that the reactive watchers below cannot re-emit
-    // on reconnect (deps unchanged: `inCall` stays true, `camEnabled`/`micEnabled`
+    
     // unchanged). On initial join this also closes the produce↔resume race for
-    // a user who started with cam-off/mic-muted: the watcher fires later via
-    // `[inCall]: false→true`, but by then the SFU already resumed the new
+    
+    
     // producer. Sending immediately after publish makes the pause take effect
     // before any frames are forwarded. Server handlers are idempotent.
     if (mode === 'participant') {
@@ -848,7 +848,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
   }
 
-  /** Local tile preview: driven only by {@link outboundVideoSource} + streams (see `activePreviewStream`). */
+  
   const localSelfPreviewStream = computed<MediaStream | null>(() =>
     readEngineRole(options) !== 'participant'
       ? localStream.value
@@ -878,8 +878,8 @@ export function useCallEngine(options?: CallEngineOptions) {
     if (source === 'screen') {
       return true
     }
-    // Camera: require both sender-enabled track and inbound RTP (`!muted`).
-    // `enabled || !muted` was too loose (e.g. `enabled=false` + `muted=false` still showed a black tile).
+    
+    
     return Boolean(track.enabled && !track.muted)
   }
 
@@ -948,10 +948,10 @@ export function useCallEngine(options?: CallEngineOptions) {
     return list
   })
 
-  /**
-   * UI highlight: derived from local Web Audio analysis of remote tile streams
-   * (dominant talker with hysteresis). Fixed-quality video does not use this for quality changes.
-   */
+  
+
+
+
   const activeSpeakerTileInputs = computed<ActiveSpeakerTile[]>(() =>
     tiles.value.map((t) => ({
       peerId: t.peerId,
@@ -1370,12 +1370,12 @@ export function useCallEngine(options?: CallEngineOptions) {
     wsStatus,
     callDebugSnapshot,
     receiveQualityPressure,
-    /** SFU `active-speaker` id; differs from UI {@link activeSpeakerPeerId} from Web Audio. */
+    
     serverActiveSpeakerPeerId,
     receiveDeviceProfile,
     playbackRenderFpsPressureByPeerId,
     refreshInboundVideoDebugStats: collectInboundVideoDebugStats,
-    /** Remote viewport signal retained for UI/debug compatibility; fixed-quality video ignores it. */
+    
     setPeerVisible,
     callPresenceMessages,
     setRemoteListenVolume,
@@ -1389,7 +1389,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     isCameraActive,
     isScreenActive,
     toggleScreenShare,
-    /** Same WebSocket as the call; for app-level room messages (e.g. Mafia host). */
+    
     sendSignalingMessage: sendJson,
     subscribeSignalingMessage: addMessageListener,
   }

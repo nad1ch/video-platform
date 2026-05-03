@@ -33,10 +33,10 @@ import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
 
 const mafiaGameLog = createLogger('mafia-game')
 
-/**
- * Mafia *game* state: numbering (after shuffle), roles (host-only display later), phase.
- * `numberingOrder` empty → CallPage uses engine join order from `mafiaPlayers` store.
- */
+
+
+
+
 const NIGHT_ACTION_ROLES: MafiaNightActionKey[] = ['mafia', 'doctor', 'sheriff', 'don']
 
 const MAFIA_ROLES: ReadonlySet<MafiaRole> = new Set(['mafia', 'don', 'sheriff', 'doctor', 'civilian'])
@@ -66,7 +66,7 @@ const MAFIA_PAGE_BACKGROUND_ITEMS = Object.freeze([
   { id: 'preset-page-night', url: 'preset:night', type: 'preset' as const },
 ]) satisfies readonly BackgroundItem[]
 
-/** Preset round lengths (30s / 60s / 90s). */
+
 export const MAFIA_TIMER_PRESET_MS = [30_000, 60_000, 90_000] as const
 
 const MAFIA_TIMER_MIN_MS = 30_000
@@ -102,13 +102,13 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   const callSession = useCallSessionStore()
 
   const phase = ref<MafiaPhase | null>(null)
-  /** Use whole-object replacement only — never assign nested keys in place. */
+  
   const nightActions = ref<MafiaNightActions>({})
 
-  /** Which night-action slot a tile click applies to. */
+  
   const activeNightActionRole = ref<MafiaNightActionKey>('mafia')
 
-  /** Shuffled player order for seat numbers 1..N. Empty = use engine join order. */
+  
   const numberingOrder = ref<string[]>([])
 
   const roleByPeerId = shallowRef<Record<string, MafiaRole>>({})
@@ -144,10 +144,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     return localUserId === hostUserId && localSessionId === hostSessionId && localPeerId === hostPeerId
   })
 
-  /** For host: set after a successful `reshuffleGame`; `useMafiaHostSignaling` sends WS then clears. */
+  
   const reshuffleBroadcastPayload = ref<MafiaReshufflePayload | null>(null)
 
-  /** For host: first peer id selected in “Swap” mode; second click runs `swapSeatsByPeerId`. */
+  
   const hostSeatSwapSelectionPeerId = ref<string | null>(null)
 
   /**
@@ -175,16 +175,16 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   const settingsUpdateBroadcastPayload = ref<MafiaSettingsUpdatePayload | null>(null)
   const pageBackgroundSettingsBroadcastPayload = ref<MafiaPageBackgroundSettings | null>(null)
 
-  /** Shared round timer; `remaining = duration - (Date.now() - startedAt)` on each client. */
+  
   const mafiaTimer = ref<MafiaTimerState | null>(null)
 
-  /** Host: set in `startTimer`; `useMafiaHostSignaling` sends `mafia:timer-start` then clears. */
+  
   const timerStartBroadcastPayload = ref<MafiaTimerStartPayload | null>(null)
 
-  /** Host: set in `stopTimer`; composable sends `mafia:timer-stop` then clears. */
+  
   const timerStopBroadcastPayload = ref<MafiaTimerStopPayload | null>(null)
 
-  /** Host: set in `kickPlayer`; `useMafiaHostSignaling` sends `mafia:player-kick` then clears. */
+  
   const kickBroadcastPayload = ref<MafiaPlayerKickPayload | null>(null)
   const reviveBroadcastPayload = ref<MafiaPlayerRevivePayload | null>(null)
 
@@ -203,7 +203,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     }
   }
 
-  /** Host: night-action assignment vs building speaking-order queue (tile click). */
+  
   const hostInteractionMode = ref<MafiaHostInteractionMode>('night')
   const oldMafiaMode = ref(true)
   const deadBackgrounds = ref<MafiaBackgroundItem[]>([...MAFIA_PRESET_BACKGROUND_ITEMS])
@@ -219,7 +219,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
   const numberingKey = computed(() => numberingOrder.value.join('\u0000'))
 
-  /** Auto-derived when `nightActions` change (host UI). */
+  
   const lastNightResult = computed((): MafiaLastNightResult | null =>
     computeMafiaLastNightResult(nightActions.value),
   )
@@ -231,9 +231,9 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     return numberingOrder.value
   }
 
-  /**
-   * When participants change, keep shuffled order for survivors and append new peers (engine order).
-   */
+  
+
+
   function reconcileNumberingWithEngine(engineOrder: string[]): void {
     if (numberingOrder.value.length === 0) {
       return
@@ -270,7 +270,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     numberingOrder.value = next
   }
 
-  /** Remove role/background state for peer ids that are no longer in the call. */
+  
   function pruneGameStateToPeers(engineOrder: string[]): void {
     const s = new Set<string>()
     for (const id of engineOrder) {
@@ -294,7 +294,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     eliminationBackgroundByPeerId.value = bg
   }
 
-  /** Drop night-action seat refs outside 1..maxSeat. */
+  
   function pruneNightActionsToMaxSeat(maxSeat: number): void {
     if (maxSeat < 1) {
       nightActions.value = {}
@@ -318,9 +318,9 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     activeNightActionRole.value = k
   }
 
-  /**
-   * Host: set a night action target by role and seat. Replaces `nightActions` with a new object.
-   */
+  
+
+
   function setNightAction(role: MafiaNightActionKey, seat: number): void {
     if (!isMafiaHost.value) {
       return
@@ -333,10 +333,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     void nextTick()
   }
 
-  /**
-   * Host: assign the active night role’s target to a seat (1..N from tile #).
-   * Ignored when not host.
-   */
+  
+
+
+
   function assignNightActionForSeat(seat: number): void {
     if (!isMafiaHost.value) {
       return
@@ -347,9 +347,9 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     setNightAction(activeNightActionRole.value, seat)
   }
 
-  /**
-   * Host: set or clear the active night role’s target for a seat. Same seat again clears that role’s slot.
-   */
+  
+
+
   function assignOrClearNightActionForActiveRole(seat: number): void {
     if (!isMafiaHost.value) {
       return
@@ -878,9 +878,9 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     hostSeatSwapSelectionPeerId.value = peerId
   }
 
-  /**
-   * If `numberingOrder` is still empty, copy `joinOrder` so seat positions are a concrete list to permute.
-   */
+  
+
+
   function ensureNumberingOrderMaterialized(joinOrder: string[]): void {
     if (numberingOrder.value.length > 0) {
       return
@@ -924,10 +924,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     }
   }
 
-  /**
-   * Host: swap two players’ seat numbers; roles stay on the people (`roleByPeerId` unchanged).
-   * `nightActions` and `speakingQueue` (seat #s) are remapped so targets stay on the same people.
-   */
+  
+
+
+
   function swapSeatsByPeerId(peerA: string, peerB: string): void {
     if (!isMafiaHost.value) {
       return
@@ -1014,9 +1014,9 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     pageBackgroundSettingsBroadcastPayload.value = null
   }
 
-  /**
-   * Host speaking queue: append seat if not already present (order preserved).
-   */
+  
+
+
   function addSpeakingSeatIfNew(seat: number): void {
     if (!isMafiaHost.value) {
       return
@@ -1038,7 +1038,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     speakingQueue.value = speakingQueue.value.filter((n) => n !== seat)
   }
 
-  /** Host: empty the speaking order (broadcast via `useMafiaHostSignaling` like other queue edits). */
+  
   function clearSpeakingQueue(): void {
     if (!isMafiaHost.value) {
       return
@@ -1090,9 +1090,9 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     }
   }
 
-  /**
-   * Apply queue from `mafia:queue-update` (all peers; host applies echo from server to avoid re-send).
-   */
+  
+
+
   function applySpeakingQueueFromSignaling(seats: number[]): void {
     if (!Array.isArray(seats)) {
       speakingQueue.value = []
@@ -1128,9 +1128,9 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     }
   }
 
-  /**
-   * Apply a host-issued reshuffle (from WebSocket) so everyone shares numbering, roles, and grid order.
-   */
+  
+
+
   function applyMafiaReshuffleFromSignaling(payload: MafiaReshufflePayload): void {
     const list = payload.players
     if (list.length < 1) {
@@ -1314,10 +1314,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     mafiaHostSessionId.value = null
   }
 
-  /**
-   * Role on the tile: host sees everyone; a player sees only their own; others’ roles are hidden.
-   * Uses `roleByPeerId` (filled after host reshuffle + WS sync, or on join state apply).
-   */
+  
+
+
+
   function startTimer(durationMs: number): void {
     if (!isMafiaHost.value) {
       mafiaGameLog.info('startTimer ignored: not mafia host')
@@ -1375,16 +1375,16 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     mafiaTimer.value = null
   }
 
-  /** UI: show elimination placeholder only while Mafia life state is dead. */
+  
   function isMafiaPeerEliminated(peerId: string): boolean {
     return lifeStateForPeer(peerId) === 'dead'
   }
 
   type KickResult = { ok: true } | { ok: false; reason: 'not-host' | 'bad-peer' | 'self' | 'already' }
 
-  /**
-   * Host: mark a remote player dead and broadcast; tiles hide video for everyone.
-   */
+  
+
+
   function kickPlayer(peerId: string): KickResult {
     if (!isMafiaHost.value) {
       return { ok: false, reason: 'not-host' }
@@ -1447,9 +1447,9 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
   type ReviveResult = { ok: true } | { ok: false; reason: 'not-host' | 'bad-peer' | 'not-dead' | 'self' }
 
-  /**
-   * Host: soft-revive a remote player; camera state is not changed.
-   */
+  
+
+
   function revivePlayer(peerId: string): ReviveResult {
     if (!isMafiaHost.value) {
       return { ok: false, reason: 'not-host' }
@@ -1471,7 +1471,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     return { ok: true }
   }
 
-  /** Host: kill if alive/ghost, soft-revive if dead (camera state remains independent). */
+  
   function hostToggleMafiaPlayerLife(peerId: string): KickResult | ReviveResult {
     if (lifeStateForPeer(peerId) === 'dead') {
       return revivePlayer(peerId)

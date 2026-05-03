@@ -7,9 +7,9 @@ import { computed, useSlots } from 'vue'
  */
 withDefaults(
   defineProps<{
-    /** Shown in the brand area when the #brand slot is empty. */
+    
     title?: string
-    /** Extra classes on `<header>` (e.g. host / vote modifiers). */
+    
     headerClass?: string | Record<string, boolean> | Array<string | Record<string, boolean>>
   }>(),
   { title: '' },

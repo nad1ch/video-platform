@@ -1,7 +1,7 @@
-/**
- * Public browser origin for post-OAuth redirects and nadle links.
- * In production, set `BASE_URL` or `NADLE_CLIENT_ORIGIN` — no localhost fallback.
- */
+
+
+
+
 export function clientPublicOrigin(): string {
   const raw = process.env.BASE_URL ?? process.env.NADLE_CLIENT_ORIGIN
   if (typeof raw === 'string' && raw.trim().length > 0) {

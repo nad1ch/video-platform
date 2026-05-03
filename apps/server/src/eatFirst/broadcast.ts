@@ -18,13 +18,13 @@ function removeSubscription(gameId: string, ws: WebSocket): void {
   }
 }
 
-/* safeSend is now `safeSendJson` from `../utils/wsSafeSend` (imported above). */
+
 
 export function attachEatFirstSocketServer(wss: WebSocketServer): void {
-  // WS-level ping-frame heartbeat so half-open TCP clients are reaped and do
-  // not keep accumulating in `subs` forever. EatFirst has no separate JSON
-  // keep-alive; the WS ping is enough because EatFirst WS traffic is already
-  // chatty enough (state broadcasts) for proxies to see activity.
+  
+  
+  
+  
   attachWsHeartbeat(wss, { logLabel: 'eat-first-ws' })
 
   wss.on('connection', (ws) => {

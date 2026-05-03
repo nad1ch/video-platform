@@ -62,7 +62,7 @@ export function mountTwitchNadleAuth(app: Express): void {
 
   app.get('/api/nadle/me', handleGetNadleMe)
 
-  /** @deprecated Prefer POST /api/auth/logout — clears the same global session cookie. */
+  
   app.post('/api/nadle/logout', (_req: Request, res: Response) => {
     clearGlobalSessionCookie(res)
     res.status(204).end()

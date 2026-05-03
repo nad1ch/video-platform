@@ -59,9 +59,9 @@ export function mountBillingRoutes(app: Express): void {
     res.status(500).json({ error: { code: 'INTERNAL', message: e.message || 'Error' } })
   }
 
-  // Authoritative billing config snapshot for the FE pricing card. Auth-gated
-  // to match the rest of `/api/billing/*` (the `/app/billing` route is also
-  // auth-gated, so unauthenticated callers cannot reach the page anyway).
+  
+  
+  
   app.get(`${base}/config`, (req, res) => {
     void (async () => {
       try {
@@ -109,9 +109,9 @@ export function mountBillingRoutes(app: Express): void {
     })()
   })
 
-  // Owner-only request snapshot. Used by the FE modal to poll status so it can
-  // react to admin reject / needs_review / expired immediately, without waiting
-  // on a subscription `isActive` flip (which never happens for those statuses).
+  
+  
+  
   app.get(`${base}/jar/payment-request/:id`, (req, res) => {
     void (async () => {
       try {
@@ -132,9 +132,9 @@ export function mountBillingRoutes(app: Express): void {
     })()
   })
 
-  // Set/clear the billing notification email. Body: `{ "email": "..." }` or
-  // `{ "email": "" }` to clear. Returns the same shape as `subscription/me`
-  // so the FE can replace its singleton snapshot in one round-trip.
+  
+  
+  
   app.post(`${base}/billing-email`, (req, res) => {
     void (async () => {
       try {
@@ -163,28 +163,28 @@ export function mountBillingRoutes(app: Express): void {
     })()
   })
 
-  // Public verification endpoint: monobank Personal API webhook setup expects
-  // a fast 200 to confirm the URL belongs to us. Intentionally unauthenticated
-  // — Monobank's registration probe is a bare GET.
+  
+  
+  
   app.get(`${base}/mono-personal/webhook`, (_req, res) => {
     res.status(200).json({ ok: true })
   })
 
-  // Public statement webhook. ALWAYS return 200 quickly so monobank does not
+  
   // hammer us — activation safety lives in the service layer.
-  //
-  // Defense-in-depth: when MONO_WEBHOOK_SECRET is configured, require a matching
-  // `X-Mono-Secret` header (preferred) OR `?secret=<value>` query (fallback:
-  // Mono's Personal API registers a single URL, so secret-in-URL is the
-  // practical deployment path). Without this, an attacker who learned the
-  // private MONO_ACCOUNT_ID could forge a StatementItem with the right amount
-  // against a pending `PaymentRequest` and auto-activate Pro — the matcher's
-  // account-id gate alone is not sufficient once the id leaks.
-  //
-  // Responses are always 200 (even on secret mismatch) so Mono does not
-  // retry-storm when the secret rolls or the attacker probes.
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   app.post(`${base}/mono-personal/webhook`, (req, res) => {
-    // Reply first so monobank gets a fast 200 even if our matcher is slow.
+    
     res.status(200).json({ ok: true })
     void (async () => {
       try {
@@ -199,10 +199,10 @@ export function mountBillingRoutes(app: Express): void {
   })
 }
 
-/**
- * Constant-time compare helper (prevents timing leaks on secret equality).
- * Falls back to a strict `===` check when inputs have different lengths.
- */
+
+
+
+
 function constantTimeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) {
     return false
@@ -219,7 +219,7 @@ let warnedMissingMonoWebhookSecret = false
 function verifyMonoWebhookSecret(req: Request): boolean {
   const expected = (process.env.MONO_WEBHOOK_SECRET ?? '').trim()
   if (expected.length === 0) {
-    // Dev / not-yet-configured. Log once in production so the operator notices.
+    
     if (process.env.NODE_ENV === 'production' && !warnedMissingMonoWebhookSecret) {
       warnedMissingMonoWebhookSecret = true
       console.warn(

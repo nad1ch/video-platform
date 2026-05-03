@@ -69,7 +69,7 @@ export type NadleGlobalRatingRow = {
   losses: number
 }
 
-/** Query suffix e.g. `?streamerId=…` — same shape as before (always `res.json()`). */
+
 export async function fetchLeaderboardWins(querySuffix: string): Promise<NadleGlobalWinsRow[]> {
   const res = await apiFetch(`/api/leaderboard/wins${querySuffix}`)
   const j = (await res.json()) as { entries?: unknown }
@@ -89,7 +89,7 @@ export async function fetchLeaderboardWins(querySuffix: string): Promise<NadleGl
 
 export type FetchLeaderboardStreakResult = {
   entries: NadleGlobalStreakRow[]
-  /** Present when the request had a valid session (0 = no wins recorded). */
+  
   viewerMaxStreak?: number
 }
 

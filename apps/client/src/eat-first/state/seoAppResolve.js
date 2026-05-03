@@ -47,12 +47,12 @@ export function resolveAppSeoDescription(route, t) {
   return t('seo.metaDescription', { nick: STREAMER_NICK })
 }
 
-/**
- * Absolute URL for default OG/Twitter image (same origin as canonical).
- *
- * @param {string} originTrimmed — no trailing slash
- * @returns {string}
- */
+
+
+
+
+
+
 export function resolveDefaultOgImageUrl(originTrimmed) {
   if (!originTrimmed) {
     return ''

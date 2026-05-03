@@ -1,11 +1,11 @@
 import { mergeJson } from './mergePatch'
 
-/** Top-level room keys that should replace entirely (not deep-merge), mirroring Firestore map replace semantics. */
+
 const REPLACE_TOP = new Set(['voting', 'hands', 'playersReady'])
 
-/**
- * Merge a room document patch. `null` removes a key. `voting` / `hands` / `playersReady` replace wholesale.
- */
+
+
+
 export function mergeEatFirstRoom(existing: unknown, patch: unknown): unknown {
   if (patch === null || patch === undefined) {
     return existing
@@ -73,7 +73,7 @@ export function mergeEatFirstPlayerData(prev: unknown, patch: unknown): unknown 
   return o
 }
 
-/** Deep merge for rare nested player updates (e.g. revive flag). */
+
 export function mergePlayerDeep(existing: unknown, patch: unknown): unknown {
   return mergeJson(existing, patch)
 }

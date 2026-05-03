@@ -4,10 +4,10 @@ import { readStorageJson, writeStorageJson } from '@/utils/storageJson.js'
 
 const STORAGE_KEY = 'eat-first:onboarding-dismissed:v1'
 
-/**
- * @param {{ path: string, query: Record<string, string | string[] | undefined | null> }} route
- * @returns {'join'|'controlHost'|'controlPlayer'|'overlay'|null}
- */
+
+
+
+
 export function resolveOnboardingTourKeyFromRoute(route) {
   const v = eatViewFromRoute(route)
   if (v === 'join') return 'join'
@@ -20,7 +20,7 @@ export function resolveOnboardingTourKeyFromRoute(route) {
   return null
 }
 
-/** @returns {Record<string, boolean>} */
+
 function readMap() {
   if (typeof localStorage === 'undefined') return {}
   const o = readStorageJson(localStorage, STORAGE_KEY, {})
@@ -32,14 +32,14 @@ function writeMap(m) {
   writeStorageJson(localStorage, STORAGE_KEY, m)
 }
 
-/** @param {string} tourKey join | controlHost | controlPlayer | overlay */
+
 export function isOnboardingDismissed(tourKey) {
   const k = String(tourKey ?? '').trim()
   if (!k) return false
   return readMap()[k] === true
 }
 
-/** @param {string} tourKey */
+
 export function dismissOnboardingTour(tourKey) {
   const k = String(tourKey ?? '').trim()
   if (!k) return

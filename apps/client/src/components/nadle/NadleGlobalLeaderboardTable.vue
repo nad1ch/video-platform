@@ -24,7 +24,7 @@ defineProps<{
   tabWinsLabel: string
   tabStreakLabel: string
   tabRatingLabel: string
-  /** Shown above the table on the streak tab when the server returns the viewer’s best streak. */
+  
   selfStreakSummary: string | null
   loadingText: string
   emptyText: string
@@ -137,7 +137,7 @@ defineProps<{
 </template>
 
 <style scoped>
-/* Mirrored from NadleStreamPage.vue (global LB); parent :deep rules kept until dedup pass. */
+
 .nadle-page__global-lb {
   flex: 1 1 auto;
   min-width: 0;

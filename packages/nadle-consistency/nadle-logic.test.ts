@@ -1,7 +1,7 @@
-/**
- * Ground-truth tests: client vs server nadle helpers must agree.
- * Run: npm run test:nadle (from repo root)
- */
+
+
+
+
 import { describe, expect, it } from 'vitest'
 import { computeFeedback as coreComputeFeedback, wordGraphemeCount as coreWordGraphemeCount } from 'nadle-core'
 import {
@@ -17,7 +17,7 @@ import {
 
 type Fb = 'correct' | 'present' | 'absent'
 
-/** Length, per-index correctness, and multiset caps (present+correct per letter ≤ count in secret). */
+
 function assertFeedbackInvariants(secret: string, guess: string, fb: Fb[]): void {
   const s = [...secret]
   const g = [...guess]
@@ -66,10 +66,10 @@ describe('normalizeWord (client vs server)', () => {
     { input: '  КІТ  ' },
     { input: 'ҐРУНТ' },
     { input: 'їжак' },
-    { input: '\u0439\u0306' }, // й + combining breve — NFC may differ from precomposed
+    { input: '\u0439\u0306' }, 
     { input: '  слово  ' },
     { input: '' },
-    { input: 'a\u0301b' }, // decomposed é-like pattern on Latin (edge)
+    { input: 'a\u0301b' }, 
     { input: '\uD83D\uDE00', note: 'surrogate pair emoji' },
     { input: 'e\u0301', note: 'e + combining acute' },
     { input: '\u0045\u0301\u0323', note: 'mixed combining marks' },

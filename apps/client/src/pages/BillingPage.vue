@@ -42,17 +42,17 @@ const billingConfig = useBillingConfig()
 
 const modalOpen = ref(false)
 
-/* -------------------------------------------------------------------------- */
-/* Billing notification email                                                 */
-/* -------------------------------------------------------------------------- */
+
+
+
 
 const billingEmailDraft = ref('')
 const billingEmailSaving = ref(false)
 const billingEmailMessage = ref<{ kind: 'ok' | 'err'; text: string } | null>(null)
 
-// Pre-fill the input when the singleton snapshot arrives. We seed from the
-// effective `billingEmail` (override OR auth fallback) so users with an auth
-// email see their existing address immediately and can confirm-or-change.
+
+
+
 watch(
   subscriptionBillingEmail,
   (next, prev) => {
@@ -95,9 +95,9 @@ async function onSaveBillingEmail(): Promise<void> {
       }
       return
     }
-    // Server returns the same shape as `subscription/me` — push it into the
+    
     // singleton so every other UI consumer (header pill, toast notifier,
-    // admin views opened in another tab) sees the change immediately.
+    
     subscriptionState.value = r.data
     billingEmailMessage.value = {
       kind: 'ok',
@@ -392,9 +392,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* ============================================================================
-   Page layout
-   ========================================================================== */
+
+
+
 
 .billing-page {
   display: flex;
@@ -872,9 +872,9 @@ onMounted(() => {
   color: #ffd28a;
 }
 
-/* ============================================================================
-   Billing notification email card
-   ========================================================================== */
+
+
+
 
 .billing-email-card {
   margin: 0 auto;

@@ -1,0 +1,44 @@
+---
+description: When to keep code comments — English only, high signal, no noise
+alwaysApply: true
+---
+
+# Code comments policy
+
+## Language
+
+- **All new and retained comments** (including `//`, `/* */`, `/** */`, and inline CSS comments in Vue SFCs) must be **English** only.
+- **Do not** put Ukrainian or Russian prose in comments. Product-facing strings stay in their i18n/data files per locale rules; comments are for maintainers.
+
+## When to comment (keep)
+
+Keep a comment only when it carries information that is **not obvious from names/types** and one of:
+
+- **Invariant or contract** (ordering, lifecycle, idempotency, “must not” rules).
+- **Non-obvious bug workaround** (browser/engine quirk, race, stack overflow link, ticket id).
+- **Security or authority** note (why something is validated server-side, why a guard exists).
+- **Performance or coupling** note that would be dangerous to “simplify” without reading history.
+
+Prefer **one short block** over many scattered lines.
+
+## When not to comment (delete)
+
+- Restates the next line of code (“increment counter”, “return result”).
+- Restates obvious control flow (“loop over items”, “if null return”).
+- Section banners that duplicate file structure (`// --- utils ---`).
+- Duplicated doc already in types, JSDoc on the public API, or README.
+- Commented-out dead code — **remove the code** or restore it; do not leave blocks disabled in comments.
+
+## Edits in existing files
+
+- If a comment is useful but not English: **translate** to concise English or **delete** if redundant after translation.
+- If cleaning a file: aim to remove **most** comments and leave **only** the categories above — do not strip comments that document WebRTC/realtime ordering, billing edge cases, or layout bugs without replacing them with an equally clear English line.
+
+## Style
+
+- Imperative or neutral factual tone; no chatty filler.
+- No secrets, tokens, or PII in comments.
+
+## Bulk maintenance (repo)
+
+- `npm run comments:prune` runs `scripts/prune-low-signal-comments.mjs` on `apps/*` and `packages/*` (skips `*.d.ts`). It removes low-signal comments but **keeps** matches for directives, URLs, TODO/FIXME, and realtime/security keywords (see script). Re-run `npm run lint`, `npm run test:ci`, and `npm run build -w client` after changes; fix any newly surfaced `vue-tsc` issues with proper types instead of relying on removed comments.

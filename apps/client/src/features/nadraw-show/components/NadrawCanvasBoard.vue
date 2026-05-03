@@ -10,7 +10,7 @@ const BOARD_FILL = '#f5f2eb'
 
 const props = defineProps<{
   canDraw: boolean
-  /** Streamer drawing phases: show tool controls overlay. */
+  
   showToolbar?: boolean
 }>()
 
@@ -37,7 +37,7 @@ let shapeSnapshot: ImageData | null = null
 let shapeStartNorm: { nx: number; ny: number } | null = null
 let shapeKind: 'rect' | 'ellipse' | null = null
 
-/** Stroke paint color when erasing (sampled at stroke start); avoids transparent holes that show white behind the canvas. */
+
 let localEraseStrokeStyle: string | null = null
 const remoteEraseStrokeStyleById = new Map<string, string>()
 
@@ -72,7 +72,7 @@ function boardFillRgbaCss(): string {
   return rgb ? rgbaCssFromBytes(rgb.r, rgb.g, rgb.b, rgb.a) : 'rgba(245,242,235,1)'
 }
 
-/** Sample top-left pixel of canvas in device space (CSS coords × dpr). */
+
 function sampleStrokeStyleAtCss(cssX: number, cssY: number): string {
   const canvas = canvasRef.value
   if (!canvas || !ctx) {
@@ -211,10 +211,10 @@ function clearShapeGesture(): void {
   shapeKind = null
 }
 
-/**
- * Bucket fill at normalized click (0–1): only contiguous pixels matching the seed color
- * (same as `sampleStrokeStyleAtCss`), so existing strokes stay visible as boundaries.
- */
+
+
+
+
 function floodFillAtNormalized(nx: number, ny: number, colorHex: string): void {
   const canvas = canvasRef.value
   if (!canvas || !ctx) {

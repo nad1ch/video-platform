@@ -1,10 +1,10 @@
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 
-/**
- * Гучність відеоклітинок на overlay (окремий об’єкт у ref).
- *
- * @param {import('vue').Ref<Record<string, number>>} volumeByIdentity
- */
+
+
+
+
+
 export function useOverlayVolumeBindings(volumeByIdentity) {
   function mediaVolumeForPlayer(player) {
     const id = normalizePlayerSlotId(player?.id)

@@ -21,10 +21,10 @@ const emit = defineEmits(['update:volume'])
 
 const { user } = useAuth()
 
-/**
- * Single derived snapshot per player: one `getTile` + one `getVolume` per invalidation
- * (avoids a chain of computeds each re-reading `tile.value` and extra dependency edges).
- */
+
+
+
+
 const tileView = computed(() => {
   const raw = props.getTile(props.player)
   const volume = props.getVolume(props.player)

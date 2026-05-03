@@ -13,7 +13,7 @@ const { setTimeout: sleep } = require('timers/promises')
 const serverRoot = path.join(__dirname, '..')
 const prismaClientDir = path.join(serverRoot, 'node_modules', '.prisma')
 const prismaClientNested = path.join(prismaClientDir, 'client')
-/** Hoisted workspace install may also place engines under repo root. */
+
 const workspaceRoot = path.join(serverRoot, '..', '..')
 const rootPrismaDir = path.join(workspaceRoot, 'node_modules', '.prisma')
 
@@ -32,7 +32,7 @@ function tryRemoveTmpEngines() {
   }
 }
 
-/** Drop read-only so `rd` / Prisma rename are less likely to hit EPERM. */
+
 function clearReadOnlyWin(dir) {
   if (process.platform !== 'win32' || !fs.existsSync(dir)) {
     return
@@ -44,9 +44,9 @@ function clearReadOnlyWin(dir) {
   }
 }
 
-/**
- * Windows: Node's fs.rmSync often loses to AV/IDE locks on `.dll.node`; `rd /s /q` sometimes wins after dev servers stop.
- */
+
+
+
 function forceRemoveDir(dir) {
   if (!fs.existsSync(dir)) {
     return
@@ -78,7 +78,7 @@ function scrubPrismaArtifacts() {
   }
 }
 
-/** Avoid Git Bash–spawned shells; use cmd.exe + local prisma (matches double-click / CI). */
+
 function runPrismaGenerate() {
   if (process.platform === 'win32') {
     return spawnSync('cmd.exe', ['/d', '/c', 'npm exec -- prisma generate'], {

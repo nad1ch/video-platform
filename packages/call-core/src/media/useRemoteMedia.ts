@@ -208,7 +208,7 @@ export type InboundVideoDebugRow = {
   jitter?: number
 }
 
-/** DEV: track capture hints + inbound-rtp frame counters when the browser exposes them. */
+
 async function logInboundVideoDebug(consumer: Consumer, peerId: string): Promise<void> {
   if (!import.meta.env.DEV) {
     return
@@ -254,15 +254,15 @@ export function useRemoteMedia() {
   const receiveDeviceProfile = shallowRef<ReceiveDeviceProfile>(
     resolveReceiveDeviceProfile(readNavigatorDeviceProfileInput()),
   )
-  /** Last applied targets after receive-quality pressure (for debug overlay). */
+  
   const lastPreferredLayerTargetsByPeerId = shallowRef<
     Record<string, { spatialLayer: number; temporalLayer: number }>
   >({})
 
   const recvTransport = shallowRef<Transport | null>(null)
-  /** Stable MediaStream per remote peer (mutate with addTrack / removeTrack only). */
+  
   const streamsByPeerId = new Map<string, MediaStream>()
-  /** shallowRef(Map) clone-on-write — reliable Vue updates vs reactive(Map). */
+  
   const remotePeerStreamsMap = shallowRef(new Map<string, MediaStream>())
   const remotePeerStreams = computed<RemotePeerStream[]>(() => {
     const m = remotePeerStreamsMap.value
@@ -270,10 +270,10 @@ export function useRemoteMedia() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([peerId, stream]) => ({ peerId, stream }))
   })
-  /**
-   * Per-remote-peer counter: bump only when that peer's stream changes (not global).
-   * Single rev per peer (no separate refresh tick).
-   */
+  
+
+
+
   const remotePeerPlayRevs = shallowRef(new Map<string, number>())
   const consumeLifecycle = createConsumeLifecycleManager()
   const recvRecovery = createRecoveryCoordinator()
@@ -290,11 +290,11 @@ export function useRemoteMedia() {
   const recentSpeakerAtByPeerId = new Map<string, number>()
   /** Last preferred layers sent per recv video consumer (skip duplicate signaling). */
   const lastSentPreferredLayersByConsumerId = new Map<string, SimulcastPreferredLayers>()
-  /** Local receive-only: lowers remote *video* preferred layers when inbound stats look unhealthy. */
+  
   const receiveQualityPressure = shallowRef<ReceiveQualityPressure>('normal')
-  /**
-   * Phase 3.5: per-peer stable render-FPS pressure from inbound-rtp drop ratios (same poll as recv pressure).
-   */
+  
+
+
   const playbackRenderFpsPressureByPeerId = shallowRef(new Map<string, FpsRenderPressure>())
   const playbackRenderFpsHysteresisByPeer = new Map<
     string,
@@ -480,17 +480,17 @@ export function useRemoteMedia() {
     if (signalingRoom === null) {
       return
     }
-    // Always collect inbound stats and update the FPS-pressure UI signal —
-    // `playbackRenderFpsPressureByPeerId` feeds CallPage's `isSystemHealthy`
-    // / `isFullPowerMode` UI affordances and must keep updating even though
+    
+    
+    
     // spatial-layer signaling is currently disabled (single-encoding wire).
     // Spatial-layer downgrade decisions remain gated on
-    // `videoSpatialLayerSignalingEnabled` so this fix does NOT change desktop
-    // video quality.
+    
+    
     const rows = await collectInboundVideoDebugStats()
     // `collectInboundVideoDebugStats` awaits consumer.getStats() — `stopRemoteMedia`
-    // can run between the await and here (leaveCall / unmount). Re-check liveness
-    // so subsequent `schedulePreferredLayersUpdate()` / `room.sendJson` calls do
+    
+    
     // not fire against a closed socket.
     if (signalingRoom === null) {
       return
@@ -726,7 +726,7 @@ export function useRemoteMedia() {
         console.log('[track] ended', track.id, { peerId })
       }
     }
-    /** `track.muted` is not a Vue reactive source — tiles must re-run readiness when RTP starts (unmute). */
+    
     track.addEventListener('unmute', () => {
       if (import.meta.env.DEV) {
         console.log('[track] unmuted', track.id, { peerId, kind: track.kind })
@@ -907,7 +907,7 @@ export function useRemoteMedia() {
     }
   }
 
-  /** Outer entry: inflight coalescing + `runConsumeProducer`. See `consumeLifecycle.ts`. */
+  
   async function consumeProducer(
     device: Device,
     room: SendTransportRoomApi,
@@ -1069,7 +1069,7 @@ export function useRemoteMedia() {
     schedulePreferredLayersUpdate()
   }
 
-  /** Public entry — goes through the recv apply queue so it never overlaps listener-driven applies. */
+  
   function syncExistingProducers(
     device: Device,
     room: SendTransportRoomApi,
@@ -1161,7 +1161,7 @@ export function useRemoteMedia() {
       // Close the matching consumer (if any) and drop the stale track from the
       // peer's composite stream. Safe when we don't have a consumer yet: the
       // subsequent producer-sync / new-producer flow will not re-create one
-      // because producerInfoById is cleared here too.
+      
       const consumer = consumersByProducerId.get(producerId)
       if (consumer && !consumer.closed) {
         lastSentPreferredLayersByConsumerId.delete(consumer.id)

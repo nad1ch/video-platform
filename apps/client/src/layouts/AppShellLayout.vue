@@ -58,9 +58,9 @@ const { t, locale } = useI18n()
 const callRoomHeaderJoin = useCallRoomHeaderJoinStore()
 const auth = useAuth()
 const { openStreamAuthModal } = useStreamAuthModal()
-// Header gold "PRO" pill — driven by the same singleton subscription state
-// the global billing notifier keeps fresh (~20s tick), so the badge appears
-// automatically when Pro is activated and disappears when admin cancels.
+
+
+
 const { isProActive: isProActiveSubscription, expiresAt: proExpiresAt } = useProSubscription()
 const proHeaderLinkTo = { path: '/app/billing' } as const
 const proHeaderLabel = computed(() => {
@@ -103,7 +103,7 @@ const isAdminRoute = computed(() => String(route.name ?? '').startsWith('admin-'
 const isHeavyVisualRoute = computed(() => isHomeRoute.value)
 const shellShowsCoinBalance = computed(() => showChrome.value)
 
-/** Nadle stream + Nadraw: дати viewport `min-height: 0`, щоб сторінка могла займати залишок висоти без нескінченного росту. */
+
 const isNadleStreamRoute = computed(
   () =>
     route.name === 'nadle-streamer' ||
@@ -283,7 +283,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', syncMafiaSettingsPopoverPosition)
 })
 
-/** URL source of truth for OBS / stream layout (`?mode=view`). */
+
 const isMafiaViewMode = computed(() => mafiaViewQueryIsView(route.query.mode))
 
 function mafiaQueryAsStringRecord(
@@ -1137,7 +1137,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   line-height: 1;
 }
 
-/* Route content crossfades; leaving page overlays the new one to avoid blank gaps. */
+
 .app-shell-route-stack {
   position: relative;
   flex: 1 1 auto;
@@ -1645,7 +1645,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   object-fit: contain;
 }
 
-/* Same look as `AppShellStreamNav` .stream-nav__link (separate scoped component). */
+
 .app-shell-header__stream-center .stream-nav__link {
   font-size: 0.72rem;
   font-weight: 700;

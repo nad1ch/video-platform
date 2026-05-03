@@ -59,8 +59,8 @@ async function authorizePlayerAction(
   slotId: string,
   body: { joinToken?: unknown; deviceId?: unknown },
 ): Promise<boolean> {
-  // Host/admin for this game always wins — supports the admin overlay UI
-  // which acts on behalf of any slot without carrying that slot's token.
+  
+  
   if (await eatFirstSessionCanOperateGame(req.headers.cookie, gameId)) {
     return true
   }
@@ -114,12 +114,12 @@ export function mountEatFirstRoutes(app: Express): void {
     void (async () => {
       try {
         const gameId = String(req.params.gameId ?? '')
-        // When called by an authenticated host/admin, stamp them as the game
-        // owner so later mutations route through the per-game gate. Anonymous
-        // callers (public join/overlay pages that GET and opportunistically
-        // POST ensure) still get the row created without an owner — legacy
-        // ownership fallback in `eatFirstSessionCanOperateGame` keeps such
-        // rooms usable while still isolating hosts to games they created.
+        
+        
+        
+        
+        
+        
         const ownerUserId = await resolveEatFirstOperatorUserId(req.headers.cookie)
         const created = await eatFirstEnsureGame(gameId, ownerUserId)
         res.json({ created })
@@ -157,8 +157,8 @@ export function mountEatFirstRoutes(app: Express): void {
         const rawSlot = String(body.playerId ?? '')
         const slotId = normalizeEatFirstSlot(rawSlot)
         if (!(await authorizePlayerAction(req, res, gameId, slotId, body))) return
-        // Null for slot-token anonymous callers (they never become owners);
-        // host/admin callers are stamped on first creation.
+        
+        
         const ownerUserId = await resolveMutationOwnerUserId(req)
         await eatFirstPostHand(gameId, rawSlot, Boolean(body.raised), ownerUserId)
         res.status(204).end()

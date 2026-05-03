@@ -13,7 +13,7 @@ function requiredEnv(name: string): string {
   return v
 }
 
-/** Must match the Authorized redirect URI in Google Cloud (and token exchange). */
+
 export function resolveGoogleOAuthRedirectUri(): string {
   const explicit = process.env.GOOGLE_OAUTH_REDIRECT_URI
   if (typeof explicit === 'string' && explicit.trim().length > 0) {
@@ -25,10 +25,10 @@ export function resolveGoogleOAuthRedirectUri(): string {
   return `${clientPublicOrigin()}/api/auth/google/callback`
 }
 
-/**
- * Step 1: Google OAuth 2.0 authorization URL (Authorization Code flow).
- * `state` should carry signed post-login path (see `signOAuthReturnPath` in auth/session/sessionJwt).
- */
+
+
+
+
 export function getGoogleAuthUrl(state: string): string {
   const clientId = requiredEnv('GOOGLE_CLIENT_ID')
   const redirectUri = resolveGoogleOAuthRedirectUri()
@@ -38,14 +38,14 @@ export function getGoogleAuthUrl(state: string): string {
     response_type: 'code',
     scope: 'openid email profile',
     access_type: 'offline',
-    /** Account picker + consent: avoids silent re-pick of the same Google session after app logout. */
+    
     prompt: 'select_account consent',
     state,
   })
   return `https://accounts.google.com/o/oauth2/v2/auth?${p.toString()}`
 }
 
-/** Step 2: exchange authorization code for access token. */
+
 export async function exchangeCodeForToken(code: string): Promise<string> {
   const clientId = requiredEnv('GOOGLE_CLIENT_ID')
   const clientSecret = requiredEnv('GOOGLE_CLIENT_SECRET')
@@ -77,10 +77,10 @@ export async function exchangeCodeForToken(code: string): Promise<string> {
   return data.access_token
 }
 
-/**
- * Step 3: userinfo → SessionUser (same JWT / cookie shape as Twitch).
- * Maps conceptually: id, name → display_name, picture → profile_image_url, provider "google".
- */
+
+
+
+
 export async function getUserProfile(accessToken: string): Promise<GoogleProfileForSession> {
   const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
     headers: { Authorization: `Bearer ${accessToken}` },

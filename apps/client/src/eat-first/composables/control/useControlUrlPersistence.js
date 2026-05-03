@@ -29,7 +29,7 @@ export function useControlUrlPersistence({ route, router, gameId, isAdmin, admin
     })
   }
 
-  /** Прибираємо `key` / `role=admin` з адресного рядка; залишаємо лише `host=1`. */
+  
   watch(
     () => [route.path, isAdmin.value, route.query.key, route.query.role],
     () => {
@@ -42,7 +42,7 @@ export function useControlUrlPersistence({ route, router, gameId, isAdmin, admin
     { flush: 'post' },
   )
 
-  /** Підставляє `game` у URL з пам’яті, щоб F5 не скидав кімнату. */
+  
   watch(
     () => [route.path, String(route.query.game ?? ''), adminAccessDenied.value],
     () => {

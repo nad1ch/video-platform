@@ -1,4 +1,4 @@
-/// <reference types="vite/client" />
+
 
 import type { RtpCapabilities } from 'mediasoup-client/types'
 import { onUnmounted, ref, shallowRef } from 'vue'
@@ -55,10 +55,10 @@ function assertProductionUsesWss(url: string): void {
   }
 }
 
-/**
- * Normalize path (strip trailing slashes), then if the path is empty or root-only, use `/ws`
- * for nginx-style upstreams. Avoids `//ws` when the env value is `wss://host/`.
- */
+
+
+
+
 function withDefaultSignalingPath(url: string): string {
   try {
     const u = new URL(url)
@@ -83,7 +83,7 @@ function resolveWsUrl(explicit?: string): string {
     if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) {
       url = fromEnv.trim()
     } else if (import.meta.env.DEV) {
-      // Match the Vite dev proxy target: Windows can resolve localhost to an address the WS upgrade path does not use.
+      
       url = 'ws://127.0.0.1:3000'
     } else {
       throw new Error(
@@ -300,7 +300,7 @@ function tryParseNewProducerNotice(data: unknown): RemoteProducerInfo | null {
 }
 
 export function useRoomConnection(wsUrl?: string) {
-  /** Resolve at first connect so the app shell mounts even when prod env is misconfigured. */
+  
   let memoResolvedUrl: string | undefined
   function getResolvedWsUrl(): string {
     if (memoResolvedUrl === undefined) {
@@ -326,7 +326,7 @@ export function useRoomConnection(wsUrl?: string) {
     }
   }
 
-  /** JSON ping so reverse proxies see traffic in background tabs (WS ping frames alone are not always enough). */
+  
   function startSignalingKeepAlive(intervalMs = 25_000): void {
     stopSignalingKeepAlive()
     keepAliveTimer = setInterval(() => {
@@ -573,10 +573,10 @@ export function useRoomConnection(wsUrl?: string) {
     peers.value = []
     lastRoomState.value = null
     // Do NOT clear `messageListeners` here — they are owned by their subscriber
-    // (the unsub closure returned from `addMessageListener`) and are expected to
-    // survive a leave→rejoin cycle within the same component instance. The
-    // engine top-level registrations (presence, chat, raise-hand, mafia
-    // force-controls in CallPage) would otherwise go silent after rejoin.
+    
+    
+    
+    
     // Full cleanup still happens via each subscriber's own scope dispose.
     pendingNewProducers.length = 0
     bufferNewProducers = true

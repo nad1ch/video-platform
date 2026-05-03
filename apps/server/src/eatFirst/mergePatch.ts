@@ -1,4 +1,4 @@
-/** JSON merge: object patches recurse; `null` removes a key (JSON Merge Patch style). */
+
 export function mergeJson(existing: unknown, patch: unknown): unknown {
   if (patch === null || patch === undefined) {
     return existing

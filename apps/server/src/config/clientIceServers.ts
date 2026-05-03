@@ -50,9 +50,9 @@ function parseJsonArray(raw: string): ClientIceServer[] | undefined {
   }
 }
 
-/**
- * Reads env on each call so tests / dynamic config can override without restart if needed.
- */
+
+
+
 export function getClientIceServersFromEnv(): ClientIceServer[] | undefined {
   const json = process.env.ICE_SERVERS_JSON?.trim()
   if (json) {

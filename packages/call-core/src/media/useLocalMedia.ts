@@ -9,9 +9,9 @@ import {
 import { getCallVideoConstraints } from './videoQualityPreset'
 
 export type UseLocalMediaOptions = {
-  /** Defaults to `auto_large_room` when omitted. */
+  
   getVideoPublishTier?: () => VideoPublishTier
-  /** Defaults to `audio-video`; `audio-only` reuses the same audio path without camera capture. */
+  
   mediaMode?: () => 'audio-video' | 'audio-only'
 }
 
@@ -31,7 +31,7 @@ async function safeEnumerateDevices(): Promise<MediaDeviceInfo[]> {
   }
 }
 
-/** Explicit pick from enumerateDevices: `ideal` can keep the previous device; `exact` forces the switch. */
+
 async function getUserMediaWithDeviceIdExactThenIdeal(
   constraints: MediaStreamConstraints,
   kind: 'audio' | 'video',
@@ -74,10 +74,10 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
   const resolveMediaMode = (): 'audio-video' | 'audio-only' =>
     options?.mediaMode?.() === 'audio-only' ? 'audio-only' : 'audio-video'
   const localStream = shallowRef<MediaStream | null>(null)
-  /** Microphone and camera start off until the user turns them on. */
+  
   const micEnabled = ref(false)
   const camEnabled = ref(false)
-  /** Bumps when local stream or tracks change so <video> re-runs play(). */
+  
   const localPlayRev = ref(0)
 
   const audioInputDevices = ref<CallMediaDeviceOption[]>([])

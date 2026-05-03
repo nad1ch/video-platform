@@ -7,9 +7,9 @@ import mafiaTimerClock from '@/assets/mafia/ui/timer-clock.svg'
 
 const props = withDefaults(
   defineProps<{
-    /** Back-compat; prefer `viewMode`. */
+    
     streamView?: boolean
-    /** Mafia `?mode=view` — timer only, no host controls. */
+    
     viewMode?: boolean
   }>(),
   { streamView: false, viewMode: undefined },
@@ -145,7 +145,7 @@ function onToggleTimer(): void {
 <style scoped src="@/components/call/callFloatingSurface.css"></style>
 
 <style scoped>
-/* Stacking: below call dock (40) and tile menus (40); above call grid stage. */
+
 .mafia-overlay {
   position: absolute;
   inset: 0;
@@ -153,7 +153,7 @@ function onToggleTimer(): void {
   pointer-events: none;
 }
 
-/* Layout + spacing: matches `.call-page__dock` flex / padding / max-width. */
+
 .mafia-overlay__header {
   position: absolute;
   top: calc(max(0px, env(safe-area-inset-top, 0px)) + 6px);
@@ -269,7 +269,7 @@ function onToggleTimer(): void {
   align-self: center;
 }
 
-/* Typography aligned with `.call-page__toast` / call HUD. */
+
 .mafia-overlay__timer-text {
   font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
   font-size: 20px;
