@@ -24,7 +24,7 @@ export function useOverlayUiState(ctx) {
 
   const dramaPersonal = computed(() => isPersonal.value && aliveForCinema.value === 3)
 
-  /** Тільки глобальна сітка: на персональному оверлеї без vignette по центру вебки */
+  
   const overlayDrama = computed(() => dramaMode.value)
 
   const globalStatusLine = computed(() => {

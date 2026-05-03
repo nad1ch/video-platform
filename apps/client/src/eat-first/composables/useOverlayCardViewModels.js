@@ -68,11 +68,11 @@ export function useOverlayCardViewModels(ctx) {
     mediaVolumeForPlayer: mediaVolumeFn,
   } = ctx
 
-  /** @type {import('vue').ShallowRef<Map<string, import('vue').UnwrapNestedRefs<{ player: Record<string, unknown>, tile: unknown, volume: number, card: Record<string, unknown> }>>>} */
+  
   const mosaicRowById = shallowRef(new Map())
-  /** Стабільний порядок id; не оновлюємо масив, якщо послідовність тих самих id не змінилась. */
+  
   const mosaicOrderedIds = shallowRef([])
-  /** Рядки мозаїки — той самий масив-реф, поки membership/order row-рефів не змінився (менше v-for churn). */
+  
   const globalMosaicCardViewModels = shallowRef([])
 
   function slotNumFromId(id) {
@@ -186,7 +186,7 @@ export function useOverlayCardViewModels(ctx) {
       return
     }
 
-    // Read refs so watchEffect re-runs when mosaic-driving state changes (void satisfies no-unused-expressions).
+    
     void nominationsRoomSlice.value
     void handsMap.value
     void votes.value

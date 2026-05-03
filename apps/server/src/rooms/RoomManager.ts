@@ -34,10 +34,10 @@ export class RoomManager {
       this.pendingRoomWorkers.set(roomId, pooled)
       pending = Room.create(roomId, pooled)
         .then((room) => {
-          // Defensive: worker may have died between `Room.create` starting
-          // and resolving. `registerRoom` already throws on a dead worker,
+          
+          
           // but close the orphaned router explicitly so the mediasoup-side
-          // child is not leaked waiting for GC.
+          
           if (pooled.dead) {
             try {
               if (!room.getRouter().closed) {
@@ -53,9 +53,9 @@ export class RoomManager {
           return room
         })
         .finally(() => {
-          // Delete only if this is still the current pending entry — an
-          // `evacuateRoomsForDeadWorker` call could have cleared us earlier
-          // and a new getOrCreateRoom may have started a fresh creation.
+          
+          
+          
           if (this.pendingRooms.get(roomId) === pending) {
             this.pendingRooms.delete(roomId)
             this.pendingRoomWorkers.delete(roomId)
@@ -112,9 +112,9 @@ export class RoomManager {
         this.rooms.delete(room.id)
       }
     }
-    // Drop pending creations bound to the dead worker. The original Room.create
-    // promise's `.then` guards via `pooled.dead`, but clearing here makes the
-    // next `getOrCreateRoom` start a fresh Promise on a live worker instead
+    
+    
+    
     // of returning the stale one to all concurrent callers.
     for (const [roomId, pooled] of [...this.pendingRoomWorkers.entries()]) {
       if (pooled === entry) {

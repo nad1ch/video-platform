@@ -1,10 +1,10 @@
-/**
- * Admin allowlists (source of truth on the server).
- * Location: `apps/server/src/auth/resolveUserRole.ts` (not under client `src/utils`).
- */
+
+
+
+
 import type { SessionUser } from './session/types'
 
-/** Parse comma-separated env (e.g. ADMIN_EMAILS, ADMIN_TWITCH_IDS). */
+
 export function parseAdminEnvList(raw: string | undefined): string[] {
   if (raw == null || typeof raw !== 'string') {
     return []
@@ -24,7 +24,7 @@ export function resolveUserRole(input: {
   provider?: SessionUser['provider']
   id: string
   email?: string
-  /** Helix numeric user id; for Twitch prefer passing explicitly alongside `id`. */
+  
   twitchId?: string
 }): 'admin' | 'user' {
   const adminEmails = parseAdminEnvList(process.env.ADMIN_EMAILS).map((e) => e.toLowerCase())

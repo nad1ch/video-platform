@@ -14,10 +14,10 @@ const TX_SERIALIZABLE: { isolationLevel: Prisma.TransactionIsolationLevel } = {
   isolationLevel: 'Serializable',
 }
 
-/**
- * Outcome of matching a single transaction. Distinct from the per-transaction
- * matching loop result so callers can render audit-quality logs.
- */
+
+
+
+
 export type MatchTxnOutcome =
   | { kind: 'matched'; transactionId: string; paymentRequestId: string; userId: string; activated: boolean }
   | { kind: 'needs_review'; transactionId: string; paymentRequestIds: string[] }
@@ -70,7 +70,7 @@ async function activateProInTx(
     select: { expiresAt: true, status: true },
   })
 
-  // Stack (extend) when there is an active future window; otherwise start now.
+  
   const stillActive =
     existing != null &&
     existing.status === 'active' &&
@@ -94,10 +94,10 @@ async function activateProInTx(
       status: 'active' satisfies SubscriptionStatus,
       // Do NOT rewrite startsAt for renewals — preserves the historical timeline.
       expiresAt,
-      // Reset email single-flight claims so the NEXT future expiry / cancellation
-      // fires its user notification. Without this, a user who lets Pro lapse
-      // (or has it cancelled), then re-pays and lapses again, would silently
-      // miss the second "Pro закінчився" / "Pro скасовано" email because the
+      
+      
+      
+      
       // claim timestamp from the previous lifecycle is still set.
       expiredEmailSentAt: null,
       cancelledEmailSentAt: null,
@@ -145,7 +145,7 @@ export async function tryAutoMatchTransaction(
       return { kind: 'skipped', transactionId: monoTransactionDbId, reason: 'no_candidates' }
     }
     if (!transactionEligibleForAutoMatch(txn, expectedAccountId)) {
-      // Negative / outgoing / wrong account / wrong currency / already matched.
+      
       return {
         kind: 'skipped',
         transactionId: txn.id,
@@ -159,7 +159,7 @@ export async function tryAutoMatchTransaction(
         amount: txn.amount,
         currency: CURRENCY_UAH,
         matchedTransactionId: null,
-        // operationTime > createdAt AND operationTime < expiresAt
+        
         createdAt: { lt: txn.operationTime },
         expiresAt: { gt: txn.operationTime },
       },
@@ -172,8 +172,8 @@ export async function tryAutoMatchTransaction(
     }
 
     if (candidates.length > 1) {
-      // Ambiguous — never auto-activate. Mark each currently-eligible candidate
-      // as `needs_review` and leave transaction unmatched so admin can decide.
+      
+      
       const flagged: string[] = []
       for (const c of candidates) {
         const updated = await tx.paymentRequest.updateMany({
@@ -192,7 +192,7 @@ export async function tryAutoMatchTransaction(
       return { kind: 'needs_review', transactionId: txn.id, paymentRequestIds: flagged }
     }
 
-    // Exactly one candidate.
+    
     const winner = candidates[0]!
 
     // Single-flight on transaction (lose race → bail).
@@ -219,7 +219,7 @@ export async function tryAutoMatchTransaction(
       },
     })
     if (reqUpdate.count === 0) {
-      // Roll back transaction attachment so it remains available for re-evaluation.
+      
       await tx.monoTransaction.updateMany({
         where: { id: txn.id, matchedPaymentRequestId: winner.id },
         data: { matchedPaymentRequestId: null },
@@ -259,7 +259,7 @@ export async function approvePaymentRequestInTx(
       return { activated: false, finalStatus: 'rejected' as PaymentRequestStatus }
     }
     if (req.status === 'auto_matched' || req.status === 'approved') {
-      // Already activated — never extend twice for the same request.
+      
       return { activated: false, finalStatus: req.status as PaymentRequestStatus }
     }
     if (req.status === 'rejected' || req.status === 'expired') {

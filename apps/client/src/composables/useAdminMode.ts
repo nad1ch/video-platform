@@ -4,10 +4,10 @@ import { useAuth } from '@/composables/useAuth'
 
 const LS_KEY = 'isAdmin'
 
-/**
- * Client-only dev/QA “admin” overlay (Coin Hub, etc.): query `?admin=1`,
- * `localStorage['isAdmin']==='1'`, or `user.role==='admin'`. Does not grant server privileges.
- */
+
+
+
+
 export function useAdminMode() {
   const route = useRoute()
   const { user } = useAuth()

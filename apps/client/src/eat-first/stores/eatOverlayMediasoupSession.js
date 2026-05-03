@@ -3,13 +3,13 @@ import { ref } from 'vue'
 import { newCallTabPeerId } from 'call-core'
 import { resolveOverlayPeerDisplayName } from '../utils/overlayParticipantDisplay.js'
 
-/** Окремий session slice для Eat overlay — не змішується з Video call (`callSession`). */
+
 export const useEatOverlayMediasoupSession = defineStore('eatOverlayMediasoup', () => {
   const roomId = ref('')
   const selfPeerId = ref(newCallTabPeerId())
   const selfDisplayName = ref('Spectator')
   const inCall = ref(false)
-  const remoteDisplayNames = ref(/** @type {Record<string, string>} */ ({}))
+  const remoteDisplayNames = ref( ({}))
 
   function replaceRemoteDisplayNames(peers) {
     const next = {}
@@ -35,7 +35,7 @@ export const useEatOverlayMediasoupSession = defineStore('eatOverlayMediasoup', 
     remoteDisplayNames.value = {}
   }
 
-  /** Same semantics as `callSession.labelFor` — delegated to `resolveOverlayPeerDisplayName`. */
+  
   function labelFor(peerId) {
     return resolveOverlayPeerDisplayName(peerId, remoteDisplayNames.value, {
       selfPeerId: selfPeerId.value,

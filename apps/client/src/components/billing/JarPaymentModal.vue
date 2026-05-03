@@ -125,7 +125,7 @@ onBeforeUnmount(() => {
         </header>
 
         <div class="jar-modal__body">
-          <!-- 1) Creating the request -->
+          
           <template v-if="kind === 'creating'">
             <div class="jar-modal__state">
               <div class="jar-modal__spinner" aria-hidden="true" />
@@ -133,7 +133,7 @@ onBeforeUnmount(() => {
             </div>
           </template>
 
-          <!-- 2) Awaiting payment / checking — main flow -->
+          
           <template v-else-if="isPayable">
             <!--
               Price + currency are read from the server-issued PaymentRequestDto
@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
             </p>
           </template>
 
-          <!-- 3) needs_review -->
+          
           <template v-else-if="isReview">
             <div class="jar-modal__state jar-modal__state--review">
               <p class="jar-modal__state-title">Платіж на ручній перевірці</p>
@@ -233,7 +233,7 @@ onBeforeUnmount(() => {
             </div>
           </template>
 
-          <!-- 4) Success -->
+          
           <template v-else-if="isSuccess">
             <div class="jar-modal__state jar-modal__state--success">
               <p class="jar-modal__state-title">StreamAssist Pro активовано</p>
@@ -253,7 +253,7 @@ onBeforeUnmount(() => {
             </div>
           </template>
 
-          <!-- 5) Rejected -->
+          
           <template v-else-if="isRejected">
             <div class="jar-modal__state jar-modal__state--rejected">
               <p class="jar-modal__state-title">Платіж відхилено</p>
@@ -269,7 +269,7 @@ onBeforeUnmount(() => {
             </div>
           </template>
 
-          <!-- 6) Expired -->
+          
           <template v-else-if="isExpired">
             <div class="jar-modal__state jar-modal__state--expired">
               <p class="jar-modal__state-title">Час на оплату вийшов</p>
@@ -293,7 +293,7 @@ onBeforeUnmount(() => {
             </div>
           </template>
 
-          <!-- 7) Error -->
+          
           <template v-else-if="isErrorState">
             <div class="jar-modal__state jar-modal__state--error">
               <p class="jar-modal__state-title">Не вдалося відкрити оплату</p>

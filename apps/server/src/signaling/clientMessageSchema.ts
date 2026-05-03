@@ -62,7 +62,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       peerId: z.string().min(1),
       userId: z.string().min(1).max(128).optional(),
       displayName: z.string().max(64).optional(),
-      /** Optional profile image (https) announced at join; broadcast to room with peer roster. */
+      
       avatarUrl: z.string().max(2048).optional(),
     }),
   }),
@@ -92,7 +92,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       kind: z.enum(['audio', 'video']),
       rtpParameters: z.unknown(),
       requestId: z.string().min(1),
-      /** Outbound video semantic; default `camera` on server. */
+      
       videoSource: z.enum(['camera', 'screen']).optional(),
     }),
   }),
@@ -103,14 +103,14 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       source: z.enum(['camera', 'screen']),
     }),
   }),
-  /** Pause/resume this peer's outbound video producers so remotes get `track.muted`, not a black tile. */
+  
   z.object({
     type: z.literal('set-outbound-video-paused'),
     payload: z.object({
       paused: z.boolean(),
     }),
   }),
-  /** UI metadata only: announce whether this peer muted their local microphone. */
+  
   z.object({
     type: z.literal('set-audio-muted'),
     payload: z.object({
@@ -138,7 +138,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('client-ping'),
     payload: z.object({}).optional(),
   }),
-  /** Answer to server JSON `{ type: 'ping' }` (nginx / proxy idle timeouts). */
+  
   z.object({
     type: z.literal('pong'),
     payload: z.object({}).optional(),
@@ -182,7 +182,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal(MafiaWs.queueUpdate),
     payload: z.object({
-      /** 1-based seat indices; order preserved; max length bounded server-side. */
+      
       speakingQueue: z.array(z.number().int().min(1).max(12)).max(16),
     }),
   }),

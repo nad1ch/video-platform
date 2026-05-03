@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { isNavigationFailure, type Router } from 'vue-router'
 
-/** Pending in-flight client navigations (lazy route chunks + guards). */
+
 export const routeNavLoadingDepth = ref(0)
 export const routeNavLoadingVisible = ref(false)
 
@@ -77,10 +77,10 @@ function releaseRouteNavLoadingAfterPaint(): void {
   })
 }
 
-/**
- * Full-screen route loader: bump on navigation start, release when it settles or fails.
- * Registered first so it wraps the whole guard chain.
- */
+
+
+
+
 export function installRouteNavLoadingGuards(router: Router): void {
   router.beforeEach(() => {
     bumpRouteNavLoading()

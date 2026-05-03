@@ -1,12 +1,12 @@
-/**
- * Minimal JSON helpers for localStorage/sessionStorage (silent failures).
- */
 
-/**
- * @param {Storage | null | undefined} storage
- * @param {string} key
- * @param {unknown} fallback returned when missing, empty, or parse error
- */
+
+
+
+
+
+
+
+
 export function readStorageJson(storage, key, fallback) {
   if (storage == null || typeof storage === 'undefined') {
     return fallback
@@ -22,11 +22,11 @@ export function readStorageJson(storage, key, fallback) {
   }
 }
 
-/**
- * @param {Storage | null | undefined} storage
- * @param {string} key
- * @param {unknown} value
- */
+
+
+
+
+
 export function writeStorageJson(storage, key, value) {
   if (storage == null || typeof storage === 'undefined') {
     return

@@ -1,7 +1,7 @@
 /**
  * Minimal monobank Personal API wrapper.
  *
- * Spec: https://api.monobank.ua/docs/  ("Особистий API")
+ * Spec: https://api.monobank.ua/docs/ (Monobank "Personal API" docs)
  *
  * One endpoint used by the MVP Jar matcher:
  *   GET  /personal/statement/{account}/{from}/{to}
@@ -51,15 +51,15 @@ export function readPersonalConfig(): MonoPersonalConfig | null {
   return { token, accountId }
 }
 
-/** Raw monobank StatementItem shape (subset we rely on). */
+
 export type RawMonoStatementItem = {
   id: string
   time: number
   description: string | null
-  /** Signed kopecks (negative = outgoing). */
+  
   amount: number
   operationAmount: number
-  /** ISO-4217 numeric (980 = UAH). */
+  
   currencyCode: number
   commissionRate: number
   cashbackAmount: number
@@ -69,24 +69,24 @@ export type RawMonoStatementItem = {
   comment?: string
 }
 
-/** Normalized statement item used by the matcher. */
+
 export type NormalizedStatementItem = {
   monoTransactionId: string
-  /** Kopecks, always positive (absolute value). */
+  
   amount: number
-  /** `"incoming"` for credits (positive raw `amount`), `"outgoing"` for debits. */
+  
   direction: 'incoming' | 'outgoing'
-  /** ISO-4217 alphabetic — `"UAH"` only currently exposed (980). */
+  
   currency: string
   description: string | null
   operationTime: Date
-  /** Original payload for forensic admin review. */
+  
   raw: Record<string, unknown>
 }
 
 function ccyToAlpha(code: number): string {
   // We deliberately do not over-engineer this — the matcher only auto-matches
-  // UAH (980). Anything else is normalized to a string code so admin can see it.
+  
   if (code === 980) return 'UAH'
   return `ISO-${code}`
 }
@@ -115,7 +115,7 @@ export type FetchStatementOk = {
 
 export type FetchStatementSkipped = {
   ok: false
-  /** `"not_configured"` — token/account missing; `"rate_limited"` — local cool-down; `"error"` — API/network. */
+  
   reason: 'not_configured' | 'rate_limited' | 'error'
   message?: string
 }
@@ -135,9 +135,9 @@ export type FetchStatementResult = FetchStatementOk | FetchStatementSkipped
  */
 export async function fetchRecentStatement(opts?: {
   windowSeconds?: number
-  /** Override `Date.now` for testing. */
+  
   now?: () => number
-  /** Bypass the in-process cool-down (admin-only). */
+  
   force?: boolean
 }): Promise<FetchStatementResult> {
   const cfg = readPersonalConfig()
@@ -151,9 +151,9 @@ export async function fetchRecentStatement(opts?: {
   }
   lastFetchAtByAccount.set(cfg.accountId, nowMs)
 
-  // Default to 30 minutes (≈ 2× the default 15-minute payment window) so we cover
-  // brief clock skew and slightly delayed settlement, but never exceed the 31-day
-  // monobank limit.
+  
+  
+  
   const windowSeconds = Math.max(60, Math.min(31 * 24 * 60 * 60, opts?.windowSeconds ?? 30 * 60))
   const fromUnix = Math.floor(nowMs / 1000) - windowSeconds
   const toUnix = Math.floor(nowMs / 1000)
@@ -173,7 +173,7 @@ export async function fetchRecentStatement(opts?: {
   }
 
   if (res.status === 429) {
-    // Server-side rate limit — keep our cool-down so we don't retry immediately.
+    
     return { ok: false, reason: 'rate_limited' }
   }
 

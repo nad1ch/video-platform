@@ -43,7 +43,7 @@ function redirectToApp(res: Response, query: Record<string, string>): void {
   res.redirect(302, url.toString())
 }
 
-/** POST /api/auth/email-verification/send */
+
 export async function handleSendEmailVerification(req: Request, res: Response): Promise<void> {
   const session = readSessionFromCookie(req.headers.cookie)
   if (!session) {
@@ -113,7 +113,7 @@ export async function handleSendEmailVerification(req: Request, res: Response): 
   }
 }
 
-/** GET /api/auth/email-verification/verify?token=... */
+
 export async function handleVerifyEmail(req: Request, res: Response): Promise<void> {
   const token = typeof req.query.token === 'string' ? req.query.token.trim() : ''
   if (token.length < 24 || token.length > 256) {

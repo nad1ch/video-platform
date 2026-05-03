@@ -46,9 +46,9 @@ type CheckersUiMode = CheckersMode | 'rated'
 type CheckersPlayerLabels = Record<CheckersPlayer, string>
 const CHECKERS_GUEST_IDENTITY_KEY = 'checkers:guest-identity:v1'
 const CHECKERS_LOCAL_NAMES_KEY = 'checkers:local-names:v1'
-/** In-game display override per DB user (does not change the account profile). */
+
 const CHECKERS_SIGNED_DISPLAY_BY_USER_KEY = 'checkers:signed-display-by-user:v1'
-/** Set via `?defaultMode=rated` when opening Checkers from landing / home entry points. */
+
 const CHECKERS_DEFAULT_MODE_QUERY_KEY = 'defaultMode'
 const CHECKERS_DEFAULT_MODE_RATED_Q = 'rated'
 
@@ -73,7 +73,7 @@ function normalizeTwitchLogin(raw: string | null | undefined): string | null {
   return s
 }
 
-/** Twitch IRC relay scope: account streamer → `?streamer=` → brand default (not the checkers room id). */
+
 const effectiveCheckersRelaySlug = computed((): string | null => {
   const u = auth.user.value
   const fromAccount =
@@ -185,7 +185,7 @@ const CHECKERS_LB_Q = '?game=checkers'
 const checkersLbWinsRows = ref<NadleGlobalWinsRow[]>([])
 const checkersLbStreakRows = ref<NadleGlobalStreakRow[]>([])
 const checkersLbRatingRows = ref<NadleGlobalRatingRow[]>([])
-/** Set only after a successful streak fetch; `undefined` while not loaded on streak tab. */
+
 const checkersLbViewerMaxStreak = ref<number | undefined>(undefined)
 const checkersLbLoading = ref(false)
 const checkersLbError = ref<string | null>(null)
@@ -202,13 +202,13 @@ const remoteListenVolume = ref(1)
 const remoteListenMuted = ref(false)
 const audioControlsOpen = ref(false)
 const audioControlsRoot = ref<HTMLElement | null>(null)
-/** Middle game column: card root (`AppCard`) — same box the turn HUD anchors to (`left: 50%`). */
+
 const checkersGameStackRef = ref<InstanceType<typeof AppCard> | null>(null)
-/** Inner flex column hosting the board (fallback if stack `$el` is unavailable). */
+
 const checkersGameContentRef = ref<HTMLElement | null>(null)
 let voiceDockAnchorFrame = 0
 let voiceDockResizeObserver: ResizeObserver | null = null
-/** Horizontal center sync for `.checkers-voice-dock` (`left` + translateX −50%); matches `.checkers-turn-hud` / middle card. */
+
 const voiceDockCenterXPx = ref<number | undefined>(undefined)
 
 function resolveCheckersGameStackEl(): HTMLElement | null {
@@ -266,7 +266,7 @@ const matchmakingState = ref<MatchmakingState>('idle')
 const matchmakingError = ref('')
 const matchmakingSeconds = ref(0)
 const TURN_SECONDS = 60
-/** When remaining turn time is at or below this, the HUD timer warns (color + blink). */
+
 const TURN_TIMER_WARN_BELOW_SEC = 10
 const turnSecondsLeft = ref(TURN_SECONDS)
 const showYourTurn = ref(false)
@@ -362,7 +362,7 @@ const checkersUi = computed(() => {
 const friendRoomReady = computed(() => {
   if (checkers.isRatedMatch.value) return true
   if (checkers.mode.value !== 'friend') {
-    // Friend tab selected but WS hasn't applied friend mode yet (room switch / reconnect).
+    
     if (selectedUiMode.value === 'friend') return false
     return true
   }
@@ -430,7 +430,7 @@ const isFriendInviteVisible = computed(() => {
   if (selectedUiMode.value !== 'friend' || checkers.isRatedMatch.value) return false
   if (friendRoomReady.value) return false
   if (!checkers.serverModeSynced.value) return true
-  // Server default for a new room is often `bot` until our `setMode('friend')` is applied.
+  
   return checkers.mode.value === 'friend' || checkers.mode.value === 'bot'
 })
 const isStartOverlayVisible = computed(() =>
@@ -1001,7 +1001,7 @@ watch(
       selectedUiMode.value = mode
       return
     }
-    // Until the server matches the tab, keep the player's choice (covers `bot` / `friend` / `local`).
+    
     if (
       (selectedUiMode.value === 'friend' && mode !== 'friend') ||
       (selectedUiMode.value === 'local' && mode !== 'local') ||
@@ -1441,7 +1441,7 @@ function applyFriendRoomFromOverlay(): void {
   if (!next || next === roomId.value) {
     return
   }
-  // Same as auto-generated friend rooms: new slug must re-apply `friend` on the server (default room mode is `bot`).
+  
   addCheckersFriendSlug(next)
   expectFriendRestartAfterRoute = true
   void router.push({ name: 'checkers', params: { roomId: next } })
@@ -1938,7 +1938,7 @@ function handleCellClick(pos: CheckersPosition): void {
         audio-processing
       />
     </div>
-    <!-- Body: escapes `filter`/`transform` on `.page-route` (e.g. match pulse) so `fixed` stays viewport-anchored. -->
+    
     <Teleport to="body">
       <div class="checkers-voice-dock" :style="voiceDockInlineStyle">
       <button
@@ -2055,7 +2055,7 @@ function handleCellClick(pos: CheckersPosition): void {
   overflow: hidden;
 }
 
-/* Let coord labels + neon/glow extend past inner clip (default stacks use overflow-x clip on narrow breakpoints). */
+
 .nadle-page--checkers.nadle-page {
   overflow-x: visible;
 }
@@ -2162,7 +2162,7 @@ function handleCellClick(pos: CheckersPosition): void {
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
-  /* Extra horizontal slack so coords + glow survive overflow-x clipping on narrow layouts */
+  
   padding-inline: clamp(10px, 2.15cqmin, 22px);
   container-type: size;
 }
@@ -2689,7 +2689,7 @@ function handleCellClick(pos: CheckersPosition): void {
   overflow: hidden;
 }
 
-/* Fixed under viewport; horizontal center tracks middle game card (HUD uses the same anchor). */
+
 .checkers-voice-dock {
   position: fixed;
   bottom: clamp(3.35rem, 6vh, 4.5rem);
@@ -3232,7 +3232,7 @@ function handleCellClick(pos: CheckersPosition): void {
     overflow-y: visible;
   }
 
-  /* Same clip as sibling stacks — board sizing budgets glow/coords inward (see CheckersBoard.vue). */
+  
   .nadle-page__grid > .nadle-page__stack.checkers-game-stack.nadle-page__stack--game {
     overflow-x: clip;
     overflow-y: visible;
@@ -3264,7 +3264,7 @@ function handleCellClick(pos: CheckersPosition): void {
     flex: 0 0 auto;
   }
 
-  /* `height: auto` + `container-type: size` made CQ `cqh` cyclic (≈0) and broke `--checkers-board-size`. */
+  
   .checkers-board-shell {
     height: auto;
     container-type: inline-size;

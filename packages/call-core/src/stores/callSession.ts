@@ -6,7 +6,7 @@ import { normalizeDisplayName } from '../utils/normalizeDisplayName'
 import { newCallTabPeerId } from '../utils/callTabPeerId'
 
 const LS_VIDEO_PRESET = 'streamassist_call_video_quality_preset'
-/** When `'1'`, the user chose economy / balanced / HD (or migrated from older persisted preset). */
+
 const LS_VIDEO_EXPLICIT = 'streamassist_call_video_quality_explicit'
 const LS_CALL_DEBUG = 'streamassist_call_debug_overlay'
 
@@ -20,7 +20,7 @@ function readVideoQualityFromStorage(): { preset: VideoQualityPreset; explicit: 
     if (explicitFlag === '1' && v && isVideoQualityPreset(v)) {
       return { preset: v, explicit: true }
     }
-    // Older builds only stored the preset — treat as an explicit choice.
+    
     if (v && isVideoQualityPreset(v)) {
       return { preset: v, explicit: true }
     }
@@ -48,18 +48,18 @@ export const useCallSessionStore = defineStore('callSession', () => {
   const selfPeerId = ref(newCallTabPeerId())
   const selfDisplayName = ref('You')
   const inCall = ref(false)
-  /** Economy / balanced / HD — UI selection; encoding uses `videoPublishTier` (see `videoQualityExplicit`). */
+  
   const videoQualityPreset = ref<VideoQualityPreset>(readVideoQualityFromStorage().preset)
-  /** False until the user changes quality (or legacy preset was in localStorage). */
+  
   const videoQualityExplicit = ref(readVideoQualityFromStorage().explicit)
-  /** Technical overlay (stats, mode). Persisted so devs keep it across reloads. */
+  
   const callDebugOverlay = ref(readCallDebugOverlay())
   /** displayName from server (room-state / peer-joined / peer-display-name). */
   const remoteDisplayNames = ref<Record<string, string>>({})
-  /** Profile image URLs from server join/roster (http(s)); excludes self. */
+  
   const remoteAvatarUrls = ref<Record<string, string>>({})
 
-  /** Replace remote name map from server peer list (excludes self). */
+  
   function replaceRemoteDisplayNames(peers: RoomPeerEntry[]): void {
     const next: Record<string, string> = {}
     const nextAv: Record<string, string> = {}
@@ -124,10 +124,10 @@ export const useCallSessionStore = defineStore('callSession', () => {
     remoteAvatarUrls.value = {}
   }
 
-  /**
-   * Non-UI helper (debug / legacy callers). Call UI must use `buildCallParticipantMap` +
-   * `resolvePeerDisplayNameForUi` and presence `displayName` snapshots — not this.
-   */
+  
+
+
+
   function labelFor(peerId: string): string {
     if (peerId === selfPeerId.value) {
       return normalizeDisplayName(selfDisplayName.value) || 'You'
@@ -154,7 +154,7 @@ export const useCallSessionStore = defineStore('callSession', () => {
     }
   }
 
-  /** Back to automatic profiles on next capture/publish (clears persisted explicit choice). */
+  
   function setVideoQualityImplicitDefault(): void {
     videoQualityExplicit.value = false
     videoQualityPreset.value = 'balanced'

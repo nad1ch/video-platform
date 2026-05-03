@@ -2,10 +2,10 @@ import { handleNadrawChatGuess } from './nadrawGameStore'
 import { saveNadrawPromptFromChat } from './nadrawPromptMutations'
 import { broadcastNadrawTwitchChat } from './nadrawSocket'
 
-/**
- * Fan-out from Twitch IRC: mirrors chat to Nadraw WebSocket clients and runs guess / `!add` logic.
- * Nadle continues to use the same IRC connection with its own handler (ordering: Nadraw first).
- */
+
+
+
+
 export function ingestNadrawTwitchLine(params: {
   streamerId: string
   userId: string

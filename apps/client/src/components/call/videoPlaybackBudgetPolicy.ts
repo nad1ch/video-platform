@@ -4,21 +4,21 @@
  */
 
 export type RankRemoteVideoPeersInput = {
-  /** Remote `peerId`s that currently show video (camera/screen on). */
+  
   remotePeerIdsWithVideo: readonly string[]
   serverActiveSpeakerPeerId: string | null
   uiActiveSpeakerPeerId: string | null
   /** Future: pin UI — reserved for parity with simulcast `pinnedPeerId`. */
   pinnedPeerId?: string | null
-  /**
-   * IntersectionObserver / viewport: `false` = off-screen; missing key = on-screen for ranking.
-   */
+  
+
+
   viewportVisibleByPeerId: ReadonlyMap<string, boolean>
 }
 
-/**
- * Priority: UI speaker (Web Audio, low latency) → SFU speaker → pinned → on-screen (sorted) → off-screen.
- */
+
+
+
 export function rankRemoteVideoPeersForPlayback(input: RankRemoteVideoPeersInput): string[] {
   const set = new Set(
     input.remotePeerIdsWithVideo.map((id) => id.trim()).filter((id) => id.length > 0),
@@ -54,18 +54,18 @@ export function rankRemoteVideoPeersForPlayback(input: RankRemoteVideoPeersInput
 
 export type AllowedRemotePlaybackInput = RankRemoteVideoPeersInput & {
   maxActiveRemoteVideos: number
-  /** When false (desktop default/strong), every remote with video is within budget. */
+  
   enableVisiblePlaybackBudget: boolean
-  /**
-   * Adaptive full-power unlock (healthy desktop): bypass visible playback cap while still using
-   * the ranking helper elsewhere; keeps policy pure — CallPage sets this from hysteresis + profile.
-   */
+  
+
+
+
   fullPowerUnlock?: boolean
 }
 
-/**
- * Peers allowed to keep playback when visible budget applies. When disabled, returns all remotes with video.
- */
+
+
+
 export function computeAllowedRemotePlaybackPeerIds(input: AllowedRemotePlaybackInput): Set<string> {
   const ids = input.remotePeerIdsWithVideo
     .map((id) => id.trim())

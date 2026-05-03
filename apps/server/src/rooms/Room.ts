@@ -45,25 +45,25 @@ export class Room {
   private readonly pooledWorker: PooledWorker
   private readonly peers = new Map<string, Peer>()
   private audioLevelObserver: AudioLevelObserver | null = null
-  /** Last `peerId` sent in `active-speaker` (null = last send was clear). `undefined` = nothing sent yet. */
+  
   private lastBroadcastSpeakerPeerId: string | null | undefined = undefined
   private silenceClearTimer: ReturnType<typeof setTimeout> | null = null
   /** Mafia “ведучий” — stable auth user id; not derived from transient peer lifecycle. */
   private mafiaHostUserId: string | null = null
-  /** Active Mafia host tab/session id; stable across reload in the same tab. */
+  
   private mafiaHostSessionId: string | null = null
-  /** Active Mafia host peer id; prevents duplicated tabs with copied sessionStorage from also being active. */
+  
   private mafiaHostPeerId: string | null = null
   /** Shared Mafia speaking queue (1-based seat indices); host authorizes updates via signaling. */
   private mafiaSpeakingQueue: number[] = []
-  /** Shared Mafia round timer; host `mafia:timer-start`, clients derive remaining from wall clock. */
+  
   private mafiaTimer: { startedAt: number; duration: number } | null = null
   private mafiaMode: 'old' | 'new' = 'old'
   private mafiaDeadBackgrounds: MafiaBackgroundItem[] = [...MAFIA_PRESET_BACKGROUND_ITEMS]
   private mafiaActiveBackgroundId: string | null = null
   private mafiaPageBackgrounds: MafiaPageBackgroundItem[] = [...MAFIA_PAGE_BACKGROUND_ITEMS]
   private mafiaForcedPageBackgroundId: string | null = null
-  /** Mafia overlay state only. Missing peer id means alive. */
+  
   private mafiaPlayerLifeStateByPeerId = new Map<string, Exclude<MafiaPlayerLifeState, 'alive'>>()
   /**
    * Mafia host enforcement persistence. `Peer.forcedAudioMuted` /
@@ -145,9 +145,9 @@ export class Room {
     return undefined
   }
 
-  /**
-   * Broadcast `active-speaker` only when the dominant speaker actually changes (reduces WS noise).
-   */
+  
+
+
   private emitActiveSpeakerIfChanged(peerId: string | null): void {
     if (this.lastBroadcastSpeakerPeerId === peerId) {
       return
@@ -159,9 +159,9 @@ export class Room {
     }
   }
 
-  /**
-   * Late joiners miss deduped broadcasts; replay last known dominant speaker (or null) once.
-   */
+  
+
+
   sendActiveSpeakerCatchUpToPeer(peer: Peer): void {
     if (this.lastBroadcastSpeakerPeerId === undefined) {
       return
@@ -218,16 +218,16 @@ export class Room {
       return undefined
     }
     this.peers.delete(peerId)
-    // If the leaving peer was the last broadcast active speaker, emit a clear
-    // immediately. The AudioLevelObserver eventually emits `silence` after its
-    // hold timer, but until then a fresh joiner's catch-up replay would point
-    // at a peer that is gone. The broadcast loop now skips the leaving peer
-    // because we already removed it from `this.peers` above.
+    
+    
+    
+    
+    
     if (this.lastBroadcastSpeakerPeerId === peerId) {
       this.emitActiveSpeakerIfChanged(null)
     }
-    // Drop any host-forced video state tied to this peerId. The room-level
-    // force-mute-all flag is room-wide and stays until the host clears it.
+    
+    
     this.clearMafiaForceStateForPeer(peerId)
     return peer
   }
@@ -280,9 +280,9 @@ export class Room {
   }
 
   setMafiaSpeakingQueue(seats: number[]): void {
-    // Defensive copy: callers passed in arrays they still hold references to,
-    // so without the spread a subsequent external mutation would silently
-    // corrupt the room's queue.
+    
+    
+    
     this.mafiaSpeakingQueue = [...seats]
   }
 

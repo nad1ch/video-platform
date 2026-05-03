@@ -29,7 +29,7 @@ const mode = computed<AuthMode>(() => {
 
 const redirectForOAuth = computed(() => safeOAuthRedirectPath(props.redirectPath))
 
-/** Signup tab removed: normalize legacy `?mode=signup` URLs to login. */
+
 watch(
   () => route.query.mode,
   () => {
@@ -201,7 +201,7 @@ function goLoginFromSuccess(): void {
   justify-content: center;
 }
 
-/* Twitch: primary CTA — larger, gradient, glow (tokens only) */
+
 :deep(.auth-form-oauth-btn--twitch.app-btn) {
   min-height: 3rem;
   padding: 0.65rem 1rem;
@@ -232,7 +232,7 @@ function goLoginFromSuccess(): void {
     0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 40%, transparent);
 }
 
-/* Google: secondary — same radius, quieter */
+
 :deep(.auth-form-oauth-btn--google.app-btn) {
   min-height: 2.5rem;
   font-size: 0.875rem;

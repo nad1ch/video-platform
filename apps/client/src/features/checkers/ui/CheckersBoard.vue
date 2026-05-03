@@ -124,7 +124,7 @@ function emitCellClick(pos: CheckersPosition): void {
 
 <template>
   <div class="checkers-board-frame">
-    <!-- Flips with player seat; coords + glyphs counter-spin for readability -->
+    
     <div class="checkers-board-rotatable" :class="{ 'checkers-board-rotatable--flipped': flipped }">
       <div class="checkers-coordinate-corner checkers-coordinate-corner--tl" aria-hidden="true" />
 
@@ -199,7 +199,7 @@ function emitCellClick(pos: CheckersPosition): void {
 
 <style scoped>
 .checkers-board-frame {
-  /* --checkers-board-size: playable square (px + cq), see min() below */
+  
   --checkers-board-glow-bleed: clamp(11px, 2.35cqmin, 20px);
   /*
    * Space reserved on each horizontal side OUTSIDE coords+mid grid so neon/box-shadow
@@ -213,18 +213,18 @@ function emitCellClick(pos: CheckersPosition): void {
    * (content area = cqw − 2×padding), which clips glow/coords asymmetrically inside the shell.
    */
   --checkers-frame-padding-inline: clamp(10px, 2.35cqmin, 22px);
-  /* Content-box budget inside this frame (CQ width minus frame padding − glow safe gutters) */
+  
   --checkers-board-inner-max-inline: calc(
     100cqw - 2 * var(--checkers-frame-padding-inline) - 2 * var(--checkers-board-glow-outer-safe)
   );
-  /* Side glyphs only (neon bleed sits inside expanded center track, not strips) */
+  
   --checkers-coordinate-strip: clamp(1.06rem, 3.95cqmin, 1.58rem);
-  /* Breath between glyphs and playable grid edges (letters / ranks) — keep visually tight */
+  
   --checkers-coordinate-gap: clamp(0px, 0.26cqmin, 3px);
   --checkers-layout-vertical-inset-top: clamp(0.1rem, 0.55cqmin, 0.3rem);
   /* Voice dock is `position: fixed`; do not shrink the playable square for it via CQ height. */
   --checkers-board-vertical-fudge: clamp(4px, 1.1cqmin, 12px);
-  /* Cap horizontal sizing to inner budget minus coord strips + mid glow bleed gutter */
+  
   --checkers-board-inline-cap: max(
     0px,
     calc(
@@ -245,12 +245,12 @@ function emitCellClick(pos: CheckersPosition): void {
   );
 
   --checkers-board-mid-span: calc(var(--checkers-board-size) + 2 * var(--checkers-board-glow-bleed));
-  /* One cell-wide column widths for top/bottom (stable alignment vs board grid) */
+  
   --checkers-cell-span: calc(var(--checkers-board-size) / 8);
 
   --checkers-board-radius: clamp(6px, 0.58cqmin, 8px);
   --checkers-board-border: rgba(220, 190, 255, 0.65);
-  /* Outer neon separated from inset/drop shadows (layered pseudo) — spread fixes corner harsh cutoffs */
+  
   --checkers-board-glow-neon:
     0 0 0 1px rgba(255, 255, 255, 0.08),
     0 0 20px 2.35px rgba(180, 95, 255, 0.48),
@@ -276,7 +276,7 @@ function emitCellClick(pos: CheckersPosition): void {
   overflow: visible;
 }
 
-/* Soft purple aura behind board + coordinates (single visual unit). */
+
 .checkers-board-frame::before {
   position: absolute;
   inset: -12% -10% -14% -10%;
@@ -295,7 +295,7 @@ function emitCellClick(pos: CheckersPosition): void {
   z-index: 1;
   display: grid;
   overflow: visible;
-  /* Center tracks when wrapper is wider than sum(strips + mid)—avoids cramming coords to the left */
+  
   justify-content: center;
   align-content: center;
   justify-items: stretch;
@@ -467,7 +467,7 @@ function emitCellClick(pos: CheckersPosition): void {
   overflow: visible;
 }
 
-/* Dedicated neon halo (rounded corners + spread) avoids box-shadow clipping at arcs */
+
 .checkers-board-glow-wrap::before {
   position: absolute;
   top: var(--checkers-board-glow-bleed);
@@ -487,7 +487,7 @@ function emitCellClick(pos: CheckersPosition): void {
   z-index: 1;
   box-sizing: border-box;
   display: grid;
-  /* Cells + radius polish; halo lives on glow-wrap / pseudo */
+  
   overflow: hidden;
   width: var(--checkers-board-size);
   height: var(--checkers-board-size);
@@ -533,10 +533,10 @@ function emitCellClick(pos: CheckersPosition): void {
 @media (max-width: 1200px) {
   .checkers-board-frame {
     height: auto;
-    /*
-     * Matches the subtraction used with `100cqh` above, but using a bounded viewport span
-     * (`vmin`/`vw`/`dvh`) so the playable square stays valid when CQ block axis is indefinite.
-     */
+    
+
+
+
     --checkers-board-viewport-block-playable-cap: max(
       1px,
       calc(

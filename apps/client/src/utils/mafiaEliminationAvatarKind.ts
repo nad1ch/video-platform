@@ -1,6 +1,6 @@
-/**
- * Stable per-`peerId` choice of elimination placeholder (skull / ghost / cross).
- */
+
+
+
 const KINDS = ['skull', 'ghost', 'cross'] as const
 
 export type MafiaEliminationAvatarKind = (typeof KINDS)[number]

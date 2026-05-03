@@ -73,7 +73,7 @@ export function readSessionFromCookie(cookieHeader: string | undefined): Session
   return null
 }
 
-/** Cookie name kept for non-breaking browser sessions. */
+
 export const NADLE_SESSION_COOKIE = COOKIE_NAME
 export const NADLE_SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 7
 
@@ -124,10 +124,10 @@ export function verifyOAuthReturnPath(state: string | undefined): string {
     if (decoded.typ !== OAUTH_STATE_TYP || typeof decoded.r !== 'string') {
       return '/'
     }
-    // Single-use replay guard. A legitimate OAuth login consumes the state
-    // exactly once; a replay from a captured state string falls back to the
-    // safe default path. `exp` is in seconds; we cache up to the same window
-    // so the entry cannot outlive the JWT expiry.
+    
+    
+    
+    
     if (seenOAuthStates.has(state)) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('[auth][oauth] rejected state replay')

@@ -52,7 +52,7 @@ export function useNadleWs(options: {
   let wsTargetStreamerId: string | null = null
   let nadleWsDisposed = false
   let nadleWsReconnectTimer: ReturnType<typeof setTimeout> | null = null
-  /** Resets on successful `open`; incremented when scheduling reconnect after close. */
+  
   let nadleWsReconnectAttempt = 0
   const NADLE_WS_RECONNECT_BASE_MS = 1000
   const NADLE_WS_RECONNECT_CAP_MS = 30_000

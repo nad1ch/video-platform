@@ -1,14 +1,14 @@
-/** @param {string} s */
+
 export function wordGraphemeCount(s) {
   return [...s].length
 }
 
-/**
- * Letter-guessing feedback (Unicode code points). Canonical implementation — client + server.
- * @param {string} answer
- * @param {string} guess
- * @returns {('correct'|'present'|'absent')[]}
- */
+
+
+
+
+
+
 export function computeFeedback(answer, guess) {
   const secretArr = [...answer]
   const guessArr = [...guess]

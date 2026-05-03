@@ -4,10 +4,10 @@ import { getPersistedGameId, setPersistedGameId } from '../../utils/persistedGam
 import { saveLastPlayerSlot } from '../../utils/persistedPlayerSlot.js'
 import { normalizePlayerSlotId } from '../../utils/playerSlot.js'
 
-/**
- * Host/player gate, game & slot identity from route, overlay links, join linking.
- * Host access: signed-in user with role admin or host (see GET /api/auth/me).
- */
+
+
+
+
 export function useControlAccessContext({ route, t, authUser, authLoaded }) {
   const hostModeRequested = computed(
     () =>
@@ -35,7 +35,7 @@ export function useControlAccessContext({ route, t, authUser, authLoaded }) {
     return 'test1'
   })
 
-  /** `= # ? &` у значенні `?game=` ламають або плутають посилання (наприклад `test=4`). */
+  
   const GAME_ID_UNSAFE = /[=#?&]/
   const gameIdHasUnsafeChars = computed(() => GAME_ID_UNSAFE.test(gameId.value))
 

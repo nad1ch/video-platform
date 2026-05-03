@@ -20,14 +20,14 @@ export function defaultActiveCard() {
 
 export const characterState = reactive({
   eliminated: false,
-  /**
-   * Ліміт відкриттів характеристик за раунд (гравець, не ведучий).
-   * round: останній ігровий раунд, для якого застосовано count/maxForRound; 0 = ще не синхронізовано.
-   */
+  
+
+
+
   revealLedger: { round: 0, count: 0, maxForRound: 0 },
-  /** Legacy: синхронізується з demographicsRevealed при збереженні */
+  
   identityRevealed: false,
-  /** Вік і стать на оверлеї; ім’я завжди видно окремо */
+  
   demographicsRevealed: false,
   name: '',
   age: '',

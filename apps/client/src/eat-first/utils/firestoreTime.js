@@ -1,4 +1,4 @@
-/** Milliseconds from legacy Firestore Timestamp, server ISO string, or `{ seconds }`. */
+
 export function millisFromFirestore(ts) {
   if (ts == null) return null
   if (typeof ts === 'string') {

@@ -1,19 +1,19 @@
 import { computed, type ComputedRef } from 'vue'
 import { useRoute, type LocationQueryValue, type RouteLocationNormalizedLoaded } from 'vue-router'
 
-/** App shell → CallPage: show copy-to-clipboard toast after copying the `?mode=view` OBS URL. */
+
 export const MAFIA_OBS_URL_TOAST_EVENT = 'stream-assist:mafia-obs-url-copied'
 
-/** App shell → CallPage: show a Mafia settings validation/error toast. */
+
 export const MAFIA_SETTINGS_TOAST_EVENT = 'stream-assist:mafia-settings-toast'
 
-/** CallPage / tile → MafiaOverlay: open kick dialog with a pre-selected peer. */
+
 export const MAFIA_OPEN_KICK_MODAL_EVENT = 'stream-assist:mafia-open-kick-modal'
 
-/**
- * `?mode=view` enables Mafia **view / stream** layout (read-only, minimal UI).
- * Any other or missing `mode` = **host** mode (default).
- */
+
+
+
+
 export function mafiaViewQueryIsView(mode: LocationQueryValue | LocationQueryValue[] | undefined): boolean {
   if (mode === 'view') {
     return true
@@ -21,7 +21,7 @@ export function mafiaViewQueryIsView(mode: LocationQueryValue | LocationQueryVal
   return Array.isArray(mode) && mode[0] === 'view'
 }
 
-/** Shell / layout: use `mafiaViewModeFromRoute` in Mafia UI for the same check. */
+
 export function mafiaStreamViewFromRoute(route: RouteLocationNormalizedLoaded): boolean {
   if (route.name !== 'mafia') {
     return false
@@ -29,7 +29,7 @@ export function mafiaStreamViewFromRoute(route: RouteLocationNormalizedLoaded): 
   return mafiaViewQueryIsView(route.query.mode)
 }
 
-/** Mafia: `?mode=view` (stream) vs default host mode. */
+
 export const mafiaViewModeFromRoute = mafiaStreamViewFromRoute
 
 export function useMafiaViewMode(): { isViewMode: ComputedRef<boolean> } {

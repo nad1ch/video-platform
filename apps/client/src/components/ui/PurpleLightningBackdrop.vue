@@ -88,9 +88,9 @@ defineProps<{
   light?: boolean
 }>()
 
-/**
- * 10 різних форм у одному стилі: #0 — як раніше (оригінальний перший fork), інші — нові, але той самий «язик» zigzag + гілки.
- */
+
+
+
 const FORK_VARIANTS = [
   {
     main: 'M50 34 L48.2 42 L52 42 L47.5 52 L50.2 52 L46 64 L49 64 L44.5 76',
@@ -138,14 +138,14 @@ const FORK_VARIANTS = [
   },
 ] as const
 
-/** Геометричний центр блискавки в локальних координатах path (~середина стовбура) */
+
 const BOLT_ANCHOR_X = 50
 const BOLT_ANCHOR_Y = 56
 
 type Bolt = {
   main: string
   branches: readonly string[]
-  /** Центр блискавки в координатах viewBox 0–100 */
+  
   cx: number
   cy: number
   rot: number
@@ -156,11 +156,11 @@ type Bolt = {
   dur: number
   delay: number
   branchLagBase: number
-  /** 0..9 — індекс форми з FORK_VARIANTS */
+  
   variantId: number
 }
 
-/** Детермінований RNG (стабільно між рендерами; «рандом» без накладань через сітку) */
+
 function createRng(seed: number): () => number {
   let a = seed >>> 0
   return () => {
@@ -239,7 +239,7 @@ function buildBolts(): Bolt[] {
     const baseSc = 0.3 + rngAnim() * 0.08
     const sc = baseSc * scaleMul
 
-    /* Трохи повільніше за базову формулу; швидше ніж попередній крок з 1.45×. */
+    
     const dur = (2.35 + rngAnim() * 3.15) * 1.22
     const delay = rngAnim() * 14.5
     const branchLagBase = (0.038 + rngAnim() * 0.055) * 1.16
@@ -266,8 +266,8 @@ function buildBolts(): Bolt[] {
 const bolts = buildBolts()
 
 /**
- * Язик накреслений навколо (50,56). Правильний порядок: перенести язик у нуль → scale → rotate → поставити в (cx,cy).
- * Старий варіант translate(cx-50,…) rotate(…,50,56) scale(s) давав масштаб від (0,0) і зміщував усе вліво/обрізав справа.
+ * Bolt artwork is authored around (50,56). Transform order: move anchor to origin → scale → rotate → translate to (cx,cy).
+ * Older `translate(cx-50,…) rotate(…,50,56) scale(s)` scaled around (0,0) and shifted/clipped strokes to the left.
  */
 function boltTransform(b: Bolt): string {
   return `translate(${b.cx} ${b.cy}) rotate(${b.rot}) scale(${b.sc}) translate(-${BOLT_ANCHOR_X} -${BOLT_ANCHOR_Y})`
@@ -283,7 +283,7 @@ function boltTransform(b: Bolt): string {
    */
   position: fixed;
   inset: 0;
-  /* hidden + drop-shadow на <g> обрізає праву частину SVG у Chrome — «усі зліва» */
+  /* Chrome clips the right side when combining `overflow:hidden` + `filter:drop-shadow` on `<g>` groups. */
   overflow: visible;
   pointer-events: none;
   /* Above `LandingCosmicBackdrop` (z-index 0), below main chrome (z-index 1). */
@@ -297,7 +297,6 @@ function boltTransform(b: Bolt): string {
   opacity: 0.96;
 }
 
-/* Стовбур: спочатку «прокреслюється», потім м’яко згасає */
 .purple-lightning-backdrop__path--main,
 .purple-lightning-backdrop__path--main-core {
   stroke-dasharray: 1;
@@ -311,7 +310,6 @@ function boltTransform(b: Bolt): string {
   animation-name: purple-bolt-draw-core;
 }
 
-/* Відгалуження — з невеликим запізненням, ніби розряд «біжить» у боки */
 .purple-lightning-backdrop__path--branch,
 .purple-lightning-backdrop__path--branch-core {
   stroke-dasharray: 1;

@@ -3,7 +3,7 @@ import { normalizeDisplayName } from './normalizeDisplayName'
 
 export type ResolvePeerDisplayNameForUiOptions = {
   selfPeerId: string
-  /** Trimming applied by caller — used when the local row is missing from the map. */
+  
   selfDisplayName: string
 }
 

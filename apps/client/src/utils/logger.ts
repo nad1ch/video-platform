@@ -1,8 +1,8 @@
 const isDev = import.meta.env.DEV
 
-/**
- * Tiny namespaced logger: verbose in dev, errors only in production builds.
- */
+
+
+
 export function createLogger(scope: string) {
   const prefix = `[${scope}]`
   return {

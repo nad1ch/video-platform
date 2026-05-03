@@ -4,7 +4,7 @@ import Database from 'better-sqlite3'
 
 let db: Database.Database | null = null
 
-/** SQLite file for email/password accounts. Override with EMAIL_USERS_DB_PATH. */
+
 export function getEmailUserDb(): Database.Database {
   if (db) {
     return db

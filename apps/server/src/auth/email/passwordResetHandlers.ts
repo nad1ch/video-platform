@@ -73,10 +73,10 @@ function createRawToken(): string {
 }
 
 function buildResetUrl(token: string): string {
-  // The reset link targets the SPA route (/auth?mode=reset&token=...), so it
-  // MUST come from the trusted `clientPublicOrigin()` — never from
+  
+  
   // `x-forwarded-host` / request headers which an attacker could spoof to
-  // redirect the victim's click to a hostile host.
+  
   const url = new URL('/auth', clientPublicOrigin())
   url.searchParams.set('mode', 'reset')
   url.searchParams.set('token', token)
@@ -134,7 +134,7 @@ async function ensureEmailPasswordPrismaUser(row: { id: string; email: string; d
   return created.id
 }
 
-/** POST /api/auth/password-reset/send */
+
 export async function handleSendPasswordReset(req: Request, res: Response): Promise<void> {
   const parsed = sendBodySchema.safeParse(req.body)
   if (!parsed.success) {
@@ -146,9 +146,9 @@ export async function handleSendPasswordReset(req: Request, res: Response): Prom
     res.json({ ok: true })
   }
 
-  // Rate limit BEFORE any DB read so an attacker cannot pay DB cost while
-  // enumerating. Responses stay generic (`{ ok: true }`) on rate-limit hits
-  // so a probe cannot distinguish "throttled" from "unknown email".
+  
+  
+  
   const ipCheck = passwordResetIpLimiter.tryConsume(`ip:${getClientIp(req)}`)
   if (!ipCheck.allowed) {
     genericOk()
@@ -204,7 +204,7 @@ export async function handleSendPasswordReset(req: Request, res: Response): Prom
   }
 }
 
-/** POST /api/auth/password-reset/confirm */
+
 export async function handleConfirmPasswordReset(req: Request, res: Response): Promise<void> {
   const parsed = confirmBodySchema.safeParse(req.body)
   if (!parsed.success) {

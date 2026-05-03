@@ -54,7 +54,7 @@ function applyDotEnvFile(filePath) {
   }
 }
 
-// Mirror loadDotEnv.ts ordering: .env then .env.local (local overrides).
+
 const serverRoot = path.resolve(__dirname, '..')
 applyDotEnvFile(path.join(serverRoot, '.env'))
 applyDotEnvFile(path.join(serverRoot, '.env.local'))
@@ -76,7 +76,7 @@ const apiUrl = (process.env.MONO_PERSONAL_API_URL || process.env.MONO_API_URL ||
   .replace(/\/$/, '')
 
 if (process.argv.includes('--debug')) {
-  // Mask: show first 2 + last 2 chars only. Never log the full token.
+  
   const masked = token.length > 4 ? `${token.slice(0, 2)}***${token.slice(-2)}` : '***'
   console.error(`[list-mono-accounts] Using token: ${masked} · api: ${apiUrl}`)
 }
@@ -169,7 +169,7 @@ function main() {
       console.log(
         'Each jar is a separate monobank account in the Personal API; deposits via send.monobank.ua land directly on the jar.\n',
       )
-      // Surface jars — these are the canonical MONO_ACCOUNT_ID candidates for jar-based billing.
+      
       if (Array.isArray(info?.jars) && info.jars.length > 0) {
         console.log(
           'Jars (use the jar id below as MONO_ACCOUNT_ID for jar-based billing):',

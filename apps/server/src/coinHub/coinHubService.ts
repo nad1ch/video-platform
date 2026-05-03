@@ -124,9 +124,9 @@ async function loadAndBuild(
   }
 }
 
-/**
- * Public GET snapshot: ensure rows, reconcile cooldowns, return hub JSON.
- */
+
+
+
 export async function getCoinHubSnapshot(userId: string, now: Date = new Date()): Promise<GetCoinHubResponse> {
   return prisma.$transaction(async (tx) => {
     await ensureUserCoinHub(tx, userId, now)
@@ -183,7 +183,7 @@ export async function spin(
       where: { userId },
       data: {
         lastReward: reward as unknown as Prisma.InputJsonValue,
-        /** Admins / dev bypass: keep spin always available in snapshot without waiting a day. */
+        
         nextAvailableAt: bypass ? null : next,
       },
     })

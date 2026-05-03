@@ -8,7 +8,7 @@ export function syncMafiaJoinOrder(params: {
   roomKey: string
   previousRoomKey: string
   previousOrder: string[]
-  /** Current participant ids in engine order (`tiles.map(t => t.peerId)`). */
+  
   enginePeerOrder: string[]
 }): { roomKey: string; joinOrder: string[] } {
   const { roomKey, previousRoomKey, previousOrder, enginePeerOrder } = params

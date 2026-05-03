@@ -4,7 +4,7 @@ function key(streamerId: string, userId: string): string {
   return `${streamerId}:${userId}`
 }
 
-/** Per-user cooldown between guesses in Nadraw (default 2000 ms). */
+
 export function nadrawGuessCooldownMs(): number {
   return 2000
 }

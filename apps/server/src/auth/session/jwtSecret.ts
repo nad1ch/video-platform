@@ -1,6 +1,6 @@
-/**
- * Prefer AUTH_JWT_SECRET; otherwise `NADLE_JWT_SECRET`.
- */
+
+
+
 export function authJwtSecret(): string {
   const s = process.env.AUTH_JWT_SECRET ?? process.env.NADLE_JWT_SECRET
   if (typeof s === 'string' && s.length >= 16) {

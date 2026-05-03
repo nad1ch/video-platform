@@ -183,10 +183,10 @@ function sendSession(
   })
 }
 
-/** POST /api/auth/register */
+
 export async function handleEmailRegister(req: Request, res: Response): Promise<void> {
-  // Per-IP RL runs first — cheap and protects against registration spam
-  // without needing to peek at the body.
+  
+  
   const ipCheck = registerIpLimiter.tryConsume(`ip:${getClientIp(req)}`)
   if (!ipCheck.allowed) {
     denyRateLimited(res, ipCheck.retryAfterSec)
@@ -199,8 +199,8 @@ export async function handleEmailRegister(req: Request, res: Response): Promise<
   }
   const { email, password, displayName } = parsed.data
   const normalized = normalizeEmail(email)
-  // Per-email RL prevents someone cycling IPs from pounding the same address
-  // (enumeration / password-guess via DB-backed `EMAIL_TAKEN` response).
+  
+  
   const emailCheck = registerEmailLimiter.tryConsume(`email:${normalized}`)
   if (!emailCheck.allowed) {
     denyRateLimited(res, emailCheck.retryAfterSec)
@@ -247,9 +247,9 @@ export async function handleEmailRegister(req: Request, res: Response): Promise<
   }
 }
 
-/** POST /api/auth/login */
+
 export async function handleEmailLogin(req: Request, res: Response): Promise<void> {
-  // Per-IP RL runs first so credential-stuffing hits the cap before bcrypt.
+  
   const ipCheck = loginIpLimiter.tryConsume(`ip:${getClientIp(req)}`)
   if (!ipCheck.allowed) {
     denyRateLimited(res, ipCheck.retryAfterSec)
@@ -262,8 +262,8 @@ export async function handleEmailLogin(req: Request, res: Response): Promise<voi
   }
   const { email, password } = parsed.data
   const normalized = normalizeEmail(email)
-  // Per-email RL protects the same user from distributed brute force across
-  // many IPs. Applied BEFORE bcrypt verify so the cost of a miss stays O(1).
+  
+  
   const emailCheck = loginEmailLimiter.tryConsume(`email:${normalized}`)
   if (!emailCheck.allowed) {
     denyRateLimited(res, emailCheck.retryAfterSec)
@@ -280,8 +280,8 @@ export async function handleEmailLogin(req: Request, res: Response): Promise<voi
     res.status(verification.error === 'ACCOUNT_LINK_REQUIRED' ? 409 : 500).json({ error: verification.error })
     return
   }
-  // Reset both counters on a successful login so a legit user who mistyped
-  // repeatedly isn't locked out after they got it right.
+  
+  
   loginIpLimiter.reset(`ip:${getClientIp(req)}`)
   loginEmailLimiter.reset(`email:${normalized}`)
   sendSession(res, session, false, 200, verification.state)

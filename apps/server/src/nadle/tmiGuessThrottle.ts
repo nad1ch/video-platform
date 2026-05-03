@@ -4,7 +4,7 @@ function throttleKey(streamerId: string, userId: string): string {
   return `${streamerId}:${userId}`
 }
 
-/** Per-user cooldown between guess-shaped chat lines (1–2s typical). Env clamp 1000–2500. */
+
 export function readTwitchChatGuessCooldownMs(): number {
   const raw = process.env.TWITCH_CHAT_GUESS_COOLDOWN_MS
   if (typeof raw !== 'string' || raw.length === 0) {
@@ -35,7 +35,7 @@ if (typeof throttleReaper.unref === 'function') {
   throttleReaper.unref()
 }
 
-/** Returns false if this user must wait before another guess-shaped message is processed. */
+
 export function tryConsumeTwitchGuessThrottle(streamerId: string, userId: string): boolean {
   const now = Date.now()
   const cooldown = readTwitchChatGuessCooldownMs()

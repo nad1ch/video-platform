@@ -46,7 +46,7 @@ export function trackPageView(path) {
   }
 }
 
-/** Технічні події (відвал слухача Firestore тощо). */
+
 export function trackTechnicalEvent(name, props = {}) {
   if (window.plausible) {
     window.plausible(name, { props })

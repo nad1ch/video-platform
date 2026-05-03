@@ -68,26 +68,26 @@ async function bootstrap(): Promise<void> {
     next()
   })
 
-  // ---------------------------------------------------------------------------
+  
   // CSRF defense-in-depth for cookie-authenticated mutations.
-  //
-  // Session cookie is `sameSite=none` in production so the SPA on a different
-  // subdomain can include it. That means simple cross-site forms can submit
-  // POSTs with the cookie attached. The CORS middleware above already rejects
-  // cross-origin requests that *send* an Origin header with a disallowed value,
-  // but browsers/tools can also send mutations with Origin absent (classic form
+  
+  
+  
+  
+  
+  
   // CSRF, some Safari same-site cases, server-side fetches with cookies).
-  //
-  // Require ONE of:
+  
+  
   //   - an allow-listed `Origin` header (the CORS layer already validated it
-  //     is in `allowed`; we just re-check presence here), OR
-  //   - a custom `X-Requested-With` header (cross-origin JS cannot set this
+  
+  
   //     without triggering a preflight, which the CORS layer 403s for
-  //     disallowed origins).
-  //
-  // Public webhooks that must accept server-to-server POSTs without Origin
-  // bypass this guard via an explicit allow-list.
-  // ---------------------------------------------------------------------------
+  
+  
+  
+  
+  
   const CSRF_WEBHOOK_ALLOWLIST: ReadonlySet<string> = new Set([
     '/api/billing/mono-personal/webhook',
   ])

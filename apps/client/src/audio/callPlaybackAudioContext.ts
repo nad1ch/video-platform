@@ -1,7 +1,7 @@
-/**
- * Shared AudioContext for remote call playback (gain > 100% via GainNode).
- * One context per page avoids hitting per-tab context limits with many peers.
- */
+
+
+
+
 let shared: AudioContext | null = null
 
 export function getSharedCallPlaybackContext(): AudioContext {

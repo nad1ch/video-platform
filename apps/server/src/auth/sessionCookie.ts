@@ -1,7 +1,7 @@
-/**
- * Session cookie flags for `nadle_session` (app shell + nadle share the same cookie name).
- * Production cross-subdomain / SPA↔API setups need SameSite=None + Secure.
- */
+
+
+
+
 export function isAuthCookieProduction(): boolean {
   return process.env.NODE_ENV === 'production'
 }
@@ -34,7 +34,7 @@ export function sessionCookieSetOptions(maxAgeMs: number): {
   }
 }
 
-/** Must match every attribute used in `set` so the browser actually removes the cookie. */
+
 export function sessionCookieClearOptions(): {
   httpOnly: true
   secure: boolean

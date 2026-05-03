@@ -25,79 +25,79 @@ const { t } = useI18n()
 const emit = defineEmits<{
   'update:listenVolume': [value: number]
   'update:listenMuted': [value: boolean]
-  /** Local-only label override (`name` null or empty clears). */
+  
   'commit-local-display-name': [payload: { peerId: string; name: string | null }]
-  /** Mafia host: toggle eliminated / alive for this remote tile. */
+  
   'mafia-toggle-life': [peerId: string]
-  /** Mafia host: ask a remote peer to turn camera off. */
+  
   'mafia-force-camera-off': [peerId: string]
-  /** Mafia: local UI override for eliminated background on this peer. */
+  
   'mafia-set-elimination-background': [payload: { peerId: string; background: MafiaEliminationBackground }]
-    /** Mafia: tile intersects viewport. */
+    
   'mafia-viewport-layers': [visible: boolean]
-  /** Remote `<video>` `waiting`: fast playback stall signal for adaptive FPS (CallPage). */
+  
   'remote-playback-stall': [payload: { peerId: string; stalling: boolean }]
 }>()
 
 const props = withDefaults(
   defineProps<{
-    /** Room participant id (for optional volume_* localStorage mirror). */
+    
     peerId?: string
     displayName: string
     stream: MediaStream | null
     isLocal: boolean
     videoEnabled: boolean
     audioEnabled: boolean
-    /** Bumps play() when stream ref or tracks change (local / remote). */
+    
     playRev?: number
-    /** CSS size tier from parent grid: sm | md | lg */
+    
     sizeTier: 'sm' | 'md' | 'lg'
-    /**
-     * CallPage drives speaking UI: wrap glow + this tile’s `is-speaking` / video nudge
-     * (from `activeSpeakerPeerId` + local RMS; see `isTileRowSpeaking` in `CallPage`).
-     */
+    
+
+
+
     rowSpeaking: boolean
-    /** Local-only remote listening gain 0..2 (0–200%). */
+    
     remoteListenVolume?: number
-    /** Local-only remote listen mute */
+    
     remoteListenMuted?: boolean
-    /** Existing call-core RMS level for this remote peer. */
+    
     remoteAudioLevel?: number
-    /** True when another remote is currently louder and this one should be ducked. */
+    
     remoteVoiceDucked?: boolean
     /** “Raise hand” from signaling (call room). */
     raiseHand?: boolean
-    /** Passed to StreamVideo `fill-cover`; CallPage sets false so grid video uses contain (no crop). */
+    
     videoFillCover?: boolean
-    /** Outbound/inbound presentation; local may be `none` when outbound video is paused / no track. */
+    
     videoPresentation?: 'camera' | 'screen' | 'none'
-    /** Profile image when video is off (HTTPS URL from parent; never fetch here). */
+    
     avatarUrl?: string
-    /** Mafia: 1-based seat index; shown in a small circle before the role chip (optional UI only). */
+    
     mafiaSeatIndex?: number
-    /**
-     * Mafia: when set, show a role label (CallPage sets only for host or that tile’s local player; off for stream capture).
-     */
+    
+
+
     mafiaVisibleRole?: MafiaRole
-    /** Mafia stream capture: hide per-tile menu and name editing. */
+    
     streamViewMode?: boolean
-    /** Mafia overlay life state; independent from camera/video state. */
+    
     mafiaLifeState?: MafiaPlayerLifeState
     mafiaEliminationKind?: MafiaEliminationAvatarKind
     mafiaEliminationBackground?: MafiaEliminationBackground
     mafiaDeadBackgroundUrl?: string | null
-    /** Mafia: host, round started — show persistent 💀/❤️ life toggle (top-right). */
+    
     mafiaHostShowLifeToggle?: boolean
-    /**
-     * Call / Mafia: track tile intersection with the viewport.
-     * Remotes only.
-     */
+    
+
+
+
     mafiaLayerViewportObserve?: boolean
-    /**
-     * Remote-only: pause `<video>` playback while tile is off-screen (Phase 2); audio unchanged.
-     */
+    
+
+
     videoPlaybackSuppressed?: boolean
-    /** Phase 3.5: optional `<video>` presentation cap (see `StreamVideo.targetPlaybackFps`). */
+    
     videoTargetPlaybackFps?: number
   }>(),
   {
@@ -122,7 +122,7 @@ const MAFIA_ELIMINATION_BACKGROUND_OPTIONS = Object.freeze([
 
 const menuOpen = ref(false)
 const menuRoot = ref<HTMLElement | null>(null)
-/** Mafia: IntersectionObserver root (`.tile`). */
+
 const tileRootRef = ref<HTMLElement | null>(null)
 let mafiaLayerObserver: IntersectionObserver | null = null
 let mafiaLayerLastEmitted: boolean | null = null
@@ -215,7 +215,7 @@ function initials(name: string): string {
   return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || '?'
 }
 
-/** Remote: audio-only split stream for Web Audio path (video uses the same composite stream as props). */
+
 const audioSplitStream = shallowRef<MediaStream | null>(null)
 
 function clearSplitHolder(holder: { value: MediaStream | null }): void {
@@ -279,7 +279,7 @@ const showMafiaSeat = computed(
   () => typeof props.mafiaSeatIndex === 'number' && props.mafiaSeatIndex > 0,
 )
 
-/** Mafia call tiles: name only; seat is a separate circle before the role chip. */
+
 const mafiaCallPrimaryLine = computed(() => {
   if (!showMafiaSeat.value || typeof props.mafiaSeatIndex !== 'number') {
     return props.displayName
@@ -334,7 +334,7 @@ const mafiaDeadBackgroundUrl = computed(() => {
 })
 const mafiaHasCustomDeadBackground = computed(() => mafiaIsDead.value && mafiaDeadBackgroundUrl.value.length > 0)
 
-/** Mafia: dim + grayscale the frame while still rendering the stream. */
+
 const mafiaDeadShade = computed(
   () => !props.isLocal && !props.streamViewMode && mafiaIsDead.value,
 )
@@ -358,7 +358,7 @@ const resolvedAvatarUrl = computed(() => {
   return typeof u === 'string' && u.trim().length > 0 ? u.trim() : ''
 })
 
-/** Video-off filler: OAuth avatar when provided, else initials (below). Elimination art takes priority. */
+
 const showCustomMafiaDeadBackgroundOnly = computed(() =>
   mafiaHasCustomDeadBackground.value && !showVideo.value,
 )
@@ -982,7 +982,6 @@ if (import.meta.env.DEV) {
   transform: none;
 }
 
-/* Без тіні — лише легкий scale (і рамка), щоб не «випирала» картка над сіткою. */
 .tile:hover:not(.is-speaking),
 .tile:focus-within:not(.is-speaking) {
   transform: scale(1.01);
@@ -1064,7 +1063,7 @@ if (import.meta.env.DEV) {
   min-height: 0;
   display: flex;
   aspect-ratio: 16 / 9;
-  /* Matting behind `object-fit: contain` video (camera or screen); portrait phone feeds letterbox inside. */
+  
   background: #050508;
   border-radius: 14px;
   container-type: size;
@@ -1077,14 +1076,14 @@ if (import.meta.env.DEV) {
   z-index: 0;
 }
 
-/* Speaking highlight: `rowSpeaking` from CallPage; scales whole `.tile-video-wrap` (webcam + overlay). */
+
 .tile-video-wrap {
   position: absolute;
   inset: 0;
   z-index: 1;
   background: #000;
   border-radius: 14px;
-  /* Clips video/overlay; participant menu is a sibling under `.tile-media` so it is not clipped here. */
+  
   overflow: hidden;
   transform-origin: center center;
   transition: transform 0.2s ease;
@@ -1157,7 +1156,7 @@ if (import.meta.env.DEV) {
   border-radius: inherit;
   overflow: hidden;
   z-index: 0;
-  /* `overflow:hidden` alone often leaves square bottom corners on <video>; clip-path forces a rounded mask. */
+  
   clip-path: inset(0 round 14px);
 }
 
@@ -1167,10 +1166,10 @@ if (import.meta.env.DEV) {
   border-radius: inherit;
 }
 
-/**
- * Call grid uses `fill-cover=false` → StreamVideo `object-fit: contain` (camera + screen).
- * Extra guard for narrow tiles if `fill-cover` ever changes.
- */
+
+
+
+
 @media (max-width: 768px) {
   .tile-video-clip :deep(.stream-video--fill) {
     object-fit: contain !important;
@@ -1197,7 +1196,7 @@ if (import.meta.env.DEV) {
   border-bottom-right-radius: 14px;
 }
 
-/* Bottom bar: name + Mafia seat — layout matches call HUD density (`--sa-space-*`). */
+
 .tile-overlay__label-group {
   display: flex;
   align-items: center;
@@ -1211,7 +1210,7 @@ if (import.meta.env.DEV) {
   pointer-events: auto;
 }
 
-/** Mafia seat: small dark circle, white digit — left of the role chip (name is separate). */
+
 .tile-overlay__seat-badge {
   display: inline-flex;
   align-items: center;
@@ -1279,7 +1278,7 @@ if (import.meta.env.DEV) {
   pointer-events: auto;
 }
 
-/** Inline rename: matches `CallPage` `.call-page__room-pop-field input` (call shell / `sa` tokens). */
+
 .tile-overlay__name-input {
   flex: 1;
   min-width: 0;
@@ -1327,10 +1326,10 @@ if (import.meta.env.DEV) {
   opacity: 0.95;
 }
 
-/**
- * Mafia + remote controls: top-right, row-reverse so 💀/❤️ sits at the true top-right, ⋯ to its left.
- * Life control stays visible; ⋯ is hidden on desktop until tile hover.
- */
+
+
+
+
 .tile-menu-cluster {
   position: absolute;
   top: 7px;
@@ -1352,7 +1351,7 @@ if (import.meta.env.DEV) {
   transition: opacity 0.15s ease;
 }
 
-/** Remote menu above overlays; visibility: hover on desktop, always on touch / narrow viewports. */
+
 .tile-menu--remote {
   z-index: 1;
 }
@@ -1411,7 +1410,7 @@ if (import.meta.env.DEV) {
   opacity: 1;
 }
 
-/** Wraps the ⋯ menu only; fade on desktop until tile hover. */
+
 .tile-menu-hoverable--remote {
   position: relative;
   transition: opacity 0.15s ease;
@@ -1618,7 +1617,7 @@ if (import.meta.env.DEV) {
 .tile-placeholder-avatar {
   box-sizing: border-box;
   flex-shrink: 0;
-  /* Scales with the tile: cqmin tracks the smaller tile axis; cap relative to inline size. */
+  
   --tile-avatar-size: min(42cqmin, 32cqi, 7.5rem);
   width: var(--tile-avatar-size);
   height: var(--tile-avatar-size);

@@ -36,14 +36,14 @@ const props = withDefaults(
     targetPayout?: number
     spinAvailable?: boolean
     spinCooldownHint?: string
-    /** Cinematic main reel on Coin Hub (`lg` strip + frame). */
+    
     variant?: 'default' | 'hero'
     /**
      * When `variant` is `hero`, omit tag + title — parent `CoinHubPage` provides section chrome
      * (roulette is embedded in a dedicated full-width block).
      */
     omitHeroHeading?: boolean
-    /** Short line under the title (e.g. daily section hint). Hero layout only. */
+    
     sectionDescription?: string
   }>(),
   {
@@ -91,7 +91,7 @@ function writeDryStreak(n: number) {
   sessionStorage.setItem(DRY_STREAK_KEY, String(n))
 }
 
-/** Spins since last ≥ {@link SPIN_BIG_WIN_MIN_COINS} coin result; nudges filler weights (session). Admin: not persisted — each spin uses a “fresh” streak for strip theatre. */
+
 const spinsSinceBigWin = ref(0)
 
 function syncDryStreakFromStorage() {
@@ -158,7 +158,7 @@ const finalPayout = computed(() => spinPayoutFromStore.value)
 const wonLineAria = computed(() => t('coinHub.spinWon', { n: finalPayout.value }))
 const rewardRarity = computed(() => getSpinRarity(finalPayout.value))
 
-/** Single gold-tier frame pulse on win (no per-rarity rainbow). */
+
 const heroWinFrameClass = computed(() => {
   if (!isHero.value || phase.value !== 'result') {
     return null
@@ -173,7 +173,7 @@ const heroWinFrameClass = computed(() => {
   return 'slot-machine--win-gold'
 })
 
-/** Prevents double API spin + double onRollComplete if complete fires twice. */
+
 const spinInteractionLock = ref(false)
 const rollCompleteHandled = ref(false)
 
@@ -203,15 +203,15 @@ const cameraIn = computed(
 const isHero = computed(() => props.variant === 'hero')
 const stripItemW = computed(() => (isHero.value ? 90 : 72))
 const stripSize = computed(() => (isHero.value ? 'lg' : 'md') as 'md' | 'lg')
-/** Tighter, casino-style main reel timing on the large hero block. */
-/** Longer main phase on hero reel so decel + bounce read as physical inertia, not a quick fade. */
-/** Hero: ~10s main travel (fast → inertia decel) + short overshoot; default strip shorter. */
+
+
+
 const spinStripDurationMs = computed(() => (isHero.value ? 10_000 : 3200))
 
 const rollIsPlaceholder = computed(
   () => rollCells.value.length === 1 && rollCells.value[0] === '—',
 )
-/** “Attract” mode: slow infinite strip before the first spin (or after a failed request). */
+
 const stripIdleAutoplay = computed(
   () =>
     isHero.value &&
@@ -437,7 +437,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!-- Hero: single “game UI” card with integrated slot window (Coin Hub main daily strip). -->
+  
   <article
     v-if="isHero"
     :class="[
@@ -929,7 +929,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* —— Coin Hub main daily spin: “slot window” card (hero) —— */
+
 .daily-spin {
   padding: 32px;
   border-radius: 20px;
@@ -945,12 +945,12 @@ onBeforeUnmount(() => {
     border-color 0.22s ease,
     transform 0.18s ease;
 }
-/* .daily-spin--focal {
-  box-shadow:
-    0 0 0 1px rgba(100, 80, 160, 0.35),
-    0 20px 60px rgba(0, 0, 0, 0.6),
-    inset 0 0 60px rgba(120, 60, 255, 0.1);
-} */
+
+
+
+
+
+
 .daily-spin--ready:hover {
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
@@ -1045,7 +1045,7 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-/* Physical “capsule” shell: layered device body; `.reel-window` = glass inside. */
+
 .slot-machine {
   position: relative;
   z-index: 0;
@@ -1055,7 +1055,7 @@ onBeforeUnmount(() => {
   border-radius: 1.75rem;
   overflow: visible;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  /* Depth: speckle + existing noise + purple rim + dark base (no new hues). */
+  
   background:
     radial-gradient(circle, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
     url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.28'/%3E%3C/svg%3E")
@@ -1221,7 +1221,7 @@ onBeforeUnmount(() => {
 .slot-machine__reel-assembly {
   position: relative;
   z-index: 2;
-  /* padding-top: 0.35rem; */
+  
 }
 
 .daily-slot {
@@ -1325,7 +1325,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   border-right: 1px solid rgba(15, 23, 42, 0.45) !important;
 }
-/* Rarity = gold intensity only (no multicolor frames). */
+
 .daily-slot :deep(.coinhub-strip-roll__cell--rarity-uncommon) {
   border: 1px solid rgba(255, 200, 120, 0.22) !important;
   box-shadow:
@@ -1414,7 +1414,7 @@ onBeforeUnmount(() => {
   opacity: 0.45;
 }
 
-/* Glass: top shine (::before) + side fade (::after); row + sweep sit under / between overlays. */
+
 .reel-window {
   isolation: isolate;
   perspective: 900px;
@@ -1559,7 +1559,7 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Tip points down into the window. */
+
 .slot-pointer {
   position: absolute;
   top: 0.15rem;
@@ -1748,7 +1748,7 @@ onBeforeUnmount(() => {
 .coinhub-spin-win__amount--rarity-common .coinhub-reward-number {
   filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.65));
 }
-/* Compact strip win: same gold system, strength scales with tier. */
+
 .coinhub-spin-win__amount--rarity-uncommon .coinhub-reward-number {
   filter: drop-shadow(0 0 6px rgba(255, 200, 100, 0.35)) drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6));
 }
@@ -2088,7 +2088,7 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Win celebration: coins to balance (same stack order as premium modal fly). */
+
 .spin-win-fly-layer {
   position: fixed;
   inset: 0;

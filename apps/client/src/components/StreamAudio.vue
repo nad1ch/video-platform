@@ -13,17 +13,17 @@ const streamAudioLog = createLogger('stream-audio')
 const props = withDefaults(
   defineProps<{
     stream: MediaStream | null
-    /** Bump when parent stream gains audio track in place. */
+    
     playRev?: number
-    /** Local listening gain 0..2 (0–200%; 1 = default). */
+    
     listenVolume?: number
-    /** Local-only mute for this stream (does not affect remote sender). */
+    
     listenMuted?: boolean
-    /** Existing call-core RMS level for this remote peer. */
+    
     audioLevel?: number
-    /** True when another peer is the dominant speaker and this stream should be ducked. */
+    
     voiceDucked?: boolean
-    /** Enables gain-node ducking and noise gate without changing stream routing. */
+    
     audioProcessing?: boolean
   }>(),
   {
@@ -42,7 +42,7 @@ const NOISE_GATE_CLOSE = 0.02
 const DUCKED_GAIN = 0.68
 const GAIN_LERP = 0.25
 
-/** One-shot gesture retry after autoplay policy blocks play() */
+
 let playUnlockHandler: (() => void) | null = null
 
 let sourceNode: MediaStreamAudioSourceNode | null = null

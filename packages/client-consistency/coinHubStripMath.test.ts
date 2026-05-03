@@ -8,7 +8,7 @@ import {
   mapSpinScrollProgress,
 } from '@/utils/coinHub/coinHubStripMath'
 
-/** Avoids optional near-100 inject and extended tease so tease triplets stay predictable. */
+
 const stableSpinRng = () => 0.99
 
 describe('endTranslateX', () => {

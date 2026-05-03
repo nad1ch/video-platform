@@ -1,6 +1,6 @@
-/**
- * Control page orchestrator: composes access + URL helpers + core setup (Firestore, voting, editor, …).
- */
+
+
+
 import { createLogger } from '@/utils/logger'
 import { useAuth } from '@/composables/useAuth'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
@@ -147,11 +147,11 @@ export function useControlOrchestrator() {
   })
 
 const syncing = ref(false)
-/** Не ставити в чергу autosave одразу після підстановки даних з Firestore (інакше зайві Write / WebChannel). */
+
 const skipRemoteAutosave = ref(false)
-/** Перший snap персонажа з Firestore (лоадер на панелі). */
+
 const panelHydrating = ref(false)
-/** Для гравця: joinToken з того ж документа що й персонаж (захист пульта). */
+
 const playerDocJoinToken = ref('')
 const playerJoinGateReady = ref(false)
 const loadError = ref(null)
@@ -170,7 +170,7 @@ const playerSlotAccessBlocked = computed(() => {
 const PLAYER_SLOTS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10']
 const PHASE_OPTIONS = ['intro', 'discussion', 'voting', 'final']
 
-/** Порядок колонок на екрані гравця (широкий layout). */
+
 const PLAYER_TRAIT_COL_LEFT = fieldConfig.filter((f) =>
   ['profession', 'health', 'phobia'].includes(f.key),
 )
@@ -299,7 +299,7 @@ const nominationsList = computed(() => nominationsFromRoom(gameRoom.value))
 
 const nominatedPlayerActive = computed(() => nominationsList.value.length > 0)
 
-/** Чекбокси ростера для масового видалення */
+
 const bulkSelectedSlots = ref([])
 
 function rosterSlotNum(id) {
@@ -484,7 +484,7 @@ watch(gameId, () => {
   bulkSelectedSlots.value = []
 })
 
-/** Після зміни гри / URL слоту підтягуємо вибір ростера (без повного remount сторінки). */
+
 watch(
   [isAdmin, playerId, gameId],
   () => {
@@ -497,14 +497,14 @@ watch(
   { immediate: true, flush: 'post' },
 )
 
-/** Документ гравця для редактора: у ведучого — вибраний слот у ростері, інакше з URL. */
+
 const editorPlayerId = computed(() => {
   if (!isAdmin.value) return playerId.value
   const sel = String(selectedDeskPlayerId.value || '').trim()
   return sel ? normalizePlayerSlotId(sel) : playerId.value
 })
 
-/** Є документ у Firestore для обраного слота (кубик і автосейв мають сенс лише тоді). */
+
 const editorPlayerInRoster = computed(() =>
   allPlayers.value.some(
     (p) => normalizePlayerSlotId(p.id) === normalizePlayerSlotId(editorPlayerId.value),
@@ -544,7 +544,7 @@ const playerPhaseDisplay = computed(() => {
   return te(pk) ? t(pk) : p
 })
 
-/** Sticky рядок: фаза, раунд, спікер, ціль, голосування, руки */
+
 const hostSummaryLine = computed(() => {
   const phRaw = String(gameRoom.value?.gamePhase || 'intro')
   const pk = `gamePhase.${phRaw}`
@@ -756,7 +756,7 @@ function eliminatedBySlot() {
   return m
 }
 
-/** Лише стан з Firestore — без оптимістичного UI (ведучий може скинути руки, гравець має одразу бачити). */
+
 const myHandRaised = computed(() => gameRoom.value?.hands?.[playerId.value] === true)
 
 const myPlayerReady = computed(() => playersReadyMap.value[String(playerId.value)] === true)
@@ -776,7 +776,7 @@ function characterReadsFemale() {
   )
 }
 
-/** Текст кнопки готовності (зелений / червоний) з урахуванням статі персонажа. */
+
 const playerReadyPillLabel = computed(() => {
   const fem = characterReadsFemale()
   if (myPlayerReady.value) {
@@ -895,26 +895,26 @@ function revealDemographics(open) {
   characterState.identityRevealed = open
 }
 
-/** Ліміт «слотів» відкриття за раунд (гравець): 6 характеристик + профіль (вік/стать) — кожен слот з ліміту. Раунд 1: два слоти (спочатку професія). Далі: один. */
+
 function computeRevealMaxForRound(rr) {
   if (rr === 1) return 2
   return 1
 }
 
-/** Скільки з CORE_FIELD_KEYS зараз відкрито (для узгодження лічильника з Firestore). */
+
 function countRevealedCoreTraits() {
   return CORE_FIELD_KEYS.filter((k) => characterState[k]?.revealed === true).length
 }
 
-/** Слоти відкриття: картки + показ профілю (оверлей). */
+
 function countPlayerRevealSlotsUsed() {
   return countRevealedCoreTraits() + (characterState.demographicsRevealed ? 1 : 0)
 }
 
-/**
- * Після зміни полів / завантаження: count не може бути більшим за фактично відкриті слоти
- * (картки + профіль), інакше лічильник з БД блокує відкриття в тому ж раунді.
- */
+
+
+
+
 function reconcilePlayerRevealLedgerCount() {
   if (isAdmin.value) return
   const rr = roomRoundLive.value
@@ -926,7 +926,7 @@ function reconcilePlayerRevealLedgerCount() {
   L.maxForRound = computeRevealMaxForRound(rr)
 }
 
-/** Синхронізує лічильник відкриттів з поточним раундом кімнати (гравець). */
+
 function syncRevealLedgerForOpenAttempt() {
   const rr = roomRoundLive.value
   const maxForRound = computeRevealMaxForRound(rr)
@@ -1259,7 +1259,7 @@ async function hostVotingStart() {
   }
 }
 
-/** Локальна статистика сесії (localStorage по gameId): голосування + підрахунок підняття рук. */
+
 const hostSessionStats = ref({ v: 1, voteSessions: [], handRaises: {} })
 
 function persistHostStats() {
@@ -1283,7 +1283,7 @@ function bumpHandRaiseSlot(pidRaw) {
   persistHostStats()
 }
 
-/** null = ще не «заряджено» — перший знімок рук без лічильника (щоб не порахувати вже підняті). */
+
 const prevHandsForStats = ref(null)
 
 watch([gameId, isAdmin], () => {
@@ -1396,7 +1396,7 @@ function aggregateForVotesByTarget(entries) {
   return m
 }
 
-/** Підсумок 👍 по серії слотів: однозначний лідер, нічия кількох, або немає голосів. */
+
 function analyzeVoteOutcome(tallies) {
   const pairs = Object.entries(tallies).filter(([, n]) => n > 0)
   if (pairs.length === 0) return { kind: 'none' }
@@ -1407,7 +1407,7 @@ function analyzeVoteOutcome(tallies) {
   return { kind: 'winner', slot: tops[0] }
 }
 
-/** Порядок переголосування: спочатку як у номінаціях, далі — за номером слота на столі. */
+
 function orderTieSlotsByNominationOrder(slots, nominations, slotOrder) {
   const norm = [...new Set(slots.map((s) => normalizePlayerSlotId(s)))]
   const set = new Set(norm)
@@ -1697,7 +1697,7 @@ async function persistNominationOnePerRound(val) {
   }
 }
 
-/** Накопичення цілей голосування в поточному раунді (окремо від черги). */
+
 async function appendVoteTargetsThisRound(slotRaw) {
   if (!isAdmin.value) return
   const tid = normalizePlayerSlotId(String(slotRaw ?? '').trim())
@@ -2129,7 +2129,7 @@ async function requestCardFromHost() {
 }
 
 let saveTimer = null
-/** Не зберігати попередній слот при перемиканні редактора — інакше після deleteDoc merge знову створює документ у Firestore. */
+
 const slotsToSkipPersistOnSwitch = new Set()
 
 function goToPlayer(id) {
@@ -2145,7 +2145,7 @@ function hostForgetSavedAndLeave() {
   router.push({ name: 'eat', query: { view: 'join', game: gameId.value } })
 }
 
-/** URL збігається з вибраним слотом — після оновлення сторінки той самий гравець у редакторі. */
+
 watch(
   () => String(selectedDeskPlayerId.value || '').trim(),
   (sel) => {
@@ -2166,7 +2166,7 @@ async function applyNewGame() {
     loadError.value = null
     const created = await ensureGameRoomExists(g)
     await saveGameRoom(g, { activeScenario: selectedScenario.value })
-    // Не викликати seed при кожному OK — інакше знову з’являються видалені слоти p1–p10.
+    // Do not seed on every OK — that would resurrect deleted p1–p10 slots.
     if (created) {
       await seedMissingStandardPlayers(g, selectedScenario.value)
       showToast(t('toast.rosterSeeded'))
@@ -2226,7 +2226,7 @@ function applyFromFirestoreSnapshot(data) {
   }
 }
 
-/** Поля службові Firestore — не передаємо в редактор персонажа. */
+
 watch(characterState, () => {
   if (
     syncing.value ||

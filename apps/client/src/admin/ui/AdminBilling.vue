@@ -40,19 +40,19 @@ const AUTO_REFRESH_MS = 6000
 
 const data = ref<AdminListDto | null>(null)
 const subscriptionsData = ref<AdminSubscriptionListDto | null>(null)
-/** Set during the very first load only — drives the "Немає даних" empty-state. */
+
 const loading = ref(false)
 const lastError = ref<string | null>(null)
 const lastFetchedAt = ref<string | null>(null)
-/** Per-row note draft, keyed by request id. */
+
 const noteDraft = ref<Record<string, string>>({})
-/** Per-row pending action ('approve' | 'reject') — disables both buttons while set. */
+
 const pending = ref<Record<string, 'approve' | 'reject'>>({})
 const rowMessage = ref<Record<string, string | null>>({})
-/** Per-subscription pending cancel — disables button while set. */
+
 const pendingSubCancel = ref<Record<string, true>>({})
 const subRowMessage = ref<Record<string, string | null>>({})
-/** "Force re-poll mono" pending flag + last-result message. */
+
 const pollMonoPending = ref(false)
 const pollMonoMessage = ref<{ kind: 'ok' | 'warn' | 'err'; text: string } | null>(null)
 
@@ -146,7 +146,7 @@ function stopAutoRefresh(): void {
 function onVisibilityChange(): void {
   if (typeof document === 'undefined') return
   if (document.visibilityState === 'visible') {
-    // Catch up immediately when the tab regains focus, then resume the interval.
+    
     void autoRefreshTick()
   }
 }
@@ -258,8 +258,8 @@ async function onPollMonoNow(): Promise<void> {
         text: `Помилка mono: ${r.data.message ?? 'невідома'}.`,
       }
     }
-    // After a successful fetch, the matcher may have transitioned a request
-    // to auto_matched / needs_review — refresh queue + subscriptions.
+    
+    
     await load()
   } finally {
     pollMonoPending.value = false
@@ -345,7 +345,7 @@ function subBadgeClasses(row: AdminSubscriptionRow): string {
   if (row.status === 'inactive') {
     return 'bg-rose-500/15 text-rose-200 ring-1 ring-rose-400/40'
   }
-  // 'expired'
+  
   return 'bg-slate-500/15 text-slate-200 ring-1 ring-slate-400/40'
 }
 

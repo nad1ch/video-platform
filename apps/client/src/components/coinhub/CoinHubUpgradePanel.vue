@@ -6,9 +6,9 @@ import '@/styles/coinhub-design-system.css'
 
 withDefaults(
   defineProps<{
-    /**
-     * Beside the hero: premium upgrade card (md+). Default: section below boosts.
-     */
+    
+
+
     inlineWithHero?: boolean
   }>(),
   { inlineWithHero: false },
@@ -114,7 +114,7 @@ function openPremiumModal() {
 </template>
 
 <style scoped>
-/* —— Premium “Upgrade plan” card (hero column) —— */
+
 .upgrade-card {
   position: relative;
   display: flex;
@@ -145,7 +145,7 @@ function openPremiumModal() {
   pointer-events: none;
 }
 
-/* Subtle noise / film to reduce flat CG */
+
 .upgrade-card__noise {
   position: absolute;
   inset: 0;
@@ -233,7 +233,7 @@ function openPremiumModal() {
   color: #e8e8ee;
 }
 
-/* CTA: shared .ch-coinhub-gold-cta from coinhub-design-system.css */
+
 .upgrade-card__cta {
   width: 100%;
   max-width: 100%;

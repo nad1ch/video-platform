@@ -34,7 +34,7 @@ const props = withDefaults(
     aria-hidden="true"
   >
     <circle class="m-bg" cx="32" cy="32" r="28" />
-    <!-- Rounded top + tail; white fill, dark eye holes -->
+    
     <path class="m-fill" d="M20 28A12 8 0 0 1 44 28L44 36C40 32 32 40 32 40S24 32 20 36Z" />
     <circle class="m-void" cx="25" cy="27" r="2.3" />
     <circle class="m-void" cx="39" cy="27" r="2.3" />
@@ -53,7 +53,7 @@ const props = withDefaults(
 
 <style scoped>
 .mafia-elimination-mark {
-  /* White-on-dark; works on any tile */
+  
   --m-dead-fg: #f4f4f6;
   --m-dead-void: #12121a;
   display: block;

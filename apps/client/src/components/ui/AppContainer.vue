@@ -1,9 +1,9 @@
 <script setup lang="ts">
 withDefaults(
   defineProps<{
-    /** Wider main column (e.g. Nadle board). */
+    
     wide?: boolean
-    /** No horizontal padding (full-bleed sections handle their own). */
+    
     flush?: boolean
   }>(),
   { wide: false, flush: false },
@@ -39,7 +39,7 @@ withDefaults(
 
 .app-container--flush {
   padding-inline: 0;
-  /* Call / full-bleed: no vertical inset — parent handles height; avoids page scroll. */
+  
   padding-block: 0;
 }
 

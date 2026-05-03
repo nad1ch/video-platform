@@ -95,8 +95,8 @@ export async function eatFirstEnsureGame(
   }
 
   // Back-fill ownerUserId on legacy rows that never had one stamped. Do NOT
-  // overwrite an existing owner — this prevents a second host from hijacking
-  // a game they did not create by simply calling `ensure`.
+  
+  
   let backfilled = false
   if (ownerId) {
     const room =
@@ -118,9 +118,9 @@ export async function eatFirstEnsureGame(
     }
   }
 
-  // Only broadcast when something actually changed. Previously every ensure
-  // call (common on join/reload / polling code paths) re-broadcast the full
-  // snapshot to every subscriber even when state was unchanged.
+  
+  
+  
   if (backfilled) {
     broadcast(gameId)
   }
@@ -137,9 +137,9 @@ export async function eatFirstMergeRoomAdmin(
     ;(e as Error & { status?: number }).status = 400
     throw e
   }
-  // Stamp ownership on first creation / legacy backfill so a host that reaches
-  // this mutation before `/ensure` cannot produce an ownerless row that any
-  // other host could then take over via the legacy fallback gate.
+  
+  
+  
   await eatFirstEnsureGame(gameId, ownerUserId)
   const g = await prisma.eatFirstGame.findUnique({ where: { id: gameId } })
   if (!g) {
@@ -206,8 +206,8 @@ export async function eatFirstPostHand(
     throw e
   }
   const pid = normalizeEatFirstSlot(playerId)
-  // `ownerUserId` is only non-null for authenticated host/admin callers; for
-  // public slot-token players it is null and ensureGame does NOT stamp an
+  
+  
   // owner (anonymous actions must not create ownership).
   await eatFirstEnsureGame(gameId, ownerUserId)
   await prisma.$transaction(async (tx) => {
@@ -238,8 +238,8 @@ export async function eatFirstPostReady(
     throw e
   }
   const pid = normalizeEatFirstSlot(playerId)
-  // Same rule as `eatFirstPostHand`: only stamp ownership when the caller is
-  // an authenticated host/admin.
+  
+  
   await eatFirstEnsureGame(gameId, ownerUserId)
   await prisma.$transaction(async (tx) => {
     const g = await tx.eatFirstGame.findUnique({ where: { id: gameId } })
@@ -270,11 +270,11 @@ export async function eatFirstClaimSlot(
   const token = randomBytes(24).toString('hex')
   try {
     // Serializable isolation closes the read-then-write race: two concurrent
-    // claims on an unclaimed slot used to both read `exTok === ''`, both pass
-    // the TAKEN check, and both update → last writer silently won, first
-    // claimer was locked out with no error signal. Under Serializable, one
-    // of the transactions aborts with a serialization error (Prisma retries
-    // or bubbles up), so exactly one claimant wins and the other gets TAKEN.
+    
+    
+    
+    
+    
     await prisma.$transaction(
       async (tx) => {
         const row = await tx.eatFirstPlayer.findUnique({
@@ -315,9 +315,9 @@ export async function eatFirstClaimSlot(
     const err = e as Error & { code?: string }
     if (err.code === 'TAKEN') return { ok: false, reason: 'taken' }
     if (err.code === 'NO_SLOT') return { ok: false, reason: 'no-slot' }
-    // Serialization failure from a racing concurrent claim on the same slot
-    // presents as a Prisma P2034 (write conflict). Surface it as `taken`
-    // rather than 500 so the client UX matches the logical outcome.
+    
+    
+    
     const prismaCode = (e as { code?: unknown })?.code
     if (prismaCode === 'P2034') return { ok: false, reason: 'taken' }
     throw e
@@ -363,18 +363,18 @@ export async function eatFirstDeletePlayerAdmin(gameId: string, slot: string): P
     throw e
   }
   const pid = normalizeEatFirstSlot(slot)
-  // Atomic path: `deleteMany` never throws on "not found" (count === 0) and
+  
   // is race-safe for two concurrent admin deletes targeting the same slot.
-  // Previously we did `findFirst` + `delete(id)`; two racing calls could
-  // both find the row and the loser would throw "Record to delete does not
-  // exist" from Prisma.
+  
+  
+  
   const deleted = await prisma.eatFirstPlayer.deleteMany({
     where: { gameId, slotId: pid },
   })
   if (deleted.count === 0) {
-    // Legacy fallback for non-normalized stored slotIds — wrapped in a
-    // transaction so the scan+delete is atomic with respect to other admin
-    // mutations on the same game.
+    
+    
+    
     await prisma.$transaction(async (tx) => {
       const all = await tx.eatFirstPlayer.findMany({ where: { gameId } })
       const match = all.find((r) => normalizeEatFirstSlot(r.slotId) === pid)
@@ -453,10 +453,10 @@ export async function eatFirstReviveEliminatedAdmin(gameId: string): Promise<num
     ;(e as Error & { status?: number }).status = 400
     throw e
   }
-  // Atomic: partial revivals previously left the room with a mix of
-  // eliminated=true/false when one update errored mid-loop. Running the scan
-  // and all updates inside a single transaction guarantees all-or-nothing so
-  // the broadcast reflects a consistent state.
+  
+  
+  
+  
   const n = await prisma.$transaction(async (tx) => {
     const players = await tx.eatFirstPlayer.findMany({ where: { gameId } })
     let count = 0

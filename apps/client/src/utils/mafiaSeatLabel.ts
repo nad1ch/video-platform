@@ -1,4 +1,4 @@
-/** One row of `mafiaPlayers.players` (seat number + on-screen name). */
+
 export type MafiaSeatLabelRow = { number: number; displayName: string }
 
 /**
@@ -17,9 +17,9 @@ export function mafiaSeatLabel(seat: number, rows: readonly MafiaSeatLabelRow[])
   return String(seat)
 }
 
-/**
- * **Game logic UI only:** seat number (queue, host panel, actions). No names.
- */
+
+
+
 export function mafiaGameSeatText(seat: number): string {
   if (Number.isInteger(seat) && seat >= 1) {
     return String(seat)

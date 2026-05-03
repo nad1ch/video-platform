@@ -9,16 +9,16 @@ import { createLogger } from '@/utils/logger'
 const localTileSpeakLog = createLogger('local-tile-speaking')
 
 const FFT_SIZE = 512
-/** Above → treat as "speaking" (local mic; match call-core order of magnitude, slightly lower for quiet USB mics). */
+
 const RMS_ON = 0.02
-/** Hysteresis off — avoid flicker when level hovers at threshold. */
+
 const RMS_OFF = 0.01
-/** Match `ParticipantTile` active-speaker debounce so local/remote feel identical. */
+
 const SPEAKING_SHOW_DELAY_MS = 200
 const SPEAKING_HIDE_DELAY_MS = 200
 
 const POLL_MS = 64
-/** DEV: log RMS / ctx about once per second at 64ms poll. */
+
 const DEV_LOG_EVERY = 16
 
 function rmsTimeDomain(analyser: AnalyserNode): number {
@@ -32,10 +32,10 @@ function rmsTimeDomain(analyser: AnalyserNode): number {
   return Math.min(1, Math.sqrt(sum / buf.length))
 }
 
-/**
- * Local preview tile: `useActiveSpeaker` in call-core excludes the local track (USB composite
- * mic/cam conflict). One lightweight `AnalyserNode` + interval polling — no extra RAF vs call-core.
- */
+
+
+
+
 export function useLocalTileSpeakingVisual(
   getStream: () => MediaStream | null | undefined,
   getIsLocal: () => boolean,

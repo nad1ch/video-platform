@@ -17,7 +17,7 @@ function roleInput(s: SessionPayload) {
   }
 }
 
-/** Поточна роль з allowlist (як у GET /api/auth/me), не лише поле в JWT. */
+
 export async function isSessionAdminFromCookie(cookieHeader: string | undefined): Promise<boolean> {
   const s = readSessionFromCookie(cookieHeader)
   if (!s) {

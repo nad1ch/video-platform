@@ -33,7 +33,7 @@ useLandingCosmicParallax(canvasEl)
 </template>
 
 <style scoped>
-/* Same cosmic stack as landing canvas (no wordmarks / raster bolts) — `lcb-*` avoids keyframe clashes with the landing route. */
+
 .landing-cosmic-backdrop {
   /* Match `PurpleLightningBackdrop`: viewport-sized layer, not full scroll height. */
   position: fixed;

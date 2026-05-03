@@ -102,9 +102,9 @@ export class MediasoupWorkerPool {
     return this.entries
   }
 
-  /**
-   * Normal shutdown: close every worker after rooms are gone.
-   */
+  
+
+
   closeAllWorkers(): void {
     this.isShuttingDown = true
     for (const e of this.entries) {

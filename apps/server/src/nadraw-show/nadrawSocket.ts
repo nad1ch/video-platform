@@ -197,9 +197,9 @@ function cleanupAfterClientDisconnect(ws: WebSocket): void {
     cancelPendingStreamerClear(streamerId)
     const timer = setTimeout(() => {
       pendingStreamerClearTimers.delete(streamerId)
-      // Re-check on fire: if a streamer tab came back during the grace
-      // window, keep the round alive. This covers fast refresh, tab
-      // restore, brief network blips.
+      
+      
+      
       if (hasActiveStreamerClient(streamerId)) {
         return
       }
@@ -213,7 +213,7 @@ function cleanupAfterClientDisconnect(ws: WebSocket): void {
   }
 }
 
-/* safeSend is now `safeSendJson` from `../utils/wsSafeSend` (imported above). */
+
 
 export function broadcastNadrawState(streamerId: string): void {
   const set = clientsByStreamer.get(streamerId)
@@ -348,8 +348,8 @@ setNadrawFeedbackListener((streamerId, payload) => {
   broadcastNadrawGuessFeedback(streamerId, payload)
 })
 
-/* parseStreamerId / parseOptionalPeerId are now shared helpers in
- * `../utils/wsUpgradeQuery` (identical byte-for-byte behavior). */
+
+
 
 type HostStartMsg = {
   type: typeof NadrawWs.hostStartRound
@@ -434,10 +434,10 @@ function parseClientMsg(
     }
   }
   if (o.type === NadrawWs.hostDraw) {
-    // Strict caps: everything is broadcast to every viewer of this streamer,
-    // so a rogue host with a modified client could otherwise push massive
-    // stroke payloads. Canvases in the UI stay well below 8 k on each axis;
-    // line widths in the palette never exceed 64. Reasonable tight caps.
+    
+    
+    
+    
     const MAX_COORD = 8192
     const MAX_LINE_WIDTH = 256
     const MAX_STROKE_ID_LEN = 128
@@ -520,9 +520,9 @@ export function attachNadrawShowSocketServer(wss: WebSocketServer): void {
     }
 
     // IMPORTANT: attach lifecycle listeners synchronously BEFORE the hydration
-    // IIFE awaits. Otherwise, a client that disconnects during hydration would
-    // fire `'close'` / `'error'` before any listener exists; the `ws` library
-    // never re-emits past events, so `clientMeta` / `clientsByStreamer` would
+    
+    
+    
     // leak forever and broadcasts would still iterate the dead socket.
     ws.on('error', () => {
       cleanupAfterClientDisconnect(ws)
@@ -551,9 +551,9 @@ export function attachNadrawShowSocketServer(wss: WebSocketServer): void {
             return
           }
 
-          // Messages that arrive before `registerClient` has run (still hydrating)
-          // have no meta yet — drop them. Same check as before the move; the
-          // client retries via subsequent user actions after receiving `state`.
+          
+          
+          
           const meta = clientMeta.get(ws)
           if (!meta || meta.streamerId !== streamerId) {
             return
@@ -642,7 +642,7 @@ export function attachNadrawShowSocketServer(wss: WebSocketServer): void {
       await hydrateNadrawLiveRoom(streamerId)
 
       // If the socket already closed during hydration, the `'close'` handler
-      // above already ran `cleanupAfterClientDisconnect` (no-op because meta
+      
       // was never registered). Avoid registering a now-dead socket.
       if (ws.readyState !== 1) {
         return
@@ -651,8 +651,8 @@ export function attachNadrawShowSocketServer(wss: WebSocketServer): void {
       const session = readSessionFromCookie(req.headers.cookie)
       const isStreamer = session != null && (await canUserControlNadrawRoom(session, streamerId))
 
-      // A new streamer tab arrived during the post-disconnect grace window —
-      // cancel the pending round-clear so the host can resume seamlessly.
+      
+      
       if (isStreamer) {
         cancelPendingStreamerClear(streamerId)
       }

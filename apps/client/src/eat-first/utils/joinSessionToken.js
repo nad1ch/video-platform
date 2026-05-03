@@ -17,7 +17,7 @@ export function setJoinSessionToken(gameId, playerId, token) {
   try {
     sessionStorage.setItem(key(gameId, playerId), t)
   } catch {
-    /* quota / приватний режим */
+    /* Storage unavailable (quota / private mode). */
   }
 }
 
@@ -26,6 +26,6 @@ export function clearJoinSessionToken(gameId, playerId) {
   try {
     sessionStorage.removeItem(key(gameId, playerId))
   } catch {
-    /* */
+    // ignore
   }
 }

@@ -13,42 +13,42 @@ const HUD_RIGHT = ['luggage', 'fact', 'quirk']
 
 const props = defineProps({
   player: { type: Object, required: true },
-  /** Spotlight (activePlayer) */
+  
   isSpotlight: { type: Boolean, default: false },
-  /** Таймер лише для currentSpeaker */
+  
   isTimerTarget: { type: Boolean, default: false },
-  /** Глобальна сітка: затемнити, коли інший говорить */
+  
   dimmed: { type: Boolean, default: false },
   solo: { type: Boolean, default: false },
   cinema: { type: Boolean, default: false },
   speakerTimeLeft: { type: Number, default: undefined },
   speakerTimerTotal: { type: Number, default: 30 },
   drama: { type: Boolean, default: false },
-  /** Голосування з gameRoom.voting */
+  
   votingActive: { type: Boolean, default: false },
   votingTargetId: { type: String, default: '' },
-  /** Тільки персональний оверлей: кнопки голосу активні */
+  
   voteInteractive: { type: Boolean, default: false },
-  /** Сховати смугу голосування на картці (батько показує зверху, напр. персональний оверлей) */
+  
   hideVoteStrip: { type: Boolean, default: false },
   gameId: { type: String, default: '' },
   nominatedPlayerId: { type: String, default: '' },
   /** Хто ініціював номінацію (slot p1…) — legacy */
   nominatedById: { type: String, default: '' },
-  /** Рядок «1, 3» з масиву nominations або legacy */
+  
   nominatorsLine: { type: String, default: '' },
   roomRound: { type: Number, default: 1 },
-  /** Голоси проти цього гравця в поточному раунді: { id, choice } */
+  
   votesReceived: { type: Array, default: () => [] },
   hasVotedThisRound: { type: Boolean, default: false },
-  /** Персональний оверлей: тебе голосують */
+  
   isVoteTargetSelf: { type: Boolean, default: false },
   handRaised: { type: Boolean, default: false },
-  /** Персональний оверлей: немає спікера й немає голосування */
+  
   idleWaiting: { type: Boolean, default: false },
-  /** Глобальна сітка: >3 рук у грі — не показувати ✋ на картці */
+  
   suppressHandBadge: { type: Boolean, default: false },
-  /** Міні-клітинка глобального оверлею: той самий solo-HUD, але від container (cqw/cqh) */
+  
   mosaicTile: { type: Boolean, default: false },
 })
 
@@ -58,7 +58,7 @@ const labelByKey = computed(() =>
   Object.fromEntries(fieldConfig.map((f) => [f.key, t(`traits.${f.key}`)])),
 )
 
-/** Закрите поле в HUD: [ ПРОФЕСІЯ ] */
+
 function fieldLabelUi(fieldKey) {
   const raw = labelByKey.value[fieldKey] ?? fieldKey
   const loc = typeof locale.value === 'string' && locale.value ? locale.value : 'uk'
@@ -78,7 +78,7 @@ function statDisplay(player, fieldKey) {
   return { mode: 'value', text: v.length ? v : '—' }
 }
 
-/** Вік/стать на оверлеї; ім’я окремо завжди */
+
 function demographicsRevealed(player) {
   if (player.demographicsRevealed === true) return true
   if (player.demographicsRevealed === false) return false
@@ -107,7 +107,7 @@ function isEliminated(player) {
   return player.eliminated === true
 }
 
-/** Випадковий арт вибуття 1…12 */
+
 const deathArtIndex = ref(null)
 
 watch(
@@ -235,7 +235,7 @@ const showVoteDetail = computed(
     props.votesReceived.length > 0,
 )
 
-/** Детальний список голосів з мікро-stagger (30–50ms) */
+
 const staggeredVotes = ref([])
 const staggerTimers = []
 
@@ -335,7 +335,7 @@ const voteButtonsLocked = computed(
   () => voteBusy.value || props.hasVotedThisRound || localVoteChoice.value != null,
 )
 
-/** Короткий flash рамки live-голосів (сітка + персональний перегляд цілі) */
+
 const voteFlash = ref(false)
 let voteFlashTimer = null
 
@@ -361,7 +361,7 @@ onUnmounted(() => {
 })
 
 const voteBusy = ref(false)
-/** Локальний стан після успішного голосу (персональний оверлей) */
+
 const localVoteChoice = ref(null)
 
 watch(
@@ -706,7 +706,6 @@ async function submitVote(choice) {
 .card-grid {
   --cg-pad-x: clamp(0.75rem, min(2.8vw, 3.2vh), 1.45rem);
   --cg-pad-y: clamp(0.85rem, min(3vw, 3.4vh), 1.5rem);
-  /* +20%: картки характеристик, номер слота, цифра таймера, голосування */
   --cg-stat-gap: clamp(0.504rem, min(2.16vw, 2.64vh), 0.9rem);
   --cg-stat-pad-y: clamp(0.624rem, min(2.64vw, 3.12vh), 1.26rem);
   --cg-stat-pad-x: clamp(0.696rem, min(3.12vw, 3.6vh), 1.44rem);
@@ -720,7 +719,6 @@ async function submitVote(choice) {
   position: relative;
   padding: 0;
   border-radius: 14px;
-  /* Трохи прозоріше — вебка з відеошару проглядає під карткою */
   background: rgba(12, 8, 28, 0.78);
   border: 1px solid rgba(168, 85, 247, 0.28);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
@@ -739,7 +737,6 @@ async function submitVote(choice) {
   }
 }
 
-/* Spotlight: окремо від спікера — статична фіолетова рамка + м’яке світіння */
 .card-grid--spotlight:not(.card-grid--speaker) {
   transform: scale(1.008);
   border-color: rgba(168, 85, 247, 0.5);
@@ -783,7 +780,6 @@ async function submitVote(choice) {
     filter 0.45s ease;
 }
 
-/* Спікер: лише легка рамка — центр кадру не зафарбовуємо */
 .card-grid--speaker:not(.card-grid--eliminated) {
   opacity: 1;
   filter: none;
@@ -1000,7 +996,7 @@ async function submitVote(choice) {
   animation: voteStripPulse 0.1s ease-out;
 }
 
-/* brightness — не обрізається overflow:hidden на .card-grid */
+
 @keyframes voteStripPulse {
   0% {
     filter: brightness(1.35);
@@ -1562,10 +1558,10 @@ async function submitVote(choice) {
   text-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
 }
 
-/**
- * Персональний HUD: vmin/vw/vh — масштаб від розміру екрана.
- * Бічні колонки (bl/br) ширші за верхні (tl/tr).
- */
+
+
+
+
 .hud-root--solo.hud-root--eliminated {
   background: #050308 !important;
   opacity: 1 !important;
@@ -1577,7 +1573,6 @@ async function submitVote(choice) {
   --hud-top-max: min(52vw, clamp(13rem, 36vmin, 26rem));
   --hud-pad-side: clamp(0.78rem, min(2.8vw, 3.2vh), 1.55rem);
   --hud-pad-top: clamp(0.68rem, min(2.2vw, 2.8vh), 1.25rem);
-  /* +20%: характеристики, великий номер слота, таймер, голосування (ті ж класи) */
   --hud-stat-gap: clamp(0.54rem, min(2.04vw, 2.4vh), 1.02rem);
   --hud-stat-pad-y: clamp(0.816rem, min(3.36vw, 3.84vh), 1.62rem);
   --hud-stat-pad-x: clamp(0.9rem, min(3.84vw, 4.32vh), 1.86rem);
@@ -1604,7 +1599,6 @@ async function submitVote(choice) {
   }
 }
 
-/* Глобальна мозаїка: компактніший HUD, більше місця під відео по центру */
 .hud-root--solo.hud-root--mosaic {
   --hud-edge: clamp(0.28rem, min(1.4cqw, 1.9cqh), 0.85rem);
   --hud-side-max: min(30cqw, clamp(3.2rem, 30cqmin, 10.5rem));
@@ -1679,7 +1673,6 @@ async function submitVote(choice) {
   letter-spacing: 0.1em;
 }
 
-/* Spotlight без спікера: окремий стиль — рамка + м’який glow, без пульсу */
 .hud-root--solo.hud-root--spotlight:not(.hud-root--speaker) .hud-block {
   border-color: rgba(168, 85, 247, 0.48);
   box-shadow:
@@ -1692,7 +1685,7 @@ async function submitVote(choice) {
   border-color: rgba(168, 85, 247, 0.26);
 }
 
-/* Спікер: без outline на весь кадр — акцент лише на блоці з таймером (hud-tr) */
+
 .hud-root--solo.hud-root--speaker:not(.hud-root--eliminated):not(.hud-root--nominated) .hud-block:not(.hud-tr) {
   box-shadow:
     0 2px 14px rgba(0, 0, 0, 0.28),

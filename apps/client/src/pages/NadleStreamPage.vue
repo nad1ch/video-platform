@@ -23,7 +23,7 @@ const nadleLog = createLogger('nadle-ws')
 
 const DEMO_TWITCH_CHANNEL = STREAMER_NICK
 
-/** Ланцюг висоти як у `sa-call-route` — див. `style.css` (`html.sa-nadle-route`). */
+
 const NADLE_ROUTE_HTML_CLASS = 'sa-nadle-route'
 
 function normalizeTwitchLogin(raw: string | null | undefined): string | null {
@@ -44,10 +44,10 @@ const route = useRoute()
 const { t } = useI18n()
 const { isAuthenticated, user, isAdmin, ensureAuthLoaded } = useAuth()
 
-/**
- * URL `/nadle/:name` targets a streamer room; if the signed-in user has a linked `Streamer` row,
- * their own room (chat + `streamerId`) is always used.
- */
+
+
+
+
 const effectiveNadleSlug = computed((): string | null => {
   const u = user.value
   const fromAccount =
@@ -58,7 +58,7 @@ const effectiveNadleSlug = computed((): string | null => {
   return normalizeTwitchLogin(String(route.params.streamer || ''))
 })
 
-/** Per-streamer local prefs (effective slug). */
+
 const nadleStorageScope = computed(() => effectiveNadleSlug.value || 'default')
 
 const {
@@ -88,7 +88,7 @@ function showNadleToast(text: string): void {
   }, 2200)
 }
 
-/** Unique per page load / tab — never from localStorage (avoids WS / UI collisions across tabs). */
+
 const nadleTabPeerId =
   typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
@@ -218,7 +218,7 @@ function confettiStyle(i: number): Record<string, string> {
 const guessFieldId = 'nadle-guess-sr'
 const guessInputEl = ref<HTMLInputElement | null>(null)
 
-/** Довжина слова для підказки в чаті: з WS-стану раунду (як на сервері для Twitch), інакше локальна сітка. */
+
 const chatTargetWordLength = computed(() => {
   const ws = gameState.value?.wordLength
   if (typeof ws === 'number' && Number.isFinite(ws) && ws > 0) {
@@ -716,7 +716,6 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
-/* Десктоп-сітка з `min-width: 1201px`; нижче — планшет/мобільна колонка. */
 @media (max-width: 1200px) {
   .page-route {
     flex: 0 1 auto;
@@ -736,7 +735,7 @@ onBeforeUnmount(() => {
   --nadle-tile-bg: rgba(102, 56, 143, 0.33);
   flex: 1 1 auto;
   padding-block: var(--sa-space-2) var(--sa-space-5);
-  /* Horizontal inset comes from `AppShellLayout` (`--app-shell-content-x`); avoid double padding. */
+  
   padding-inline: 0;
   font-family: var(--sa-font-main);
   display: flex;
@@ -1004,7 +1003,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 767px) {
-  /* Кнопка прокрутки до чату в потоці документа; сам чат більше не fixed-оверлей (не наїжджає на поле/клавіатуру). */
   .nadle-page__chat-mobile-trigger {
     display: flex;
   }
@@ -1017,11 +1015,10 @@ onBeforeUnmount(() => {
   grid-template-columns: 1fr;
   gap: var(--sa-space-4);
   align-items: stretch;
-  /* `minmax(min-content, max-content)` ламав flow на одній колонці (планшет). */
+  
   grid-auto-rows: auto;
 }
 
-/* Триколонка: лідерборд/чат не розтягуються ширше за клітинку grid, горизонтальний вміст не «протікає». */
 .nadle-page__grid :deep(.nadle-page__stack--leader),
 .nadle-page__grid :deep(.nadle-page__stack--chat) {
   min-width: 0;
@@ -1036,7 +1033,6 @@ onBeforeUnmount(() => {
 }
 
 @media (min-width: 1201px) {
-  /* Одна висота колонок, скрол лише всередині (чат / таблиця), без скролу body. */
   .page-route {
     height: 100%;
     max-height: 100%;
@@ -1045,7 +1041,7 @@ onBeforeUnmount(() => {
     min-height: 0;
   }
 
-  /* Chrome-padding дає `app-shell-main__viewport--chrome`; без цього cap вузькіший за ряд хедера (`AppContainer --wide`). */
+  /* Wide header uses chrome-padded viewport; without this, max-width is narrower than the header row. */
   .app-container.app-container--wide.app-container--flush.nadle-page {
     max-width: 100%;
   }
@@ -1120,7 +1116,6 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Мобільний / планшетний стек: одна колонка, скрол сторінки; порядок блоків фіксований. */
 @media (max-width: 1200px) {
   .page-route {
     height: auto;
@@ -1353,7 +1348,6 @@ onBeforeUnmount(() => {
   }
 
   @media (max-width: 1200px) {
-    /* Один плавний режим для всіх <=1200px, без окремого "перелому" на 960px. */
     .nadle-page--len5 .nadle-page__game {
       --nadle-cell: min(
         clamp(3rem, 6.6vw, 4.75rem),
@@ -1537,7 +1531,6 @@ onBeforeUnmount(() => {
     min-height: 0;
   }
 
-  /* Триколонка: колонка чату тягнеться по висоті рядка; шапка fixed, повідомлення — scroll. */
   .nadle-page__grid :deep(.nadle-page__stack--chat) {
     min-height: 0;
     height: 100%;
@@ -1554,7 +1547,7 @@ onBeforeUnmount(() => {
 }
 
 .nadle-page__grid :deep(.nadle-page__stack--leader > .nadle-page__leader-stack) {
-  /* `flex` лише в медіа: ≤1024 — за контентом; ≥1025 — тягнеться в колонці сітки (не перезаписувати пізнішим правилом). */
+  /* <=1024: intrinsic height; >=1025: stretch in grid — keep ordering so later rules do not undo this. */
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -1953,7 +1946,7 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Final game-card sizing: vertical inset only; shell + grid gaps define horizontal alignment. */
+
 .nadle-page__stack--game {
   display: flex;
   align-items: center;

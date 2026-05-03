@@ -54,7 +54,7 @@ export type BillingFlowKind =
 export type BillingFlowError = {
   code: string
   message: string
-  /** True when the server signalled MONO_JAR_URL is missing (server-side config issue). */
+  
   jarMisconfigured: boolean
 }
 
@@ -83,9 +83,9 @@ const DEFAULT_POLL_TIMEOUT_MS = 180_000
 export function useJarBillingFlow() {
   const request = ref<PaymentRequestDto | null>(null)
   const loading = ref(false)
-  /** True while the `mark-paid` HTTP call is in flight. */
+  
   const submittingCheck = ref(false)
-  /** True while the status poll interval is active (request is `checking`). */
+  
   const isPolling = ref(false)
   const error = ref<BillingFlowError | null>(null)
 
@@ -124,7 +124,7 @@ export function useJarBillingFlow() {
       kind.value === 'expired',
   )
 
-  /** True when buttons that mutate billing state should be disabled. */
+  
   const isBusy = computed(() => loading.value || submittingCheck.value)
 
   function stopPolling(): void {
@@ -194,7 +194,7 @@ export function useJarBillingFlow() {
       try {
         next = await fetchJarPaymentRequest(requestId)
       } catch (err) {
-        // Defence in depth — `jsonRequest` already returns a structured error,
+        
         // but a sync throw should not crash the interval.
         log.warn('payment-request poll threw', err)
         if (Date.now() >= pollDeadline) stopPolling()
@@ -205,9 +205,9 @@ export function useJarBillingFlow() {
         return
       }
       if (!next.ok) {
-        // 404 → request has been deleted/owner mismatch. Stop polling so we
-        // don't hammer the server. Other errors → keep last known status,
-        // just wait for next tick / timeout.
+        
+        
+        
         if (next.status === 404) {
           stopPolling()
           return
@@ -220,20 +220,19 @@ export function useJarBillingFlow() {
 
       if (isTerminalStatus(next.data.status)) {
         stopPolling()
-        // Surface the terminal as a global toast (so a user with the modal
-        // closed sees it on whatever page they're on). De-duped via
-        // `seenEventKeys` — the global notifier won't fire a second toast.
+        
+        
+        
         notifyTerminalRequestStatus(requestId, next.data.status)
         if (SUCCESS_TERMINAL_STATUSES.includes(next.data.status)) {
-          // Push the latest subscription to the singleton so other parts of
-          // the app (Pro badge, header, etc.) update immediately.
+          
+          
           void refreshSub()
         }
         return
       }
       if (Date.now() >= pollDeadline) {
-        // Timeout — leave status as-is (most likely 'checking'); modal already
-        // renders the "Платіж може з'явитися не миттєво…" notice.
+        
         stopPolling()
       }
     }
@@ -272,7 +271,7 @@ export function useJarBillingFlow() {
       if (r.data.status === 'checking') {
         startStatusPolling(r.data.paymentRequestId)
       } else if (isTerminalStatus(r.data.status) && SUCCESS_TERMINAL_STATUSES.includes(r.data.status)) {
-        // Defensive — reused request was already activated since last visit.
+        
         void refreshSub()
       }
     } finally {
@@ -306,27 +305,27 @@ export function useJarBillingFlow() {
         return
       }
       applyServerStatus(id, r.data.status, r.data.expiresAt)
-      // Source-of-truth update: the server's response embeds a fresh subscription DTO.
-      // We refresh the singleton anyway so other parts of the app pick up the change.
+      
+      
       void refreshSub()
 
       if (SUCCESS_TERMINAL_STATUSES.includes(r.data.status)) {
-        // Already activated — no polling needed; clear pending and emit toast.
+        
         stopPolling()
         notifyTerminalRequestStatus(id, r.data.status)
         return
       }
       if (r.data.status === 'checking') {
-        // Webhook may still be in flight, OR admin may reject — poll request
-        // status so we react to all terminal transitions, not just activation.
-        // Persist the pending id so the GLOBAL notifier picks up terminal
-        // transitions even after the modal is closed or the user navigates
-        // away from `/app/billing`.
+        
+        
+        
+        
+        
         writePendingPaymentRequestId(id)
         startStatusPolling(id)
         return
       }
-      // needs_review / rejected / expired came back synchronously — no poll.
+      
       stopPolling()
       notifyTerminalRequestStatus(id, r.data.status)
     } catch (err) {
@@ -345,7 +344,7 @@ export function useJarBillingFlow() {
   function openJarLinkInNewTab(): void {
     const url = request.value?.jarUrl
     if (!url) return
-    // `noopener,noreferrer` removes window.opener leak; `_blank` opens new tab.
+    
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 

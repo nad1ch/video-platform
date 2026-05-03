@@ -6,7 +6,7 @@ const props = defineProps({
   options: { type: Array, required: true },
   ariaLabel: { type: String, required: true },
   disabled: { type: Boolean, default: false },
-  /** header = вузький тригер; block = на всю ширину рядка */
+  
   variant: { type: String, default: 'block' },
 })
 

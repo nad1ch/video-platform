@@ -1,8 +1,8 @@
 import { apiFetch, readJsonIfOk } from '@/utils/apiFetch'
 
-/**
- * Shared admin GET helper: 403 is explicit; otherwise JSON when `ok`, same as manual `readJsonIfOk` usage.
- */
+
+
+
 export async function adminGetJson<T>(path: string): Promise<
   | { forbidden: true }
   | { forbidden: false; notOk: true }

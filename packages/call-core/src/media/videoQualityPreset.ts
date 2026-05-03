@@ -10,7 +10,7 @@ export type VideoPublishTier = VideoQualityPreset | 'auto_small_room' | 'auto_la
 
 export const VIDEO_QUALITY_PRESETS: VideoQualityPreset[] = ['economy', 'balanced', 'hd']
 
-/** Inclusive: <= this many active camera publishers → high small-room profile. */
+
 export const ACTIVE_CAMERA_SMALL_ROOM_MAX = 4
 export const CALL_VIDEO_WIDTH = 854
 export const CALL_VIDEO_HEIGHT = 480
@@ -38,25 +38,25 @@ export const FIXED_CALL_VIDEO_ENCODING: RtpEncodingParameters = {
   scaleResolutionDownBy: 1,
 } as const
 
-/**
- * Fixed call camera capture: every participant publishes exactly 854×480 with a 20 fps cap.
- */
+
+
+
 export const VIDEO_PRESET_MAFIA: MediaTrackConstraints = {
   width: { exact: CALL_VIDEO_WIDTH },
   height: { exact: CALL_VIDEO_HEIGHT },
   frameRate: { max: CALL_VIDEO_MAX_FRAMERATE },
 } as const
 
-/**
- * Back-compat export; fixed-quality calls intentionally use the same capture constraints for every tier.
- */
+
+
+
 export const VIDEO_PRESET_FALLBACK: MediaTrackConstraints = {
   ...VIDEO_PRESET_MAFIA,
 } as const
 
-/**
- * Numeric view of the fixed capture target for call sites that read `WIDTH_IDEAL` / `FPS_MAX`.
- */
+
+
+
 export const AUTO_LARGE_ROOM_VIDEO_CAPTURE = {
   WIDTH_IDEAL: CALL_VIDEO_WIDTH,
   HEIGHT_IDEAL: CALL_VIDEO_HEIGHT,
@@ -66,7 +66,7 @@ export const AUTO_LARGE_ROOM_VIDEO_CAPTURE = {
   FPS_MAX: CALL_VIDEO_MAX_FRAMERATE,
 } as const
 
-/** Back-compat export; small rooms use the same fixed 480p capture as every other room. */
+
 export const AUTO_SMALL_ROOM_VIDEO_CAPTURE = {
   WIDTH_IDEAL: CALL_VIDEO_WIDTH,
   HEIGHT_IDEAL: CALL_VIDEO_HEIGHT,
@@ -108,30 +108,30 @@ export function countActiveCameraPublishersAtWire(
 
 export type ResolveOutgoingVideoPublishTierInput = {
   manualPreset: VideoQualityPreset
-  /** User chose economy/balanced/hd in UI (or legacy LS). */
+  
   manualExplicit: boolean
-  /** Only admins see manual controls; when false, manual preset is ignored for encoding. */
+  
   allowManualQuality: boolean
   activeCameraPublishersAtWire: number
 }
 
-/**
- * Single source of truth for outbound capture/encode tier.
- * Fixed-quality calls intentionally ignore manual presets and participant counts.
- */
+
+
+
+
 export function resolveOutgoingVideoPublishTier(input: ResolveOutgoingVideoPublishTierInput): VideoPublishTier {
   void input
   return 'auto_large_room'
 }
 
-/** @deprecated Use `resolveOutgoingVideoPublishTier` — kept for narrow call sites that only map explicit preset. */
+
 export function resolveVideoPublishTier(preset: VideoQualityPreset, explicit: boolean): VideoPublishTier {
   void preset
   void explicit
   return 'auto_large_room'
 }
 
-/** Fixed capture constraints for every tier. */
+
 export function getCallVideoConstraints(tier: VideoPublishTier): MediaTrackConstraints {
   void tier
   return { ...VIDEO_PRESET_MAFIA }

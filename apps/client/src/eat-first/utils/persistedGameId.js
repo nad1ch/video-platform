@@ -1,4 +1,4 @@
-/** Останній обраний game id — переживає оновлення сторінки та перехід без `?game=` у URL. */
+
 const KEY = 'eat-first:last-game-id'
 const MAX_LEN = 96
 
@@ -21,6 +21,6 @@ export function setPersistedGameId(id) {
     if (!t || t.length > MAX_LEN) return
     localStorage.setItem(KEY, t)
   } catch {
-    /* quota / приватний режим */
+    /* Storage unavailable (quota / private mode). */
   }
 }

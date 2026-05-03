@@ -58,7 +58,7 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-/* Local guess grid tiles; vars --nadle-gap / --nadle-cell come from ancestor .nadle-page. */
+
 .nadle-page__guess-board {
   display: flex;
   flex-direction: column;

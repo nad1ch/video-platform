@@ -1,7 +1,7 @@
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import type { AuthMode } from '@/types/authMode'
 
-/** Stable auth page query: keep `redirect`, set `mode`, drop noise. */
+
 export function replaceAuthQuery(
   route: RouteLocationNormalizedLoaded,
   mode: AuthMode,

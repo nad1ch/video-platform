@@ -16,7 +16,7 @@ import NadrawRoundSetupPanel from '@/features/nadraw-show/components/NadrawRound
 import type { NadrawRoundSetupWordSource } from '@/features/nadraw-show/core/nadrawTypes'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 
-/** Locks the shell to the viewport; see `style.css` (`html.sa-nadraw-route`). */
+
 const NADRAW_HTML_CLASS = 'sa-nadraw-route'
 
 const { t } = useI18n()
@@ -93,7 +93,7 @@ const roundsPlanHud = computed(() => {
   return t('nadrawShow.roundProgressHud', { current, total: st.roundsPlanned })
 })
 
-/** Full setup (overlay) only when no multi-round session is active. */
+
 const showRoundSetupOverlay = computed(() => {
   if (!showHostChrome.value) {
     return false
@@ -195,7 +195,7 @@ const gameFeelLine = computed(() => {
   return `🟢 ${t('nadrawShow.gameFeelRound')}`
 })
 
-/** Viewers: lobby veil until server state arrives or round is idle (host sees setup panel instead). */
+
 const viewerIdleVeil = computed(() => {
   if (showHostChrome.value) {
     return false
@@ -225,7 +225,7 @@ const showCanvasStatsHud = computed(() => {
   return Boolean(st && st.phase !== 'idle')
 })
 
-/** Streamer-only: word to draw — shown on the camera strip while drawing. */
+
 const canvasHostWordToDrawInCamera = computed((): { label: string; word: string } | null => {
   if (!showHostChrome.value) {
     return null
@@ -241,7 +241,7 @@ const canvasHostWordToDrawInCamera = computed((): { label: string; word: string 
   return { label: 'nadrawShow.canvasWordToDraw', word: w }
 })
 
-/** Streamer-only: revealed word at round end — canvas HUD (and break modal when it covers the board). */
+
 const canvasHostWordWasForHost = computed((): { word: string } | null => {
   if (!showHostChrome.value) {
     return null
@@ -425,7 +425,7 @@ watch(
       <aside
         class="flex w-full max-w-none shrink-0 flex-col gap-3 overflow-hidden px-3 pt-3 max-md:max-h-[min(58vh,100%)] md:h-full md:w-[320px] md:min-w-[280px] md:max-w-[320px] md:min-h-0 md:px-0 md:pt-0"
       >
-        <!-- Single merged card: HUD + camera + streamer controls -->
+        
         <div
           class="flex shrink-0 flex-col overflow-hidden rounded-xl border border-slate-700/80 bg-slate-900/90 shadow-md"
         >

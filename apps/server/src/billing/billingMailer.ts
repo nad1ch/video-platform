@@ -70,10 +70,10 @@ export type BillingAdminEventType =
   | 'approved'
   | 'rejected'
 
-/**
- * Full snapshot the admin email needs. Caller is responsible for assembling
- * this from a single DB read so retries never produce inconsistent context.
- */
+
+
+
+
 export type BillingAdminNotificationContext = {
   event: BillingAdminEventType
   paymentRequest: {
@@ -263,9 +263,9 @@ export async function sendBillingAdminNotification(
       { throwInProduction: false, devLogTag: DEV_LOG_TAG },
     )
   } catch (err) {
-    // Auth-style throws (network/SMTP error) are caught here so billing flow
-    // is never rolled back. Logged with subject + recipient so ops can re-send
-    // manually by clearing `<event>EmailSentAt` on the PaymentRequest.
+    
+    
+    
     console.warn(
       '[billing][mail] send failed',
       SUBJECTS[ctx.event],
@@ -278,9 +278,9 @@ export async function sendBillingAdminNotification(
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* User-facing payment notifications                                          */
-/* -------------------------------------------------------------------------- */
+
+
+
 
 /**
  * Context for the user-facing email sent on a billing event. Lean: only the
@@ -315,9 +315,9 @@ export type UserBillingNotificationContext = {
   displayName: string
   amountKopecks: number
   currency: string
-  /** Active subscription expiresAt for activation/expiry events; ignored otherwise. */
+  
   subscriptionExpiresAt: Date | null
-  /** Optional admin note shown in rejection / cancellation email bodies. */
+  
   adminNote: string | null
 }
 
@@ -332,7 +332,7 @@ const USER_SUBJECTS: Record<UserBillingEventType, string> = {
 
 function fmtUahWithCcy(amountKopecks: number, currency: string): string {
   const ccy = currency === 'UAH' ? '₴' : currency
-  // Drop trailing ".00" for whole-UAH amounts (e.g. "99 ₴" instead of "99.00 ₴")
+  
   const decimal = (amountKopecks / 100).toFixed(2).replace(/\.00$/, '')
   return `${decimal} ${ccy}`
 }
@@ -394,7 +394,7 @@ function renderUserBody(
     }.</p><p>Поновіть, щоб продовжити користуватися Pro — відкрийте розділ білінгу в застосунку.</p>`
     return { text, html }
   }
-  // rejected (default fall-through for the original BillingAdminEventType set)
+  
   const noteText = ctx.adminNote ? ` Коментар адміністратора: ${ctx.adminNote}` : ''
   const noteHtml = ctx.adminNote
     ? `<p>Коментар адміністратора: <em>${escapeHtml(ctx.adminNote)}</em></p>`
@@ -426,8 +426,8 @@ export async function sendUserBillingNotification(
         subject: USER_SUBJECTS[ctx.event],
         text,
         html,
-        // User-facing emails reuse the canonical EMAIL_FROM; SMTP_FROM stays
-        // dedicated to admin/ops mail when both are configured.
+        
+        
         fromOverride: null,
       },
       { throwInProduction: false, devLogTag: DEV_LOG_TAG },
@@ -445,9 +445,9 @@ export async function sendUserBillingNotification(
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Subscription-cancellation notification                                     */
-/* -------------------------------------------------------------------------- */
+
+
+
 
 /**
  * Context for a manual subscription cancellation. Distinct from the
@@ -465,7 +465,7 @@ export type SubscriptionCancelledNotificationContext = {
     plan: string
     previousStatus: 'active' | 'inactive' | 'expired'
     newStatus: 'active' | 'inactive' | 'expired'
-    /** New `expiresAt` after the cancel — for "active until" display. */
+    
     expiresAt: Date
     startsAt: Date
   }

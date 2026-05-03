@@ -88,7 +88,7 @@ function slotNum(id) {
   return s.replace(/^p/i, '') || s
 }
 
-/** OBS / стрім: без токена (публічне джерело). */
+
 function openPersonalOverlay(pid) {
   router.push({
     name: 'eat',
@@ -96,7 +96,7 @@ function openPersonalOverlay(pid) {
   })
 }
 
-/** Глобальна сітка оверлею для OBS (без ?player — глядацька сцена). */
+
 function openGlobalOverlay() {
   router.push({ name: 'eat', query: { view: 'overlay', game: gameId.value } })
 }
@@ -164,7 +164,7 @@ async function confirmNameModal() {
   await runClaimSlot(id, displayName)
 }
 
-/** Панель гравця: зайняття слота + токен у URL. */
+
 async function runClaimSlot(id, displayName) {
   if (!id || joinActionBusy.value) return
   joinActionBusy.value = true
@@ -444,7 +444,6 @@ function handUpJoin(pid) {
   font-family: var(--font-body);
   color: var(--text-body);
   overflow-x: hidden;
-  /* Короткий fade блоків після маршруту — близько до `route-soft` у шеллі. */
   --motion-duration: 0.14s;
 }
 
@@ -618,7 +617,6 @@ function handUpJoin(pid) {
   transform: scale(1.04);
 }
 
-/* «Хто ти зараз?»: на широкому екрані — 3 картки в один ряд */
 .cta-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -833,7 +831,6 @@ function handUpJoin(pid) {
   color: var(--text-muted);
 }
 
-/* «Обери свій слот»: на великому екрані — 5×2 (два рядки), далі адаптивно */
 .cards {
   display: grid;
   gap: 0.85rem;

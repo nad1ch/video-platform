@@ -33,13 +33,13 @@ export function easeOutCubic(t: number) {
   return 1 - (1 - u) ** 3
 }
 
-/** Main slot reward pool (visual + filler). Server `targetPayout` must appear as last tease cell. */
+
 export const SLOT_VISUAL_POOL: readonly number[] = [5, 8, 12, 20, 25, 50, 100]
 
-/**
- * Weights for legacy helpers / tests (not the only filler source; spin reel uses tier bias too).
- * Low values more frequent.
- */
+
+
+
+
 const WEIGHTED_POOL: readonly { value: number; weight: number }[] = [
   { value: 5, weight: 30 },
   { value: 8, weight: 25 },
@@ -50,7 +50,7 @@ const WEIGHTED_POOL: readonly { value: number; weight: number }[] = [
   { value: 100, weight: 2 },
 ]
 
-/** Picks a visual value for non-winning strip cells (weighted). Exposed for tests / future tuning. */
+
 export function pickWeightedVisualReward(rng: () => number = Math.random): number {
   const total = WEIGHTED_POOL.reduce((s, r) => s + r.weight, 0)
   let r = rng() * total
@@ -74,13 +74,13 @@ export function buildSpinStripCells(
   return buildSpinStripFromPayout(targetPayout, opts)
 }
 
-/** Alias for clarity in UI docs — same as `buildSpinStripCells`. */
+
 export const buildVisualReel = buildSpinStripCells
 
-/**
- * "Slot" motion: fast run → long decel (inertia) → final approach → last-time snap.
- * Pairs with long `durationMs` on the strip + overshoot bounce.
- */
+
+
+
+
 export function mapSlotMachineProgress(u: number): number {
   const t = Math.min(1, Math.max(0, u))
   if (t <= 0) {
@@ -101,19 +101,19 @@ export function mapSlotMachineProgress(u: number): number {
   return 0.97 + 0.03 * ((t - 0.9) / 0.1) ** 0.75
 }
 
-/**
- * Back-compat export: `mapSpinScrollProgress` is now the phased slot curve (was split bezier + tail).
- * Games that relied on the old curve should re-tune; daily spin now uses this exclusively.
- */
+
+
+
+
 export function mapSpinScrollProgress(u: number): number {
   return mapSlotMachineProgress(u)
 }
 
 const CASE_POOL: readonly string[] = ['+5', '+10', '+15', '+20', '+25', '+30', '+50', '+100']
 
-/**
- * Pads with pool values; places `targetLine` at a fixed index so the roll can land on it.
- */
+
+
+
 export function buildCaseStripCells(targetLine: string): { cells: string[]; landIndex: number } {
   const out: string[] = []
   for (let i = 0; i < 32; i += 1) {

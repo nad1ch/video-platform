@@ -1,4 +1,4 @@
-/** Відображення раунду в оверлеї / UI (узгоджено з gameService MIN/MAX round). */
+
 export const UI_MIN_ROUND = 1
 export const UI_MAX_ROUND = 8
 

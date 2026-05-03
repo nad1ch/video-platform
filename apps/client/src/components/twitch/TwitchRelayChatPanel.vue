@@ -7,7 +7,7 @@ const props = withDefaults(
     wsStatus: TwitchRelayChatWsStatus
     wsStatusLabel: string
     chatTitle: string
-    /** Shown when `showGuessHints` is true (e.g. Nadle word length). */
+    
     guessLenHint: string
     channelDisplay: string
     twitchWatchUrl: string
@@ -20,14 +20,14 @@ const props = withDefaults(
     defaultCooldownMs: number
     formatCooldownHint: (ms: number) => string
     feedbackToEmojis: (fb: ('correct' | 'present' | 'absent')[]) => string
-    /** Nadle: guess hints + badges. Nadraw / plain relay: false. */
+    
     showGuessHints?: boolean
-    /**
-     * When true, the feed scrolls inside a fixed-height flex parent (sidebar rail).
-     * Prevents chat content from stretching sibling columns (e.g. Nadraw canvas).
-     */
+    
+
+
+
     flexRail?: boolean
-    /** When false, hides the WebSocket status pill (e.g. Nadraw uses a global link dot). */
+    
     showWsPill?: boolean
   }>(),
   { showGuessHints: true, flexRail: false, showWsPill: true },
@@ -151,19 +151,19 @@ defineExpose({ scrollToBottom })
   min-width: 0;
   min-height: 0;
   height: 100%;
-  /* Symmetric horizontal padding (was 23px left / 10px right). */
+  
   padding: 17px 14px 11px;
   box-sizing: border-box;
 }
 
-/** Sidebar / split layout: never grow past parent; scroll messages inside the feed. */
+
 .twitch-relay-chat__shell--flex-rail {
   position: relative;
   height: 100%;
   max-height: 100%;
   min-height: 0;
   overflow: hidden;
-  /* Tighter stack so the feed sits just under the header (no %-based absolute offset). */
+  
   gap: 6px;
 }
 

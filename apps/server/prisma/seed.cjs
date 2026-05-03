@@ -1,7 +1,7 @@
-/**
- * Minimal local seed: one Prisma `User` row used with ADMIN_EMAILS (Google OAuth same email).
- * Run: `npm run db:seed` from `apps/server` (after migrations; DATABASE_URL must be set).
- */
+
+
+
+
 const fs = require('fs')
 const path = require('path')
 

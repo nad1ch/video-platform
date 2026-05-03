@@ -107,7 +107,7 @@ const sparkleDotsRaw: LandingCosmicDot[] = [
   { x: 739.91, y: 1374.42, size: 4.16, radius: 2.08 },
 ]
 
-/** Per-dot twinkle: unique duration/delay (deterministic) so stars don’t pulse in sync. */
+
 export const landingCosmicSparkleDots = Object.freeze(
   sparkleDotsRaw.map((d, index) => {
     const dur = 2.05 + ((index * 47) % 215) / 100
@@ -169,7 +169,7 @@ const glowsRaw: LandingCosmicGlow[] = [
   { x: 1511.25, y: 1029, width: 82.5, height: 80.25, background: GLOW_BG_SKY, blur: 9 },
 ]
 
-/** Parallax first, then rotate — screen-space drift (vars set on canvas root). */
+
 export const landingCosmicGlows = Object.freeze(
   glowsRaw.map((glow) =>
     Object.freeze({

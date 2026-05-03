@@ -131,7 +131,7 @@ const navItems = computed(
     ] as readonly NavItem[],
 )
 
-/** Labels match `eat-first` i18n locale codes (`VALID` in i18n/index.js includes pl, not es). */
+
 const localeButtons = computed(() =>
   [
     { code: 'en', label: 'English' },
@@ -716,7 +716,7 @@ watch(
 </template>
 
 <style scoped>
-/* Display + body sans are loaded once in `index.html` to avoid route-level font races. */
+
 
 .landing-u-text-outline-heading {
   line-height: 1.12;
@@ -815,10 +815,10 @@ watch(
   transform-origin: center;
 }
 
-/*
- * Seven independent twinkle curves (opacity + phase). Floors stay >= ~0.26 so dots never
- * read as “gone”; extra key stops smooth ease-in-out between endpoints (no harsh pops).
- */
+
+
+
+
 @keyframes landingDotPh0 {
   0%,
   100% {
@@ -1283,7 +1283,7 @@ watch(
   animation-iteration-count: infinite;
   animation-duration: var(--dot-dur);
   animation-delay: var(--dot-delay);
-  /* During delay, use first keyframe opacity — avoids a flash at full opacity before the twinkle starts. */
+  
   animation-fill-mode: backwards;
   transform: translate3d(var(--landing-parallax-fg-x, 0px), var(--landing-parallax-fg-y, 0px), 0);
   will-change: transform;
@@ -2584,10 +2584,10 @@ watch(
   }
 }
 
-/*
- * Desktop artboard: keep side gutters visually stable while the central designed blocks scale up.
- * The source frame has wide empty edges, so the rendered canvas grows faster than the viewport.
- */
+
+
+
+
 @media (min-width: 961px) {
   .landing__canvas {
     width: max(1515px, calc((100vw - 300px) * 2));
@@ -2595,7 +2595,7 @@ watch(
   }
 }
 
-/* Narrow desktop / large tablet landscape: header mark reads oversized vs nav; scale whole lockup. */
+
 @media (min-width: 961px) and (max-width: 1280px) {
   .landing__canvas {
     width: max(1580px, calc((100vw - 280px) * 2.05));
@@ -3274,9 +3274,9 @@ watch(
     align-items: center;
   }
 
-  /*
-   * <=560px: absolute + negative mark offset clipped off-screen; switch to flex + no horizontal nudge.
-   */
+  
+
+
   .landing-topbar__start {
     flex: 0 1 auto;
     min-width: 0;
@@ -3781,7 +3781,7 @@ watch(
 </style>
 
 <style>
-  /* Landing only: viewport “camera” crops the fixed canvas; no horizontal page scroll. */
+  
   body:has(.landing) {
     overflow-x: hidden;
   }

@@ -17,7 +17,7 @@ export function normalizeTraitText(v) {
   return String(v ?? '').trim()
 }
 
-/** @param {unknown[]} pool @param {Set<string>|Iterable<string>} excludeNormalized */
+
 export function pickFromPoolAvoiding(pool, excludeNormalized) {
   const arr = Array.isArray(pool) ? pool : []
   const ex = excludeNormalized instanceof Set ? excludeNormalized : new Set(excludeNormalized)
@@ -34,7 +34,7 @@ export function createEmptyUsedState() {
   return { usedByField, usedTemplateIds: new Set() }
 }
 
-/** Дані гравця (Firestore або зі списку в UI) — додає зайняті значення в usedState. */
+
 export function mergePlayerDataIntoUsedState(data, usedState) {
   if (!data || typeof data !== 'object' || !usedState) return
   for (const key of FIELD_KEYS) {
@@ -49,7 +49,7 @@ export function mergePlayerDataIntoUsedState(data, usedState) {
 export const PLAYER_AGE_MIN = 18
 export const PLAYER_AGE_MAX = 100
 
-/** Випадковий вік гравця (ціле 18–100 років), рядок для поля `age`. */
+
 export function randomPlayerAgeString() {
   const n = Math.floor(Math.random() * (PLAYER_AGE_MAX - PLAYER_AGE_MIN + 1)) + PLAYER_AGE_MIN
   return String(n)
@@ -103,7 +103,7 @@ const namesNeutral = [
   'Кейсі',
 ]
 
-/** Для сумісності / старих сценаріїв */
+
 export const displayNames = [...namesMale, ...namesFemale]
 
 export function pickNameForGender(gender) {
@@ -167,11 +167,11 @@ export function rollRandomIntoCharacter(target, options = {}) {
   }
 }
 
-/**
- * @param {string} fieldKey
- * @param {string} [scenarioId]
- * @param {Set<string>|Iterable<string>} [excludeNormalized] значення інших гравців у кімнаті (нормалізовані рядки)
- */
+
+
+
+
+
 export function rollFieldValue(fieldKey, scenarioId = 'classic_crash', excludeNormalized) {
   const pool = poolForScenarioField(scenarioId, fieldKey)
   return pickFromPoolAvoiding(pool, excludeNormalized ?? new Set())
@@ -193,10 +193,10 @@ export function rollKeysIntoCharacter(target, keys, scenarioId = 'classic_crash'
   }
 }
 
-/**
- * Значення поля, уже зайняті іншими гравцями (plain objects як у allPlayers).
- * @param {string} exceptPlayerId — id слота, якого не враховуємо (редактор)
- */
+
+
+
+
 export function traitExcludeSetFromPlayers(players, fieldKey, exceptPlayerId) {
   const ex = new Set()
   const skip = exceptPlayerId != null && exceptPlayerId !== '' ? String(exceptPlayerId) : null
@@ -221,10 +221,10 @@ export function activeTemplateExcludeSetFromPlayers(players, exceptPlayerId) {
   return ex
 }
 
-/**
- * @param {string} [scenarioId]
- * @param {{ usedByField: Record<string, Set<string>>, usedTemplateIds: Set<string> } | null} [usedState] якщо передано — мутується (унікальність у кімнаті)
- */
+
+
+
+
 export function buildRandomPlayerDocument(scenarioId = 'classic_crash', usedState = null) {
   const sid = scenarioId && scenarios[scenarioId] ? scenarioId : 'classic_crash'
   const us = usedState ?? createEmptyUsedState()

@@ -31,13 +31,13 @@ type Room = {
   startedAt: number
   unlockAt: number
   endsAt: number
-  /** Multi-round session: total rounds (0 = no active session). */
+  
   sessionPlannedRounds: number
-  /** Rounds already finished in this session. */
+  
   sessionCompletedRounds: number
   sessionWordSource: 'random' | 'db' | 'manual'
   sessionRoundDurationSec: number
-  /** Snapshot after a round ends (phase `between_rounds`). */
+  
   breakHadWinner: boolean
   breakWinnerDisplayName: string
   breakSessionFinished: boolean
@@ -113,9 +113,9 @@ function stopLetterReveal(room: Room): void {
   }
 }
 
-/**
- * One optional hint letter, fired once in the last ~6–12s before `endsAt` (not during the whole round).
- */
+
+
+
 function scheduleEndgameHintLetter(streamerId: string, room: Room): void {
   stopLetterReveal(room)
   if (room.phase !== 'drawing_active') {
@@ -183,9 +183,9 @@ function fullSessionEnd(streamerId: string, room: Room): void {
   notifyState(streamerId)
 }
 
-/**
- * After `revealed`, move to `between_rounds` so the host can confirm before the next round starts.
- */
+
+
+
 async function enterBetweenRounds(streamerId: string, room: Room): Promise<void> {
   if (room.phase !== 'revealed') {
     return
@@ -371,7 +371,7 @@ async function pickWord(
           })
           return { ok: true, word: pick.text }
         }
-        // random: prefer DB if any
+        
         const pick = rows[Math.floor(Math.random() * rows.length)]!
         await prisma.nadrawPrompt.update({
           where: { id: pick.id },
@@ -383,7 +383,7 @@ async function pickWord(
         return { ok: false, code: 'no_prompts', message: 'No approved prompts in database.' }
       }
     } catch (e) {
-      // Unhandled Prisma errors here previously crashed the whole API process (502 on /api/* including OAuth).
+      
       console.error('[nadraw-show] pickWord database error', e)
       if (wordSource === 'db') {
         return {
@@ -573,9 +573,9 @@ export function hostClearNadrawRound(streamerId: string): void {
   notifyState(streamerId)
 }
 
-/**
- * Twitch / sidecar entry: chat guesses and `!add` are handled separately; this only processes guesses.
- */
+
+
+
 export function handleNadrawChatGuess(streamerId: string, userId: string, displayName: string, text: string): void {
   const room = getOrCreateRoom(streamerId)
   if (room.phase !== 'drawing_locked' && room.phase !== 'drawing_active') {

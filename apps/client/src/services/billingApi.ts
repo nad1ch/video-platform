@@ -33,7 +33,7 @@ export type SubscriptionDto = {
    * (Twitch sign-up without email and no override).
    */
   billingEmail: string | null
-  /** Auth-side `User.email` — exposed so the FE can show "fallback to <auth email>". */
+  
   accountEmail: string | null
 }
 
@@ -54,7 +54,7 @@ export type MarkPaidDto = {
   subscription: SubscriptionDto
 }
 
-/** Public DTO returned by `GET /api/billing/jar/payment-request/:id`. Owner-only. */
+
 export type OwnedPaymentRequestDto = {
   paymentRequestId: string
   status: PaymentRequestStatus
@@ -81,7 +81,7 @@ export type BillingConfigDto = {
   jarConfigured: boolean
 }
 
-/** Admin row from `GET /api/admin/billing/subscriptions`. */
+
 export type AdminSubscriptionRow = {
   id: string
   userId: string
@@ -102,11 +102,11 @@ export type AdminSubscriptionListDto = {
 
 export type CancelSubscriptionDto = {
   subscription: AdminSubscriptionRow
-  /** True iff this call performed the active→inactive transition. */
+  
   cancelledNow: boolean
 }
 
-/** Result of `POST /api/admin/billing/poll-mono`. Discriminated by `ok`. */
+
 export type AdminForcePollResultDto =
   | { ok: true; itemCount: number; accountId: string }
   | {
@@ -161,7 +161,7 @@ export type BillingApiOk<T> = { ok: true; data: T }
 export type BillingApiError = {
   ok: false
   status: number
-  /** Server `error.code` when present (e.g. `MONO_JAR_NOT_CONFIGURED`, `UNAUTHORIZED`). */
+  
   code: string
   message: string
 }
@@ -246,12 +246,12 @@ export function fetchJarPaymentRequest(
   )
 }
 
-/** Authoritative pricing/duration snapshot for the FE pricing card. */
+
 export function fetchBillingConfig(): Promise<BillingApiResult<BillingConfigDto>> {
   return jsonRequest<BillingConfigDto>('/api/billing/config')
 }
 
-/** Admin: list every Subscription. */
+
 export function fetchAdminSubscriptions(opts?: {
   limit?: number
 }): Promise<BillingApiResult<AdminSubscriptionListDto>> {

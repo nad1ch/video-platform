@@ -70,9 +70,9 @@ function applyCoinHubToRefs(raw: ApiCoinHub, refs: {
     sub?.state === 'cooldown' && sub.cooldownUntil ? sub.cooldownUntil : null
 }
 
-/**
- * Coin Hub: mirrors GET `/api/coinhub` and POST mutations.
- */
+
+
+
 export const useCoinHubStore = defineStore('coinHub', () => {
   const balance = ref(0)
   const pending = ref(0)
@@ -90,7 +90,7 @@ export const useCoinHubStore = defineStore('coinHub', () => {
   const lastErrorKind = ref<CoinHubErrorKind | null>(null)
   const lastAction = ref<CoinHubLastAction | null>(null)
   const lastOpenCaseId = ref<string | null>(null)
-  /** Set from `opened` in POST `/api/coinhub/case/open` (for modal copy). */
+  
   const lastOpenedCaseRewardLine = ref<string | null>(null)
   const hubLoading = ref(false)
   const refreshing = ref(false)
@@ -107,10 +107,10 @@ export const useCoinHubStore = defineStore('coinHub', () => {
    */
   const premiumBalanceDisplaySkip = ref(false)
 
-  /** Incremented to trigger a one-off hero balance “celebration” scale pulse (premium reward UX). */
+  
   const balanceCelebrationPulse = ref(0)
 
-  /** Lifts the Coin Hub hero above the teleported premium celebration overlay (body stacking). Toggled from PremiumPlansModal. */
+  
   const premiumCelebrationHeroLift = ref(false)
 
   const refs = {
@@ -242,9 +242,9 @@ export const useCoinHubStore = defineStore('coinHub', () => {
     }
   }
 
-  /**
-   * Adds coins locally (no API). Real billing should replace this; hero animates the bump.
-   */
+  
+
+
   function applyLocalPremiumBonus(amt: number) {
     const a = Math.max(0, Math.floor(amt))
     if (a <= 0) {

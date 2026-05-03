@@ -1,9 +1,9 @@
 <script setup lang="ts">
 withDefaults(
   defineProps<{
-    /** Visually muted (e.g. disabled state). */
+    
     muted?: boolean
-    /** Interactive hover lift (for links wrapping the card). */
+    
     interactive?: boolean
   }>(),
   { muted: false, interactive: false },

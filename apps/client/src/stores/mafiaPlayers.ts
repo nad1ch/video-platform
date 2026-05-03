@@ -9,10 +9,10 @@ export type MafiaPlayerRow = {
   displayName: string
 }
 
-/**
- * Mafia: stable player numbers 1..N and mirror list `{ peerId, number, displayName }`.
- * Join order is driven from `syncMafiaJoinOrder` in engine tile order; display names are filled from CallPage.
- */
+
+
+
+
 export const useMafiaPlayersStore = defineStore('mafiaPlayers', () => {
   const roomKey = ref('')
   const joinOrder = ref<string[]>([])
@@ -22,9 +22,9 @@ export const useMafiaPlayersStore = defineStore('mafiaPlayers', () => {
     return normalizeDisplayName(String(raw ?? '')) || 'demo'
   }
 
-  /**
-   * @param enginePeerOrder — `tiles.map(t => t.peerId)` in orchestrator order (not grid order).
-   */
+  
+
+
   function syncWithPeers(rawRoomId: unknown, enginePeerOrder: string[]): void {
     const key = buildRoomKey(rawRoomId)
     const next = syncMafiaJoinOrder({

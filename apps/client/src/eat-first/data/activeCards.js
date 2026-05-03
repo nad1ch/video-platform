@@ -1,7 +1,7 @@
-/**
- * Активна карта (1 на гру): ефекти в межах party survival після авіакатастрофи.
- * effectId обробляється в activeCardEffects.js
- */
+
+
+
+
 export const ACTIVE_CARD_EFFECT_IDS = {
   NARRATIVE: 'narrative',
   REROLL_PROFESSION_SELF: 'reroll_profession_self',
@@ -26,9 +26,8 @@ export const ACTIVE_CARD_EFFECT_IDS = {
   SWAP_TWO_TRAITS_SELF: 'swap_two_traits_self',
 }
 
-/** Порядок і формулювання з узгодженого списку подій (🎴 активні · 🌪 масові · 🗣 дискусія · 🔄 взаємодія). */
+
 export const ACTIVE_CARD_TEMPLATES = [
-  /* 🎴 Активні карти */
   {
     id: 'immunity_once',
     title: 'Імунітет (один раунд)',
@@ -78,7 +77,6 @@ export const ACTIVE_CARD_TEMPLATES = [
       'Обираєш гравця; разом із ведучим визначаєш, яку саме карту він відкриє в наступному раунді.',
     effectId: ACTIVE_CARD_EFFECT_IDS.NARRATIVE,
   },
-  /* 🌪 Масові ефекти */
   {
     id: 'all_prof',
     title: 'Хаос професій',
@@ -103,7 +101,6 @@ export const ACTIVE_CARD_TEMPLATES = [
     description: 'Усім гравцям новий багаж.',
     effectId: ACTIVE_CARD_EFFECT_IDS.REROLL_LUGGAGE_ALL,
   },
-  /* 🗣 Дискусія і голосування */
   {
     id: 'extra_minute',
     title: 'Хвилина правди',
@@ -128,7 +125,6 @@ export const ACTIVE_CARD_TEMPLATES = [
     description: 'Скасувати останню активну карту до її застосування — за правилами ведучий оформлює в ефірі.',
     effectId: ACTIVE_CARD_EFFECT_IDS.CANCEL_LAST_DECISION,
   },
-  /* 🔄 Взаємодія між гравцями */
   {
     id: 'swap_profession',
     title: 'Обмін професією',
@@ -182,7 +178,7 @@ export function pickRandomActiveCardTemplate() {
   return pickRandomActiveCardTemplateAvoiding(new Set())
 }
 
-/** Уникає templateId з excludeIds; якщо пул вичерпано — повний список (рідко, коли гравців більше за шаблони). */
+
 export function pickRandomActiveCardTemplateAvoiding(excludeIds = new Set()) {
   const ex = excludeIds instanceof Set ? excludeIds : new Set(excludeIds)
   const candidates = ACTIVE_CARD_TEMPLATES.filter((t) => !ex.has(t.id))

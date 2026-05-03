@@ -4,14 +4,14 @@ import {
   computeCallVideoGridLayout,
 } from '../../apps/client/src/components/call/callVideoGridLayout'
 
-/** Same as CallPage active call: GAP, MIN_TILE_WIDTH, GRID_CONTENT_INSET_PX */
+
 const PAGE_PARAMS = {
   gapPx: 12,
   minTileWidthPx: 180,
   contentInsetPx: 12,
 } as const
 
-/** Typical landscape stage (after padding) — golden cols/rows are stable for this size. */
+
 const STAGE_W = 1600
 const STAGE_H = 900
 
@@ -35,10 +35,10 @@ describe('computeCallVideoGridLayout (call gallery)', () => {
     }
   })
 
-  /**
-   * Product rules + best fit at 1600×900 reference stage.
-   * If this fails after an intentional layout change, update the table and recheck UI.
-   */
+  
+
+
+
   it('golden cols×rows at reference stage', () => {
     const golden: Array<{ n: number; cols: number; rows: number }> = [
       { n: 1, cols: 1, rows: 1 },

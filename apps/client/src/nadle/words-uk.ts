@@ -34,7 +34,7 @@ export const WORDS_UK = [
   'влада',
 ] as const
 
-/** Якорі для 6 літер (опційно; порожній масив — ОК). */
+
 export const WORDS_UK_6 = [
   'машина',
   'книжка',
@@ -52,7 +52,7 @@ export const WORDS_UK_6 = [
   'кнопка',
 ] as const
 
-/** Якорі для 7 літер (опційно). */
+
 export const WORDS_UK_7 = [
   'телефон',
   'історія',

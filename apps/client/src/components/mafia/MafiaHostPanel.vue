@@ -19,16 +19,16 @@ const visible = computed(() => isMafiaHost.value)
 
 const MIN_W = 281
 const MAX_W = 360
-/** Enough for header + 3-line role strip + scroller padding; below this only inner area scrolls. */
+
 const MIN_H = 126
 const MARGIN = 8
-/** Default gap from the viewport’s right edge to the panel (px). */
+
 const DEFAULT_LEFT_INSET = 70
 const DEFAULT_BOTTOM_INSET = 25
 
 const collapsed = ref(false)
 const size = ref({ w: 281, h: 126 })
-/** Default: bottom-right (aligned with public host-panel placement). */
+
 const pos = ref(
   (() => {
     const h = 126
@@ -41,9 +41,9 @@ const pos = ref(
     }
   })(),
 )
-/** Snapshot when minimizing — restore on expand. */
+
 const savedSnapshot = ref<{ pos: { x: number; y: number }; size: { w: number; h: number } } | null>(null)
-/** Collapsed tab vertical position (px, “center” line for translateY(-50%)). */
+
 const tabAnchorY = ref(200)
 const collapsedSide = ref<'left' | 'right'>('left')
 
@@ -92,7 +92,7 @@ const collapseArrowPath = computed(() =>
     : 'M9.5 7l5 5-5 5M6 12h8',
 )
 
-/** Display order: Mafia → Don → Sheriff → Doctor (UI only; store keys unchanged). */
+
 const roleKeys: MafiaNightActionKey[] = ['mafia', 'don', 'sheriff', 'doctor']
 
 const flashRole = ref<MafiaNightActionKey | null>(null)
@@ -151,9 +151,9 @@ function roleAtSeat(seat: number | undefined): MafiaRole | undefined {
   return roleByPeerId.value[pid]
 }
 
-/**
- * UI-only: sheriff/don check — `mafia` = red thumb down, `peace` = green thumb up, `unknown` = em dash.
- */
+
+
+
 function checkResultKindForKey(k: 'sheriff' | 'don'): 'mafia' | 'peace' | 'unknown' {
   const seat = nightActions.value[k]
   if (seat == null) {
@@ -642,7 +642,7 @@ watch(visible, (v) => {
 </template>
 
 <style scoped>
-/* Card shell: same token stack as `call-floating-surface` / `CallPage` dock, but `var(--sa-radius-sm)` (panel, not pill). */
+
 .mafia-host-panel__shell {
   position: fixed;
   box-sizing: border-box;
@@ -679,7 +679,7 @@ watch(visible, (v) => {
 }
 
 .mafia-host-panel {
-  /* outer uses panelStyle; inner layout */
+  
   margin: 0;
   padding: 0;
 }
@@ -825,7 +825,7 @@ watch(visible, (v) => {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  /* Keeps the bottom rounded shell visible under selected-column glow. */
+  
   padding-bottom: 0;
 }
 

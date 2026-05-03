@@ -5,9 +5,9 @@
  * The tail promise always settles (errors are logged) so the chain never deadlocks.
  */
 export type RecvApplySerialQueue = {
-  /** Queue one unit of work after any prior recv apply completes. */
+  
   enqueue: (run: () => Promise<void>) => Promise<void>
-  /** Reset the chain (e.g. `stopRemoteMedia`) so the next session starts fresh. */
+  
   reset: () => void
 }
 

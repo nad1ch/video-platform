@@ -8,9 +8,9 @@ import '@/styles/coinhub-design-system.css'
 
 withDefaults(
   defineProps<{
-    /** Hero label (e.g. “Your balance” / “Ваш баланс”) */
+    
     balanceLabel: string
-    /** Pending line (e.g. “Pending” + amount below) */
+    
     pendingLabel: string
     claimLabel: string
     isFocalTarget?: boolean
@@ -24,7 +24,7 @@ const coinHub = useCoinHubStore()
 const { balanceCelebrationPulse, premiumCelebrationHeroLift } = storeToRefs(coinHub)
 
 const heroHeaderRef = ref<HTMLElement | null>(null)
-/** `true` after the first getBoundingClientRect so Teleport to body is safe. */
+
 const celebrationTeleportReady = ref(false)
 const celebrationSpacerH = ref(0)
 const celebrationFixedBox = ref<{ top: number; left: number; width: number } | null>(null)
@@ -286,7 +286,7 @@ async function onClaim() {
             <div
               class="coinhub-hero__main flex min-h-0 w-full min-w-0 flex-1 items-center justify-between gap-4"
             >
-        <!-- Left: balance -->
+        
         <div class="hero__left ch-hero-balance flex min-w-0 flex-col justify-center gap-1">
           <p class="text-xs font-semibold uppercase tracking-[0.16em] text-[#9CA3AF]">
             {{ balanceLabel }}
@@ -332,7 +332,7 @@ async function onClaim() {
           </p>
         </div>
 
-        <!-- Right: CTA -->
+        
         <div
           class="hero__right"
           :class="[coinHub.claimInFlight && 'coinhub-hero-claim--loading']"
@@ -426,7 +426,7 @@ async function onClaim() {
   margin-inline: 0;
 }
 
-/* Full hero (balance + chest + CTA) above premium celebration overlay — see Teleport + fixed rect in script. */
+
 .coinhub-hero-header.coinhub-hero--overlay-focus {
   position: relative;
   isolation: isolate;
@@ -493,7 +493,7 @@ async function onClaim() {
   z-index: 0;
 }
 
-/* Dark read backdrop behind CTA (pools light + gradient overlay) */
+
 .hero__right::before {
   content: '';
   position: absolute;
@@ -511,7 +511,7 @@ async function onClaim() {
   );
 }
 
-/* Gold CTA — label + icon light on gold (same idea as .ch-coinhub-gold-cta--label-light) */
+
 .hero-cta {
   position: relative;
   z-index: 1;
@@ -647,7 +647,7 @@ async function onClaim() {
   position: relative;
 }
 
-/* Soft warm bloom only — no second color stop (avoids a muddy “box” behind digits). */
+
 .coinhub-hero__balance-glow {
   background: radial-gradient(closest-side, rgba(255, 200, 100, 0.14) 0%, transparent 72%);
   animation: ch-hero-balance-pulse 5s ease-in-out infinite;

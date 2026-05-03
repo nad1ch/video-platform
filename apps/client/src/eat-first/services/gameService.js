@@ -68,10 +68,10 @@ function collectRaisedHandsMapFromGameData(data) {
   return h
 }
 
-/**
- * @param {string} gameId
- * @param {(players: Array<{ id: string } & Record<string, unknown>>) => void} callback
- */
+
+
+
+
 export async function setPlayerReady(gameId, playerId, ready) {
   const raw = String(playerId ?? '').trim()
   if (!raw) return
@@ -367,8 +367,8 @@ export async function claimPlayerSlot(gameId, playerId, options = {}) {
   try {
     const out = await efClaimSlot(gid, pid, deviceId, displayName)
     if (out && out.ok === true && typeof out.token === 'string') {
-      // Persist for subsequent hand/ready/vote auth — server rejects actions
-      // without a matching (joinToken + deviceId) for claimed slots.
+      
+      
       saveEatFirstJoinToken(gid, pid, out.token)
       return { ok: true, token: out.token }
     }

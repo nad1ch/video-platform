@@ -1,4 +1,4 @@
-/** Profile from Helix `users` — `id` is the stable numeric string (not login name). */
+
 export type TwitchProfileForSession = {
   id: string
   login: string
@@ -21,9 +21,9 @@ function requiredEnv(name: string): string {
   return v
 }
 
-/**
- * Twitch OAuth token exchange (authorization code). `redirectUri` must match the authorize request.
- */
+
+
+
 export async function twitchExchangeCode(code: string, redirectUri: string): Promise<string> {
   const clientId = requiredEnv('TWITCH_CLIENT_ID')
   const clientSecret = requiredEnv('TWITCH_CLIENT_SECRET')

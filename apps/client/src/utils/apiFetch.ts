@@ -49,13 +49,13 @@ export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   )
 }
 
-/** Alias for callers that prefer the `*Json` name; still returns `Response` (parse in caller). */
+
 export const apiFetchJson = apiFetch
 
-/**
- * Parse JSON when `res.ok` is true. Returns `null` if the status is not OK or the body is not JSON.
- * Prefer this over duplicating `if (!res.ok) …; return res.json()` at call sites.
- */
+
+
+
+
 export async function readJsonIfOk<T>(res: Response): Promise<T | null> {
   if (!res.ok) {
     return null

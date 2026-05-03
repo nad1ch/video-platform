@@ -41,7 +41,7 @@ export type SubscriptionStatus = 'active' | 'inactive' | 'expired'
 
 export type TransactionDirection = 'incoming' | 'outgoing'
 
-/** Public DTO returned by `GET /api/billing/subscription/me`. */
+
 export type SubscriptionDto = {
   status: SubscriptionStatus | null
   plan: typeof PLAN_PRO | null
@@ -53,20 +53,20 @@ export type SubscriptionDto = {
    * sign-up without email and no notification address configured).
    */
   billingEmail: string | null
-  /** Auth-side `User.email` (read-only display source for the FE prompt). */
+  
   accountEmail: string | null
 }
 
-/** Body for `POST /api/billing/billing-email`. */
+
 export type UpdateBillingEmailRequest = {
-  /** Empty string clears the override (FE will fall back to auth email). */
+  
   email: string
 }
 
-/** Response for the same endpoint — same shape as the DTO above. */
+
 export type UpdateBillingEmailResponse = SubscriptionDto
 
-/** Public DTO returned by `POST /api/billing/jar/create-payment-request`. */
+
 export type PaymentRequestDto = {
   paymentRequestId: string
   amount: number
@@ -113,31 +113,31 @@ export type OwnedPaymentRequestDto = {
  * once per checkout flow.
  */
 export type BillingConfigDto = {
-  /** Numeric UAH price from `PRO_PRICE_UAH`, e.g. 99 or 1. */
+  
   priceUah: number
-  /** Smallest currency unit (kopecks). Matches `PaymentRequest.amount`. */
+  
   amount: number
-  /** Pre-formatted "X.YY" string for verbatim FE rendering. */
+  
   amountUah: string
   currency: typeof CURRENCY_UAH
-  /** From `PRO_DURATION_DAYS`, default 30. */
+  
   durationDays: number
-  /** From `PAYMENT_MATCH_WINDOW_MINUTES`, default 15. */
+  
   matchWindowMinutes: number
-  /** True iff `MONO_JAR_URL` is set on the server. FE uses this to disable CTA when false. */
+  
   jarConfigured: boolean
 }
 
-/** Admin-only row for `GET /api/admin/billing/subscriptions`. */
+
 export type AdminSubscriptionRow = {
   id: string
   userId: string
   userEmail: string | null
   userDisplayName: string
   plan: string
-  /** Reconciled status: `active` only when row.status==='active' AND expiresAt>now. */
+  
   status: SubscriptionStatus
-  /** Same as `status === 'active'` — explicit to mirror the user-facing DTO. */
+  
   isActive: boolean
   startsAt: string
   expiresAt: string
@@ -165,7 +165,7 @@ export type AdminPaymentRequestRow = {
   markedPaidAt: string | null
   matchedTransactionId: string | null
   matchedTransaction: AdminTransactionRow | null
-  /** Recent transactions that *could* belong to this request (same amount, in window, unmatched). */
+  
   candidateTransactions: AdminTransactionRow[]
 }
 
@@ -183,6 +183,6 @@ export type AdminTransactionRow = {
 
 export type AdminListDto = {
   requests: AdminPaymentRequestRow[]
-  /** Recently observed transactions that have not been matched to any request. */
+  
   unmatchedTransactions: AdminTransactionRow[]
 }

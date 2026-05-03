@@ -7,7 +7,7 @@ const props = defineProps({
   message: { type: String, default: '' },
   confirmLabel: { type: String, default: '' },
   cancelLabel: { type: String, default: '' },
-  /** When true, primary action is disabled (e.g. require extra slot input first). */
+  
   confirmDisabled: { type: Boolean, default: false },
 })
 

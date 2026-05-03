@@ -10,7 +10,7 @@ function randomId() {
   }
 }
 
-/** Стабільний ідентифікатор пристрою/браузера для «зайняття» слота. */
+
 export function getOrCreateDeviceId() {
   if (typeof localStorage === 'undefined') return randomId()
   try {

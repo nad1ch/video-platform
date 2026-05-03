@@ -7,14 +7,14 @@ import { tryConsumeProducerOnce } from '../utils/consumerDedup'
  * Invariants match previous inline `Set`/`Map` usage in `useRemoteMedia` — see `consumeLifecycle.ts`.
  */
 export type ConsumeLifecycleManager = {
-  /** Fast path before `await ensureRecvTransport` — skip if slot already consumed. */
+  
   isAlreadyConsumed: (producerId: string) => boolean
   /**
    * After `ensureRecvTransport`: reserve `producerId` or detect duplicate concurrent entry.
    * @returns `true` if this caller holds the reservation and must proceed to signaling/consume.
    */
   tryReserveAfterTransport: (producerId: string) => boolean
-  /** Roll back reservation on failure (same as `consumedProducerIds.delete`). */
+  
   releaseReservation: (producerId: string) => void
 
   getInflightTask: (producerId: string) => Promise<void> | undefined
@@ -26,7 +26,7 @@ export type ConsumeLifecycleManager = {
 
   /** `peer-left` / per-producer teardown: drop all tracking for one producer id. */
   removeProducerLifecycle: (producerId: string) => void
-  /** Full recv reset (`teardownAllRemoteConsumers`, `stopRemoteMedia`). */
+  
   resetAllLifecycle: () => void
 }
 

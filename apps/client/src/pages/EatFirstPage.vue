@@ -62,14 +62,14 @@ const route = useRoute()
 const currentView = computed(() => eatViewFromRoute(route))
 
 const currentPanel = computed(() => {
-  const v = currentView.value
+  const v = currentView.value as keyof typeof panelByView
   return panelByView[v] ?? JoinPage
 })
 
 /**
- * Стабільний ключ для join: той самий ефективний game id, що й у JoinPage (query.game || persisted || test1).
- * Інакше JoinPage робить router.replace(?game=…) після mount → fullPath змінюється → ключ змінюється →
- * повний remount + out-in анімація («миготіння»).
+ * Stable join panel key: same effective game id as JoinPage (`query.game` || persisted || `test1`).
+ * Otherwise JoinPage runs `router.replace(?game=…)` after mount → `fullPath` changes → key changes →
+ * full remount + out-in transition flicker.
  */
 function joinPanelStableKey(): string {
   const raw = route.query.game
@@ -84,7 +84,7 @@ function joinPanelStableKey(): string {
   return 'test1'
 }
 
-/** Не включаємо `player` у ключ: інакше кожна зміна слота в URL повністю перемонтовує ControlPage. */
+
 const routeViewKey = computed(() => {
   if (currentView.value === 'control') {
     const q = route.query
@@ -99,7 +99,7 @@ const routeViewKey = computed(() => {
 const routeTransition = computed(() => {
   if (currentView.value === 'overlay') return 'route-fade'
   if (adminControlTransitionInstant.value) return 'route-none'
-  /* Той самий fade, що й у AppShellLayout (`route-soft`) — без окремого «з’їзду» знизу. */
+  
   return 'route-soft'
 })
 

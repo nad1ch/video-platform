@@ -29,7 +29,7 @@ function envPositiveNumber(key: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
-/** Resolved once at module load (Vite inlines at build time). */
+
 export const BWE_THRESHOLDS = {
   poorBps: envPositiveNumber('VITE_BWE_POOR_BPS', 1_000_000),
   mediumBps: envPositiveNumber('VITE_BWE_MEDIUM_BPS', 2_000_000),
@@ -46,7 +46,7 @@ export type ParsedTransportStats = {
 }
 
 export type BweMetrics = {
-  /** Conservative estimate: min(in, out) when both exist. */
+  
   estimatedBitrate?: number
   rttMs?: number
   videoPacketsLost: number
@@ -118,7 +118,7 @@ export function mergeRecvSendBwe(recv: ParsedTransportStats, send?: ParsedTransp
 
 export type NetworkQualityClass = 'good' | 'medium' | 'poor'
 
-/** Classify link quality; thresholds from `BWE_THRESHOLDS` (Vite env). */
+
 export function classifyBweMetrics(
   m: BweMetrics,
   thresholds: typeof BWE_THRESHOLDS = BWE_THRESHOLDS,

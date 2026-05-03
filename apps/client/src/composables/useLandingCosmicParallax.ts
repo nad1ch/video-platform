@@ -7,7 +7,7 @@ function landingPageScrollY(): number {
   )
 }
 
-/** Same multipliers as `LandingPage` canvas — keeps scroll depth consistent app-wide. */
+
 export function useLandingCosmicParallax(canvasEl: Ref<HTMLElement | null>) {
   let cleanup: (() => void) | undefined
 

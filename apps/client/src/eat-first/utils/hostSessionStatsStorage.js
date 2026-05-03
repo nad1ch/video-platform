@@ -1,4 +1,4 @@
-/** Локальна статистика ведучого для gameId: історія голосувань + лічильник підняття рук (до скидання кімнати / очистки). */
+
 
 const KEY_PREFIX = 'eat-first:host-session-stats:v1:'
 
@@ -19,10 +19,10 @@ function defaultStats() {
   return { v: 1, voteSessions: [], handRaises: {} }
 }
 
-/**
- * @param {unknown} o
- * @returns {{ v: 1, voteSessions: VoteSessionEntry[], handRaises: Record<string, number> }}
- */
+
+
+
+
 function normalizeStats(o) {
   if (!o || typeof o !== 'object') return defaultStats()
   const voteSessions = []
@@ -65,9 +65,9 @@ function normalizeStats(o) {
   return { v: 1, voteSessions: voteSessions.slice(0, MAX_VOTE_SESSIONS), handRaises }
 }
 
-/**
- * @param {string} gameId
- */
+
+
+
 export function loadHostSessionStats(gameId) {
   const gid = String(gameId ?? '').trim()
   if (!gid || typeof localStorage === 'undefined') return defaultStats()
@@ -81,10 +81,10 @@ export function loadHostSessionStats(gameId) {
   }
 }
 
-/**
- * @param {string} gameId
- * @param {{ voteSessions: VoteSessionEntry[], handRaises: Record<string, number> }} data
- */
+
+
+
+
 export function saveHostSessionStats(gameId, data) {
   const gid = String(gameId ?? '').trim()
   if (!gid || typeof localStorage === 'undefined') return
@@ -100,9 +100,9 @@ export function saveHostSessionStats(gameId, data) {
   }
 }
 
-/**
- * @param {string} gameId
- */
+
+
+
 export function clearHostSessionStats(gameId) {
   const gid = String(gameId ?? '').trim()
   if (!gid || typeof localStorage === 'undefined') return

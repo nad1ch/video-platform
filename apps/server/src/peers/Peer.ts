@@ -10,7 +10,7 @@ export class Peer {
   displayName: string
   /** HTTPS profile URL from join-room (opaque to SFU). */
   avatarUrl: string
-  /** UI metadata: true when this peer has locally muted their outbound mic. */
+  
   audioMuted = false
   /**
    * Mafia host enforcement: when true, the SFU keeps this peer's audio
@@ -27,7 +27,7 @@ export class Peer {
    * resends `mafia:force-camera-off` with `paused: false`.
    */
   forcedCameraOff = false
-  /** Mafia tab/session identity; set by `mafia:claim-host`. */
+  
   mafiaSessionId = ''
   /**
    * Set during full-peer removal (`removePeerFromNetwork`) before

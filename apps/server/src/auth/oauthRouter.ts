@@ -31,9 +31,9 @@ function twitchAppRedirectUri(): string {
   return `${clientPublicOrigin()}/api/auth/twitch/callback`
 }
 
-/**
- * Only allow same-origin relative paths after login (blocks open redirects).
- */
+
+
+
 export function sanitizePostLoginPath(raw: string | undefined): string {
   if (!raw || typeof raw !== 'string') {
     return '/'
@@ -45,7 +45,7 @@ export function sanitizePostLoginPath(raw: string | undefined): string {
   return t
 }
 
-/** Final browser URL: client origin + safe path + `authSuccess=1` (for SPA hints). */
+
 function buildPostLoginRedirectUrl(signedReturnPath: string): string {
   const origin = clientPublicOrigin()
   const path = sanitizePostLoginPath(signedReturnPath)
@@ -71,10 +71,10 @@ function appleConfigured(): boolean {
   )
 }
 
-/**
- * Global OAuth + session API. Mount with:
- * `app.use('/api/auth', oauthRouter)`
- */
+
+
+
+
 export const oauthRouter = Router()
 
 oauthRouter.get('/me', handleGetApiAuthMe)
@@ -147,7 +147,7 @@ oauthRouter.get('/twitch/callback', async (req: Request, res: Response) => {
       return null
     })
     await persistTwitchOAuthUser(profile, { streamStatus })
-    /** `role` + `twitch_id` from {@link withSessionRole} → `resolveUserRole` (Helix `id` vs ADMIN_TWITCH_IDS). */
+    
     const finalUser = withSessionRole(profile)
     const token = signSession(finalUser, NADLE_SESSION_MAX_AGE_SEC)
     setGlobalSessionCookie(res, token)
@@ -230,15 +230,15 @@ oauthRouter.get('/apple', (_req: Request, res: Response) => {
     )
 })
 
-/**
- * Mount global auth:
- * - `GET/POST /api/auth/*` via {@link oauthRouter}
- * - `GET /api/me` legacy (same cookie), not under `/api/auth`
- */
+
+
+
+
+
 export function mountGlobalAuth(app: Express): void {
   app.use('/api/auth', oauthRouter)
   app.get('/api/me', handleGetApiMeLegacy)
 }
 
-/** @deprecated Use {@link mountGlobalAuth} */
+
 export const mountAppOAuth = mountGlobalAuth

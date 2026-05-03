@@ -12,9 +12,9 @@ type FeatureItem = { text: string; kind?: 'includes' }
 const props = withDefaults(
   defineProps<{
     plan: PlanId
-    /** Fake checkout flow driven by `PremiumPlansModal` (no payments yet). */
+    
     fakePhase?: FakeFlowPhase
-    /** Which plan row is the active fake purchase (plus | pro), or `null` when idle. */
+    
     fakeTarget?: PlanId | null
   }>(),
   {
@@ -64,7 +64,7 @@ const price = computed(() => {
   return t('coinHub.premiumPricePro')
 })
 
-/** Card-level chat mock (per spec: nad1ch / 🟣 / 👑). */
+
 const chatLine = computed(() => {
   if (props.plan === 'basic') return t('coinHub.premiumCardChatLineBasic')
   if (props.plan === 'plus') return t('coinHub.premiumCardChatLinePlus')
@@ -77,10 +77,10 @@ const badgeLabel = computed(() => {
   return ''
 })
 
-/** Pro CTA only: gold + tier glow (Plus uses `ppc__cta-plus`). */
+
 const proCtaGlowClass = computed(() => 'ch-coinhub-gold-cta--glow-pro ch-coinhub-gold-cta--glow-pro-cta')
 
-/** Basic is the current (free) plan — CTA is display-only. */
+
 const isCurrentPlan = computed(() => props.plan === 'basic')
 
 const isFakeThisCard = computed(
@@ -160,7 +160,7 @@ function onCta() {
       {{ badgeLabel }}
     </div>
 
-    <!-- Pro: gold gradient border shell -->
+    
     <div
       v-if="plan === 'pro'"
       class="ppc__pro-ring"
@@ -304,7 +304,7 @@ function onCta() {
 </template>
 
 <style scoped>
-/* —— Pricing card (Coin Hub premium modal) —— */
+
 .ppc {
   position: relative;
   display: flex;
@@ -360,7 +360,7 @@ function onCta() {
   }
 }
 
-/* Gold gradient border + strong glow (PRO) */
+
 .ppc__pro-ring {
   position: relative;
   z-index: 1;
@@ -415,7 +415,7 @@ function onCta() {
   opacity: 0.88;
 }
 
-/* Pro: large blurred gradient aura (behind card; stacks with ::before) */
+
 .ppc--pro::after {
   content: '';
   position: absolute;
@@ -468,7 +468,7 @@ function onCta() {
   background: linear-gradient(180deg, rgba(32, 22, 10, 0.96) 0%, rgba(6, 8, 18, 0.99) 100%);
 }
 
-/* Inner radial “spotlight” — animated */
+
 .ppc__pro-surface::before {
   content: '';
   position: absolute;
@@ -613,7 +613,7 @@ function onCta() {
   }
 }
 
-/* —— Basic: smallest column + slightly faded (entry tier) —— */
+
 .ppc--basic {
   border: 1px solid rgba(82, 84, 100, 0.28);
   background: linear-gradient(180deg, rgba(11, 13, 22, 0.86) 0%, rgba(4, 6, 12, 0.93) 100%);
@@ -636,7 +636,7 @@ function onCta() {
   color: rgba(180, 182, 195, 0.82);
 }
 
-/* —— Plus: medium purple glow (mid tier) —— */
+
 .ppc--plus {
   border: 1px solid rgba(139, 92, 246, 0.52);
   background: linear-gradient(180deg, rgba(36, 28, 70, 0.85) 0%, rgba(6, 8, 20, 0.99) 100%);
@@ -655,7 +655,7 @@ function onCta() {
     0 20px 48px rgba(0, 0, 0, 0.42);
 }
 
-/* Mid-tier emphasis (Plus) */
+
 .ppc--plus--highlight {
   transform: scale(1.01);
   border-color: rgba(167, 139, 250, 0.68);
@@ -684,7 +684,7 @@ function onCta() {
   color: #fff;
 }
 
-/* Chat mock */
+
 .ppc__chat {
   display: block;
   border-radius: 10px;
@@ -769,7 +769,7 @@ function onCta() {
   margin-top: 0.5rem;
 }
 
-/* Feature row icons: Basic = gray dot, Plus = purple dot, Pro = crown */
+
 .ppc__feat-lead {
   display: flex;
   flex-shrink: 0;
@@ -852,7 +852,7 @@ function onCta() {
   padding-top: 28px;
 }
 
-/* 56px CTAs, vertically centered label (overrides design-system padding) */
+
 .ppc__buy.ppc__cta--sized,
 .ppc__buy.ch-coinhub-gold-cta.ppc__cta--sized {
   min-height: 56px;
@@ -862,7 +862,7 @@ function onCta() {
   box-sizing: border-box;
 }
 
-/* Plus: purple gradient CTA (not gold) */
+
 .ppc__cta-plus {
   position: relative;
   display: flex;
@@ -915,7 +915,7 @@ function onCta() {
   }
 }
 
-/* Pro gold CTA: lift on hover (stacks with design-system scale) */
+
 :deep(.ppc__buy.ch-coinhub-gold-cta:hover:enabled) {
   transform: translateY(-3px) scale(1.03);
 }
@@ -951,7 +951,7 @@ function onCta() {
   pointer-events: none;
 }
 
-/* —— Fake purchase: CTA states (dev-only / placeholder checkout) —— */
+
 .ppc__cta--fake-purchasing {
   animation: ppc-cta-fake-pulse 0.65s ease-in-out infinite;
   transform-origin: center;

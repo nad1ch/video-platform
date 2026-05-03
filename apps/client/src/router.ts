@@ -12,12 +12,12 @@ import { installRouteNavLoadingGuards, releaseRouteNavLoading } from '@/routeNav
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import { loadCheckersPage, loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
 
-/** Twitch login slug for `/nadle` → `/nadle/:streamer` redirect and default home link. */
+
 const DEFAULT_NADLE_STREAMER =
   (typeof import.meta.env.VITE_DEFAULT_STREAMER === 'string' && import.meta.env.VITE_DEFAULT_STREAMER.trim()) ||
   STREAMER_NICK
 
-/** Served as real HTML from `public/{slug}/index.html`. If the host returns SPA `index.html` instead, full-reload to that file. */
+
 const SEO_MARKETING_SLUGS = ['video-calls-for-streamers', 'twitch-nadle-game', 'stream-overlay-tools'] as const
 
 const seoMarketingPlaceholder = defineComponent({
@@ -274,7 +274,7 @@ export const router = createRouter({
   scrollBehavior: ((to, from, savedPosition) => {
     if (!to.path.startsWith('/app/eat')) {
       if (savedPosition) return savedPosition
-      // Landing uses fixed-canvas sections with ~0 in-flow height; LandingPage applies hash scroll.
+      
       if (to.path === '/' && to.hash) return false
       return { top: 0 }
     }

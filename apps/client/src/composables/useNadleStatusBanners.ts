@@ -4,10 +4,10 @@ import type { NadleIrcRelayState, NadleWsConnectionState } from '@/nadle/ws'
 
 export type NadleTopBanner = { text: string; variant: 'error' | 'default' }
 
-/**
- * Top page banner (streamer load vs WS/app error) and chat relay status labels.
- * No DOM — template binds to returned computeds.
- */
+
+
+
+
 export function useNadleStatusBanners(options: {
   streamerLoadError: Ref<string | null | undefined>
   lastError: Ref<string | null | undefined>

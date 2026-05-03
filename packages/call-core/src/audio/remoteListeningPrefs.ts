@@ -1,9 +1,9 @@
 const LS_PREFIX = 'streamassist_call_listen_v1:'
 
 export type RemoteListenEntry = {
-  /** Linear playback gain 0..2 (0–200%; 1 = 100%). */
+  
   volume: number
-  /** Local-only mute (does not affect sender). */
+  
   muted: boolean
 }
 

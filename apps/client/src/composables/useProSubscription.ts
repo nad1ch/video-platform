@@ -57,9 +57,9 @@ export function useProSubscription() {
   const isProActive = computed(() => subscription.value?.isActive === true)
   const expiresAt = computed(() => subscription.value?.expiresAt ?? null)
   const status = computed(() => subscription.value?.status ?? null)
-  /** Effective notification address (billingEmail override or auth email). */
+  
   const billingEmail = computed(() => subscription.value?.billingEmail ?? null)
-  /** Auth-side `User.email` — exposed so the FE can pre-fill the billing-email input. */
+  
   const accountEmail = computed(() => subscription.value?.accountEmail ?? null)
 
   return {

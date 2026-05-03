@@ -32,7 +32,7 @@ export function useCheckersOrchestrator(options: {
   const movePending = ref(false)
   const myRole = ref<CheckersRole>('spectator')
   const mode = ref<CheckersMode>('bot')
-  /** After roomId / canJoin changes, false until first WS `state` for this room (avoids bot-mode UI flicker). */
+  
   const serverModeSynced = ref(false)
   const isRatedMatch = ref(false)
   const players = ref<Partial<Record<'player1' | 'player2', CheckersPlayerMeta>>>({})

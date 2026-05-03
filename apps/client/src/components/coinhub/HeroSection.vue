@@ -2,15 +2,15 @@
 import { computed } from 'vue'
 import '@/styles/coinhub-design-system.css'
 
-/**
- * Full-viewport-width hero. Bitmap + lighting via CSS `background` (no <img>).
- * Subtle motion: slow bg drift, ::before gold pulse, lightweight particles (transform/opacity only).
- */
+
+
+
+
 const PARTICLE_COUNT = 20
 
 const props = withDefaults(
   defineProps<{
-    /** File under `public/` (e.g. `assets/hero-3200x1000.png`) */
+    
     backgroundPath?: string
   }>(),
   { backgroundPath: 'assets/hero-3200x1000.png' },
@@ -24,7 +24,7 @@ const sectionStyle = computed(() => {
   } as const
 })
 
-/** Deterministic placement — stable across renders, no `random()` in CSS. */
+
 function particleMotionStyle(i: number): Record<string, string> {
   const n = i + 1
   const left = 6 + ((n * 37) % 86)
@@ -93,9 +93,9 @@ function particleMotionStyle(i: number): Record<string, string> {
     0 0 0 1px rgba(255, 180, 0, 0.1),
     0 12px 48px rgba(0, 0, 0, 0.65);
   background-color: #080614;
-  /* Art: nudged so chest isn’t in the CTA gap; see --hero-bg-x */
+  
   --hero-bg-x: 65%;
-  /* Layers (top → bottom): right read overlay, gold wash, global dim, poster art */
+  
   background-image: linear-gradient(
       90deg,
       rgba(5, 3, 18, 0) 0%,
@@ -115,7 +115,7 @@ function particleMotionStyle(i: number): Record<string, string> {
       rgba(5, 4, 14, 0.72) 100%
     ),
     var(--hero-poster);
-  /* Poster: height-bound — full scene in band without vertical cover-crop */
+  
   background-size: 100% 100%, 100% 100%, 100% 100%, auto 100%;
   background-position: 0 0, 0 0, 0 0, var(--hero-bg-x) center;
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
@@ -124,7 +124,7 @@ function particleMotionStyle(i: number): Record<string, string> {
     hero-glow 6s ease-in-out infinite alternate;
 }
 
-/* Chest interior glow: tight ellipse over coin pile / opening (left of 60% — CTA side stays clean) */
+
 .hero::before {
   content: '';
   position: absolute;
@@ -142,7 +142,7 @@ function particleMotionStyle(i: number): Record<string, string> {
   will-change: opacity, transform;
 }
 
-/* Edge vignette: lighter on the right (read overlay already darkens CTA side) */
+
 .hero::after {
   content: '';
   position: absolute;

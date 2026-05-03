@@ -1,4 +1,4 @@
-/** Unicode-aware code point iterator for mask / reveal. */
+
 export function wordCodePoints(word: string): string[] {
   return [...word]
 }
@@ -22,7 +22,7 @@ export function initialRevealedMask(word: string): boolean[] {
   return wordCodePoints(word).map((ch) => ch === ' ')
 }
 
-/** Reveal one random still-hidden letter; returns false if nothing left. */
+
 export function revealRandomLetter(revealed: boolean[], word: string): boolean {
   const chars = wordCodePoints(word)
   const hidden: number[] = []
@@ -43,7 +43,7 @@ export function countNonSpaceLetters(word: string): number {
   return wordCodePoints(word).filter((ch) => ch !== ' ').length
 }
 
-/** How many non-space letters are currently revealed. */
+
 export function countRevealedLetters(revealed: boolean[], word: string): number {
   const chars = wordCodePoints(word)
   let n = 0
@@ -55,9 +55,9 @@ export function countRevealedLetters(revealed: boolean[], word: string): number 
   return n
 }
 
-/**
- * At most one automatic hint letter per round (late-game), for words with 2+ letters.
- */
+
+
+
 export function maxEndgameHintLetters(word: string): number {
   return countNonSpaceLetters(word) >= 2 ? 1 : 0
 }

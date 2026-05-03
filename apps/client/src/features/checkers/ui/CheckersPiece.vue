@@ -9,7 +9,7 @@ defineProps<{
   flipped?: boolean
 }>()
 
-/** Light king: dark mark. Dark king: light mark (`public/brand/*`). */
+
 function kingBrandSrc(player: CheckersPiece['player']): string {
   return player === 'player1' ? BRAND_LOGO_DARK_SVG : BRAND_LOGO_LIGHT_SVG
 }
@@ -75,7 +75,7 @@ function kingBrandSrc(player: CheckersPiece['player']): string {
   transform: scale(1.04);
 }
 
-/* Inner token bevel ring — stronger dome read */
+
 .checkers-piece::before {
   position: absolute;
   inset: 7%;
@@ -101,7 +101,7 @@ function kingBrandSrc(player: CheckersPiece['player']): string {
   border-color: rgba(255, 255, 255, 0.42);
 }
 
-/* Top-left glossy specular — slightly stronger */
+
 .checkers-piece::after {
   position: absolute;
   top: 16%;
@@ -126,7 +126,7 @@ function kingBrandSrc(player: CheckersPiece['player']): string {
   opacity: 0.53;
 }
 
-/* Glossy dark-purple / onyx tokens */
+
 .checkers-piece--dark {
   background:
     radial-gradient(circle at 34% 28%, rgba(210, 190, 255, 0.34) 0%, transparent 16%),
@@ -141,7 +141,7 @@ function kingBrandSrc(player: CheckersPiece['player']): string {
     0 0 0 2px rgba(215, 190, 255, 0.24);
 }
 
-/* Pearl/lavender domed tokens */
+
 .checkers-piece--light {
   background:
     radial-gradient(circle at 30% 23%, rgba(255, 255, 255, 0.96) 0%, transparent 18%),

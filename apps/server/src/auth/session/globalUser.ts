@@ -3,10 +3,10 @@ import type { GlobalAuthUser } from './types'
 import type { UserRole } from './types'
 import { resolveUserRole } from '../resolveUserRole'
 
-/**
- * Роль з JWT може застаріти після зміни ADMIN_* у .env.
- * Для API «хто я зараз» завжди зводимо роль до поточних allowlist (resolveUserRole).
- */
+
+
+
+
 function effectiveSessionRole(session: SessionPayload): UserRole {
   return resolveUserRole({
     provider: session.provider,
@@ -49,7 +49,7 @@ export function sessionToGlobalAuthUser(session: SessionPayload, dbRole?: string
   }
 }
 
-/** Legacy JSON for GET /api/me and GET /api/nadle/me. */
+
 export function sessionToLegacyApiUser(session: SessionPayload): {
   id: string
   display_name: string

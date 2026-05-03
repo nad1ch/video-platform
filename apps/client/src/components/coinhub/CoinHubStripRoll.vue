@@ -9,23 +9,23 @@ import { playStripTickAtSpeed, playWinStop } from '@/utils/coinHub/coinHubAudioS
 
 const props = withDefaults(
   defineProps<{
-    /** One label or structured cell per item (daily spin uses `SpinStripCell` from the reel builder). */
+    
     cells: (string | SpinStripCell)[]
     landIndex: number
     itemWidthPx?: number
     durationMs?: number
-    /** `lg` = wide cinematic reel (hero spin on Coin Hub). */
+    
     size?: 'md' | 'lg'
-    /**
-     * In placeholder `—` state, show a slow infinite scroll of `idleBaseCells` (doubled) until
-     * a real spin runs. Ignored while the RAF main roll is active.
-     */
+    
+
+
+
     enableIdleAutoplay?: boolean
-    /** “Attract” values for the idle loop; duplicated for a seamless track. */
+    
     idleBaseCells?: string[]
-    /** After the reel stops on the prize, add extra read-a-boo on the winning cell. */
+    
     highlightLandWin?: boolean
-    /** Daily spin: long decel / heavy stop (cubic-bezier style), vs case-opening strip. */
+    
     dailyAnticipationEasing?: boolean
   }>(),
   {
@@ -40,14 +40,14 @@ const props = withDefaults(
 )
 
 type CoinHubStripProgressMeta = {
-  /** Wall-clock time left in main roll before bounce. */
+  
   remainingMainMs: number
-  /** Raw time 0..1 (with friction pauses). Drives pre-win / tension UI. */
+  
   rawU: number
-  /** Scroll position 0..1 (eased, heavy late slowdown). */
+  
   scrollPos: number
   preWin: boolean
-  /** Last ~500ms of main segment — “heartbeat” window for parent. */
+  
   heartbeat: boolean
   inMainPhase: boolean
 }
@@ -58,12 +58,12 @@ const emit = defineEmits<{
 }>()
 
 const viewportRef = ref<HTMLElement | null>(null)
-/** Pause idle “attract” on hover (premium slot affordance). */
+
 const idleHoverPause = ref(false)
 const translateX = ref(0)
-/** Scroll position 0..1 (eased); drives parallax. */
+
 const spinT = ref(0)
-/** Raw virtual time 0..1; drives marker, near-win glow, stutter. */
+
 const rawProgressU = ref(0)
 const isReelActive = ref(false)
 const rowNudgeX = ref(0)
@@ -88,10 +88,10 @@ const isPlaceholderCells = computed(
 )
 const loopedIdleCells = computed(() => {
   const b = props.idleBaseCells.length > 0 ? props.idleBaseCells : ['5', '8', '12', '20', '25', '50', '100']
-  // Five repeats: one period = len(b)×itemWidth for seamless RAF wrap.
+  
   return [...b, ...b, ...b, ...b, ...b]
 })
-/** “Attract” track: parent keeps phase `idle` and placeholder; motion is RAF (no CSS loop jump). */
+
 const showIdleStrip = computed(
   () => props.enableIdleAutoplay && isPlaceholderCells.value && !isReelActive.value,
 )
@@ -190,7 +190,7 @@ function syncViewportW() {
   }
 }
 
-/** Per-cell “depth”: scale + opacity by distance to viewport center; blur at edges. */
+
 function cellStyle(i: number): Record<string, string> {
   const w = props.itemWidthPx
   const tw = translateX.value
@@ -245,7 +245,7 @@ function progressEmitDone() {
   emit('complete')
 }
 
-/** Single-cell idle: center the marker. Multi-cell: starting translate is 0; animation runs. */
+
 async function applyStaticCenter() {
   isReelActive.value = false
   const v = viewportRef.value
@@ -566,7 +566,7 @@ const markerGlow = computed(() => {
   return 0.35 + 0.25 * u + micro
 })
 
-/** Gold center line — strong bloom + rim (reads as the “real” reel marker). */
+
 const markerStyle = computed(() => {
   const g = markerGlow.value
   const rim = 0.55 + 0.38 * g

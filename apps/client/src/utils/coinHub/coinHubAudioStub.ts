@@ -1,6 +1,6 @@
-/**
- * Audio hooks for Coin Hub reel (stubs: wire Web Audio / assets later; DEV may log).
- */
+
+
+
 import { createLogger } from '@/utils/logger'
 import type { SpinRarity } from '@/utils/coinHub/coinHubRarity'
 
@@ -36,7 +36,7 @@ function tickGap(speed: StripTickSpeed, preWin: boolean): number {
   return SPEED_MIN_GAP_MS[speed]
 }
 
-/** Ticks by phase — faster = higher cadence cap (reel “roller” pass frequency). */
+
 export function playStripTickAtSpeed(speed: StripTickSpeed, opts?: TickOpts) {
   const preWin = opts?.preWin === true
   const now = performance.now()
@@ -51,12 +51,12 @@ export function playStripTickAtSpeed(speed: StripTickSpeed, opts?: TickOpts) {
   })
 }
 
-/** @deprecated use playStripTickAtSpeed — bool API kept for a minimal call surface */
+
 export function playStripTick(fast: boolean, opts?: TickOpts) {
   playStripTickAtSpeed(fast ? 'fast' : 'decel', opts)
 }
 
-/** One shot when the spin CTA is pressed (before server resolves). */
+
 export function playSpinStart() {
   lastTick = 0
   devOnly(() => {
@@ -76,7 +76,7 @@ export function playStripLand() {
   })
 }
 
-/** Final settle thud (alias of land; separate hook for SFX pack). */
+
 export function playWinStop() {
   playStripLand()
 }
@@ -87,7 +87,7 @@ export function playStripResolving() {
   })
 }
 
-// —— Web Audio UI (Coin Hub) — one shared context, lazy init, safe if unsupported ——
+
 
 let webCtx: AudioContext | null = null
 
@@ -163,7 +163,7 @@ function playSineChime(
   o.stop(start + durationSec + 0.02)
 }
 
-/** Short click / tap (premium CTA, UI affordance). */
+
 export function playUiClick() {
   const c = getWebAudioContext()
   if (!c) {
@@ -173,10 +173,10 @@ export function playUiClick() {
   playSineChime(c, 0, 1020, 0.08, 0.1)
 }
 
-/**
- * Coin collect / reward (ascending chime, ~0.2s). Call when coins apply to the balance
- * (separate from UI click; safe to no-op if audio blocked).
- */
+
+
+
+
 export function playCoinCollect() {
   const c = getWebAudioContext()
   if (!c) {
@@ -188,7 +188,7 @@ export function playCoinCollect() {
   playSineChime(c, 0.1, 1680, 0.12, 0.07)
 }
 
-/** Stinger when the winning line settles (in addition to {@link playCoinCollect}). */
+
 export function playWinByRarity(r: SpinRarity) {
   const c = getWebAudioContext()
   if (!c) {
@@ -210,7 +210,7 @@ export function playWinByRarity(r: SpinRarity) {
     playSineChime(c, 0.14, 1200, 0.1, 0.06)
     return
   }
-  /* legendary */
+  
   playSineChime(c, 0, 520, 0.14, 0.1)
   playSineChime(c, 0.08, 780, 0.14, 0.1)
   playSineChime(c, 0.16, 1040, 0.16, 0.09)

@@ -1,7 +1,7 @@
-/**
- * Сценарії: для profession / fact / luggage — окремі пули (або null → загальний з characterPools).
- * Здоров’я, фобія, особливість — з загального пулу, якщо тут не заано масив.
- */
+
+
+
+
 
 export const scenarios = {
   classic_crash: {

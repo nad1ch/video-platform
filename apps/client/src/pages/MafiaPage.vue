@@ -7,10 +7,10 @@ import MafiaOverlay from '@/components/mafia/MafiaOverlay.vue'
 import { useMafiaViewMode } from '@/composables/mafiaStreamViewRoute'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
 
-/**
- * `?mode=view` — stream / OBS layout (grid + timer + labels only).
- * Omitted or any other `mode` — host mode (default).
- */
+
+
+
+
 const { isViewMode } = useMafiaViewMode()
 const mafiaGame = useMafiaGameStore()
 const { isMafiaHost, oldMafiaMode } = storeToRefs(mafiaGame)

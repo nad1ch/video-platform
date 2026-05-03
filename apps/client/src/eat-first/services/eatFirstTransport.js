@@ -1,7 +1,7 @@
 const PREFIX = '/api/eat-first'
 
 // X-Requested-With accompanies every mutation so the server's CSRF guard accepts
-// the request even when the browser omits `Origin`. Matches apps/client/src/utils/apiFetch.ts.
+
 const CSRF_HEADER = { 'X-Requested-With': 'streamassist-fetch' }
 
 async function jfetch(path, init = {}) {
@@ -29,7 +29,7 @@ export async function efSnapshot(gameId) {
   return jfetch(`/games/${encodeURIComponent(gameId)}/snapshot`, { method: 'GET' })
 }
 
-/** @returns {Promise<boolean>} true if the game was newly created */
+
 export async function efEnsureGame(gameId) {
   const data = await jfetch(`/games/${encodeURIComponent(gameId)}/ensure`, { method: 'POST', body: '{}' })
   return Boolean(data && data.created)
