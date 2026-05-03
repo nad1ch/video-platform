@@ -6,7 +6,26 @@ import {
   readPreferredVideoInputDeviceId,
   selectPreferredVideoInputDeviceId,
 } from './preferredVideoInputDevice'
-import { getCallVideoConstraints } from './videoQualityPreset'
+import { getCallVideoConstraintsForRuntime } from './videoQualityPreset'
+
+/**
+ * Cheap, runtime-only mobile sniff. Used solely to bias `getUserMedia`
+ * resolution/fps constraints toward a lighter preset on phones; never used as
+ * authority for any feature flag. Prefers `navigator.userAgentData.mobile` (UA
+ * Client Hints) and falls back to a UA substring match for browsers that have
+ * not shipped UA-CH (Safari iOS, older Firefox).
+ */
+function detectMobileForLocalCapture(): boolean {
+  if (typeof navigator === 'undefined') {
+    return false
+  }
+  const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData
+  if (uaData && typeof uaData.mobile === 'boolean') {
+    return uaData.mobile
+  }
+  const ua = typeof navigator.userAgent === 'string' ? navigator.userAgent : ''
+  return /Android|iPhone|iPad|iPod|Mobile|Opera Mini|IEMobile/i.test(ua)
+}
 
 export type UseLocalMediaOptions = {
   
@@ -148,7 +167,9 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     const tier = resolveTier()
     const devices = await safeEnumerateDevices()
     const preferred = selectPreferredVideoInputDeviceId(devices, readPreferredVideoInputDeviceId())
-    const videoConstraints = { ...getCallVideoConstraints(tier) }
+    const videoConstraints = {
+      ...getCallVideoConstraintsForRuntime(tier, detectMobileForLocalCapture()),
+    }
     const stream =
       preferred !== undefined
         ? await getUserMediaWithDeviceIdExactThenIdeal(
@@ -284,7 +305,10 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     const tier = resolveTier()
     const tmp = await getUserMediaWithDeviceIdExactThenIdeal(
       {
-        video: { ...getCallVideoConstraints(tier), deviceId: { ideal: deviceId } },
+        video: {
+          ...getCallVideoConstraintsForRuntime(tier, detectMobileForLocalCapture()),
+          deviceId: { ideal: deviceId },
+        },
       },
       'video',
     )

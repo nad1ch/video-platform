@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { hostControlChromeStore as store } from '../../../composables/hostControlChrome.js'
 import { useHostChromeAct } from '../../../composables/useHostChromeAct.js'
@@ -11,22 +11,40 @@ const act = useHostChromeAct()
 const tick = ref(Date.now())
 let tickId = null
 
-onMounted(() => {
+function startTickIfNeeded() {
+  if (tickId != null) return
+  tick.value = Date.now()
   tickId = window.setInterval(() => {
     tick.value = Date.now()
   }, 250)
-})
+}
 
-onUnmounted(() => {
+function stopTick() {
   if (tickId != null) {
     window.clearInterval(tickId)
     tickId = null
   }
-})
+}
 
 const targetPlayerId = computed(() => String(store.gameRoom?.voting?.targetPlayer ?? '').trim())
 const votingActive = computed(() => Boolean(store.gameRoom?.voting?.active))
 const canStart = computed(() => Boolean(targetPlayerId.value) && !votingActive.value)
+
+/**
+ * Vote-slot countdown only progresses while `voting.active` and a slot is open.
+ * Outside that window the panel just shows static idle hints, so the 250 ms
+ * ticker is paused to avoid background wakeups on every page hosting it.
+ */
+watch(
+  votingActive,
+  (active) => {
+    if (active) startTickIfNeeded()
+    else stopTick()
+  },
+  { immediate: true },
+)
+
+onUnmounted(stopTick)
 
 const voteSlotRemaining = computed(() => {
   const v = store.gameRoom?.voting

@@ -83,13 +83,18 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
   
   
   
+  
+  
+  
+  const PING_FRAME = JSON.stringify({ type: 'ping' })
+
   const jsonPing = setInterval(() => {
     for (const socket of wss.clients) {
       if (socket.readyState !== WebSocket.OPEN) {
         continue
       }
       try {
-        socket.send(JSON.stringify({ type: 'ping' }))
+        socket.send(PING_FRAME)
       } catch {
         /* ignore */
       }

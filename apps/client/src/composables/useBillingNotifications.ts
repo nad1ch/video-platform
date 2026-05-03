@@ -302,10 +302,23 @@ async function tick(): Promise<void> {
   return inflightTick
 }
 
+/**
+ * While the tab is hidden the interval is fully cleared (not just early-returned)
+ * so the JS loop is not woken every 20 s on a backgrounded tab. On visible we
+ * issue an immediate catch-up tick and resume the interval.
+ */
 function onVisibilityChange(): void {
   if (typeof document === 'undefined') return
   if (document.visibilityState === 'visible') {
+    if (starts > 0 && pollTimer === null) {
+      pollTimer = setInterval(() => {
+        void tick()
+      }, POLL_INTERVAL_MS)
+    }
     void tick()
+  } else if (pollTimer !== null) {
+    clearInterval(pollTimer)
+    pollTimer = null
   }
 }
 
@@ -333,10 +346,12 @@ export function startBillingNotifier(): void {
   }
   if (pollTimer) return
   
-  void tick()
-  pollTimer = setInterval(() => {
+  if (!isHidden()) {
     void tick()
-  }, POLL_INTERVAL_MS)
+    pollTimer = setInterval(() => {
+      void tick()
+    }, POLL_INTERVAL_MS)
+  }
 }
 
 export function stopBillingNotifier(): void {

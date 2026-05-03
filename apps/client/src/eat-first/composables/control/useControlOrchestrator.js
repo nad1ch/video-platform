@@ -196,10 +196,55 @@ let toastTimer = null
 const tick = ref(Date.now())
 let tickTimer = null
 
-onMounted(() => {
+function startControlTickIfNeeded() {
+  if (tickTimer != null) return
+  tick.value = Date.now()
   tickTimer = window.setInterval(() => {
     tick.value = Date.now()
   }, 250)
+}
+
+function stopControlTick() {
+  if (tickTimer != null) {
+    window.clearInterval(tickTimer)
+    tickTimer = null
+  }
+}
+
+/**
+ * The 250 ms control tick is only consumed by:
+ *   1) `hostTimerRemaining` — only useful while a speaking timer is counting down
+ *      and not paused.
+ *   2) The vote-slot auto-finish watcher — only useful while voting is active.
+ * In all other states the control panel is idle and the tick was running for no
+ * reason. Gating it here keeps the host UI live during those windows and quiet
+ * everywhere else.
+ */
+const controlTickActive = computed(() => {
+  const gr = gameRoom.value
+  if (!gr || typeof gr !== 'object') return false
+  const speakingTimerRunning =
+    gr.timerPaused !== true &&
+    millisFromFirestore(gr.timerStartedAt) != null &&
+    Number(gr.speakingTimer) > 0
+  const voteSlotActive = Boolean(gr.voting?.active)
+  return speakingTimerRunning || voteSlotActive
+})
+
+watch(
+  controlTickActive,
+  (active) => {
+    if (active) startControlTickIfNeeded()
+    else stopControlTick()
+  },
+  { immediate: true },
+)
+
+onMounted(() => {
+  
+  
+  
+  
   nextTick(() => {
     if (eatViewFromRoute(route) !== 'control' || hostModeRequested.value) return
     const q = route.query

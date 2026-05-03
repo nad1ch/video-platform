@@ -704,7 +704,12 @@ async function copyMafiaObsViewUrl(): Promise<void> {
 
 <template>
   <div class="app-shell-layout eat-first-root page-stack" :data-theme="theme">
-    <LandingCloudBackdrop class="app-shell-layout__backdrop" variant="app" :active="isHeavyVisualRoute" />
+    <LandingCloudBackdrop
+      v-if="isHeavyVisualRoute"
+      class="app-shell-layout__backdrop"
+      variant="app"
+      :active="true"
+    />
     <div
       v-if="(isCallRoute || isMafiaRoute) && mafiaPageBackgroundStyle"
       class="app-shell-mafia-page-background"

@@ -4,10 +4,14 @@ import {
   CALL_VIDEO_HEIGHT,
   CALL_VIDEO_MAX_FRAMERATE,
   CALL_VIDEO_MIN_FRAMERATE,
+  CALL_VIDEO_MOBILE_HEIGHT,
+  CALL_VIDEO_MOBILE_MAX_FRAMERATE,
+  CALL_VIDEO_MOBILE_WIDTH,
   CALL_VIDEO_TARGET_BITRATE_BPS,
   CALL_VIDEO_WIDTH,
   countActiveCameraPublishersAtWire,
   getCallVideoConstraints,
+  getCallVideoConstraintsForRuntime,
   getSingleLayerEncodingsForPreset,
   getSimulcastEncodingsForPreset,
   isVideoQualityPreset,
@@ -50,6 +54,36 @@ describe('fixed call video quality', () => {
         expect(enc.maxFramerate).toBeLessThanOrEqual(CALL_VIDEO_MAX_FRAMERATE)
       }
     }
+  })
+})
+
+describe('getCallVideoConstraintsForRuntime (mobile)', () => {
+  it('returns the desktop preset when isMobile is false', () => {
+    expect(getCallVideoConstraintsForRuntime('auto_large_room', false)).toEqual({
+      width: { exact: CALL_VIDEO_WIDTH },
+      height: { exact: CALL_VIDEO_HEIGHT },
+      frameRate: { max: CALL_VIDEO_MAX_FRAMERATE },
+    })
+  })
+
+  it('returns the lighter mobile preset using ideal/max (never exact) when isMobile is true', () => {
+    const constraints = getCallVideoConstraintsForRuntime('auto_large_room', true)
+    expect(constraints).toEqual({
+      width: { ideal: CALL_VIDEO_MOBILE_WIDTH, max: CALL_VIDEO_WIDTH },
+      height: { ideal: CALL_VIDEO_MOBILE_HEIGHT, max: CALL_VIDEO_HEIGHT },
+      frameRate: { ideal: CALL_VIDEO_MOBILE_MAX_FRAMERATE, max: CALL_VIDEO_MAX_FRAMERATE },
+    })
+    expect(CALL_VIDEO_MOBILE_WIDTH).toBeLessThanOrEqual(CALL_VIDEO_WIDTH)
+    expect(CALL_VIDEO_MOBILE_HEIGHT).toBeLessThanOrEqual(CALL_VIDEO_HEIGHT)
+    expect(CALL_VIDEO_MOBILE_MAX_FRAMERATE).toBeLessThanOrEqual(CALL_VIDEO_MAX_FRAMERATE)
+    expect(CALL_VIDEO_MOBILE_MAX_FRAMERATE).toBeGreaterThanOrEqual(CALL_VIDEO_MIN_FRAMERATE)
+  })
+
+  it('does not mutate a shared preset object across calls', () => {
+    const a = getCallVideoConstraintsForRuntime('auto_large_room', true)
+    const b = getCallVideoConstraintsForRuntime('auto_large_room', true)
+    expect(a).not.toBe(b)
+    expect(a).toEqual(b)
   })
 })
 

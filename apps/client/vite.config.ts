@@ -117,8 +117,14 @@ export default defineConfig({
     
     
     cssMinify: 'esbuild',
-    
-    sourcemap: true,
+    /**
+     * `'hidden'` keeps source maps as separate files (uploadable for crash
+     * symbolication) but strips the `//# sourceMappingURL=...` comment from the
+     * shipped `.js`, so browsers do not download the map for every chunk on
+     * mobile networks and devtools cannot reconstruct full source from a public
+     * site visit.
+     */
+    sourcemap: 'hidden',
     rollupOptions: {
       output: {
         manualChunks: manualAppChunks,

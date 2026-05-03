@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { hostControlChromeStore as store } from '../../../composables/hostControlChrome.js'
 import { useHostChromeAct } from '../../../composables/useHostChromeAct.js'
@@ -11,18 +11,45 @@ const act = useHostChromeAct()
 const tick = ref(Date.now())
 let tickId = null
 
-onMounted(() => {
+function startTickIfNeeded() {
+  if (tickId != null) return
+  tick.value = Date.now()
   tickId = window.setInterval(() => {
     tick.value = Date.now()
   }, 250)
-})
+}
 
-onUnmounted(() => {
+function stopTick() {
   if (tickId != null) {
     window.clearInterval(tickId)
     tickId = null
   }
+}
+
+/**
+ * Run the 250 ms ticker only while a speaking timer is genuinely counting down.
+ * If the room is idle, paused, or has no active timer, the interval is stopped so
+ * host control panels in the background do not wake the JS loop 4 times a second.
+ */
+const timerCountdownActive = computed(() => {
+  const gr = store.gameRoom
+  if (!gr || typeof gr !== 'object') return false
+  if (gr.timerPaused === true) return false
+  const start = millisFromFirestore(gr.timerStartedAt)
+  const total = Number(gr.speakingTimer) || 0
+  return start != null && total > 0
 })
+
+watch(
+  timerCountdownActive,
+  (active) => {
+    if (active) startTickIfNeeded()
+    else stopTick()
+  },
+  { immediate: true },
+)
+
+onUnmounted(stopTick)
 
 const timerRemainingSec = computed(() => {
   const gr = store.gameRoom

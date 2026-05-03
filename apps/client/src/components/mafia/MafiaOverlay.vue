@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { MAFIA_TIMER_PRESET_MS, useMafiaGameStore } from '@/stores/mafiaGame'
@@ -25,6 +25,23 @@ const nowMs = ref(Date.now())
 let nowTick: ReturnType<typeof setInterval> | undefined
 
 const selectedDurationMs = ref<(typeof MAFIA_TIMER_PRESET_MS)[number]>(MAFIA_TIMER_PRESET_MS[2]!)
+
+function startTickIfNeeded(): void {
+  if (nowTick != null) {
+    return
+  }
+  nowMs.value = Date.now()
+  nowTick = setInterval(() => {
+    nowMs.value = Date.now()
+  }, 1000)
+}
+
+function stopTick(): void {
+  if (nowTick != null) {
+    clearInterval(nowTick)
+    nowTick = undefined
+  }
+}
 
 const remainingMs = computed(() => {
   const t = mafiaTimer.value
@@ -57,17 +74,25 @@ const timerIdleDisplay = computed(() => {
 const timerText = computed(() => timerDisplay.value ?? timerIdleDisplay.value)
 const useCompactTimer = computed(() => !showTimerControls.value)
 
-onMounted(() => {
-  nowTick = setInterval(() => {
-    nowMs.value = Date.now()
-  }, 1000)
-})
+/**
+ * The 1 s tick previously ran for the whole life of `MafiaPage` even when no timer was
+ * running, idly waking the JS loop every second. We start/stop it strictly around the
+ * `mafiaTimer.isRunning` transition so an idle Mafia room is fully quiet.
+ */
+watch(
+  () => mafiaTimer.value?.isRunning === true,
+  (running) => {
+    if (running) {
+      startTickIfNeeded()
+    } else {
+      stopTick()
+    }
+  },
+  { immediate: true },
+)
 
 onUnmounted(() => {
-  if (nowTick != null) {
-    clearInterval(nowTick)
-    nowTick = undefined
-  }
+  stopTick()
 })
 
 function onSelectDuration(ms: (typeof MAFIA_TIMER_PRESET_MS)[number]): void {
