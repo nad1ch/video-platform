@@ -174,7 +174,8 @@ function onToggleTimer(): void {
 .mafia-overlay {
   position: absolute;
   inset: 0;
-  z-index: 28;
+  /* Above `.call-page__tile-wrap` elevated states (z-index 35); see `MafiaPage` hover override. */
+  z-index: 42;
   pointer-events: none;
 }
 
