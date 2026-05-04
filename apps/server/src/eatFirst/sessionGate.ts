@@ -72,7 +72,8 @@ export async function eatFirstSessionCanOperateGame(
   if (!ctx) return false
   if (ctx.isAdmin) return true
   if (!isDatabaseConfigured()) {
-    return process.env.NODE_ENV !== 'production'
+    // Without Prisma we cannot verify per-game ownership; allow only global staff host role in non-production (legacy dev intent). Never widen this to all signed-in users.
+    return ctx.isHostRole === true && process.env.NODE_ENV !== 'production'
   }
   const row = await prisma.eatFirstGame.findUnique({
     where: { id: gameId },

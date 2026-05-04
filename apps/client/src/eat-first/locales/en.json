@@ -2,6 +2,26 @@
   "game": {
     "title": "Who do we eat first"
   },
+  "eatFirstCall": {
+    "brand": "Who do we eat first",
+    "statusAria": "Eat First game status",
+    "hostPanelTitle": "Host desk",
+    "hostRoleLine": "Role: Host",
+    "hostBadge": "Host",
+    "playerBadge": "Player",
+    "obsBadge": "OBS / viewer",
+    "role": "Role",
+    "gameId": "Room code",
+    "phase": "Phase",
+    "timer": "Timer",
+    "timerPlaceholder": "—",
+    "btnStartGame": "Start game",
+    "btnTimer": "Timer",
+    "btnObsHelp": "Copy OBS overlay URL",
+    "obsCopied": "Overlay link copied",
+    "obsCopyFailed": "Copy failed",
+    "btnDisabledHint": "Coming soon"
+  },
   "seo": {
     "metaDescription": "Eat First show: lobby, player and host desk, OBS browser overlay. Twitch channel {nick}."
   },

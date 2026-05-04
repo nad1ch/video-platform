@@ -2,6 +2,26 @@
   "game": {
     "title": "Кого ми з’їмо першим"
   },
+  "eatFirstCall": {
+    "brand": "Кого ми з’їмо першим",
+    "statusAria": "Стан гри Eat First",
+    "hostPanelTitle": "Пульт ведучого",
+    "hostRoleLine": "Роль: Ведучий",
+    "hostBadge": "Ведучий",
+    "playerBadge": "Гравець",
+    "obsBadge": "OBS / перегляд",
+    "role": "Роль",
+    "gameId": "Код кімнати",
+    "phase": "Фаза",
+    "timer": "Таймер",
+    "timerPlaceholder": "—",
+    "btnStartGame": "Старт гри",
+    "btnTimer": "Таймер",
+    "btnObsHelp": "Скопіювати URL оверлею OBS",
+    "obsCopied": "Посилання на оверлей скопійовано",
+    "obsCopyFailed": "Не вдалося скопіювати",
+    "btnDisabledHint": "Незабаром"
+  },
   "seo": {
     "metaDescription": "Інтерфейс шоу «Кого ми з’їмо першим»: лобі, панель гравця та ведучого, overlay для OBS. Канал {nick}."
   },

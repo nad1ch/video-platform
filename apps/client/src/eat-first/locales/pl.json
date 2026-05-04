@@ -2,6 +2,26 @@
   "game": {
     "title": "Kogo zjemy pierwszego"
   },
+  "eatFirstCall": {
+    "brand": "Kogo zjemy pierwszego",
+    "statusAria": "Status gry Eat First",
+    "hostPanelTitle": "Pulpit prowadzącego",
+    "hostRoleLine": "Rola: Prowadzący",
+    "hostBadge": "Prowadzący",
+    "playerBadge": "Gracz",
+    "obsBadge": "OBS / podgląd",
+    "role": "Rola",
+    "gameId": "Kod pokoju",
+    "phase": "Faza",
+    "timer": "Timer",
+    "timerPlaceholder": "—",
+    "btnStartGame": "Start gry",
+    "btnTimer": "Timer",
+    "btnObsHelp": "Skopiuj URL nakładki OBS",
+    "obsCopied": "Skopiowano link do nakładki",
+    "obsCopyFailed": "Kopiowanie nie powiodło się",
+    "btnDisabledHint": "Wkrótce"
+  },
   "seo": {
     "metaDescription": "„Kogo zjemy pierwszego”: lobby, panel gracza i prowadzącego, nakładka OBS. Kanał Twitch {nick}."
   },

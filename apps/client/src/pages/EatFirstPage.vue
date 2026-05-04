@@ -5,7 +5,6 @@ import '@/eat-first/styles/motion.css'
 import { bootstrapEatFirstAuthOnce } from '@/eat-first/bootstrapEatFirst'
 import { adminControlTransitionInstant } from '@/eat-first/router.js'
 import { eatViewFromRoute } from '@/eat-first'
-import { getPersistedGameId } from '@/eat-first/utils/persistedGameId.js'
 import EatFirstCallPage from '@/eat-first/pages/EatFirstCallPage.vue'
 
 const EatPanelLoading = defineComponent({
@@ -66,30 +65,14 @@ const currentPanel = computed(() => {
   return panelByView[v] ?? EatFirstCallPage
 })
 
-/**
- * Stable call-shell key while `query.game` is filled in by CallPage (avoids transition flicker).
- */
-function eatCallPanelStableKey(): string {
-  const raw = route.query.game
-  const fromQuery = raw != null && String(raw).trim() ? String(raw).trim() : ''
-  if (fromQuery) {
-    return fromQuery
-  }
-  const persisted = getPersistedGameId()
-  if (persisted != null && String(persisted).trim()) {
-    return String(persisted).trim()
-  }
-  return 'pending'
-}
-
-
 const routeViewKey = computed(() => {
   if (currentView.value === 'control') {
     const q = route.query
     return ['control', String(q.game ?? ''), String(q.host ?? '')].join('|')
   }
   if (currentView.value === 'call') {
-    return `call|${eatCallPanelStableKey()}`
+    // Stable key: do not vary with `query.game` or CallPage would remount and reconnect WebRTC when the URL gets a room code.
+    return 'call'
   }
   return route.fullPath
 })
