@@ -14,6 +14,8 @@ const props = withDefaults(
     localeOptions?: readonly LocaleOption[]
     mode?: 'both' | 'feedback' | 'locale'
     tone?: 'glass' | 'light'
+    /** Higher z-order; list opens downward inside overlays (e.g. shell settings popover). */
+    popoverLocaleStick?: boolean
   }>(),
   {
     feedbackHref: '#',
@@ -21,6 +23,7 @@ const props = withDefaults(
     localeOptions: () => [],
     mode: 'both',
     tone: 'glass',
+    popoverLocaleStick: false,
   },
 )
 
@@ -80,6 +83,7 @@ onUnmounted(() => {
     :class="[
       `app-landing-footer-actions--${tone}`,
       `app-landing-footer-actions--${mode}`,
+      { 'app-landing-footer-actions--popover-locale-stick': popoverLocaleStick },
     ]"
   >
     <a v-if="showFeedback" class="app-landing-footer-actions__feedback sa-glass-button" :href="feedbackHref">
@@ -286,6 +290,18 @@ onUnmounted(() => {
 .app-landing-footer-actions__locale-option:focus-visible {
   outline: 2px solid rgba(255, 218, 68, 0.86);
   outline-offset: 3px;
+}
+
+.app-landing-footer-actions--popover-locale-stick .app-landing-footer-actions__locale[open],
+.app-landing-footer-actions--popover-locale-stick .app-landing-footer-actions__locale {
+  z-index: 20100;
+}
+
+.app-landing-footer-actions--popover-locale-stick .app-landing-footer-actions__locale-list {
+  top: calc(100% + 8px);
+  bottom: auto;
+  z-index: 20102;
+  box-shadow: 0 12px 24px rgba(10, 3, 24, 0.26);
 }
 
 @media (max-width: 640px) {

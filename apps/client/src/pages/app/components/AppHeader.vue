@@ -346,7 +346,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   padding-top: 0.6rem;
   padding-bottom: 0;
   padding-left: clamp(1.35rem, 1.6vw, 1.55rem);
-  /* Outer inset: mirror left chrome + 4px; inner bar uses its own 4px right padding. */
+  /* Outer inset: mirror left chrome + 4px; inner bar uses its own right padding. */
   padding-right: calc(clamp(1.35rem, 1.6vw, 1.55rem) + 4px);
   transition: padding 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -363,7 +363,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   padding-top: 0;
   padding-bottom: 0;
   padding-left: calc(1.1rem - 5px);
-  padding-right: 4px;
+  padding-right: 14px;
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 999px;
   background: rgba(18, 8, 34, 0.015);
@@ -395,6 +395,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
 .app-landing-header--compact .app-landing-header__bar {
   min-height: calc(4.5rem - 20px);
+  padding-right: 4px;
 }
 
 .app-landing-header--compact .app-landing-header__title {
@@ -918,18 +919,6 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   margin-left: 3.25rem;
 }
 
-.app-landing-header--mafia .app-landing-header__center {
-  gap: 0;
-}
-
-.app-landing-header--mafia .app-landing-header__center-extra {
-  position: absolute;
-  left: calc(100% + 14px);
-  top: 50%;
-  gap: 8px;
-  transform: translateY(-50%);
-}
-
 .app-landing-header--mafia .app-landing-header__actions {
   gap: 8px;
   margin-right: 0;
@@ -1055,7 +1044,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
     padding-top: 0;
     padding-bottom: 0;
     padding-left: calc(1rem - 5px);
-    padding-right: 4px;
+    padding-right: 14px;
   }
 
   .app-landing-header--compact .app-landing-header__bar {
@@ -1138,7 +1127,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
     padding-top: 0.45rem;
     padding-bottom: 0.45rem;
     padding-left: calc(0.55rem - 5px);
-    padding-right: 4px;
+    padding-right: 14px;
     border-radius: 999px;
   }
 

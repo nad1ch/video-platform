@@ -58,11 +58,14 @@ const MAFIA_BACKGROUND_STORAGE_PREFIX = 'streamassist_mafia_dead_backgrounds'
 const MAFIA_PAGE_BACKGROUND_STORAGE_PREFIX = 'streamassist_mafia_page_backgrounds'
 const MAFIA_BACKGROUND_STORAGE_KEY = `${MAFIA_BACKGROUND_STORAGE_PREFIX}:global`
 const MAFIA_PAGE_BACKGROUND_STORAGE_KEY = `${MAFIA_PAGE_BACKGROUND_STORAGE_PREFIX}:global`
+const APP_HUB_PAGE_BACKGROUND_STORAGE_KEY = 'streamassist_app_hub_page_backgrounds:global'
 const MAFIA_HOST_SESSION_STORAGE_KEY = 'streamassist_mafia_host_session_id'
 const MAFIA_DEFAULT_PAGE_BACKGROUND_ID = 'default-page'
+/** Persisted shell backdrop default; legacy saves used `default-page` for plain canvas. */
+export const SHELL_FALLBACK_PAGE_BACKGROUND_ID = 'preset-page-violet'
 const MAFIA_PAGE_BACKGROUND_ITEMS = Object.freeze([
   { id: MAFIA_DEFAULT_PAGE_BACKGROUND_ID, url: 'default', type: 'default' as const },
-  { id: 'preset-page-violet', url: 'preset:violet', type: 'preset' as const },
+  { id: SHELL_FALLBACK_PAGE_BACKGROUND_ID, url: 'preset:violet', type: 'preset' as const },
   { id: 'preset-page-night', url: 'preset:night', type: 'preset' as const },
 ]) satisfies readonly BackgroundItem[]
 
@@ -211,6 +214,8 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   const pageBackgrounds = ref<BackgroundItem[]>([...MAFIA_PAGE_BACKGROUND_ITEMS])
   const selectedPageBackgroundId = ref<string | null>(null)
   const forcedPageBackgroundId = ref<string | null>(null)
+  const appHubPageBackgrounds = ref<BackgroundItem[]>([...MAFIA_PAGE_BACKGROUND_ITEMS])
+  const appHubSelectedPageBackgroundId = ref<string | null>(null)
   const defaultEliminationBackground = ref<MafiaEliminationBackground>('dark')
   const eliminationBackgroundByPeerId = shallowRef<Record<string, MafiaEliminationBackground>>({})
 
@@ -540,16 +545,88 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     }
   }
 
+  function persistAppHubPageBackgroundSettings(): void {
+    const key = typeof window === 'undefined' ? null : APP_HUB_PAGE_BACKGROUND_STORAGE_KEY
+    if (key == null) {
+      return
+    }
+    try {
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          v: 1,
+          backgrounds: appHubPageBackgrounds.value,
+          selectedBackgroundId: appHubSelectedPageBackgroundId.value,
+        }),
+      )
+    } catch (err) {
+      mafiaGameLog.info('app hub page background settings persist failed', { err })
+    }
+  }
+
+  function readPersistedAppHubPageBackgroundSettings(): Pick<
+    MafiaPageBackgroundSettings,
+    'backgrounds' | 'selectedBackgroundId'
+  > | null {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    try {
+      const raw = window.localStorage.getItem(APP_HUB_PAGE_BACKGROUND_STORAGE_KEY)
+      if (!raw) {
+        return null
+      }
+      const parsed = JSON.parse(raw) as { backgrounds?: unknown; selectedBackgroundId?: unknown }
+      if (!Array.isArray(parsed.backgrounds)) {
+        return null
+      }
+      return {
+        backgrounds: parsed.backgrounds as BackgroundItem[],
+        selectedBackgroundId: typeof parsed.selectedBackgroundId === 'string' ? parsed.selectedBackgroundId : null,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  function hydratePersistedAppHubPageBackgroundSettings(): void {
+    const persisted = readPersistedAppHubPageBackgroundSettings()
+    if (persisted == null) {
+      appHubSelectedPageBackgroundId.value = MAFIA_DEFAULT_PAGE_BACKGROUND_ID
+      persistAppHubPageBackgroundSettings()
+      return
+    }
+    const items = normalizePageBackgroundItems(persisted.backgrounds)
+    appHubPageBackgrounds.value = items
+    let sid = persisted.selectedBackgroundId
+    if (sid != null && !pageBackgroundExists(sid, items)) {
+      sid = MAFIA_DEFAULT_PAGE_BACKGROUND_ID
+    }
+    if (sid == null) {
+      sid = MAFIA_DEFAULT_PAGE_BACKGROUND_ID
+    }
+    appHubSelectedPageBackgroundId.value = sid
+    persistAppHubPageBackgroundSettings()
+  }
+
   function hydratePersistedPageBackgroundSettings(): void {
     const persisted = readPersistedPageBackgroundSettings()
     if (persisted == null) {
+      selectedPageBackgroundId.value = SHELL_FALLBACK_PAGE_BACKGROUND_ID
+      persistPageBackgroundSettingsForCurrentRoom()
       return
     }
     const items = normalizePageBackgroundItems(persisted.backgrounds)
     pageBackgrounds.value = items
-    selectedPageBackgroundId.value = pageBackgroundExists(persisted.selectedBackgroundId, items)
-      ? persisted.selectedBackgroundId
-      : null
+    let selectedId = persisted.selectedBackgroundId
+    if (selectedId != null && !pageBackgroundExists(selectedId, items)) {
+      selectedId = SHELL_FALLBACK_PAGE_BACKGROUND_ID
+    }
+    if (selectedId == null) {
+      selectedId = SHELL_FALLBACK_PAGE_BACKGROUND_ID
+    }
+    selectedPageBackgroundId.value = selectedId
+    persistPageBackgroundSettingsForCurrentRoom()
   }
 
   function pageBackgroundSettingsSnapshot(): MafiaPageBackgroundSettings {
@@ -566,6 +643,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   }
 
   hydratePersistedPageBackgroundSettings()
+  hydratePersistedAppHubPageBackgroundSettings()
 
   watch(
     () => callSession.roomId,
@@ -757,7 +835,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     selectedPageBackgroundId.value = next
     persistPageBackgroundSettingsForCurrentRoom()
     if (forcedPageBackgroundId.value != null && (allowAnyParticipant || isMafiaHost.value)) {
-      forcedPageBackgroundId.value = next ?? MAFIA_DEFAULT_PAGE_BACKGROUND_ID
+      forcedPageBackgroundId.value = next ?? SHELL_FALLBACK_PAGE_BACKGROUND_ID
       emitPageBackgroundSettingsUpdate()
     }
   }
@@ -809,7 +887,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     forcedPageBackgroundId.value = enabled
       ? pageBackgroundExists(selectedPageBackgroundId.value)
         ? selectedPageBackgroundId.value
-        : MAFIA_DEFAULT_PAGE_BACKGROUND_ID
+        : SHELL_FALLBACK_PAGE_BACKGROUND_ID
       : null
     emitPageBackgroundSettingsUpdate()
   }
@@ -825,8 +903,59 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     }
   }
 
+  function resolvedAppHubPageBackgroundItem(): BackgroundItem {
+    const id =
+      appHubSelectedPageBackgroundId.value != null &&
+      pageBackgroundExists(appHubSelectedPageBackgroundId.value, appHubPageBackgrounds.value)
+        ? appHubSelectedPageBackgroundId.value
+        : MAFIA_DEFAULT_PAGE_BACKGROUND_ID
+    return appHubPageBackgrounds.value.find((background) => background.id === id) ?? MAFIA_PAGE_BACKGROUND_ITEMS[0]!
+  }
+
+  function selectAppHubPageBackground(backgroundId: string | null): void {
+    if (backgroundId != null && pageBackgroundExists(backgroundId, appHubPageBackgrounds.value)) {
+      appHubSelectedPageBackgroundId.value = backgroundId
+    } else {
+      appHubSelectedPageBackgroundId.value = MAFIA_DEFAULT_PAGE_BACKGROUND_ID
+    }
+    persistAppHubPageBackgroundSettings()
+  }
+
+  function addCustomAppHubPageBackground(url: string): BackgroundItem | null {
+    const normalizedUrl = normalizeDeadBackgroundUrl(url)
+    if (normalizedUrl == null) {
+      return null
+    }
+    const item: BackgroundItem = {
+      id: `app-hub-page-custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      url: normalizedUrl,
+      type: 'custom',
+    }
+    appHubPageBackgrounds.value = normalizePageBackgroundItems([...appHubPageBackgrounds.value, item])
+    appHubSelectedPageBackgroundId.value = item.id
+    persistAppHubPageBackgroundSettings()
+    return item
+  }
+
+  function deleteCustomAppHubPageBackground(backgroundId: string): void {
+    const item = appHubPageBackgrounds.value.find((background) => background.id === backgroundId)
+    if (item?.type !== 'custom') {
+      return
+    }
+    appHubPageBackgrounds.value = normalizePageBackgroundItems(
+      appHubPageBackgrounds.value.filter((background) => background.id !== backgroundId),
+    )
+    if (appHubSelectedPageBackgroundId.value === backgroundId) {
+      appHubSelectedPageBackgroundId.value = MAFIA_DEFAULT_PAGE_BACKGROUND_ID
+    }
+    persistAppHubPageBackgroundSettings()
+  }
+
   function resolvedPageBackgroundItem(): BackgroundItem {
-    const resolvedId = forcedPageBackgroundId.value ?? selectedPageBackgroundId.value ?? MAFIA_DEFAULT_PAGE_BACKGROUND_ID
+    const resolvedId =
+      forcedPageBackgroundId.value ??
+      selectedPageBackgroundId.value ??
+      SHELL_FALLBACK_PAGE_BACKGROUND_ID
     return pageBackgrounds.value.find((background) => background.id === resolvedId) ?? MAFIA_PAGE_BACKGROUND_ITEMS[0]!
   }
 
@@ -1522,6 +1651,8 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     selectedPageBackgroundId,
     forcedPageBackgroundId,
     pageBackgroundSettingsBroadcastPayload,
+    appHubPageBackgrounds,
+    appHubSelectedPageBackgroundId,
     defaultEliminationBackground,
     eliminationBackgroundByPeerId,
     mafiaHostPeerId,
@@ -1549,11 +1680,15 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     deleteCustomDeadBackground,
     activeDeadBackgroundUrl,
     selectPageBackground,
+    selectAppHubPageBackground,
     addCustomPageBackground,
+    addCustomAppHubPageBackground,
     deleteCustomPageBackground,
+    deleteCustomAppHubPageBackground,
     setPageBackgroundForcedForRoom,
     applyMafiaPageBackgroundSettingsFromSignaling,
     resolvedPageBackgroundItem,
+    resolvedAppHubPageBackgroundItem,
     setDefaultEliminationBackground,
     setPeerEliminationBackground,
     clearPeerEliminationBackground,

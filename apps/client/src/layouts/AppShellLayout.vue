@@ -33,6 +33,7 @@ import {
 } from '@/eat-first/constants/brand.js'
 import '@/eat-first/styles/host-chrome.css'
 import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
+import AppLandingFooterActions from '@/pages/app/components/AppLandingFooterActions.vue'
 import '@/eat-first/styles/motion.css'
 import { useCoinHubStore } from '@/stores/coinHub'
 import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
@@ -84,7 +85,7 @@ const {
   deadBackgrounds: mafiaDeadBackgrounds,
   activeBackgroundId: mafiaActiveBackgroundId,
   pageBackgrounds: mafiaPageBackgrounds,
-  selectedPageBackgroundId: mafiaSelectedPageBackgroundId,
+  appHubPageBackgrounds,
   forcedPageBackgroundId: mafiaForcedPageBackgroundId,
 } = storeToRefs(mafiaGame)
 const canEatFirstHost = computed(() => {
@@ -115,6 +116,10 @@ const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route
 
 const showChrome = computed(() => !isEatRoute.value || currentEatView.value !== 'overlay')
 const showFooter = computed(() => showChrome.value && route.meta.footer !== false)
+
+const shellPageBackgroundChoices = computed(() =>
+  isHomeRoute.value ? appHubPageBackgrounds.value : mafiaPageBackgrounds.value,
+)
 
 /** Stable page key: query changes should not create an empty transition gap. */
 const routeTransitionKey = computed(() => String(route.name ?? route.path))
@@ -275,11 +280,13 @@ onMounted(() => {
   setTheme(theme.value)
   void auth.ensureAuthLoaded()
   document.addEventListener('pointerdown', onDocumentPointerDownForMafiaSettings, true)
+  document.addEventListener('keydown', onDocumentKeydownCloseMafiaSettings, true)
   window.addEventListener('resize', syncMafiaSettingsPopoverPosition, { passive: true })
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocumentPointerDownForMafiaSettings, true)
+  document.removeEventListener('keydown', onDocumentKeydownCloseMafiaSettings, true)
   window.removeEventListener('resize', syncMafiaSettingsPopoverPosition)
 })
 
@@ -310,6 +317,8 @@ const mafiaHeaderShowHostControls = computed(() => isMafiaRoute.value && isCurre
 const callOrMafiaShowVisualSettings = computed(
   () => isCallRoute.value || isMafiaRoute.value,
 )
+/** Gear next to logo whenever the `/app` shell header is visible (including `/app` home). */
+const shellShowsHeaderSettingsGear = computed(() => showChrome.value)
 const mafiaHeaderObsCopyLabel = computed(() => 'copy')
 const mafiaSettingsOpen = ref(false)
 const mafiaSettingsButtonRef = ref<HTMLElement | null>(null)
@@ -326,6 +335,10 @@ function closeMafiaSettings(): void {
   mafiaSettingsOpen.value = false
 }
 
+function onShellSettingsLocaleChange(code: string): void {
+  void persistLocale(code)
+}
+
 function syncMafiaSettingsPopoverPosition(): void {
   const anchor = mafiaSettingsButtonRef.value
   if (!anchor) {
@@ -334,7 +347,7 @@ function syncMafiaSettingsPopoverPosition(): void {
   }
   const rect = anchor.getBoundingClientRect()
   const margin = 8
-  const width = 244
+  const width = Math.min(284, Math.max(200, window.innerWidth - margin * 2))
   const left = Math.min(
     Math.max(margin, rect.left),
     Math.max(margin, window.innerWidth - width - margin),
@@ -361,6 +374,13 @@ function onDocumentPointerDownForMafiaSettings(ev: PointerEvent): void {
     return
   }
   if (mafiaSettingsButtonRef.value?.contains(target) || mafiaSettingsPopoverRef.value?.contains(target)) {
+    return
+  }
+  closeMafiaSettings()
+}
+
+function onDocumentKeydownCloseMafiaSettings(ev: KeyboardEvent): void {
+  if (!mafiaSettingsOpen.value || ev.key !== 'Escape') {
     return
   }
   closeMafiaSettings()
@@ -431,7 +451,7 @@ function onMafiaPageBackgroundFileChange(ev: Event): void {
   }
   const file = input.files?.[0]
   input.value = ''
-  if (mafiaForcedPageBackgroundId.value != null && isMafiaRoute.value && !isCurrentMafiaHost.value) {
+  if (!isHomeRoute.value && mafiaForcedPageBackgroundId.value != null && isMafiaRoute.value && !isCurrentMafiaHost.value) {
     showMafiaSettingsToast(t('mafiaPage.pageBackgroundForcedByHost'))
     return
   }
@@ -450,7 +470,14 @@ function onMafiaPageBackgroundFileChange(ev: Event): void {
     const reader = new FileReader()
     reader.addEventListener('load', () => {
       const result = reader.result
-      if (typeof result !== 'string' || mafiaGame.addCustomPageBackground(result, isCallRoute.value) == null) {
+      if (typeof result !== 'string') {
+        showMafiaSettingsToast(t('mafiaPage.backgroundUploadFailed'))
+        return
+      }
+      const ok = isHomeRoute.value
+        ? mafiaGame.addCustomAppHubPageBackground(result)
+        : mafiaGame.addCustomPageBackground(result, isCallRoute.value)
+      if (ok == null) {
         showMafiaSettingsToast(t('mafiaPage.backgroundUploadFailed'))
       }
     }, { once: true })
@@ -519,7 +546,9 @@ function labelForMafiaPageBackground(background: BackgroundItem): string {
     : t('mafiaPage.pageBackgroundViolet')
 }
 
-const mafiaResolvedPageBackground = computed(() => mafiaGame.resolvedPageBackgroundItem())
+const mafiaResolvedPageBackground = computed(() =>
+  isHomeRoute.value ? mafiaGame.resolvedAppHubPageBackgroundItem() : mafiaGame.resolvedPageBackgroundItem(),
+)
 const mafiaPageBackgroundStyle = computed(() => {
   const background = mafiaResolvedPageBackground.value
   if (background.type === 'default') {
@@ -533,8 +562,10 @@ function isMafiaBackgroundSelected(background: MafiaBackgroundItem): boolean {
 }
 
 function isMafiaPageBackgroundSelected(background: BackgroundItem): boolean {
-  const finalId = mafiaForcedPageBackgroundId.value ?? mafiaSelectedPageBackgroundId.value ?? 'default-page'
-  return finalId === background.id
+  const resolved = isHomeRoute.value
+    ? mafiaGame.resolvedAppHubPageBackgroundItem()
+    : mafiaGame.resolvedPageBackgroundItem()
+  return resolved.id === background.id
 }
 
 function isMafiaBackgroundDeleteVisible(background: MafiaBackgroundItem): boolean {
@@ -560,6 +591,10 @@ function onMafiaBackgroundDeleteKeydown(ev: KeyboardEvent, background: MafiaBack
 }
 
 function selectMafiaPageBackground(backgroundId: string): void {
+  if (isHomeRoute.value) {
+    mafiaGame.selectAppHubPageBackground(backgroundId)
+    return
+  }
   if (mafiaForcedPageBackgroundId.value != null && isMafiaRoute.value && !isCurrentMafiaHost.value) {
     showMafiaSettingsToast(t('mafiaPage.pageBackgroundForcedByHost'))
     return
@@ -577,6 +612,10 @@ function onMafiaPageBackgroundCardKeydown(ev: KeyboardEvent, backgroundId: strin
 
 function deleteMafiaPageBackground(background: BackgroundItem): void {
   if (background.type !== 'custom') {
+    return
+  }
+  if (isHomeRoute.value) {
+    mafiaGame.deleteCustomAppHubPageBackground(background.id)
     return
   }
   mafiaGame.deleteCustomPageBackground(background.id, isCallRoute.value)
@@ -676,7 +715,7 @@ function mafiaBackgroundUploadInputId(): string {
 }
 
 function mafiaPageBackgroundUploadInputId(): string {
-  return 'app-shell-mafia-page-background-upload'
+  return isHomeRoute.value ? 'app-shell-app-hub-page-bg-upload' : 'app-shell-mafia-page-background-upload'
 }
 
 function mafiaBackgroundUploadAccept(): string {
@@ -711,7 +750,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
       :active="true"
     />
     <div
-      v-if="(isCallRoute || isMafiaRoute) && mafiaPageBackgroundStyle"
+      v-if="showChrome && mafiaPageBackgroundStyle"
       class="app-shell-mafia-page-background"
       :style="mafiaPageBackgroundStyle"
       aria-hidden="true"
@@ -743,14 +782,14 @@ async function copyMafiaObsViewUrl(): Promise<void> {
         @login="openAppLandingAuth('login')"
         @logout="logoutAppLanding"
       >
-        <template v-if="callOrMafiaShowVisualSettings" #brand-extra>
+        <template v-if="shellShowsHeaderSettingsGear" #brand-extra>
           <div class="app-shell-mafia-settings-wrap">
             <button
               ref="mafiaSettingsButtonRef"
               type="button"
               class="app-shell-mafia-settings"
-              title="settings"
-              aria-label="settings"
+              :title="t('app.shellSettings')"
+              :aria-label="t('app.shellSettings')"
               :aria-expanded="mafiaSettingsOpen"
               aria-haspopup="menu"
               @click.stop="toggleMafiaSettings"
@@ -765,15 +804,70 @@ async function copyMafiaObsViewUrl(): Promise<void> {
               :style="mafiaSettingsPopoverStyle"
               @click.stop
             >
-              <button
-                type="button"
-                class="app-shell-mafia-settings-popover__close"
-                aria-label="Close"
-                title="Close"
-                @click="closeMafiaSettings"
+              <div class="app-shell-mafia-settings-popover__locale-shell">
+                <AppLandingFooterActions
+                  mode="locale"
+                  tone="glass"
+                  :locale="locale"
+                  :locale-options="appLandingLocaleMenuOptions"
+                  popover-locale-stick
+                  @update:locale="onShellSettingsLocaleChange"
+                />
+              </div>
+              <p
+                class="app-shell-mafia-settings-popover__title app-shell-mafia-settings-popover__title--page"
               >
-                ×
-              </button>
+                {{ t('mafiaPage.pageBackgroundTitle') }}
+              </p>
+              <label v-if="isMafiaRoute && isCurrentMafiaHost" class="app-shell-mafia-force-bg">
+                <input
+                  type="checkbox"
+                  :checked="mafiaForcedPageBackgroundId != null"
+                  @change="onMafiaForcePageBackgroundChange"
+                />
+                <span>{{ t('mafiaPage.pageBackgroundApplyAll') }}</span>
+              </label>
+              <div class="app-shell-mafia-bg-gallery" role="listbox" :aria-label="t('mafiaPage.pageBackgroundTitle')">
+                <div
+                  v-for="background in shellPageBackgroundChoices"
+                  :key="background.id"
+                  class="app-shell-mafia-bg-card"
+                  :class="mafiaPageBackgroundCardClass(background)"
+                  :role="mafiaBackgroundCardRole(background)"
+                  :tabindex="mafiaBackgroundCardTabIndex()"
+                  :aria-selected="isMafiaPageBackgroundSelected(background)"
+                  :aria-label="mafiaPageBackgroundAriaLabel(background)"
+                  @click="selectMafiaPageBackground(background.id)"
+                  @keydown="onMafiaPageBackgroundCardKeydown($event, background.id)"
+                >
+                  <span class="app-shell-mafia-bg-card__preview" :style="styleForMafiaPageBackground(background)" />
+                  <span class="app-shell-mafia-bg-card__label">{{ labelForMafiaPageBackground(background) }}</span>
+                  <span
+                    v-if="isMafiaPageBackgroundDeleteVisible(background)"
+                    :class="mafiaBackgroundDeleteClass()"
+                    role="button"
+                    tabindex="0"
+                    :title="mafiaPageBackgroundDeleteAriaLabel(background)"
+                    :aria-label="mafiaPageBackgroundDeleteAriaLabel(background)"
+                    @click="onMafiaPageBackgroundDeleteClick($event, background)"
+                    @keydown="onMafiaPageBackgroundDeleteKeydown($event, background)"
+                  >
+                    ×
+                  </span>
+                </div>
+                <label :class="mafiaBackgroundUploadClass()" :for="mafiaPageBackgroundUploadInputId()">
+                  <span class="app-shell-mafia-bg-card__plus" aria-hidden="true">+</span>
+                  <span class="app-shell-mafia-bg-card__label">{{ t('mafiaPage.pageBackgroundUpload') }}</span>
+                  <input
+                    :id="mafiaPageBackgroundUploadInputId()"
+                    type="file"
+                    :accept="mafiaBackgroundUploadAccept()"
+                    :aria-label="t('mafiaPage.pageBackgroundUpload')"
+                    @change="onMafiaPageBackgroundFileChange"
+                  />
+                </label>
+              </div>
+              <template v-if="callOrMafiaShowVisualSettings">
               <p v-if="isMafiaRoute && isCurrentMafiaHost" class="app-shell-mafia-settings-popover__title">
                 {{ t('mafiaPage.eliminationBackgroundDefault') }}
               </p>
@@ -822,60 +916,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
                   />
                 </label>
               </div>
-              <p
-                class="app-shell-mafia-settings-popover__title"
-                :class="{ 'app-shell-mafia-settings-popover__title--page': isMafiaRoute && isCurrentMafiaHost }"
-              >
-                {{ t('mafiaPage.pageBackgroundTitle') }}
-              </p>
-              <label v-if="isMafiaRoute && isCurrentMafiaHost" class="app-shell-mafia-force-bg">
-                <input
-                  type="checkbox"
-                  :checked="mafiaForcedPageBackgroundId != null"
-                  @change="onMafiaForcePageBackgroundChange"
-                />
-                <span>{{ t('mafiaPage.pageBackgroundApplyAll') }}</span>
-              </label>
-              <div class="app-shell-mafia-bg-gallery" role="listbox" :aria-label="t('mafiaPage.pageBackgroundTitle')">
-                <div
-                  v-for="background in mafiaPageBackgrounds"
-                  :key="background.id"
-                  class="app-shell-mafia-bg-card"
-                  :class="mafiaPageBackgroundCardClass(background)"
-                  :role="mafiaBackgroundCardRole(background)"
-                  :tabindex="mafiaBackgroundCardTabIndex()"
-                  :aria-selected="isMafiaPageBackgroundSelected(background)"
-                  :aria-label="mafiaPageBackgroundAriaLabel(background)"
-                  @click="selectMafiaPageBackground(background.id)"
-                  @keydown="onMafiaPageBackgroundCardKeydown($event, background.id)"
-                >
-                  <span class="app-shell-mafia-bg-card__preview" :style="styleForMafiaPageBackground(background)" />
-                  <span class="app-shell-mafia-bg-card__label">{{ labelForMafiaPageBackground(background) }}</span>
-                  <span
-                    v-if="isMafiaPageBackgroundDeleteVisible(background)"
-                    :class="mafiaBackgroundDeleteClass()"
-                    role="button"
-                    tabindex="0"
-                    :title="mafiaPageBackgroundDeleteAriaLabel(background)"
-                    :aria-label="mafiaPageBackgroundDeleteAriaLabel(background)"
-                    @click="onMafiaPageBackgroundDeleteClick($event, background)"
-                    @keydown="onMafiaPageBackgroundDeleteKeydown($event, background)"
-                  >
-                    ×
-                  </span>
-                </div>
-                <label :class="mafiaBackgroundUploadClass()" :for="mafiaPageBackgroundUploadInputId()">
-                  <span class="app-shell-mafia-bg-card__plus" aria-hidden="true">+</span>
-                  <span class="app-shell-mafia-bg-card__label">{{ t('mafiaPage.pageBackgroundUpload') }}</span>
-                  <input
-                    :id="mafiaPageBackgroundUploadInputId()"
-                    type="file"
-                    :accept="mafiaBackgroundUploadAccept()"
-                    :aria-label="t('mafiaPage.pageBackgroundUpload')"
-                    @change="onMafiaPageBackgroundFileChange"
-                  />
-                </label>
-              </div>
+              </template>
             </div>
             </Teleport>
           </div>
@@ -885,13 +926,12 @@ async function copyMafiaObsViewUrl(): Promise<void> {
             <button
               type="button"
               class="app-shell-call-join-room"
-              :class="{ 'app-shell-call-join-room--mafia': isMafiaRoute }"
               :aria-expanded="callRoomHeaderJoin.roomPopoverOpen"
               aria-haspopup="dialog"
               :aria-controls="CALL_ROOM_POPOVER_PANEL_ID"
               @click.stop="callRoomHeaderJoin.toggleRoomPopover()"
             >
-              {{ isMafiaRoute ? 'room' : t('callPage.headerJoinRoom') }}
+              {{ t('callPage.headerJoinRoom') }}
             </button>
           </div>
         </template>
@@ -1268,23 +1308,6 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   cursor: not-allowed;
 }
 
-.app-shell-call-join-room--mafia {
-  width: 67px;
-  min-height: 31px;
-  padding: 0;
-  border: 0;
-  border-radius: 33px;
-  background: rgb(102 56 143 / 0.47);
-  color: #fff;
-  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
-  font-size: 10px;
-  font-weight: 400;
-  font-variation-settings: 'YEAR' 1979;
-  line-height: 1;
-  text-transform: lowercase;
-  letter-spacing: 0;
-}
-
 @keyframes app-shell-mafia-settings-spin {
   to {
     transform: rotate(360deg);
@@ -1356,44 +1379,32 @@ async function copyMafiaObsViewUrl(): Promise<void> {
 .app-shell-mafia-settings-popover {
   position: fixed;
   z-index: 12080;
-  width: 244px;
-  padding: 12px 10px 10px;
+  box-sizing: border-box;
+  width: min(284px, calc(100vw - 16px));
+  padding: 10px 10px;
+  overflow: visible;
   border: 1px solid rgb(255 255 255 / 0.12);
   border-radius: 12px;
   background: rgb(18 8 34 / 0.94);
   box-shadow: 0 14px 32px rgb(0 0 0 / 0.4);
 }
 
-.app-shell-mafia-settings-popover__close {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  display: inline-flex;
-  align-items: center;
+.app-shell-mafia-settings-popover__locale-shell {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.1);
+}
+
+.app-shell-mafia-settings-popover__locale-shell :deep(.app-landing-footer-actions) {
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.08);
-  color: rgb(255 255 255 / 0.9);
-  cursor: pointer;
-  font-size: 17px;
-  line-height: 1;
-  transition:
-    background 0.16s ease,
-    transform 0.16s ease;
 }
 
-.app-shell-mafia-settings-popover__close:hover {
-  background: rgb(255 255 255 / 0.16);
-  transform: scale(1.05);
-}
-
-.app-shell-mafia-settings-popover__close:focus-visible {
-  outline: 2px solid rgb(255 255 255 / 0.82);
-  outline-offset: 2px;
+.app-shell-mafia-settings-popover__locale-shell :deep(.app-landing-footer-actions--locale),
+.app-shell-mafia-settings-popover__locale-shell :deep(.app-landing-footer-actions__locale) {
+  width: 100%;
+  max-width: 100%;
 }
 
 .app-shell-mafia-settings-popover__title {
@@ -1405,7 +1416,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
 }
 
 .app-shell-mafia-settings-popover__title--page {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .app-shell-mafia-force-bg {
@@ -1537,13 +1548,11 @@ async function copyMafiaObsViewUrl(): Promise<void> {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-shell-mafia-settings-popover__close,
   .app-shell-mafia-bg-card,
   .app-shell-mafia-bg-card__delete {
     transition: none;
   }
 
-  .app-shell-mafia-settings-popover__close:hover,
   .app-shell-mafia-bg-card:hover,
   .app-shell-mafia-bg-card__delete:hover {
     transform: none;
