@@ -291,6 +291,47 @@ export const useCoinHubStore = defineStore('coinHub', () => {
     }
   }
 
+  /**
+   * Reset every per-user piece of CoinHub state back to initial. Called from
+   * `useAuth.logout()` so the next user logging in on the same browser does
+   * not see the previous user's balance, case rewards, cooldowns, or the
+   * "spin in flight" UI flag.
+   *
+   * Inflight promise refs (`loadInflight`) are cleared, but any in-flight
+   * fetch will simply land into a future store instance — its `applySnapshot`
+   * call after reset is harmless: it will just reflect the new user's state
+   * (or 401 → not applied at all in `loadSnapshot`'s catch).
+   */
+  function reset(): void {
+    balance.value = 0
+    pending.value = 0
+    dailySpinAvailable.value = true
+    freeCaseState.value = 'available'
+    subscriberCaseState.value = 'locked'
+    caseStates.value = ['available', 'available', 'locked', 'cooldown']
+    caseRewards.value = [null, null, null, null]
+    caseGridCooldownUntilIso.value = [null, null, null, null]
+    freeCaseCooldownUntilIso.value = null
+    subscriberCaseCooldownUntilIso.value = null
+    spinPayout.value = 0
+    spinNextAvailableAtIso.value = null
+    lastError.value = null
+    lastErrorKind.value = null
+    lastAction.value = null
+    lastOpenCaseId.value = null
+    lastOpenedCaseRewardLine.value = null
+    hubLoading.value = false
+    refreshing.value = false
+    initialHydrated.value = false
+    claimInFlight.value = false
+    spinInFlight.value = false
+    openingCaseId.value = null
+    loadInflight.value = null
+    premiumBalanceDisplaySkip.value = false
+    balanceCelebrationPulse.value = 0
+    premiumCelebrationHeroLift.value = false
+  }
+
   return {
     balance,
     pending,
@@ -326,5 +367,6 @@ export const useCoinHubStore = defineStore('coinHub', () => {
     balanceCelebrationPulse,
     requestBalanceCelebrationPulse,
     premiumCelebrationHeroLift,
+    reset,
   }
 })

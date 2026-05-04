@@ -143,6 +143,54 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     camEnabled.value = v ? v.enabled : false
   }
 
+  /**
+   * React to mid-call track death: USB camera unplug, OS-level permission
+   * revoke, or any other cause that flips `track.readyState` to `'ended'`
+   * without an explicit `track.stop()` call from us. Without this listener
+   * the UI continues to render `camEnabled === true` while the track is
+   * dead and remotes see frozen frames.
+   *
+   * The listener is idempotent and self-detaching: it only acts when the
+   * track is still part of the current `localStream` (so a deliberate
+   * `track.stop()` from `stopLocalMedia` / `swapLocal*Input` is a no-op
+   * because the track was already removed before being stopped).
+   *
+   * Bumping `localPlayRev` triggers preview/peer-publication watchers in
+   * `useCallEngine` so the outbound producer is updated to a null-track
+   * (or the next available device) via the normal replaceTrack path.
+   */
+  function attachLocalTrackEndedListener(track: MediaStreamTrack): void {
+    const onEnded = (): void => {
+      const stream = localStream.value
+      if (!stream) {
+        return
+      }
+      const stillAttached = stream.getTracks().includes(track)
+      if (!stillAttached) {
+        return
+      }
+      try {
+        stream.removeTrack(track)
+      } catch {
+        /* track may already be detached */
+      }
+      if (track.kind === 'video') {
+        camEnabled.value = false
+      } else if (track.kind === 'audio') {
+        micEnabled.value = false
+      }
+      localPlayRev.value += 1
+      if (import.meta.env.DEV) {
+        console.warn('[local] track ended unexpectedly (unplug / revoke)', {
+          kind: track.kind,
+          id: track.id,
+          label: track.label,
+        })
+      }
+    }
+    track.addEventListener('ended', onEnded, { once: true })
+  }
+
   async function startLocalMedia(): Promise<MediaStream> {
     if (import.meta.env.DEV) {
       console.log('[local] starting media')
@@ -157,6 +205,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
       localStream.value = stream
       for (const t of stream.getAudioTracks()) {
         t.enabled = false
+        attachLocalTrackEndedListener(t)
       }
       micEnabled.value = false
       camEnabled.value = false
@@ -202,9 +251,11 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     persistVideoInputDeviceIdFromTrack(stream.getVideoTracks()[0])
     for (const t of stream.getAudioTracks()) {
       t.enabled = false
+      attachLocalTrackEndedListener(t)
     }
     for (const t of stream.getVideoTracks()) {
       t.enabled = false
+      attachLocalTrackEndedListener(t)
     }
     micEnabled.value = false
     camEnabled.value = false
@@ -286,6 +337,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
       old.stop()
     }
     stream.addTrack(nt)
+    attachLocalTrackEndedListener(nt)
     syncFlagsFromStream()
     localPlayRev.value += 1
     await refreshMediaDevices()
@@ -331,6 +383,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
       old.stop()
     }
     stream.addTrack(nt)
+    attachLocalTrackEndedListener(nt)
     persistVideoInputDeviceIdFromTrack(nt)
     syncFlagsFromStream()
     localPlayRev.value += 1

@@ -608,6 +608,13 @@ export function useCallEngine(options?: CallEngineOptions) {
   const joinError = ref<string | null>(null)
   /** When true, socket close must not trigger auto-reconnect (user left or failed join cleanup). */
   const intentionalLeave = ref(false)
+  /**
+   * True only when {@link intentionalLeave} was set because automatic reconnect
+   * exhausted {@link MAX_AUTO_RECONNECT}. Distinguishes "engine gave up" from
+   * "user pressed Leave" / "initial join failed". Used by the `online` event
+   * re-arm so we never auto-rejoin a call that the user actually left.
+   */
+  let exhaustedDueToFailure = false
   let displayNameDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let unsubActiveSpeaker: (() => void) | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -836,6 +843,11 @@ export function useCallEngine(options?: CallEngineOptions) {
       if (reconnectFailures >= MAX_AUTO_RECONNECT) {
         joinError.value = e instanceof Error ? e.message : String(e)
         intentionalLeave.value = true
+        // Mark this exhaustion as automatic (not user-driven) so the
+        // `online` event listener can safely re-arm one more attempt
+        // when the browser regains network. A user-clicked Leave
+        // never sets this flag and is therefore never auto-rejoined.
+        exhaustedDueToFailure = true
         teardownMedia()
       } else {
         retryLater = true
@@ -1201,6 +1213,7 @@ export function useCallEngine(options?: CallEngineOptions) {
 
   async function joinCall(): Promise<void> {
     intentionalLeave.value = false
+    exhaustedDueToFailure = false
     reconnectFailures = 0
     clearReconnectTimer()
     joinError.value = null
@@ -1229,6 +1242,8 @@ export function useCallEngine(options?: CallEngineOptions) {
 
   function leaveCall(): void {
     intentionalLeave.value = true
+    // User pressed Leave: never resurrect on `online` re-arm.
+    exhaustedDueToFailure = false
     teardownMedia()
   }
 
@@ -1314,11 +1329,39 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
   }
 
+  /**
+   * Re-arm reconnect when the browser regains network AFTER auto-reconnect
+   * exhausted its budget. Common scenario: laptop sleeps, MAX_AUTO_RECONNECT
+   * attempts all fail during the offline window (max ~5 minutes for 20
+   * exponential-backoff attempts), engine sets `intentionalLeave = true` and
+   * tears media down. Without this listener the user is stuck on the
+   * "connection lost" screen until they manually press Rejoin.
+   *
+   * Strict guards:
+   *   - `exhaustedDueToFailure` is the ONLY signal we use to opt-in. User
+   *     pressed Leave clears the flag, so a deliberate leave never resurrects.
+   *   - `inCall.value` is false after `teardownMedia` ran, so we re-issue a
+   *     full `joinCall()` (which re-runs the device pipeline).
+   *   - Triggers at most once per exhaustion: the flag is cleared on entry
+   *     to `joinCall()`.
+   */
+  function onWindowOnlineRearmReconnect(): void {
+    if (!exhaustedDueToFailure) {
+      return
+    }
+    if (joining.value) {
+      return
+    }
+    exhaustedDueToFailure = false
+    void joinCall()
+  }
+
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', onDocumentVisibilityForReconnect)
   }
   if (typeof window !== 'undefined') {
     window.addEventListener('focus', onWindowFocusForRecvResync)
+    window.addEventListener('online', onWindowOnlineRearmReconnect)
   }
 
   onScopeDispose(() => {
@@ -1338,6 +1381,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
     if (typeof window !== 'undefined') {
       window.removeEventListener('focus', onWindowFocusForRecvResync)
+      window.removeEventListener('online', onWindowOnlineRearmReconnect)
     }
   })
 

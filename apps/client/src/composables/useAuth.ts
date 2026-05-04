@@ -344,6 +344,66 @@ function logOAuthTargetWhenDevApiAmbiguous(target: string): void {
   }
 }
 
+/**
+ * Reset every store and module-singleton that holds per-user state.
+ *
+ * Triggered from `logout()` so the next user logging in on the same browser
+ * does not inherit the previous user's coin balance, mafia roles, Pro flag,
+ * or already-seen billing event ids.
+ *
+ * Each reset is independently try/catched: if one store's reset throws (e.g.
+ * Pinia is not active in a test harness), we still clear the others. Dynamic
+ * imports avoid pulling these heavy modules at auth module load time and
+ * sidestep import cycles.
+ */
+async function resetUserScopedState(): Promise<void> {
+  try {
+    const [{ useCoinHubStore }, pinia] = await Promise.all([
+      import('@/stores/coinHub'),
+      import('pinia'),
+    ])
+    if (pinia.getActivePinia()) {
+      useCoinHubStore().reset()
+    }
+  } catch (e) {
+    authLog.warn('reset coinHub store failed', e)
+  }
+  try {
+    const [{ useMafiaGameStore }, pinia] = await Promise.all([
+      import('@/stores/mafiaGame'),
+      import('pinia'),
+    ])
+    if (pinia.getActivePinia()) {
+      useMafiaGameStore().fullReset()
+    }
+  } catch (e) {
+    authLog.warn('reset mafiaGame store failed', e)
+  }
+  try {
+    const [{ useMafiaPlayersStore }, pinia] = await Promise.all([
+      import('@/stores/mafiaPlayers'),
+      import('pinia'),
+    ])
+    if (pinia.getActivePinia()) {
+      useMafiaPlayersStore().reset()
+    }
+  } catch (e) {
+    authLog.warn('reset mafiaPlayers store failed', e)
+  }
+  try {
+    const { resetProSubscriptionState } = await import('@/composables/useProSubscription')
+    resetProSubscriptionState()
+  } catch (e) {
+    authLog.warn('reset pro subscription state failed', e)
+  }
+  try {
+    const { resetBillingNotifierState } = await import('@/composables/useBillingNotifications')
+    resetBillingNotifierState()
+  } catch (e) {
+    authLog.warn('reset billing notifier state failed', e)
+  }
+}
+
 export function useAuth() {
   const isAuthenticated = computed(() => Boolean(user.value))
   const isAdmin = computed(() => user.value?.role === 'admin')
@@ -384,6 +444,14 @@ export function useAuth() {
     } catch {
       /* ignore */
     }
+
+
+
+
+
+
+
+    await resetUserScopedState()
     if (options?.navigateHome !== false) {
       const { router } = await import('@/router')
       await router.push({ path: '/' })

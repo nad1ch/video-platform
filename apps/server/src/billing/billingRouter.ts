@@ -216,16 +216,35 @@ function constantTimeEqual(a: string, b: string): boolean {
 
 let warnedMissingMonoWebhookSecret = false
 
+/**
+ * Verify the Monobank webhook secret.
+ *
+ * Production semantics (fail-closed): when `MONO_WEBHOOK_SECRET` is unset or
+ * empty in production, the webhook is REJECTED. Without the secret there is
+ * no way to distinguish a real Monobank callback from a forged one, and a
+ * forged StatementItem combined with a user-initiated `mark-paid` call could
+ * cause the matcher to auto-activate Pro for an attacker. The matcher
+ * re-reads authoritative state from DB inside a Serializable transaction,
+ * but that is a defense-in-depth layer — it must not be the only layer.
+ *
+ * Dev semantics (fail-open with warning): when the secret is empty outside
+ * production, the webhook is accepted so local development against a
+ * monobank-personal sandbox / test fixtures works without configuration.
+ * The boot-time warning ensures this is loud.
+ */
 function verifyMonoWebhookSecret(req: Request): boolean {
   const expected = (process.env.MONO_WEBHOOK_SECRET ?? '').trim()
   if (expected.length === 0) {
-    
-    if (process.env.NODE_ENV === 'production' && !warnedMissingMonoWebhookSecret) {
-      warnedMissingMonoWebhookSecret = true
-      console.warn(
-        '[billing] MONO_WEBHOOK_SECRET is not set — webhook is unauthenticated in production. ' +
-          'Configure MONO_WEBHOOK_SECRET and re-register the webhook URL with `?secret=<value>` or send `X-Mono-Secret`.',
-      )
+    if (process.env.NODE_ENV === 'production') {
+      if (!warnedMissingMonoWebhookSecret) {
+        warnedMissingMonoWebhookSecret = true
+        console.error(
+          '[billing] MONO_WEBHOOK_SECRET is not set — REJECTING all mono-personal webhook ' +
+            'requests in production. Configure MONO_WEBHOOK_SECRET and re-register the webhook ' +
+            'URL with `?secret=<value>` or send `X-Mono-Secret`.',
+        )
+      }
+      return false
     }
     return true
   }

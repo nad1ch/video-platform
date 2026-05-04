@@ -53,6 +53,19 @@ export function refreshSubscription(): Promise<void> {
   return inflight
 }
 
+/**
+ * Reset the singleton subscription snapshot. Called from `useAuth.logout()`
+ * so the next user logging in on the same browser does not inherit the
+ * previous user's `isProActive`/`expiresAt`/`billingEmail` until the next
+ * background poll. Without this, the UI briefly renders stale Pro state
+ * (Pro-only buttons enabled, paywalls hidden) until the 20s notifier tick.
+ */
+export function resetProSubscriptionState(): void {
+  subscription.value = null
+  loading.value = false
+  lastError.value = null
+}
+
 export function useProSubscription() {
   const isProActive = computed(() => subscription.value?.isActive === true)
   const expiresAt = computed(() => subscription.value?.expiresAt ?? null)

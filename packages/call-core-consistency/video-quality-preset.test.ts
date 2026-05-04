@@ -8,6 +8,7 @@ import {
   CALL_VIDEO_MOBILE_MAX_FRAMERATE,
   CALL_VIDEO_MOBILE_WIDTH,
   CALL_VIDEO_TARGET_BITRATE_BPS,
+  CALL_VIDEO_TARGET_BITRATE_BPS_SMALL_ROOM,
   CALL_VIDEO_WIDTH,
   countActiveCameraPublishersAtWire,
   getCallVideoConstraints,
@@ -20,7 +21,7 @@ import {
 } from '../call-core/src/media/videoQualityPreset'
 
 describe('fixed call video quality', () => {
-  it('uses one 480p layer at 20 fps and 600 kbps for the simulcast compatibility API', () => {
+  it('uses one 480p layer at 20 fps and 600 kbps for the large-room compatibility API', () => {
     const e = getSimulcastEncodingsForPreset('auto_large_room')
     expect(e).toHaveLength(1)
     expect(e[0]).toMatchObject({
@@ -29,6 +30,20 @@ describe('fixed call video quality', () => {
       maxFramerate: CALL_VIDEO_MAX_FRAMERATE,
     })
     expect(e[0]?.rid).toBeUndefined()
+  })
+
+  it('uses one 480p layer at 20 fps with the small-room bitrate ceiling for auto_small_room', () => {
+    const e = getSingleLayerEncodingsForPreset('auto_small_room')
+    expect(e).toHaveLength(1)
+    expect(e[0]).toMatchObject({
+      scaleResolutionDownBy: 1,
+      maxBitrate: CALL_VIDEO_TARGET_BITRATE_BPS_SMALL_ROOM,
+      maxFramerate: CALL_VIDEO_MAX_FRAMERATE,
+    })
+    expect(e[0]?.rid).toBeUndefined()
+    // Small-room bitrate must always be a (small) increase over the
+    // large-room baseline; never below it. Resolution / FPS unchanged.
+    expect(CALL_VIDEO_TARGET_BITRATE_BPS_SMALL_ROOM).toBeGreaterThan(CALL_VIDEO_TARGET_BITRATE_BPS)
   })
 
   it('uses exact 854x480 capture with max 20 fps for every tier', () => {
@@ -127,7 +142,7 @@ describe('countActiveCameraPublishersAtWire', () => {
 })
 
 describe('resolveOutgoingVideoPublishTier', () => {
-  it('ignores manual preset so every participant uses the fixed tier', () => {
+  it('ignores manual preset and picks large-room when above the small-room threshold', () => {
     expect(
       resolveOutgoingVideoPublishTier({
         manualPreset: 'economy',
@@ -138,7 +153,7 @@ describe('resolveOutgoingVideoPublishTier', () => {
     ).toBe('auto_large_room')
   })
 
-  it('keeps fixed tier when manual is not explicit', () => {
+  it('picks small-room tier when manual is not explicit and there is a 1:1', () => {
     expect(
       resolveOutgoingVideoPublishTier({
         manualPreset: 'hd',
@@ -146,10 +161,10 @@ describe('resolveOutgoingVideoPublishTier', () => {
         allowManualQuality: true,
         activeCameraPublishersAtWire: 1,
       }),
-    ).toBe('auto_large_room')
+    ).toBe('auto_small_room')
   })
 
-  it('keeps fixed tier when manual is not allowed', () => {
+  it('picks small-room tier when manual is not allowed and there is a 1:1', () => {
     expect(
       resolveOutgoingVideoPublishTier({
         manualPreset: 'hd',
@@ -157,10 +172,10 @@ describe('resolveOutgoingVideoPublishTier', () => {
         allowManualQuality: false,
         activeCameraPublishersAtWire: 1,
       }),
-    ).toBe('auto_large_room')
+    ).toBe('auto_small_room')
   })
 
-  it('keeps fixed tier when active cameras at wire <= ACTIVE_CAMERA_SMALL_ROOM_MAX', () => {
+  it('picks small-room tier at exactly ACTIVE_CAMERA_SMALL_ROOM_MAX publishers', () => {
     expect(ACTIVE_CAMERA_SMALL_ROOM_MAX).toBe(4)
     expect(
       resolveOutgoingVideoPublishTier({
@@ -169,10 +184,10 @@ describe('resolveOutgoingVideoPublishTier', () => {
         allowManualQuality: false,
         activeCameraPublishersAtWire: 4,
       }),
-    ).toBe('auto_large_room')
+    ).toBe('auto_small_room')
   })
 
-  it('keeps fixed tier when above the old threshold', () => {
+  it('switches to large-room tier above the small-room threshold', () => {
     expect(
       resolveOutgoingVideoPublishTier({
         manualPreset: 'balanced',
@@ -183,7 +198,9 @@ describe('resolveOutgoingVideoPublishTier', () => {
     ).toBe('auto_large_room')
   })
 
-  it('keeps fixed tier when wire snapshot has zero active video publishers', () => {
+  it('falls back to large-room tier when wire snapshot has zero active video publishers', () => {
+    // 0 means "nobody is publishing video yet" — there is no small-room budget
+    // benefit to claim, and the safer default is the conservative tier.
     expect(
       resolveOutgoingVideoPublishTier({
         manualPreset: 'balanced',
@@ -194,7 +211,7 @@ describe('resolveOutgoingVideoPublishTier', () => {
     ).toBe('auto_large_room')
   })
 
-  it('keeps fixed tier when manual balanced is explicit and allowed', () => {
+  it('keeps large-room tier when manual balanced is explicit and the room is large', () => {
     expect(
       resolveOutgoingVideoPublishTier({
         manualPreset: 'balanced',

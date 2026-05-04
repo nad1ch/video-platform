@@ -182,6 +182,13 @@ export function useCallScreenShare(deps: UseCallScreenShareDeps) {
         stopAllTracks(dm)
       }
       screenShareStream.value = null
+      // Pre-set the source to 'none' BEFORE attempting recovery. If recovery
+      // succeeds we overwrite below with the actual outcome ('camera' or 'none');
+      // if recovery throws (producer torn down, transport closed, etc.) the
+      // outer catch's silent swallow no longer leaves outboundVideoSource stuck
+      // at 'screen' with a null screenShareStream — that mismatch previously
+      // caused remotes to see frozen frames while UI still reported screen-share.
+      outboundVideoSource.value = 'none'
       try {
         await deps.ensureOutboundCameraTrack?.()
         const liveCam = pickOutboundCameraVideoTrack(deps.localStream.value)
@@ -191,13 +198,13 @@ export function useCallScreenShare(deps: UseCallScreenShareDeps) {
           outboundVideoSource.value =
             deps.camEnabled.value && liveCam.enabled ? 'camera' : 'none'
         } else {
-          
+
           const producerId = await deps.replaceOutboundVideoTrack(null)
           deps.notifyProducerVideoSource(producerId, 'camera')
           outboundVideoSource.value = 'none'
         }
       } catch {
-        /* producer torn down */
+        /* producer torn down — outboundVideoSource already reset to 'none' above */
       }
       bumpPlayRev()
     } finally {

@@ -137,6 +137,7 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
           return
         }
 
+        const messageType = parsed.data.type
         try {
           switch (parsed.data.type) {
             case 'client-ping': {
@@ -148,7 +149,30 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'join-room': {
               const { roomId, peerId, displayName, avatarUrl, userId } = parsed.data.payload
-              await handleJoinRoom(socket, roomId, peerId, displayName, avatarUrl, userId, deps)
+              try {
+                await handleJoinRoom(socket, roomId, peerId, displayName, avatarUrl, userId, deps)
+              } catch (err) {
+
+
+
+
+
+                console.error('[signaling] join-room failed', {
+                  roomId,
+                  peerId,
+                  err: err instanceof Error ? err.message : String(err),
+                })
+                try {
+                  if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                      type: 'error',
+                      payload: { code: 'join_failed', message: 'Failed to join room' },
+                    }))
+                  }
+                } catch {
+                  /* socket may have closed mid-send */
+                }
+              }
               break
             }
             case 'update-display-name': {
@@ -288,7 +312,16 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
           }
         } catch (err) {
-          console.error('signaling handler failed', err)
+
+
+
+          const peer = socketPeer.get(socket)
+          console.error('[signaling] handler failed', {
+            messageType,
+            peerId: peer?.id,
+            roomId: peer?.roomId,
+            err: err instanceof Error ? err.message : String(err),
+          })
         }
       })()
     })

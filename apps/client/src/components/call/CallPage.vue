@@ -467,15 +467,38 @@ function reconcileRemoteVideoPlaybackSuppression(): void {
   }
 }
 
+/**
+ * Stable scalar key for the suppression-reconcile watcher. Returning a
+ * primitive string lets Vue compare with `Object.is` and skip the callback
+ * when nothing visible-to-this-watcher actually changed; the previous object
+ * source returned a fresh object on every reactivity flush which forced the
+ * callback to fire even when the underlying values were equal.
+ *
+ * `viewport` is a `Map<string, boolean>`; we encode only the visible tile
+ * ids into the key so that toggling an unrelated peer's `false` to `false`
+ * does not refire the watcher.
+ */
+const suppressionWatcherKey = computed(() => {
+  const visiblePeers: string[] = []
+  for (const [pid, vis] of callTileViewportVisibleByPeer.value) {
+    if (vis) {
+      visiblePeers.push(pid)
+    }
+  }
+  visiblePeers.sort()
+  const tilesKey = tiles.value.map((t) => `${t.peerId}:${t.isLocal ? 'L' : 'R'}`).join('|')
+  return [
+    receiveDeviceProfile.value.allowRenderSuppression ? '1' : '0',
+    isFullPowerMode.value ? '1' : '0',
+    tilesKey,
+    visiblePeers.join(','),
+    activeSpeakerPeerId.value ?? '',
+    serverActiveSpeakerPeerId.value ?? '',
+  ].join('::')
+})
+
 watch(
-  () => ({
-    allow: receiveDeviceProfile.value.allowRenderSuppression,
-    fullPower: isFullPowerMode.value,
-    tilesKey: tiles.value.map((t) => `${t.peerId}:${t.isLocal ? 'L' : 'R'}`).join('|'),
-    viewport: callTileViewportVisibleByPeer.value,
-    uiSpeaker: activeSpeakerPeerId.value,
-    srvSpeaker: serverActiveSpeakerPeerId.value,
-  }),
+  suppressionWatcherKey,
   () => {
     reconcileRemoteVideoPlaybackSuppression()
   },
@@ -1484,21 +1507,49 @@ function refreshMafiaPlayersState(): void {
   )
 }
 
+/**
+ * Stable scalar key for `refreshMafiaPlayersState`. Replaces the previous
+ * `deep: true` watcher over `[tiles, orderedGridRows, nightActions, speakingQueue]`
+ * which fired on every audio-level / tile-reorder / speaker-change tick (3-5/s
+ * in active mafia discussion at 8-12 cameras) and re-ran the full reconcile
+ * pass even when no peer-set / numbering / queue change had actually occurred.
+ *
+ * `refreshMafiaPlayersState` only consumes:
+ *   - peerIds from `tiles.value` (set membership)
+ *   - `mafiaGameStore.numberingKey` (engine ordering)
+ *   - `mafiaGameStore.speakingQueue` (length / contents)
+ *   - `isApplyingMafiaReshuffle` (branch selector)
+ * It does NOT read `orderedGridRows.value` or `mafiaGameStore.nightActions`
+ * content; nightActions are pruned by max-seat which is derived from peer count.
+ *
+ * The function itself is idempotent so an extra run on an unrelated mafia state
+ * change would only waste CPU, not produce a wrong result.
+ */
+const mafiaPlayersWatcherKey = computed(() => {
+  if (!isMafiaRoute.value) {
+    return `off|${session.roomId}`
+  }
+  const peerIds: string[] = []
+  for (const t of tiles.value) {
+    peerIds.push(t.peerId)
+  }
+  const queue = mafiaGameStore.speakingQueue.join(',')
+  return [
+    'on',
+    session.roomId,
+    peerIds.join('|'),
+    mafiaGameStore.numberingKey,
+    queue,
+    mafiaGameStore.isApplyingMafiaReshuffle ? '1' : '0',
+  ].join('::')
+})
+
 watch(
-  () =>
-    [
-      isMafiaRoute.value,
-      session.roomId,
-      tiles.value,
-      orderedGridRows.value,
-      mafiaGameStore.numberingKey,
-      mafiaGameStore.nightActions,
-      mafiaGameStore.speakingQueue,
-    ] as const,
+  mafiaPlayersWatcherKey,
   () => {
     void refreshMafiaPlayersState()
   },
-  { deep: true, immediate: true },
+  { immediate: true },
 )
 
 const gridStyle = computed(() => {

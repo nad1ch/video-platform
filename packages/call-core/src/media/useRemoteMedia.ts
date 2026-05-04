@@ -1012,6 +1012,17 @@ export function useRemoteMedia() {
         })
       }
 
+      // Visibility-first pause: if the peer is currently hidden, send the
+      // server-side pause request BEFORE the local mediasoup-client resume
+      // and BEFORE all the downstream metadata sync. The server creates the
+      // consumer paused but auto-resumes immediately after sending `consumed`,
+      // so the burst window is roughly 1 RTT — sending pause as early as
+      // possible minimizes wasted RTP for hidden tiles in large rooms (8-12+
+      // peers, late join, scrolled-out grid).
+      if (consumer.kind === 'video' && isPeerVideoConsumerEffectivelyHidden(peerId)) {
+        sendConsumerPauseTransition(consumer, true)
+      }
+
       // Audio must never be paused; fixed-quality video does not use consumer.pause.
       await consumer.resume()
 
@@ -1030,7 +1041,9 @@ export function useRemoteMedia() {
         void logInboundVideoDebug(consumer, peerId)
         flushPreferredLayersToServer()
         schedulePreferredLayersUpdate()
-        
+        // Re-check visibility after the metadata sync window. If the tile
+        // became hidden during the create/resume sequence, the early pause
+        // above did not run; this idempotent call covers that case.
         if (isPeerVideoConsumerEffectivelyHidden(peerId)) {
           sendConsumerPauseTransition(consumer, true)
         }
@@ -1486,8 +1499,20 @@ export function useRemoteMedia() {
 
   async function collectInboundVideoDebugStats(): Promise<InboundVideoDebugRow[]> {
     const out: InboundVideoDebugRow[] = []
+    // Snapshot the active consumer ids first. Iterating the live Map while
+    // awaiting `consumer.getStats()` previously raced with `removeRemotePeer`
+    // / `teardownAllRemoteConsumers`, polluting the pressure verdict with
+    // partial / undefined-field rows for consumers that closed mid-await.
+    const snapshot: Array<{ producerId: string; consumer: Consumer }> = []
     for (const [producerId, consumer] of consumersByProducerId.entries()) {
       if (consumer.closed || consumer.kind !== 'video') {
+        continue
+      }
+      snapshot.push({ producerId, consumer })
+    }
+    for (const { producerId, consumer } of snapshot) {
+      // Skip if the consumer was closed since the snapshot was taken.
+      if (consumer.closed) {
         continue
       }
       const info = producerInfoById.get(producerId)
@@ -1496,8 +1521,15 @@ export function useRemoteMedia() {
         peerId,
         producerId: consumer.producerId,
       }
+      let getStatsOk = false
       try {
         const report = await consumer.getStats()
+        // Re-check after the await: if the consumer closed during getStats,
+        // the report can be stale/partial. Drop the row entirely so
+        // pressure decisions never see ghost data for a closed consumer.
+        if (consumer.closed) {
+          continue
+        }
         report.forEach((r) => {
           if (r.type !== 'inbound-rtp') {
             return
@@ -1516,10 +1548,13 @@ export function useRemoteMedia() {
             row.framesPerSecond = v.framesPerSecond
           }
         })
+        getStatsOk = true
       } catch {
-        /* stats optional */
+        /* stats optional — drop the row to avoid feeding undefined fields into pressure */
       }
-      out.push(row)
+      if (getStatsOk) {
+        out.push(row)
+      }
     }
     return out
   }
