@@ -1952,15 +1952,11 @@ watch(joining, (j) => {
                 @click.stop="togglePin(row.tile.peerId)"
               >
                 <img
-                  v-if="isMafiaRoute"
                   class="call-page__pin-icon"
                   :src="pinnedPeerId === row.tile.peerId ? mafiaTilePinActiveIcon : mafiaTilePinIcon"
                   alt=""
                   aria-hidden="true"
                 />
-                <template v-else>
-                  {{ pinnedPeerId === row.tile.peerId ? t('callPage.unpinTileShort') : t('callPage.pinTileShort') }}
-                </template>
               </button>
             </div>
             <div

@@ -75,4 +75,10 @@ const showSignalingSessionWarning = computed(
   font-size: 0.9rem;
   line-height: 1.35;
 }
+
+@media (hover: hover) {
+  .mafia-page :deep(.call-page__tile-wrap:hover:not(.call-page__tile-wrap--pinned)) {
+    z-index: 50;
+  }
+}
 </style>

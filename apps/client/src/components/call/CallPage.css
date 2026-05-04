@@ -726,37 +726,37 @@
 
 .call-page__pin-btn {
   position: absolute;
-  top: 0.55rem;
-  left: 0.55rem;
+  top: 7px;
+  left: 7px;
   z-index: 3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.35rem;
-  height: 1.85rem;
-  padding: 0 0.65rem;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.48);
+  background: transparent;
   color: #fff;
-  font-size: 0.72rem;
-  font-weight: 700;
-  line-height: 1;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+  font-size: 0;
+  line-height: 0;
+  box-shadow: none;
   opacity: 0;
   pointer-events: none;
   transition:
-    background 0.16s ease,
-    border-color 0.16s ease,
     opacity 0.16s ease,
-    transform 0.16s ease;
+    transform 0.16s ease,
+    filter 0.16s ease;
 }
 
 .call-page__pin-btn:hover,
 .call-page__pin-btn:focus-visible,
 .call-page__pin-btn--active {
-  border-color: color-mix(in srgb, var(--sa-color-primary, #a78bfa) 58%, #fff 12%);
-  background: color-mix(in srgb, var(--sa-color-primary, #a78bfa) 34%, #000 66%);
+  background: transparent;
+  border-color: transparent;
+  filter: brightness(1.08);
 }
 
 .call-page__pin-btn:focus-visible {
@@ -771,36 +771,8 @@
 }
 
 .call-page__tile-wrap--spotlight-strip .call-page__pin-btn {
-  top: 0.45rem;
-  left: 0.45rem;
-  min-width: 2rem;
-  height: 1.6rem;
-  padding: 0 0.5rem;
-  font-size: 0.66rem;
-}
-
-.call-page__tile-wrap--mafia-host-mode .call-page__pin-btn,
-.call-page__tile-wrap--mafia-cursor-default .call-page__pin-btn {
-  top: 7px;
-  left: 7px;
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.call-page__tile-wrap--mafia-host-mode .call-page__pin-btn:hover,
-.call-page__tile-wrap--mafia-host-mode .call-page__pin-btn:focus-visible,
-.call-page__tile-wrap--mafia-cursor-default .call-page__pin-btn:hover,
-.call-page__tile-wrap--mafia-cursor-default .call-page__pin-btn:focus-visible,
-.call-page__tile-wrap--mafia-host-mode .call-page__pin-btn--active,
-.call-page__tile-wrap--mafia-cursor-default .call-page__pin-btn--active {
-  background: transparent;
-  border-color: transparent;
-  filter: brightness(1.08);
+  top: 6px;
+  left: 6px;
 }
 
 .call-page__pin-icon {
