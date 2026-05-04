@@ -59,14 +59,10 @@ export async function eatFirstSessionCanOperate(cookieHeader: string | undefined
  * Per-game authorization. Returns `true` when the session is allowed to
  * operate on this specific `gameId`:
  *   - admin sessions always pass;
- *   - a `host`-role session passes IFF `EatFirstGame.room.ownerUserId`
- *     matches the session's Prisma user id;
- *   - legacy games that never had `ownerUserId` stamped fall back to the
- *     global `isHostRole` check so existing in-flight rooms are not broken
- *     by the migration.
- *
- * Creators are stamped in `eatFirstEnsureGame` when the caller is an
- * authenticated host/admin (see `service.ts`).
+ *   - any authenticated user whose Prisma id matches `room.ownerUserId`
+ *     (per-game host stamped on first `ensure`) may operate;
+ *   - otherwise, legacy `User.role = host` staff rules apply when `ownerUserId`
+ *     is missing or the game row does not exist yet.
  */
 export async function eatFirstSessionCanOperateGame(
   cookieHeader: string | undefined,
@@ -75,25 +71,15 @@ export async function eatFirstSessionCanOperateGame(
   const ctx = await resolveSessionContext(cookieHeader)
   if (!ctx) return false
   if (ctx.isAdmin) return true
-  if (!ctx.isHostRole) return false
   if (!isDatabaseConfigured()) {
-    
-    
-    
-    
-    
     return process.env.NODE_ENV !== 'production'
   }
   const row = await prisma.eatFirstGame.findUnique({
     where: { id: gameId },
     select: { room: true },
   })
-  if (!row) {
-    
-    return true
-  }
   const room =
-    typeof row.room === 'object' && row.room !== null && !Array.isArray(row.room)
+    row && typeof row.room === 'object' && row.room !== null && !Array.isArray(row.room)
       ? (row.room as Record<string, unknown>)
       : {}
   const ownerUserIdRaw = room.ownerUserId
@@ -101,14 +87,14 @@ export async function eatFirstSessionCanOperateGame(
     typeof ownerUserIdRaw === 'string' && ownerUserIdRaw.trim().length > 0
       ? ownerUserIdRaw.trim()
       : ''
+  if (ctx.prismaUserId && ownerUserId.length > 0 && ctx.prismaUserId === ownerUserId) {
+    return true
+  }
+  if (!ctx.isHostRole) return false
+  if (!row) {
+    return true
+  }
   if (ownerUserId.length === 0) {
-    
-    
-    
-    
-    
-    
-    
     return true
   }
   return ctx.prismaUserId === ownerUserId
@@ -126,4 +112,17 @@ export async function resolveEatFirstOperatorUserId(
   if (!ctx) return null
   if (!ctx.isAdmin && !ctx.isHostRole) return null
   return ctx.prismaUserId
+}
+
+/**
+ * User id to stamp into `room.ownerUserId` on `eatFirstEnsureGame`:
+ * staff (admin / global host role) first, otherwise any authenticated Prisma user.
+ */
+export async function resolveEatFirstEnsureOwnerUserId(
+  cookieHeader: string | undefined,
+): Promise<string | null> {
+  const operator = await resolveEatFirstOperatorUserId(cookieHeader)
+  if (operator) return operator
+  const ctx = await resolveSessionContext(cookieHeader)
+  return ctx?.prismaUserId ?? null
 }

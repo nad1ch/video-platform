@@ -1,14 +1,13 @@
 
 
-const VALID = new Set(['join', 'admin', 'control', 'overlay'])
-
-
-
-
+const VALID = new Set(['call', 'admin', 'control', 'overlay'])
 
 export function normalizeEatView(raw) {
   const s = String(raw ?? '').trim().toLowerCase()
-  return VALID.has(s) ?  (s) : 'join'
+  if (s === 'join') {
+    return 'call'
+  }
+  return VALID.has(s) ? s : 'call'
 }
 
 

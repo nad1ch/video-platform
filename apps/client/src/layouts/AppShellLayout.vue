@@ -112,7 +112,7 @@ const isNadleStreamRoute = computed(
     route.name === 'nadraw-show',
 )
 
-const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route) : 'join'))
+const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route) : 'call'))
 
 const showChrome = computed(() => !isEatRoute.value || currentEatView.value !== 'overlay')
 const showFooter = computed(() => showChrome.value && route.meta.footer !== false)

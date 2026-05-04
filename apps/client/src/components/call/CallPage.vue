@@ -56,6 +56,11 @@ import {
   mafiaSignalingRoomId,
   MAFIA_SIGNALING_ROOM_PREFIX,
 } from '@/composables/useMafiaMediaRoom'
+import {
+  eatFirstBaseRoomIdFromSignaling,
+  eatFirstSignalingRoomId,
+  EAT_FIRST_SIGNALING_ROOM_PREFIX,
+} from '@/eat-first/utils/eatFirstCallRoomId'
 import MafiaSpeakingQueueBar from '@/components/mafia/MafiaSpeakingQueueBar.vue'
 import MafiaHostActionsBar from '@/components/mafia/MafiaHostActionsBar.vue'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
@@ -76,27 +81,31 @@ const { user, ensureAuthLoaded, isAdmin } = useAuth()
 const CALL_ROUTE_HTML_CLASS = 'sa-call-route'
 
 /**
- * `/app/call` and `/app/mafia` share one `CallPage` (video + orchestrator).
- * Isolation: see `useMafiaMediaRoom.ts` (signaling id) + `refreshMafiaPlayersState` (clears mafia when `route.name !== 'mafia'`).
+ * `/app/call`, `/app/mafia`, and `/app/eat` share one `CallPage` (video + orchestrator).
+ * Isolation: Mafia uses `mafia:` signaling prefix; Eat First uses `eat:` (see `eatFirstCallRoomId.ts`).
  */
-const isCallAppRoute = computed(() => route.name === 'call' || route.name === 'mafia')
+const isCallAppRoute = computed(() => route.name === 'call' || route.name === 'mafia' || route.name === 'eat')
 const isMafiaRoute = computed(() => route.name === 'mafia')
+const isEatFirstRoute = computed(() => route.name === 'eat')
 
 const props = withDefaults(
   defineProps<{
-    
     mafiaStreamView?: boolean
+    eatFirstStreamView?: boolean
   }>(),
-  { mafiaStreamView: false },
+  { mafiaStreamView: false, eatFirstStreamView: false },
 )
 
 const mafiaViewUi = computed(() => isMafiaRoute.value && props.mafiaStreamView)
+const eatFirstViewUi = computed(() => isEatFirstRoute.value && props.eatFirstStreamView)
 
 /**
- * Mafia `?mode=view` (OBS / Browser Source): recv-only in call-core — no camera/mic publish
+ * Mafia `?mode=view` and Eat First `?mode=view`: recv-only in call-core — no camera/mic publish
  * (`wireCallMediaAfterRoomState` skips send transport for `viewer`). `/app/call` stays `participant`.
  */
-const callEngineRole = computed((): CallEngineRole => (mafiaViewUi.value ? 'viewer' : 'participant'))
+const callEngineRole = computed((): CallEngineRole =>
+  mafiaViewUi.value || eatFirstViewUi.value ? 'viewer' : 'participant',
+)
 
 watch(
   () => isCallAppRoute.value,
@@ -262,8 +271,10 @@ if (import.meta.env.DEV) {
       callPageLog.info('[call-qa:role] callEngineRole', {
         role,
         mafiaViewUi: mafiaViewUi.value,
+        eatFirstViewUi: eatFirstViewUi.value,
         routeName: route.name,
         isMafiaRoute: isMafiaRoute.value,
+        isEatFirstRoute: isEatFirstRoute.value,
       })
     },
     { immediate: true },
@@ -322,6 +333,28 @@ watch(
   mafiaViewUi,
   (v, oldV) => {
     if (!isMafiaRoute.value) {
+      return
+    }
+    if (v === oldV) {
+      return
+    }
+    if (!session.inCall) {
+      return
+    }
+    if (joining.value) {
+      return
+    }
+    void (async () => {
+      await leaveCall()
+      await joinCall()
+    })()
+  },
+)
+
+watch(
+  eatFirstViewUi,
+  (v, oldV) => {
+    if (!isEatFirstRoute.value) {
       return
     }
     if (v === oldV) {
@@ -722,18 +755,28 @@ function displayCallOrMafiaRoomCode(): string {
   if (isMafiaRoute.value) {
     return mafiaBaseRoomIdFromSignaling(raw)
   }
+  if (isEatFirstRoute.value) {
+    return eatFirstBaseRoomIdFromSignaling(raw)
+  }
   return raw
 }
 
 /**
- * Keep `session.roomId` consistent with the route: Mafia → `mafia:<base>`, Call → never `mafia:`.
- * Switching between `/app/call` and `/app/mafia` then uses separate mediasoup rooms for the same base code.
+ * Keep `session.roomId` consistent with the route: Mafia → `mafia:<base>`, Eat First → `eat:<base>`,
+ * Call → neither prefix.
  */
 function normalizeSessionRoomIdForStreamRoute(): void {
   if (!isCallAppRoute.value) {
     return
   }
   const s = normalizeDisplayName(session.roomId) || 'demo'
+  if (isEatFirstRoute.value) {
+    const desired = eatFirstSignalingRoomId(eatFirstBaseRoomIdFromSignaling(s))
+    if (s !== desired) {
+      session.roomId = desired
+    }
+    return
+  }
   if (isMafiaRoute.value) {
     const desired = mafiaSignalingRoomId(mafiaBaseRoomIdFromSignaling(s))
     if (s !== desired) {
@@ -744,11 +787,18 @@ function normalizeSessionRoomIdForStreamRoute(): void {
   if (s.startsWith(MAFIA_SIGNALING_ROOM_PREFIX)) {
     session.roomId = mafiaBaseRoomIdFromSignaling(s)
   }
+  if (s.startsWith(EAT_FIRST_SIGNALING_ROOM_PREFIX)) {
+    session.roomId = eatFirstBaseRoomIdFromSignaling(s)
+  }
 }
 
 async function switchToRoom(nextRaw: string, opts?: { fromRoute?: boolean }): Promise<void> {
   const base = normalizeDisplayName(nextRaw) || 'demo'
-  const signalingId = isMafiaRoute.value ? mafiaSignalingRoomId(base) : base
+  const signalingId = isMafiaRoute.value
+    ? mafiaSignalingRoomId(base)
+    : isEatFirstRoute.value
+      ? eatFirstSignalingRoomId(base)
+      : base
   if (joining.value) {
     return
   }
@@ -763,8 +813,10 @@ async function switchToRoom(nextRaw: string, opts?: { fromRoute?: boolean }): Pr
   session.roomId = signalingId
   if (!opts?.fromRoute && isCallAppRoute.value) {
     try {
-      const name = route.name === 'mafia' ? 'mafia' : 'call'
-      await router.replace({ name, query: { ...route.query, room: base } })
+      const name = route.name === 'mafia' ? 'mafia' : route.name === 'eat' ? 'eat' : 'call'
+      const query =
+        name === 'eat' ? { ...route.query, game: base } : { ...route.query, room: base }
+      await router.replace({ name, query })
     } catch {
       /* ignore */
     }
@@ -774,20 +826,41 @@ async function switchToRoom(nextRaw: string, opts?: { fromRoute?: boolean }): Pr
 }
 
 watch(
-  () => [route.name, route.query.room, callAuthReady.value] as const,
+  () =>
+    [
+      route.name,
+      typeof route.query.room === 'string' ? route.query.room : '',
+      typeof route.query.game === 'string' ? route.query.game : '',
+      callAuthReady.value,
+    ] as const,
   async () => {
     if (!callAuthReady.value || !isCallAppRoute.value) {
       return
     }
     normalizeSessionRoomIdForStreamRoute()
-    const q = typeof route.query.room === 'string' ? normalizeDisplayName(route.query.room) : ''
+    const q =
+      route.name === 'eat'
+        ? typeof route.query.game === 'string'
+          ? normalizeDisplayName(route.query.game)
+          : ''
+        : typeof route.query.room === 'string'
+          ? normalizeDisplayName(route.query.room)
+          : ''
     if (!q) {
       if (!session.inCall && !joining.value) {
         try {
-          await router.replace({
-            name: route.name as 'call' | 'mafia',
-            query: { ...route.query, room: generateCallRoomCode() },
-          })
+          const code = generateCallRoomCode()
+          if (route.name === 'eat') {
+            await router.replace({
+              name: 'eat',
+              query: { ...route.query, game: code },
+            })
+          } else {
+            await router.replace({
+              name: route.name as 'call' | 'mafia',
+              query: { ...route.query, room: code },
+            })
+          }
         } catch {
           /* ignore */
         }
@@ -795,7 +868,12 @@ watch(
       return
     }
     const currentSignaling = normalizeDisplayName(session.roomId) || 'demo'
-    const qSignaling = isMafiaRoute.value ? mafiaSignalingRoomId(q) : q
+    const qSignaling =
+      route.name === 'mafia'
+        ? mafiaSignalingRoomId(q)
+        : route.name === 'eat'
+          ? eatFirstSignalingRoomId(q)
+          : q
     if (qSignaling !== currentSignaling) {
       await switchToRoom(q, { fromRoute: true })
       return

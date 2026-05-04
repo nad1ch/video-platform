@@ -3,6 +3,7 @@ import { prisma } from '../prisma'
 import { isValidGameId, normalizeEatFirstSlot } from './slot'
 import {
   eatFirstSessionCanOperateGame,
+  resolveEatFirstEnsureOwnerUserId,
   resolveEatFirstOperatorUserId,
 } from './sessionGate'
 import {
@@ -120,7 +121,7 @@ export function mountEatFirstRoutes(app: Express): void {
         
         
         
-        const ownerUserId = await resolveEatFirstOperatorUserId(req.headers.cookie)
+        const ownerUserId = await resolveEatFirstEnsureOwnerUserId(req.headers.cookie)
         const created = await eatFirstEnsureGame(gameId, ownerUserId)
         res.json({ created })
       } catch (err) {

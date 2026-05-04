@@ -236,7 +236,7 @@ const {
   <div v-else-if="playerSlotAccessBlocked" class="access-denied">
     <h1 class="denied-title">{{ t('control.slotAccessTitle') }}</h1>
     <p class="denied-text">{{ t('control.slotAccessHint') }}</p>
-    <router-link class="denied-back" :to="{ name: 'eat', query: { view: 'join', game: gameId } }">
+    <router-link class="denied-back" :to="{ name: 'eat', query: { view: 'call', game: gameId } }">
       {{ t('control.slotAccessCta') }}
     </router-link>
   </div>

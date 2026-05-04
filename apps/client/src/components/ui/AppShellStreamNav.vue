@@ -20,7 +20,7 @@ const showHomeLink = computed(() => route.name !== 'home')
 
 
 const showEatBack = computed(
-  () => route.path.startsWith('/app/eat') && eatViewFromRoute(route) !== 'join',
+  () => route.path.startsWith('/app/eat') && eatViewFromRoute(route) !== 'call',
 )
 
 function goEatBack() {
@@ -95,7 +95,7 @@ function goEatBack() {
       </RouterLink>
       <RouterLink
         class="stream-nav__link"
-        :to="{ name: 'eat', query: { view: 'join' } }"
+        :to="{ name: 'eat' }"
         :title="t('game.title')"
         :aria-label="t('game.title')"
       >

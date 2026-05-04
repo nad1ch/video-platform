@@ -23,11 +23,11 @@ describe('seoAppResolve', () => {
     const route = {
       path: '/app/eat',
       name: 'eat',
-      query: { view: 'join' },
+      query: { view: 'call' },
       meta: {},
       params: {},
     } as unknown as RouteLocationNormalizedLoaded
-    expect(resolveAppSeoTitle(route, t)).toContain('Лобі')
+    expect(resolveAppSeoTitle(route, t)).toContain('Кімната')
   })
 
   it('resolveAppSeoTitle: home uses brand', () => {

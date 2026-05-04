@@ -179,7 +179,7 @@ watch(
       <div v-if="isPersonal && overlayTokenGateBlocks" class="overlay-token-wall" role="alert">
         <p class="overlay-token-wall__title">{{ t('overlayPage.tokenMismatchTitle') }}</p>
         <p class="overlay-token-wall__hint">{{ t('overlayPage.tokenMismatchHint') }}</p>
-        <button type="button" class="overlay-token-wall__btn" @click="router.push({ name: 'eat', query: { view: 'join', game: gameId } })">
+        <button type="button" class="overlay-token-wall__btn" @click="router.push({ name: 'eat', query: { view: 'call', game: gameId } })">
           {{ t('overlayPage.tokenMismatchCta') }}
         </button>
       </div>
