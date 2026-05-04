@@ -440,6 +440,7 @@
     "reshuffleCountHint": "Need 5 to 12 players in the call to reshuffle",
     "reshuffleNotHost": "Host only (coming soon)",
     "hostPanelTitle": "Host",
+    "signalingSessionMissing": "The signaling connection did not receive your login session. Host tools require WebSocket signaling on the same host as the API where you signed in. Set VITE_SIGNALING_URL to your API WebSocket URL (for example the same origin as VITE_API_URL, like wss://api.example.com).",
     "hostKickGroupAria": "Mark a player as eliminated in this round",
     "hostKickSelectAria": "Choose a participant",
     "hostKickPlaceholder": "—",

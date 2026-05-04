@@ -140,6 +140,8 @@ The **Node server** must have `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` (and Go
 
 **Frontend in dev:** `useAuth` uses `apiUrl('/api/auth/twitch')`. With default Vite, **`VITE_API_URL` is unset** → browser opens **`http://localhost:5173/api/...`**, and Vite **proxies `/api` to `http://localhost:3000`** (`vite.config.ts`). So the address bar can show `:5173` while the API is still the Node server — that is expected.
 
+**Mafia / call signaling:** For the WebSocket to receive the `nadle_session` cookie, point both **`VITE_API_URL=http://localhost:3000`** and **`VITE_SIGNALING_URL=ws://localhost:3000/ws`** in `apps/client/.env.local` (see `apps/client/.env.example`). Otherwise HTTP auth and WS may hit different origins and host tools stay hidden.
+
 If you set **`VITE_API_URL=http://localhost:3000`**, OAuth redirects go to the API origin directly (also valid).
 
 **Security:** never commit real client secrets. If secrets were pasted into chat or logs, **rotate** them in Twitch/Google developer consoles.

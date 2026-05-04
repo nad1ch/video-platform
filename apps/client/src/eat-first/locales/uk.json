@@ -440,6 +440,7 @@
     "reshuffleCountHint": "Перетасування можливе за 5–12 учасників у кімнаті",
     "reshuffleNotHost": "Лише ведучий (згодом)",
     "hostPanelTitle": "Ведучий",
+    "signalingSessionMissing": "З'єднання сигналінгу не отримало твою сесію входу. Інструменти ведучого потребують WebSocket на тому ж хості, де працює API входу. Вкажи VITE_SIGNALING_URL на WSS того ж походження, що й VITE_API_URL (наприклад wss://api.example.com).",
     "hostKickGroupAria": "Позначити гравця вибувшим у цьому раунді",
     "hostKickSelectAria": "Оберіть учасника",
     "hostKickPlaceholder": "—",

@@ -123,6 +123,7 @@ export type ServerMessage =
   | { type: 'consume-failed'; payload: { producerId: string; reason: string } }
   | { type: 'active-speaker'; payload: { peerId: string | null } }
   | { type: 'server-pong'; payload: Record<string, never> }
+  | { type: 'signaling-auth'; payload: { userId: string | null } }
   | { type: 'mafia:host-updated'; payload: { hostPeerId: string | null; hostUserId: string | null; hostSessionId: string | null } }
   | { type: 'mafia:queue-update'; payload: { speakingQueue: number[] } }
   | { type: 'mafia:mode-update'; payload: { mode: 'old' | 'new' } }
@@ -627,6 +628,11 @@ export async function handleJoinRoom(
   sendServerMessage(socket, {
     type: 'room-state',
     payload: { peers: others, routerRtpCapabilities, existingProducers },
+  })
+
+  sendServerMessage(socket, {
+    type: 'signaling-auth',
+    payload: { userId: userId.length > 0 ? userId : null },
   })
 
   room.sendActiveSpeakerCatchUpToPeer(peer)
