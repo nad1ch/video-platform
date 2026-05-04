@@ -18,7 +18,7 @@ import spyImageWebp from '@/assets/landing/spy.webp'
 import whoTakeShitImage from '@/assets/landing/who-take-shit.png'
 import { useAuth } from '@/composables/useAuth'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
-import { loadCheckersPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
+import { loadCheckersPage, loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
 import { prefetchRoute } from '@/utils/routePrefetch'
 
 type AppGameCard = {
@@ -51,6 +51,7 @@ const defaultNadleStreamer =
   STREAMER_NICK
 
 const callRoute = { name: 'call' } satisfies RouteLocationRaw
+const eatFirstRoute = { name: 'eat' } satisfies RouteLocationRaw
 const mafiaRoute = { name: 'mafia' } satisfies RouteLocationRaw
 const checkersRoute = { name: 'checkers', params: { roomId: 'lobby' }, query: { defaultMode: 'rated' } } satisfies RouteLocationRaw
 const economyComingSoonRoute = { name: 'home', query: { comingSoon: 'economy' } } satisfies RouteLocationRaw
@@ -68,21 +69,18 @@ const nadrawRoute = computed<RouteLocationRaw>(() => ({
 const prefetchMafia = () => prefetchRoute(loadMafiaPage)
 const prefetchNadle = () => prefetchRoute(loadNadleStreamPage)
 const prefetchCheckers = () => prefetchRoute(loadCheckersPage)
+const prefetchEatFirst = () => prefetchRoute(loadEatFirstPage)
 
 const gameCards = computed<AppGameCard[]>(() => [
   {
     id: 'eat-first',
     title: t('home.gameEatFirst'),
+    to: eatFirstRoute,
     image: eatFirstImage,
     imageWebp: eatFirstImageWebp,
     ariaLabel: t('home.openEatFirst'),
     tone: 'amber',
-    comingSoon: {
-      eyebrow: t('home.comingSoonEyebrow'),
-      title: t('home.gameEatFirstComingSoonTitle'),
-      description: t('home.gameEatFirstComingSoonDesc'),
-      status: t('home.comingSoonStatus'),
-    },
+    prefetch: prefetchEatFirst,
   },
   {
     id: 'mafia',
