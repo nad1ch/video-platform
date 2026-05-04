@@ -4,6 +4,7 @@ import type { RtpCapabilities } from 'mediasoup-client/types'
 import { onUnmounted, ref, shallowRef } from 'vue'
 import { replyJsonPingIfNeeded } from '../utils/jsonWsPing'
 import { guestDisplayNameForPeerId } from '../utils/participantsMapper'
+import { inferWsOriginFromHttpApiBase, trimViteApiBase } from '../utils/inferSignalingWsUrlFromApiBase'
 import { normalizeDisplayName } from '../utils/normalizeDisplayName'
 
 export type RemoteProducerInfo = {
@@ -82,13 +83,17 @@ function resolveWsUrl(explicit?: string): string {
     const fromEnv = import.meta.env.VITE_SIGNALING_URL
     if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) {
       url = fromEnv.trim()
-    } else if (import.meta.env.DEV) {
-      
-      url = 'ws://127.0.0.1:3000'
     } else {
-      throw new Error(
-        'VITE_SIGNALING_URL is not defined. Set it in Vercel or .env.production. Use wss:// for HTTPS.',
-      )
+      const inferred = inferWsOriginFromHttpApiBase(trimViteApiBase(import.meta.env.VITE_API_URL))
+      if (inferred) {
+        url = inferred
+      } else if (import.meta.env.DEV) {
+        url = 'ws://127.0.0.1:3000'
+      } else {
+        throw new Error(
+          'VITE_SIGNALING_URL is not defined. Set it in Vercel or .env.production to your API origin (wss://...) so session cookies match, or set VITE_API_URL to an absolute https:// API origin for a safe default.',
+        )
+      }
     }
   }
   url = withDefaultSignalingPath(url)

@@ -440,6 +440,7 @@
     "reshuffleCountHint": "Mischen bei 5–12 Teilnehmenden im Call möglich",
     "reshuffleNotHost": "Nur Host (bald)",
     "hostPanelTitle": "Host",
+    "signalingSessionMissing": "Die Signalisierungsverbindung hat deine Anmeldesitzung nicht erhalten. Host-Tools benötigen WebSocket-Signalisierung auf demselben Host wie die API. Setze VITE_SIGNALING_URL auf die WSS-URL derselben Herkunft wie VITE_API_URL (z. B. wss://api.example.com).",
     "hostKickGroupAria": "Spieler in dieser Runde als ausgeschieden markieren",
     "hostKickSelectAria": "Teilnehmer wählen",
     "hostKickPlaceholder": "—",

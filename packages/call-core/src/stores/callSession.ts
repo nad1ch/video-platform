@@ -54,6 +54,13 @@ export const useCallSessionStore = defineStore('callSession', () => {
   const videoQualityExplicit = ref(readVideoQualityFromStorage().explicit)
   
   const callDebugOverlay = ref(readCallDebugOverlay())
+  /**
+   * `undefined` — no `signaling-auth` yet for this socket.
+   * `null` — server resolved an empty session on WS upgrade (no cookie / not logged in for this host).
+   * string — JWT user id for this signaling connection (matches server `Peer.userId` after join).
+   */
+  const signalingAuthUserId = ref<string | null | undefined>(undefined)
+
   /** displayName from server (room-state / peer-joined / peer-display-name). */
   const remoteDisplayNames = ref<Record<string, string>>({})
   
@@ -179,6 +186,10 @@ export const useCallSessionStore = defineStore('callSession', () => {
     selfPeerId.value = newCallTabPeerId()
   }
 
+  function setSignalingAuthUserId(id: string | null | undefined): void {
+    signalingAuthUserId.value = id
+  }
+
   return {
     roomId,
     selfPeerId,
@@ -187,6 +198,7 @@ export const useCallSessionStore = defineStore('callSession', () => {
     videoQualityPreset,
     videoQualityExplicit,
     callDebugOverlay,
+    signalingAuthUserId,
     remoteDisplayNames,
     remoteAvatarUrls,
     replaceRemoteDisplayNames,
@@ -200,5 +212,6 @@ export const useCallSessionStore = defineStore('callSession', () => {
     setVideoQualityImplicitDefault,
     setCallDebugOverlay,
     resetSessionIdentity,
+    setSignalingAuthUserId,
   }
 })

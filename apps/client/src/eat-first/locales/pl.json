@@ -440,6 +440,7 @@
     "reshuffleCountHint": "Tasowanie możliwe przy 5–12 uczestnikach w pokoju",
     "reshuffleNotHost": "Tylko host (wkrótce)",
     "hostPanelTitle": "Host",
+    "signalingSessionMissing": "Połączenie sygnalizacyjne nie otrzymało sesji logowania. Narzędzia hosta wymagają WebSocket na tym samym hoście co API logowania. Ustaw VITE_SIGNALING_URL na WSS tego samego pochodzenia co VITE_API_URL (np. wss://api.example.com).",
     "hostKickGroupAria": "Oznacz gracza jako odpadniętego w tej rundzie",
     "hostKickSelectAria": "Wybierz uczestnika",
     "hostKickPlaceholder": "—",

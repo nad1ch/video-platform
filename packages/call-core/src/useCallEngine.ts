@@ -10,6 +10,7 @@ import { useLocalMedia } from './media/useLocalMedia'
 import { useMediasoupDevice } from './media/useMediasoupDevice'
 import { useRemoteMedia } from './media/useRemoteMedia'
 import { useRoomConnection } from './signaling/useRoomConnection'
+import { SIGNALING_AUTH_MESSAGE_TYPE } from './signaling/signalingAuthMessage'
 import { parseProducerSyncPayload } from './signaling/producerSyncPayload'
 import {
   countActiveCameraPublishersAtWire,
@@ -492,6 +493,31 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
   })
 
+  const unsubSignalingAuth = addMessageListener((data) => {
+    if (!data || typeof data !== 'object') {
+      return
+    }
+    const m = data as { type?: string; payload?: unknown }
+    if (m.type !== SIGNALING_AUTH_MESSAGE_TYPE) {
+      return
+    }
+    const p = m.payload
+    if (p == null || typeof p !== 'object') {
+      session.setSignalingAuthUserId(undefined)
+      return
+    }
+    const raw = (p as { userId?: unknown }).userId
+    if (raw === null) {
+      session.setSignalingAuthUserId(null)
+      return
+    }
+    if (typeof raw === 'string' && raw.trim().length > 0) {
+      session.setSignalingAuthUserId(raw.trim())
+      return
+    }
+    session.setSignalingAuthUserId(null)
+  })
+
   const unsubPeerPresence = addMessageListener((data) => {
     if (!data || typeof data !== 'object') {
       return
@@ -819,6 +845,7 @@ export function useCallEngine(options?: CallEngineOptions) {
       return
     }
 
+    session.setSignalingAuthUserId(undefined)
     joining.value = true
     joinError.value = null
     let retryLater = false
@@ -1208,6 +1235,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     deviceReset()
     roomDisconnect()
     session.clearRemoteDisplayNames()
+    session.setSignalingAuthUserId(undefined)
     session.setInCall(false)
   }
 
@@ -1217,6 +1245,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     reconnectFailures = 0
     clearReconnectTimer()
     joinError.value = null
+    session.setSignalingAuthUserId(undefined)
     joining.value = true
     syncListenPrefsFromStorage()
     try {
@@ -1366,6 +1395,7 @@ export function useCallEngine(options?: CallEngineOptions) {
 
   onScopeDispose(() => {
     unsubProducerSyncPeerMeta()
+    unsubSignalingAuth()
     unsubPeerPresence()
     unsubRoomChatAndHands()
     if (displayNameDebounceTimer !== null) {
