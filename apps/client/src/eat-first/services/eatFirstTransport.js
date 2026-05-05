@@ -42,6 +42,14 @@ export async function efPatchRoom(gameId, patch) {
   })
 }
 
+export async function efHostReshuffle(gameId, options = {}) {
+  const participantCount = Number(options.participantCount ?? 0)
+  return jfetch(`/games/${encodeURIComponent(gameId)}/host-reshuffle`, {
+    method: 'POST',
+    body: JSON.stringify({ participantCount }),
+  })
+}
+
 export async function efPostHand(gameId, playerId, raised, auth) {
   const body = { playerId, raised }
   if (auth && typeof auth === 'object') {

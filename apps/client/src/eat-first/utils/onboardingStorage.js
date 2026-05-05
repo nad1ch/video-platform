@@ -10,7 +10,7 @@ const STORAGE_KEY = 'eat-first:onboarding-dismissed:v1'
 
 export function resolveOnboardingTourKeyFromRoute(route) {
   const v = eatViewFromRoute(route)
-  if (v === 'join') return 'join'
+  if (v === 'call') return 'call'
   if (v === 'overlay') return 'overlay'
   if (v === 'control') {
     const host = route.query[HOST_PANEL_QUERY_KEY]

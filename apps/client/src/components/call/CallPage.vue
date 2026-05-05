@@ -56,11 +56,21 @@ import {
   mafiaSignalingRoomId,
   MAFIA_SIGNALING_ROOM_PREFIX,
 } from '@/composables/useMafiaMediaRoom'
+import {
+  eatFirstBaseRoomIdFromSignaling,
+  eatFirstSignalingRoomId,
+  EAT_FIRST_SIGNALING_ROOM_PREFIX,
+} from '@/eat-first/utils/eatFirstCallRoomId'
 import MafiaSpeakingQueueBar from '@/components/mafia/MafiaSpeakingQueueBar.vue'
 import MafiaHostActionsBar from '@/components/mafia/MafiaHostActionsBar.vue'
+import EatFirstHostActionsBar from '@/eat-first/components/EatFirstHostActionsBar.vue'
+import EatFirstSpeakingQueueBar from '@/eat-first/components/EatFirstSpeakingQueueBar.vue'
+import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
+import { EatFirstWs } from '@/eat-first/eatFirstWsProtocol'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
 import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
 import { mafiaEliminationAvatarKindForPeerId } from '@/utils/mafiaEliminationAvatarKind'
+import { EAT_FIRST_OBS_URL_TOAST_EVENT } from '@/composables/eatFirstCallStreamView'
 import { MAFIA_OBS_URL_TOAST_EVENT, MAFIA_SETTINGS_TOAST_EVENT } from '@/composables/mafiaStreamViewRoute'
 import { MafiaWs } from '@/composables/mafiaWsProtocol'
 import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
@@ -76,27 +86,31 @@ const { user, ensureAuthLoaded, isAdmin } = useAuth()
 const CALL_ROUTE_HTML_CLASS = 'sa-call-route'
 
 /**
- * `/app/call` and `/app/mafia` share one `CallPage` (video + orchestrator).
- * Isolation: see `useMafiaMediaRoom.ts` (signaling id) + `refreshMafiaPlayersState` (clears mafia when `route.name !== 'mafia'`).
+ * `/app/call`, `/app/mafia`, and `/app/eat` share one `CallPage` (video + orchestrator).
+ * Isolation: Mafia uses `mafia:` signaling prefix; Eat First uses `eat:` (see `eatFirstCallRoomId.ts`).
  */
-const isCallAppRoute = computed(() => route.name === 'call' || route.name === 'mafia')
+const isCallAppRoute = computed(() => route.name === 'call' || route.name === 'mafia' || route.name === 'eat')
 const isMafiaRoute = computed(() => route.name === 'mafia')
+const isEatFirstRoute = computed(() => route.name === 'eat')
 
 const props = withDefaults(
   defineProps<{
-    
     mafiaStreamView?: boolean
+    eatFirstStreamView?: boolean
   }>(),
-  { mafiaStreamView: false },
+  { mafiaStreamView: false, eatFirstStreamView: false },
 )
 
 const mafiaViewUi = computed(() => isMafiaRoute.value && props.mafiaStreamView)
+const eatFirstViewUi = computed(() => isEatFirstRoute.value && props.eatFirstStreamView)
 
 /**
- * Mafia `?mode=view` (OBS / Browser Source): recv-only in call-core — no camera/mic publish
+ * Mafia `?mode=view` and Eat First `?mode=view`: recv-only in call-core — no camera/mic publish
  * (`wireCallMediaAfterRoomState` skips send transport for `viewer`). `/app/call` stays `participant`.
  */
-const callEngineRole = computed((): CallEngineRole => (mafiaViewUi.value ? 'viewer' : 'participant'))
+const callEngineRole = computed((): CallEngineRole =>
+  mafiaViewUi.value || eatFirstViewUi.value ? 'viewer' : 'participant',
+)
 
 watch(
   () => isCallAppRoute.value,
@@ -262,8 +276,10 @@ if (import.meta.env.DEV) {
       callPageLog.info('[call-qa:role] callEngineRole', {
         role,
         mafiaViewUi: mafiaViewUi.value,
+        eatFirstViewUi: eatFirstViewUi.value,
         routeName: route.name,
         isMafiaRoute: isMafiaRoute.value,
+        isEatFirstRoute: isEatFirstRoute.value,
       })
     },
     { immediate: true },
@@ -276,6 +292,24 @@ const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
 
 const MAFIA_FORCE_CAMERA_OFF_SIGNAL = MafiaWs.forceCameraOff
 const MAFIA_FORCE_MUTE_ALL_SIGNAL = MafiaWs.forceMuteAll
+const EAT_FIRST_FORCE_MUTE_ALL_SIGNAL = EatFirstWs.forceMuteAll
+const EAT_FIRST_HOST_UPDATED_SIGNAL = EatFirstWs.hostUpdated
+const EAT_FIRST_RESHUFFLE_CAMERAS_SIGNAL = EatFirstWs.reshuffleCameras
+const EAT_FIRST_TRAIT_REVEAL_REQUEST_SIGNAL = EatFirstWs.traitRevealRequest
+const EAT_FIRST_TRAIT_REVEALED_SIGNAL = EatFirstWs.traitRevealed
+const EAT_FIRST_TRAIT_REGENERATE_REQUEST_SIGNAL = EatFirstWs.traitRegenerateRequest
+const EAT_FIRST_TRAIT_REGENERATED_SIGNAL = EatFirstWs.traitRegenerated
+const EAT_FIRST_TRAIT_STATE_SYNC_SIGNAL = EatFirstWs.traitStateSync
+
+type EatFirstTraitKey =
+  | 'gender'
+  | 'age'
+  | 'profession'
+  | 'health'
+  | 'hobby'
+  | 'phobia'
+  | 'fact'
+  | 'baggage'
 
 function mafiaSignalPayload(data: unknown, type: string): Record<string, unknown> | null {
   if (data == null || typeof data !== 'object') {
@@ -322,6 +356,28 @@ watch(
   mafiaViewUi,
   (v, oldV) => {
     if (!isMafiaRoute.value) {
+      return
+    }
+    if (v === oldV) {
+      return
+    }
+    if (!session.inCall) {
+      return
+    }
+    if (joining.value) {
+      return
+    }
+    void (async () => {
+      await leaveCall()
+      await joinCall()
+    })()
+  },
+)
+
+watch(
+  eatFirstViewUi,
+  (v, oldV) => {
+    if (!isEatFirstRoute.value) {
       return
     }
     if (v === oldV) {
@@ -423,6 +479,19 @@ const remoteVideoSuppressDelayTimerByPeer = new Map<string, ReturnType<typeof se
 
 const remoteVideoSuppressPendingKind = new Map<string, 'offscreen' | 'outside-budget'>()
 const remoteVideoPlaybackSuppressed = shallowRef(new Map<string, boolean>())
+const eatFirstShell = useEatFirstCallShellStore()
+const eatFirstRevealedByPeer = shallowRef<Record<string, Record<string, boolean>>>({})
+const eatFirstOverridesByPeer = shallowRef<Record<string, Record<string, string>>>({})
+const eatFirstOpenedByPlayerByPeer = shallowRef<Record<string, Record<string, boolean>>>({})
+
+watch(
+  () => session.roomId,
+  () => {
+    eatFirstRevealedByPeer.value = {}
+    eatFirstOverridesByPeer.value = {}
+    eatFirstOpenedByPlayerByPeer.value = {}
+  },
+)
 
 function bumpRemotePlaybackSuppressed(peerId: string, suppressed: boolean, reason: string): void {
   const prev = remoteVideoPlaybackSuppressed.value.get(peerId) === true
@@ -577,7 +646,26 @@ watch(
       localTileDisplayOverrides.value = next
       saveCallTileLocalDisplayOverrides(next)
     }
+    if (isEatFirstRoute.value) {
+      const hostPeerId = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId : null
+      const connectedPlayers = hostPeerId != null && ids.has(hostPeerId) ? Math.max(0, ids.size - 1) : ids.size
+      eatFirstShell.setConnectedPlayerCount(connectedPlayers)
+    }
   },
+)
+
+watch(
+  () => [isEatFirstRoute.value, eatFirstShell.hostPeerId, tiles.value.map((t) => t.peerId).join('|')] as const,
+  ([isEatRoute, hostPeerId]) => {
+    if (!isEatRoute) {
+      return
+    }
+    const ids = new Set(tiles.value.map((t) => t.peerId))
+    const hostId = typeof hostPeerId === 'string' ? hostPeerId : null
+    const connectedPlayers = hostId != null && ids.has(hostId) ? Math.max(0, ids.size - 1) : ids.size
+    eatFirstShell.setConnectedPlayerCount(connectedPlayers)
+  },
+  { immediate: true },
 )
 
 const videoQualityChoice = computed({
@@ -656,11 +744,219 @@ function onMafiaForceMuteAll(muted: boolean): void {
   sendSignalingMessage({ type: MAFIA_FORCE_MUTE_ALL_SIGNAL, payload: { muted } })
 }
 
+function onEatFirstForceMuteAll(muted: boolean): void {
+  if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) {
+    return
+  }
+  sendSignalingMessage({ type: EAT_FIRST_FORCE_MUTE_ALL_SIGNAL, payload: { muted } })
+}
+
+function shuffledStablePeerOrder(ids: string[]): string[] {
+  const out = ids.slice()
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  if (out.length > 1 && out.every((id, index) => id === ids[index])) {
+    const first = out.shift()
+    if (first != null) out.push(first)
+  }
+  return out
+}
+
+async function onEatFirstReshuffle(): Promise<void> {
+  if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) {
+    return
+  }
+  const reshuffleResult = await eatFirstShell.reshufflePlayerOrder()
+  if (!reshuffleResult.ok) {
+    callPageLog.warn('eat first host reshuffle failed, camera order only', reshuffleResult.reason)
+  }
+  const list = orderedTiles.value.map((tile) => tile.peerId)
+  const hostId = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId : ''
+  const withoutHost = list.filter((id) => id !== hostId)
+  if (withoutHost.length < 2) return
+  const shuffled = shuffledStablePeerOrder(withoutHost)
+  const nextOrder = hostId ? [...shuffled, hostId] : shuffled
+  tileOrder.value = nextOrder
+  sendSignalingMessage({ type: EAT_FIRST_RESHUFFLE_CAMERAS_SIGNAL, payload: { peerOrder: nextOrder } })
+}
+
+const offEatFirstForceControls = subscribeSignalingMessage((data) => {
+  if (!isEatFirstRoute.value) {
+    return
+  }
+  const rec = data as { type?: unknown; payload?: unknown }
+  if (rec.type === EAT_FIRST_HOST_UPDATED_SIGNAL) {
+    const payload =
+      rec.payload != null && typeof rec.payload === 'object'
+        ? (rec.payload as Record<string, unknown>)
+        : null
+    const hostPeerId = typeof payload?.hostPeerId === 'string' ? payload.hostPeerId.trim() : ''
+    const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
+    eatFirstShell.setEatFirstHostPeer(hostPeerId || null, selfId || null)
+    return
+  }
+  if (rec.type === EAT_FIRST_RESHUFFLE_CAMERAS_SIGNAL) {
+    const payload =
+      rec.payload != null && typeof rec.payload === 'object'
+        ? (rec.payload as Record<string, unknown>)
+        : null
+    const incoming = Array.isArray(payload?.peerOrder)
+      ? payload.peerOrder.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+      : []
+    if (incoming.length > 0) {
+      tileOrder.value = incoming
+    }
+    return
+  }
+  if (rec.type === EAT_FIRST_TRAIT_STATE_SYNC_SIGNAL) {
+    const payload =
+      rec.payload != null && typeof rec.payload === 'object'
+        ? (rec.payload as Record<string, unknown>)
+        : null
+    if (!payload) return
+    const revealedRaw =
+      payload.revealedByPeer && typeof payload.revealedByPeer === 'object' && !Array.isArray(payload.revealedByPeer)
+        ? (payload.revealedByPeer as Record<string, unknown>)
+        : {}
+    const overridesRaw =
+      payload.overridesByPeer && typeof payload.overridesByPeer === 'object' && !Array.isArray(payload.overridesByPeer)
+        ? (payload.overridesByPeer as Record<string, unknown>)
+        : {}
+    const openedByPlayerRaw =
+      payload.openedByPlayerByPeer &&
+      typeof payload.openedByPlayerByPeer === 'object' &&
+      !Array.isArray(payload.openedByPlayerByPeer)
+        ? (payload.openedByPlayerByPeer as Record<string, unknown>)
+        : {}
+    const nextRevealedByPeer: Record<string, Record<string, boolean>> = { ...eatFirstRevealedByPeer.value }
+    const nextOverridesByPeer: Record<string, Record<string, string>> = { ...eatFirstOverridesByPeer.value }
+    const nextOpenedByPlayerByPeer: Record<string, Record<string, boolean>> = { ...eatFirstOpenedByPlayerByPeer.value }
+    const nextRevealed: Record<number, Record<string, boolean>> = { ...eatFirstShell.revealedTraitsBySeat }
+    const nextOverrides: Record<number, Record<string, string>> = { ...eatFirstShell.traitOverridesBySeat }
+    for (const [peerId, keysUnknown] of Object.entries(revealedRaw)) {
+      const seat = eatFirstSeatByPeer.value.get(peerId)
+      if (seat == null || !Array.isArray(keysUnknown)) continue
+      const row: Record<string, boolean> = {}
+      for (const k of keysUnknown) {
+        if (typeof k === 'string' && k.trim().length > 0) {
+          row[k.trim()] = true
+        }
+      }
+      if (Object.keys(row).length > 0) {
+        nextRevealed[seat] = { ...(nextRevealed[seat] ?? {}), ...row }
+        nextRevealedByPeer[peerId] = { ...(nextRevealedByPeer[peerId] ?? {}), ...row }
+      }
+    }
+    for (const [peerId, rowUnknown] of Object.entries(overridesRaw)) {
+      const seat = eatFirstSeatByPeer.value.get(peerId)
+      if (seat == null || !rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
+      const row = rowUnknown as Record<string, unknown>
+      const out: Record<string, string> = {}
+      for (const [k, v] of Object.entries(row)) {
+        if (typeof k === 'string' && k.trim().length > 0 && typeof v === 'string' && v.trim().length > 0) {
+          out[k.trim()] = v.trim()
+        }
+      }
+      if (Object.keys(out).length > 0) {
+        nextOverrides[seat] = { ...(nextOverrides[seat] ?? {}), ...out }
+        nextOverridesByPeer[peerId] = { ...(nextOverridesByPeer[peerId] ?? {}), ...out }
+      }
+    }
+    for (const [peerId, keysUnknown] of Object.entries(openedByPlayerRaw)) {
+      if (!Array.isArray(keysUnknown)) continue
+      const row: Record<string, boolean> = {}
+      for (const k of keysUnknown) {
+        if (typeof k === 'string' && k.trim().length > 0) {
+          row[k.trim()] = true
+        }
+      }
+      if (Object.keys(row).length > 0) {
+        nextOpenedByPlayerByPeer[peerId] = { ...(nextOpenedByPlayerByPeer[peerId] ?? {}), ...row }
+      }
+    }
+    eatFirstRevealedByPeer.value = nextRevealedByPeer
+    eatFirstOverridesByPeer.value = nextOverridesByPeer
+    eatFirstOpenedByPlayerByPeer.value = nextOpenedByPlayerByPeer
+    eatFirstShell.setRevealedTraitsBySeat(nextRevealed)
+    eatFirstShell.setTraitOverridesBySeat(nextOverrides)
+    return
+  }
+  if (rec.type === EAT_FIRST_TRAIT_REVEALED_SIGNAL) {
+    const payload =
+      rec.payload != null && typeof rec.payload === 'object'
+        ? (rec.payload as Record<string, unknown>)
+        : null
+    const peerId = typeof payload?.peerId === 'string' ? payload.peerId.trim() : ''
+    const traitKey = typeof payload?.traitKey === 'string' ? payload.traitKey.trim() : ''
+    const openedBy = payload?.openedBy === 'host' ? 'host' : 'player'
+    if (!peerId || !traitKey) return
+    const seat = eatFirstSeatByPeer.value.get(peerId)
+    if (seat == null) return
+    eatFirstShell.markTraitRevealedBySeat(seat, traitKey)
+    eatFirstRevealedByPeer.value = {
+      ...eatFirstRevealedByPeer.value,
+      [peerId]: { ...(eatFirstRevealedByPeer.value[peerId] ?? {}), [traitKey]: true },
+    }
+    if (openedBy === 'player') {
+      eatFirstOpenedByPlayerByPeer.value = {
+        ...eatFirstOpenedByPlayerByPeer.value,
+        [peerId]: { ...(eatFirstOpenedByPlayerByPeer.value[peerId] ?? {}), [traitKey]: true },
+      }
+    }
+    return
+  }
+  if (rec.type === EAT_FIRST_TRAIT_REGENERATED_SIGNAL) {
+    const payload =
+      rec.payload != null && typeof rec.payload === 'object'
+        ? (rec.payload as Record<string, unknown>)
+        : null
+    const peerId = typeof payload?.peerId === 'string' ? payload.peerId.trim() : ''
+    const traitKey = typeof payload?.traitKey === 'string' ? payload.traitKey.trim() : ''
+    const value = typeof payload?.value === 'string' ? payload.value.trim() : ''
+    if (!peerId || !traitKey || !value) return
+    const seat = eatFirstSeatByPeer.value.get(peerId)
+    if (seat == null) return
+    eatFirstShell.setTraitOverrideBySeat(seat, traitKey, value)
+    eatFirstOverridesByPeer.value = {
+      ...eatFirstOverridesByPeer.value,
+      [peerId]: { ...(eatFirstOverridesByPeer.value[peerId] ?? {}), [traitKey]: value },
+    }
+    return
+  }
+  if (rec.type !== EAT_FIRST_FORCE_MUTE_ALL_SIGNAL || rec.payload == null || typeof rec.payload !== 'object') return
+  if (eatFirstShell.isEatFirstRoomHost) return
+  const payload = rec.payload as Record<string, unknown>
+  const muted = payload.muted !== false
+  if (muted && micEnabled.value) {
+    void toggleMic()
+  } else if (!muted && !micEnabled.value) {
+    void toggleMic()
+  }
+})
+
+onBeforeUnmount(offEatFirstForceControls)
+
 function onMafiaObsUrlCopiedToast(): void {
   const id = `mafia-obs-${Date.now()}`
   callToasts.value = [
     ...callToasts.value,
     { id, text: t('mafiaPage.obsViewUrlCopiedToast'), kind: 'join' },
+  ]
+  window.setTimeout(() => {
+    callToasts.value = callToasts.value.filter((x) => x.id !== id)
+  }, 4200)
+}
+
+function onEatFirstObsUrlCopiedToast(): void {
+  if (!isEatFirstRoute.value) {
+    return
+  }
+  const id = `eat-first-obs-${Date.now()}`
+  callToasts.value = [
+    ...callToasts.value,
+    { id, text: t('eatFirstCall.obsCopied'), kind: 'join' },
   ]
   window.setTimeout(() => {
     callToasts.value = callToasts.value.filter((x) => x.id !== id)
@@ -722,18 +1018,28 @@ function displayCallOrMafiaRoomCode(): string {
   if (isMafiaRoute.value) {
     return mafiaBaseRoomIdFromSignaling(raw)
   }
+  if (isEatFirstRoute.value) {
+    return eatFirstBaseRoomIdFromSignaling(raw)
+  }
   return raw
 }
 
 /**
- * Keep `session.roomId` consistent with the route: Mafia → `mafia:<base>`, Call → never `mafia:`.
- * Switching between `/app/call` and `/app/mafia` then uses separate mediasoup rooms for the same base code.
+ * Keep `session.roomId` consistent with the route: Mafia → `mafia:<base>`, Eat First → `eat:<base>`,
+ * Call → neither prefix.
  */
 function normalizeSessionRoomIdForStreamRoute(): void {
   if (!isCallAppRoute.value) {
     return
   }
   const s = normalizeDisplayName(session.roomId) || 'demo'
+  if (isEatFirstRoute.value) {
+    const desired = eatFirstSignalingRoomId(eatFirstBaseRoomIdFromSignaling(s))
+    if (s !== desired) {
+      session.roomId = desired
+    }
+    return
+  }
   if (isMafiaRoute.value) {
     const desired = mafiaSignalingRoomId(mafiaBaseRoomIdFromSignaling(s))
     if (s !== desired) {
@@ -744,11 +1050,18 @@ function normalizeSessionRoomIdForStreamRoute(): void {
   if (s.startsWith(MAFIA_SIGNALING_ROOM_PREFIX)) {
     session.roomId = mafiaBaseRoomIdFromSignaling(s)
   }
+  if (s.startsWith(EAT_FIRST_SIGNALING_ROOM_PREFIX)) {
+    session.roomId = eatFirstBaseRoomIdFromSignaling(s)
+  }
 }
 
 async function switchToRoom(nextRaw: string, opts?: { fromRoute?: boolean }): Promise<void> {
   const base = normalizeDisplayName(nextRaw) || 'demo'
-  const signalingId = isMafiaRoute.value ? mafiaSignalingRoomId(base) : base
+  const signalingId = isMafiaRoute.value
+    ? mafiaSignalingRoomId(base)
+    : isEatFirstRoute.value
+      ? eatFirstSignalingRoomId(base)
+      : base
   if (joining.value) {
     return
   }
@@ -763,8 +1076,10 @@ async function switchToRoom(nextRaw: string, opts?: { fromRoute?: boolean }): Pr
   session.roomId = signalingId
   if (!opts?.fromRoute && isCallAppRoute.value) {
     try {
-      const name = route.name === 'mafia' ? 'mafia' : 'call'
-      await router.replace({ name, query: { ...route.query, room: base } })
+      const name = route.name === 'mafia' ? 'mafia' : route.name === 'eat' ? 'eat' : 'call'
+      const query =
+        name === 'eat' ? { ...route.query, game: base } : { ...route.query, room: base }
+      await router.replace({ name, query })
     } catch {
       /* ignore */
     }
@@ -774,20 +1089,41 @@ async function switchToRoom(nextRaw: string, opts?: { fromRoute?: boolean }): Pr
 }
 
 watch(
-  () => [route.name, route.query.room, callAuthReady.value] as const,
+  () =>
+    [
+      route.name,
+      typeof route.query.room === 'string' ? route.query.room : '',
+      typeof route.query.game === 'string' ? route.query.game : '',
+      callAuthReady.value,
+    ] as const,
   async () => {
     if (!callAuthReady.value || !isCallAppRoute.value) {
       return
     }
     normalizeSessionRoomIdForStreamRoute()
-    const q = typeof route.query.room === 'string' ? normalizeDisplayName(route.query.room) : ''
+    const q =
+      route.name === 'eat'
+        ? typeof route.query.game === 'string'
+          ? normalizeDisplayName(route.query.game)
+          : ''
+        : typeof route.query.room === 'string'
+          ? normalizeDisplayName(route.query.room)
+          : ''
     if (!q) {
       if (!session.inCall && !joining.value) {
         try {
-          await router.replace({
-            name: route.name as 'call' | 'mafia',
-            query: { ...route.query, room: generateCallRoomCode() },
-          })
+          const code = generateCallRoomCode()
+          if (route.name === 'eat') {
+            await router.replace({
+              name: 'eat',
+              query: { ...route.query, game: code },
+            })
+          } else {
+            await router.replace({
+              name: route.name as 'call' | 'mafia',
+              query: { ...route.query, room: code },
+            })
+          }
         } catch {
           /* ignore */
         }
@@ -795,7 +1131,12 @@ watch(
       return
     }
     const currentSignaling = normalizeDisplayName(session.roomId) || 'demo'
-    const qSignaling = isMafiaRoute.value ? mafiaSignalingRoomId(q) : q
+    const qSignaling =
+      route.name === 'mafia'
+        ? mafiaSignalingRoomId(q)
+        : route.name === 'eat'
+          ? eatFirstSignalingRoomId(q)
+          : q
     if (qSignaling !== currentSignaling) {
       await switchToRoom(q, { fromRoute: true })
       return
@@ -936,7 +1277,15 @@ function syncSpotlightDesktop(ev?: MediaQueryListEvent): void {
 watch(
   tiles,
   (list) => {
-    const ids = list.map((t) => t.peerId)
+    let ids = list.map((t) => t.peerId)
+    if (isEatFirstRoute.value) {
+      const hostId = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId : ''
+      const sorted = [...ids].sort((a, b) => a.localeCompare(b))
+      ids =
+        hostId && sorted.includes(hostId)
+          ? [...sorted.filter((id) => id !== hostId), hostId]
+          : sorted
+    }
     const prev = tileOrder.value
     const next: string[] = []
     for (const id of prev) {
@@ -977,6 +1326,78 @@ const mafiaNumberByPeer = computed(() => {
   return m
 })
 
+const eatFirstSeatByPeer = computed(() => {
+  if (!isEatFirstRoute.value) {
+    return new Map<string, number>()
+  }
+  const m = new Map<string, number>()
+  orderedTiles.value.forEach((tile, index) => {
+    m.set(tile.peerId, index + 1)
+  })
+  return m
+})
+
+function eatFirstTraitsForPeer(peerId: string): string[] {
+  if (!isEatFirstRoute.value) return []
+  const seat = eatFirstSeatByPeer.value.get(peerId)
+  if (seat == null) return []
+  const traits = eatFirstShell.traitsBySeat[seat]
+  if (!Array.isArray(traits) || traits.length === 0) return []
+  return traits
+}
+
+function eatFirstTraitHostView(): boolean {
+  return isEatFirstRoute.value && eatFirstShell.isEatFirstRoomHost
+}
+
+function eatFirstTraitOwnerView(peerId: string): boolean {
+  return isEatFirstRoute.value && peerId === selfPeerId.value
+}
+
+function eatFirstRevealedTraitsForPeer(peerId: string): string[] {
+  if (!isEatFirstRoute.value) return []
+  const byPeer = eatFirstRevealedByPeer.value[peerId]
+  if (!byPeer || typeof byPeer !== 'object') return []
+  return Object.entries(byPeer)
+    .filter(([_, open]) => open === true)
+    .map(([k]) => k)
+}
+
+function eatFirstTraitOverridesForPeer(peerId: string): Record<string, string> {
+  if (!isEatFirstRoute.value) return {}
+  const byPeer = eatFirstOverridesByPeer.value[peerId]
+  return byPeer && typeof byPeer === 'object' ? byPeer : {}
+}
+
+function eatFirstOpenedByPlayerTraitsForPeer(peerId: string): string[] {
+  if (!isEatFirstRoute.value) return []
+  const byPeer = eatFirstOpenedByPlayerByPeer.value[peerId]
+  if (!byPeer || typeof byPeer !== 'object') return []
+  return Object.entries(byPeer)
+    .filter(([_, open]) => open === true)
+    .map(([k]) => k)
+}
+
+function onEatFirstRevealTrait(payload: { peerId: string; traitKey: EatFirstTraitKey }): void {
+  if (!isEatFirstRoute.value) return
+  const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
+  if (!peerId) return
+  sendSignalingMessage({
+    type: EAT_FIRST_TRAIT_REVEAL_REQUEST_SIGNAL,
+    payload: { peerId, traitKey: payload.traitKey },
+  })
+}
+
+function onEatFirstGenerateTrait(payload: { peerId: string; traitKey: EatFirstTraitKey }): void {
+  if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) return
+  const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
+  if (!peerId) return
+  sendSignalingMessage({
+    type: EAT_FIRST_TRAIT_REGENERATE_REQUEST_SIGNAL,
+    payload: { peerId, traitKey: payload.traitKey },
+  })
+}
+
 const orderedTiles = computed(() => {
   const list = tiles.value.slice()
   if (isMafiaRoute.value && list.length > 0) {
@@ -994,6 +1415,37 @@ const orderedTiles = computed(() => {
         return 1
       }
       return 0
+    })
+  }
+
+  if (isEatFirstRoute.value && list.length > 0) {
+    const orderIndex = new Map<string, number>()
+    const present = new Set(list.map((tile) => tile.peerId))
+    let cursor = 0
+    for (const peerId of tileOrder.value) {
+      if (!present.has(peerId) || peerId === eatFirstShell.hostPeerId) {
+        continue
+      }
+      orderIndex.set(peerId, cursor)
+      cursor += 1
+    }
+    for (const tile of [...list].sort((a, b) => a.peerId.localeCompare(b.peerId))) {
+      if (orderIndex.has(tile.peerId) || tile.peerId === eatFirstShell.hostPeerId) {
+        continue
+      }
+      orderIndex.set(tile.peerId, cursor)
+      cursor += 1
+    }
+    if (typeof eatFirstShell.hostPeerId === 'string' && present.has(eatFirstShell.hostPeerId)) {
+      orderIndex.set(eatFirstShell.hostPeerId, Number.MAX_SAFE_INTEGER)
+    }
+    return [...list].sort((a, b) => {
+      const ai = orderIndex.get(a.peerId) ?? Number.MAX_SAFE_INTEGER - 1
+      const bi = orderIndex.get(b.peerId) ?? Number.MAX_SAFE_INTEGER - 1
+      if (ai !== bi) {
+        return ai - bi
+      }
+      return a.peerId.localeCompare(b.peerId)
     })
   }
 
@@ -1400,6 +1852,31 @@ function isMafiaHostSpeakingQueuedSeat(seat: number | undefined): boolean {
 }
 
 function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value)[number]): void {
+  if (isEatFirstRoute.value && !eatFirstViewUi.value && eatFirstShell.isEatFirstRoomHost) {
+    if (!eatFirstShell.speakingMode) {
+      return
+    }
+    const t = ev.target
+    if (t instanceof Element) {
+      if (t.closest('button, input, textarea, a, [data-no-mafia-tile-host]')) {
+        return
+      }
+      if (t.closest('.tile-overlay__label-group, .tile-overlay__name-input, .tile-overlay__name-edit')) {
+        return
+      }
+    }
+    const seat = eatFirstSeatByPeer.value.get(row.tile.peerId)
+    if (seat == null) {
+      return
+    }
+    if (eatFirstShell.speakingQueue.includes(seat)) {
+      eatFirstShell.removeSpeakingSeat(seat)
+    } else {
+      eatFirstShell.addSpeakingSeat(seat)
+    }
+    ev.stopPropagation()
+    return
+  }
   if (mafiaViewUi.value) {
     return
   }
@@ -1731,6 +2208,7 @@ onMounted(() => {
     }
   }
   window.addEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
+  window.addEventListener(EAT_FIRST_OBS_URL_TOAST_EVENT, onEatFirstObsUrlCopiedToast)
   window.addEventListener(MAFIA_SETTINGS_TOAST_EVENT, onMafiaSettingsToast)
 })
 
@@ -1739,6 +2217,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', syncChatPanelToViewport)
   stopChatPanelGesture()
   window.removeEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
+  window.removeEventListener(EAT_FIRST_OBS_URL_TOAST_EVENT, onEatFirstObsUrlCopiedToast)
   window.removeEventListener(MAFIA_SETTINGS_TOAST_EVENT, onMafiaSettingsToast)
   document.documentElement.classList.remove(CALL_ROUTE_HTML_CLASS)
   if (import.meta.env.DEV) {
@@ -1842,7 +2321,7 @@ watch(joining, (j) => {
               :ref="(el) => setTileWrapRef(row.tile.peerId, el)"
               class="call-page__tile-wrap"
               :style="tileLayoutStyle(row)"
-              :draggable="!mafiaViewUi && !isMafiaRoute"
+              :draggable="!mafiaViewUi && !isMafiaRoute && !isEatFirstRoute"
               :title="t('callPage.dragReorder')"
               :aria-label="t('callPage.dragReorder')"
               :class="{
@@ -1898,7 +2377,13 @@ watch(joining, (j) => {
                 class="call-page__tile-inner"
                 :peer-id="row.tile.peerId"
                 :display-name="row.displayName"
-                :mafia-seat-index="isMafiaRoute ? mafiaNumberByPeer.get(row.tile.peerId) : undefined"
+                :mafia-seat-index="
+                  isMafiaRoute
+                    ? mafiaNumberByPeer.get(row.tile.peerId)
+                    : isEatFirstRoute
+                      ? eatFirstSeatByPeer.get(row.tile.peerId)
+                      : undefined
+                "
                 :mafia-visible-role="
                   isMafiaRoute && !mafiaViewUi ? mafiaGameStore.getMafiaRoleVisibleForTile(row.tile.peerId) : undefined
                 "
@@ -1919,6 +2404,12 @@ watch(joining, (j) => {
                 :video-presentation="row.tile.videoPresentation"
                 :avatar-url="row.tile.avatarUrl ?? ''"
                 :mafia-life-state="isMafiaRoute ? mafiaGameStore.lifeStateForPeer(row.tile.peerId) : 'alive'"
+                :eat-first-traits="isEatFirstRoute ? eatFirstTraitsForPeer(row.tile.peerId) : undefined"
+                :eat-first-trait-host-view="isEatFirstRoute ? eatFirstTraitHostView() : false"
+                :eat-first-trait-owner-view="isEatFirstRoute ? eatFirstTraitOwnerView(row.tile.peerId) : false"
+                :eat-first-revealed-trait-keys="isEatFirstRoute ? eatFirstRevealedTraitsForPeer(row.tile.peerId) : []"
+                :eat-first-trait-overrides="isEatFirstRoute ? eatFirstTraitOverridesForPeer(row.tile.peerId) : {}"
+                :eat-first-opened-by-player-trait-keys="isEatFirstRoute ? eatFirstOpenedByPlayerTraitsForPeer(row.tile.peerId) : []"
                 :mafia-elimination-kind="mafiaEliminationAvatarKindForPeerId(row.tile.peerId)"
                 :mafia-elimination-background="mafiaGameStore.eliminationBackgroundForPeer(row.tile.peerId)"
                 :mafia-dead-background-url="isMafiaRoute ? mafiaGameStore.activeDeadBackgroundUrl() : null"
@@ -1940,6 +2431,8 @@ watch(joining, (j) => {
                 @mafia-set-elimination-background="onMafiaSetEliminationBackground"
                 @mafia-viewport-layers="(v) => onCallTileViewportForLayers(row.tile.peerId, v)"
                 @remote-playback-stall="onRemotePlaybackStall"
+                @eat-first-reveal-trait="onEatFirstRevealTrait"
+                @eat-first-generate-trait="onEatFirstGenerateTrait"
               />
               <button
                 v-if="!mafiaViewUi"
@@ -1987,6 +2480,11 @@ watch(joining, (j) => {
               v-if="isMafiaRoute && mafiaGameStore.isMafiaHost"
               @force-mute-all="onMafiaForceMuteAll"
             />
+            <EatFirstHostActionsBar
+              v-if="isEatFirstRoute && eatFirstShell.isEatFirstRoomHost"
+              @force-mute-all="onEatFirstForceMuteAll"
+              @reshuffle="onEatFirstReshuffle"
+            />
             <CallControlsDock
               ref="callControlsDockRef"
               v-model:mic-picker-open="micPickerOpen"
@@ -2011,6 +2509,7 @@ watch(joining, (j) => {
               @pick-video-input="pickVideoInput"
             />
             <MafiaSpeakingQueueBar v-if="isMafiaRoute" :show-tools="mafiaGameStore.isMafiaHost" />
+            <EatFirstSpeakingQueueBar v-if="isEatFirstRoute" :show-tools="eatFirstShell.isEatFirstRoomHost" />
           </div>
         </div>
 

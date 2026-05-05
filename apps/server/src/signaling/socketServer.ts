@@ -29,6 +29,9 @@ import {
   handleMafiaPlayerRevive,
   handleMafiaForceCameraOff,
   handleMafiaForceMuteAll,
+  handleEatFirstForceMuteAll,
+  handleEatFirstTraitRevealRequest,
+  handleEatFirstTraitRegenerateRequest,
   handleProduce,
   handleProducerVideoSource,
   handleSetOutboundVideoPaused,
@@ -302,6 +305,18 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'mafia:force-mute-all': {
               await handleMafiaForceMuteAll(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'eat:force-mute-all': {
+              await handleEatFirstForceMuteAll(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'eat:trait-reveal-request': {
+              handleEatFirstTraitRevealRequest(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'eat:trait-regenerate-request': {
+              handleEatFirstTraitRegenerateRequest(socket, parsed.data.payload, deps)
               break
             }
             case 'request-producer-sync': {

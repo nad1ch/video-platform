@@ -16,6 +16,7 @@ import {
   resolveOnboardingTourKeyFromRoute,
 } from '@/eat-first/utils/onboardingStorage.js'
 import { useAuth } from '@/composables/useAuth'
+import { eatFirstStreamViewFromRoute, EAT_FIRST_OBS_URL_TOAST_EVENT } from '@/composables/eatFirstCallStreamView'
 import {
   MAFIA_OBS_URL_TOAST_EVENT,
   MAFIA_SETTINGS_TOAST_EVENT,
@@ -39,6 +40,8 @@ import { useCoinHubStore } from '@/stores/coinHub'
 import { useStreamAuthModal } from '@/composables/useStreamAuthModal'
 import { useProSubscription } from '@/composables/useProSubscription'
 import type { AuthMode } from '@/types/authMode'
+import { normalizeDisplayName } from 'call-core'
+import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
 import type { BackgroundItem, MafiaBackgroundItem, MafiaEliminationBackground } from '@/utils/mafiaGameTypes'
 import mafiaHeaderCopyIcon from '@/assets/mafia/ui/header-copy.svg'
@@ -78,6 +81,7 @@ const proHeaderLabel = computed(() => {
 })
 const coinHub = useCoinHubStore()
 const { balance: coinHubBalance } = storeToRefs(coinHub)
+const eatFirstShell = useEatFirstCallShellStore()
 const mafiaGame = useMafiaGameStore()
 const {
   isMafiaHost: isCurrentMafiaHost,
@@ -112,10 +116,14 @@ const isNadleStreamRoute = computed(
     route.name === 'nadraw-show',
 )
 
-const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route) : 'join'))
+const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route) : 'call'))
+
+const isEatFirstCallGameView = computed(() => route.name === 'eat' && currentEatView.value === 'call')
 
 const showChrome = computed(() => !isEatRoute.value || currentEatView.value !== 'overlay')
-const showFooter = computed(() => showChrome.value && route.meta.footer !== false)
+const showFooter = computed(
+  () => showChrome.value && route.meta.footer !== false && !isEatFirstCallGameView.value,
+)
 
 const shellPageBackgroundChoices = computed(() =>
   isHomeRoute.value ? appHubPageBackgrounds.value : mafiaPageBackgrounds.value,
@@ -314,8 +322,20 @@ const mafiaHeaderHasRoom = computed(() => {
 })
 
 const mafiaHeaderShowHostControls = computed(() => isMafiaRoute.value && isCurrentMafiaHost.value)
+const eatFirstHeaderStreamView = computed(() => eatFirstStreamViewFromRoute(route))
+const eatFirstHeaderShowHostControls = computed(
+  () =>
+    isEatFirstCallGameView.value &&
+    eatFirstShell.isEatFirstRoomHost &&
+    !eatFirstHeaderStreamView.value,
+)
+const eatFirstHeaderHasGame = computed(() => {
+  if (!isEatFirstCallGameView.value) return false
+  const g = route.query.game
+  return typeof g === 'string' && normalizeDisplayName(g).trim().length > 0
+})
 const callOrMafiaShowVisualSettings = computed(
-  () => isCallRoute.value || isMafiaRoute.value,
+  () => isCallRoute.value || isMafiaRoute.value || isEatFirstCallGameView.value,
 )
 /** Gear next to logo whenever the `/app` shell header is visible (including `/app` home). */
 const shellShowsHeaderSettingsGear = computed(() => showChrome.value)
@@ -739,6 +759,24 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   }
   window.dispatchEvent(new CustomEvent(MAFIA_OBS_URL_TOAST_EVENT))
 }
+
+async function copyEatFirstCallObsUrl(): Promise<void> {
+  if (!isEatFirstCallGameView.value) {
+    return
+  }
+  const g = route.query.game
+  const gameId = typeof g === 'string' ? normalizeDisplayName(g).trim() : ''
+  if (!gameId) {
+    return
+  }
+  const viewUrl = `${window.location.origin}/app/eat?${new URLSearchParams({ game: gameId, mode: 'view' }).toString()}`
+  try {
+    await navigator.clipboard.writeText(viewUrl)
+  } catch {
+    /* clipboard may be denied */
+  }
+  window.dispatchEvent(new CustomEvent(EAT_FIRST_OBS_URL_TOAST_EVENT))
+}
 </script>
 
 <template>
@@ -768,13 +806,18 @@ async function copyMafiaObsViewUrl(): Promise<void> {
         :is-pro-active="isProActiveSubscription"
         :pro-link-to="proHeaderLinkTo"
         :pro-label="proHeaderLabel"
-        :logo-src="isMafiaRoute ? mafiaHeaderLogo : BRAND_LOGO_LIGHT_SVG"
-        :mafia-mode="isMafiaRoute"
+        :logo-src="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderLogo : BRAND_LOGO_LIGHT_SVG"
+        :mafia-mode="isMafiaRoute || isEatFirstCallGameView"
         :profile-to="appLandingProfileTo"
         :show-help-button="isEatRoute && Boolean(onboardingForRoute)"
         :show-coin="true"
         :title="headerTitle"
-        :user-prefix="isMafiaRoute && isCurrentMafiaHost ? 'host' : ''"
+        :user-prefix="
+          (isMafiaRoute && isCurrentMafiaHost) ||
+          (isEatFirstCallGameView && eatFirstShell.isEatFirstRoomHost && !eatFirstHeaderStreamView)
+            ? 'host'
+            : ''
+        "
         :user-avatar="appLandingHeaderUserAvatar"
         :user-name="appLandingHeaderUserName"
         @open-help="openOnboardingForCurrentRoute"
@@ -921,7 +964,7 @@ async function copyMafiaObsViewUrl(): Promise<void> {
             </Teleport>
           </div>
         </template>
-        <template v-if="isCallRoute || isMafiaRoute" #center>
+        <template v-if="isCallRoute || isMafiaRoute || isEatFirstCallGameView" #center>
           <div :id="CALL_ROOM_DROPDOWN_HOST_ID" class="app-shell-call-room-anchor">
             <button
               type="button"
@@ -935,29 +978,43 @@ async function copyMafiaObsViewUrl(): Promise<void> {
             </button>
           </div>
         </template>
-        <template v-if="mafiaHeaderShowHostControls" #actions-start>
+        <template v-if="mafiaHeaderShowHostControls || eatFirstHeaderShowHostControls" #actions-start>
+          <template v-if="mafiaHeaderShowHostControls">
+            <button
+              type="button"
+              class="app-shell-mafia-toggle"
+              :class="{ 'app-shell-mafia-toggle--new': !mafiaHeaderOldMode }"
+              :aria-pressed="!mafiaHeaderOldMode"
+              aria-label="old / new"
+              title="old / new"
+              @click="toggleMafiaMode"
+            >
+              <span>{{ mafiaHeaderOldMode ? 'old' : 'new' }}</span>
+            </button>
+            <button
+              v-if="mafiaHeaderHasRoom"
+              type="button"
+              class="app-shell-mafia-copy"
+              :class="{ 'stream-nav__link--active': isMafiaViewMode }"
+              :title="mafiaHeaderObsCopyLabel"
+              :aria-label="mafiaHeaderObsCopyLabel"
+              @click="copyMafiaObsViewUrl"
+            >
+              <img class="app-shell-mafia-copy__icon" :src="mafiaHeaderCopyIcon" alt="" aria-hidden="true" />
+              <span>{{ mafiaHeaderObsCopyLabel }}</span>
+            </button>
+          </template>
           <button
-            type="button"
-            class="app-shell-mafia-toggle"
-            :class="{ 'app-shell-mafia-toggle--new': !mafiaHeaderOldMode }"
-            :aria-pressed="!mafiaHeaderOldMode"
-            aria-label="old / new"
-            title="old / new"
-            @click="toggleMafiaMode"
-          >
-            <span>{{ mafiaHeaderOldMode ? 'old' : 'new' }}</span>
-          </button>
-          <button
-            v-if="mafiaHeaderHasRoom"
+            v-if="eatFirstHeaderShowHostControls && eatFirstHeaderHasGame"
             type="button"
             class="app-shell-mafia-copy"
-            :class="{ 'stream-nav__link--active': isMafiaViewMode }"
-            :title="mafiaHeaderObsCopyLabel"
-            :aria-label="mafiaHeaderObsCopyLabel"
-            @click="copyMafiaObsViewUrl"
+            :class="{ 'stream-nav__link--active': eatFirstHeaderStreamView }"
+            :title="t('eatFirstCall.copyEatCallObs')"
+            :aria-label="t('eatFirstCall.copyEatCallObs')"
+            @click="copyEatFirstCallObsUrl"
           >
             <img class="app-shell-mafia-copy__icon" :src="mafiaHeaderCopyIcon" alt="" aria-hidden="true" />
-            <span>{{ mafiaHeaderObsCopyLabel }}</span>
+            <span>{{ t('eatFirstCall.copyEatCallObs') }}</span>
           </button>
         </template>
       </AppLandingHeader>

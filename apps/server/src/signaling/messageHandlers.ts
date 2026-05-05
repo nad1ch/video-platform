@@ -24,6 +24,7 @@ import { MafiaWs } from './mafiaWsProtocol'
 import {
   MAFIA_MAX_SEAT,
   isMafiaRoomId,
+  isEatFirstRoomId,
   sanitizeAvatarUrl,
   sanitizeDisplayName,
   sanitizeMafiaSpeakingQueueList,
@@ -171,6 +172,28 @@ export type ServerMessage =
   | { type: 'mafia:player-life-state'; payload: { states: Record<string, MafiaPlayerLifeState> } }
   | { type: 'mafia:force-camera-off'; payload: { peerId: string; paused?: boolean } }
   | { type: 'mafia:force-mute-all'; payload: { muted?: boolean } }
+  | { type: 'eat:host-updated'; payload: { hostPeerId: string | null } }
+  | { type: 'eat:force-mute-all'; payload: { muted?: boolean } }
+  | { type: 'eat:trait-revealed'; payload: { peerId: string; traitKey: EatFirstTraitKey; openedBy: 'player' | 'host' } }
+  | { type: 'eat:trait-regenerated'; payload: { peerId: string; traitKey: EatFirstTraitKey; value: string } }
+  | {
+      type: 'eat:trait-state-sync'
+      payload: {
+        revealedByPeer: Record<string, EatFirstTraitKey[]>
+        overridesByPeer: Record<string, Partial<Record<EatFirstTraitKey, string>>>
+        openedByPlayerByPeer: Record<string, EatFirstTraitKey[]>
+      }
+    }
+
+type EatFirstTraitKey =
+  | 'gender'
+  | 'age'
+  | 'profession'
+  | 'health'
+  | 'hobby'
+  | 'phobia'
+  | 'fact'
+  | 'baggage'
 
 export type SignalingDeps = {
   roomManager: RoomManager
@@ -401,6 +424,58 @@ function resolveMafiaPeerAndRoom(
   return { peer, room }
 }
 
+function resolveEatFirstPeerAndRoom(
+  socket: WsSocket,
+  deps: SignalingDeps,
+): { peer: Peer; room: Room } | null {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) return null
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) return null
+  if (!isEatFirstRoomId(room.id)) return null
+  return { peer, room }
+}
+
+function eatFirstHostPeerId(room: Room): string | null {
+  const first = room.getPeers()[0]
+  return first?.id ?? null
+}
+
+function isEatFirstHostPeer(room: Room, peer: Peer): boolean {
+  const hostPeerId = eatFirstHostPeerId(room)
+  return hostPeerId != null && peer.id === hostPeerId
+}
+
+const EAT_FIRST_TRAIT_POOL: Record<EatFirstTraitKey, readonly string[]> = {
+  gender: ['Чоловік', 'Жінка'],
+  age: ['21 рік', '27 років', '33 роки', '41 рік'],
+  profession: ['Інженер', 'Лікар', 'Кухар', 'Спортсмен', 'Дизайнер'],
+  health: ['Добре', 'Астма', 'Алергія', 'Слабкий зір'],
+  hobby: ['Відеоігри', 'Фотографія', 'Малювання', 'Риболовля'],
+  phobia: ['Павуки', 'Темрява', 'Висота', 'Замкнені простори'],
+  fact: ['Говорить 4 мовами', 'Пережив кораблетрощу', 'Пробіг марафон'],
+  baggage: ['Аптечка', 'Набір інструментів', 'Ліхтарик', 'Рація'],
+}
+
+function pickEatFirstTraitValue(key: EatFirstTraitKey, current?: string): string {
+  const pool = EAT_FIRST_TRAIT_POOL[key] ?? []
+  if (pool.length < 1) {
+    return typeof current === 'string' && current.trim().length > 0 ? current.trim() : 'Невідомо'
+  }
+  const options =
+    typeof current === 'string' && current.trim().length > 0 ? pool.filter((v) => v !== current.trim()) : [...pool]
+  const target = options.length > 0 ? options : [...pool]
+  const idx = Math.floor(Math.random() * target.length)
+  return target[idx] ?? pool[0] ?? 'Невідомо'
+}
+
+function broadcastEatFirstHostUpdated(room: Room): void {
+  broadcastServerMessageToRoom(room, {
+    type: 'eat:host-updated',
+    payload: { hostPeerId: eatFirstHostPeerId(room) },
+  })
+}
+
 function broadcastMafiaQueueUpdate(room: Room): void {
   broadcastServerMessageToRoom(room, {
     type: MafiaWs.queueUpdate,
@@ -425,6 +500,9 @@ function finalizeRoomIfEmpty(room: Room, roomManager: RoomManager): void {
   if (room.getPeers().length > 0) {
     return
   }
+  eatFirstRevealedByRoom.delete(room.id)
+  eatFirstOverridesByRoom.delete(room.id)
+  eatFirstOpenedByPlayerByRoom.delete(room.id)
   room.dispose()
   roomManager.removeRoom(room.id)
 }
@@ -449,6 +527,13 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
     return
   }
   broadcastPeerLeftToRoom(room, peer.id)
+  if (isEatFirstRoomId(room.id)) {
+    broadcastEatFirstHostUpdated(room)
+    broadcastServerMessageToRoom(room, {
+      type: 'eat:trait-state-sync',
+      payload: eatFirstTraitStatePayload(room.id),
+    })
+  }
   broadcastMafiaHostUpdated(room)
   
   // stale after a leave. The host's next `mafia:players-update` will
@@ -655,6 +740,13 @@ export async function handleJoinRoom(
   }
   if (mafiaHostAssignedOnJoin) {
     broadcastMafiaHostUpdated(room)
+  }
+  if (isEatFirstRoomId(room.id)) {
+    broadcastEatFirstHostUpdated(room)
+    sendServerMessage(socket, {
+      type: 'eat:trait-state-sync',
+      payload: eatFirstTraitStatePayload(room.id),
+    })
   }
 
   
@@ -1140,6 +1232,176 @@ export async function handleMafiaForceMuteAll(
   }
 
   broadcastMafiaForceMuteAll(room, { muted })
+}
+
+export async function handleEatFirstForceMuteAll(
+  socket: WsSocket,
+  payload: { muted?: boolean },
+  deps: SignalingDeps,
+): Promise<void> {
+  const rp = resolveEatFirstPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isEatFirstHostPeer(room, peer)) return
+
+  const muted = payload.muted !== false
+
+  for (const target of room.getPeers()) {
+    if (target.id === peer.id) continue
+    target.forcedAudioMuted = muted
+    for (const p of target.getProducers()) {
+      if (p.kind !== 'audio' || p.closed) continue
+      try {
+        if (muted) {
+          if (!p.paused) await p.pause()
+        } else if (p.paused && !target.audioMuted) {
+          await p.resume()
+        }
+      } catch (e) {
+        console.warn('[signaling] eat:force-mute-all pause/resume failed', { peerId: target.id }, e)
+      }
+    }
+    const effectiveMuted = target.audioMuted || target.forcedAudioMuted
+    const audioMsg: ServerMessage = {
+      type: 'peer-audio-muted',
+      payload: { peerId: target.id, muted: effectiveMuted },
+    }
+    for (const observer of room.getPeers()) {
+      observer.sendJson(audioMsg)
+    }
+  }
+
+  broadcastServerMessageToRoom(room, { type: 'eat:force-mute-all', payload: { muted } })
+}
+
+const eatFirstRevealedByRoom = new Map<string, Map<string, Set<EatFirstTraitKey>>>()
+const eatFirstOverridesByRoom = new Map<string, Map<string, Map<EatFirstTraitKey, string>>>()
+const eatFirstOpenedByPlayerByRoom = new Map<string, Map<string, Set<EatFirstTraitKey>>>()
+
+function roomRevealMap(roomId: string): Map<string, Set<EatFirstTraitKey>> {
+  let m = eatFirstRevealedByRoom.get(roomId)
+  if (!m) {
+    m = new Map<string, Set<EatFirstTraitKey>>()
+    eatFirstRevealedByRoom.set(roomId, m)
+  }
+  return m
+}
+
+function roomOverrideMap(roomId: string): Map<string, Map<EatFirstTraitKey, string>> {
+  let m = eatFirstOverridesByRoom.get(roomId)
+  if (!m) {
+    m = new Map<string, Map<EatFirstTraitKey, string>>()
+    eatFirstOverridesByRoom.set(roomId, m)
+  }
+  return m
+}
+
+function roomOpenedByPlayerMap(roomId: string): Map<string, Set<EatFirstTraitKey>> {
+  let m = eatFirstOpenedByPlayerByRoom.get(roomId)
+  if (!m) {
+    m = new Map<string, Set<EatFirstTraitKey>>()
+    eatFirstOpenedByPlayerByRoom.set(roomId, m)
+  }
+  return m
+}
+
+function eatFirstTraitStatePayload(roomId: string): {
+  revealedByPeer: Record<string, EatFirstTraitKey[]>
+  overridesByPeer: Record<string, Partial<Record<EatFirstTraitKey, string>>>
+  openedByPlayerByPeer: Record<string, EatFirstTraitKey[]>
+} {
+  const revealMap = roomRevealMap(roomId)
+  const overrideMap = roomOverrideMap(roomId)
+  const openedByPlayerMap = roomOpenedByPlayerMap(roomId)
+  const revealedByPeer: Record<string, EatFirstTraitKey[]> = {}
+  const overridesByPeer: Record<string, Partial<Record<EatFirstTraitKey, string>>> = {}
+  const openedByPlayerByPeer: Record<string, EatFirstTraitKey[]> = {}
+  for (const [peerId, keys] of revealMap) {
+    const arr = [...keys]
+    if (arr.length > 0) {
+      revealedByPeer[peerId] = arr
+    }
+  }
+  for (const [peerId, byKey] of overrideMap) {
+    const row: Partial<Record<EatFirstTraitKey, string>> = {}
+    for (const [key, value] of byKey) {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        row[key] = value.trim()
+      }
+    }
+    if (Object.keys(row).length > 0) {
+      overridesByPeer[peerId] = row
+    }
+  }
+  for (const [peerId, keys] of openedByPlayerMap) {
+    const arr = [...keys]
+    if (arr.length > 0) {
+      openedByPlayerByPeer[peerId] = arr
+    }
+  }
+  return { revealedByPeer, overridesByPeer, openedByPlayerByPeer }
+}
+
+export function handleEatFirstTraitRevealRequest(
+  socket: WsSocket,
+  payload: { peerId: string; traitKey: EatFirstTraitKey },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveEatFirstPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  const targetPeerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
+  if (!targetPeerId) return
+  const traitKey = payload.traitKey
+  const isHost = isEatFirstHostPeer(room, peer)
+  if (!isHost && targetPeerId !== peer.id) {
+    return
+  }
+  const target = room.getPeer(targetPeerId)
+  if (!target) return
+  const byPeer = roomRevealMap(room.id)
+  const set = byPeer.get(targetPeerId) ?? new Set<EatFirstTraitKey>()
+  if (set.has(traitKey)) {
+    return
+  }
+  set.add(traitKey)
+  byPeer.set(targetPeerId, set)
+  const openedBy: 'player' | 'host' = isHost ? 'host' : 'player'
+  if (openedBy === 'player') {
+    const openedByPeer = roomOpenedByPlayerMap(room.id)
+    const openedSet = openedByPeer.get(targetPeerId) ?? new Set<EatFirstTraitKey>()
+    openedSet.add(traitKey)
+    openedByPeer.set(targetPeerId, openedSet)
+  }
+  broadcastServerMessageToRoom(room, {
+    type: 'eat:trait-revealed',
+    payload: { peerId: targetPeerId, traitKey, openedBy },
+  })
+}
+
+export function handleEatFirstTraitRegenerateRequest(
+  socket: WsSocket,
+  payload: { peerId: string; traitKey: EatFirstTraitKey },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveEatFirstPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isEatFirstHostPeer(room, peer)) return
+  const targetPeerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
+  if (!targetPeerId) return
+  const target = room.getPeer(targetPeerId)
+  if (!target) return
+  const traitKey = payload.traitKey
+  const byPeer = roomOverrideMap(room.id)
+  const row = byPeer.get(targetPeerId) ?? new Map<EatFirstTraitKey, string>()
+  const nextValue = pickEatFirstTraitValue(traitKey, row.get(traitKey))
+  row.set(traitKey, nextValue)
+  byPeer.set(targetPeerId, row)
+  broadcastServerMessageToRoom(room, {
+    type: 'eat:trait-regenerated',
+    payload: { peerId: targetPeerId, traitKey, value: nextValue },
+  })
 }
 
 function broadcastMafiaPlayersUpdate(

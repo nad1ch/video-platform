@@ -5,8 +5,7 @@ import '@/eat-first/styles/motion.css'
 import { bootstrapEatFirstAuthOnce } from '@/eat-first/bootstrapEatFirst'
 import { adminControlTransitionInstant } from '@/eat-first/router.js'
 import { eatViewFromRoute } from '@/eat-first'
-import { getPersistedGameId } from '@/eat-first/utils/persistedGameId.js'
-import JoinPage from '@/eat-first/pages/JoinPage.vue'
+import EatFirstCallPage from '@/eat-first/pages/EatFirstCallPage.vue'
 
 const EatPanelLoading = defineComponent({
   name: 'EatPanelLoading',
@@ -51,7 +50,7 @@ const OverlayPanel = defineAsyncComponent({
 })
 
 const panelByView = {
-  join: JoinPage,
+  call: EatFirstCallPage,
   admin: AdminPanel,
   control: ControlPanel,
   overlay: OverlayPanel,
@@ -63,35 +62,17 @@ const currentView = computed(() => eatViewFromRoute(route))
 
 const currentPanel = computed(() => {
   const v = currentView.value as keyof typeof panelByView
-  return panelByView[v] ?? JoinPage
+  return panelByView[v] ?? EatFirstCallPage
 })
-
-/**
- * Stable join panel key: same effective game id as JoinPage (`query.game` || persisted || `test1`).
- * Otherwise JoinPage runs `router.replace(?game=…)` after mount → `fullPath` changes → key changes →
- * full remount + out-in transition flicker.
- */
-function joinPanelStableKey(): string {
-  const raw = route.query.game
-  const fromQuery = raw != null && String(raw).trim() ? String(raw).trim() : ''
-  if (fromQuery) {
-    return fromQuery
-  }
-  const persisted = getPersistedGameId()
-  if (persisted != null && String(persisted).trim()) {
-    return String(persisted).trim()
-  }
-  return 'test1'
-}
-
 
 const routeViewKey = computed(() => {
   if (currentView.value === 'control') {
     const q = route.query
     return ['control', String(q.game ?? ''), String(q.host ?? '')].join('|')
   }
-  if (currentView.value === 'join') {
-    return `join|${joinPanelStableKey()}`
+  if (currentView.value === 'call') {
+    // Stable key: do not vary with `query.game` or CallPage would remount and reconnect WebRTC when the URL gets a room code.
+    return 'call'
   }
   return route.fullPath
 })

@@ -2187,7 +2187,7 @@ function goToPlayer(id) {
 }
 
 function hostForgetSavedAndLeave() {
-  router.push({ name: 'eat', query: { view: 'join', game: gameId.value } })
+  router.push({ name: 'eat', query: { view: 'call', game: gameId.value } })
 }
 
 

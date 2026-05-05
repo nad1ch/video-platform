@@ -235,7 +235,7 @@ export const router = createRouter({
       path: '/eat/join',
       redirect: (to: RouteLocationGeneric) => ({
         path: '/app/eat',
-        query: { ...to.query, view: 'join' },
+        query: { ...to.query, view: 'call' },
       }),
     },
     {

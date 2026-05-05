@@ -7,7 +7,8 @@ import {
 
 describe('eatFirstRouteUtils', () => {
   it('normalizeEatView accepts known views', () => {
-    expect(normalizeEatView('join')).toBe('join')
+    expect(normalizeEatView('call')).toBe('call')
+    expect(normalizeEatView('join')).toBe('call')
     expect(normalizeEatView('admin')).toBe('admin')
     expect(normalizeEatView('control')).toBe('control')
     expect(normalizeEatView('overlay')).toBe('overlay')
@@ -18,16 +19,16 @@ describe('eatFirstRouteUtils', () => {
     expect(normalizeEatView('Overlay')).toBe('overlay')
   })
 
-  it('normalizeEatView falls back to join for unknown', () => {
-    expect(normalizeEatView('')).toBe('join')
-    expect(normalizeEatView('lobby')).toBe('join')
-    expect(normalizeEatView(null)).toBe('join')
+  it('normalizeEatView falls back to call for unknown', () => {
+    expect(normalizeEatView('')).toBe('call')
+    expect(normalizeEatView('lobby')).toBe('call')
+    expect(normalizeEatView(null)).toBe('call')
   })
 
   it('eatViewFromRoute reads query.view', () => {
     expect(eatViewFromRoute({ query: { view: 'overlay' } })).toBe('overlay')
-    expect(eatViewFromRoute({ query: {} })).toBe('join')
-    expect(eatViewFromRoute({ query: { view: 'bad' } })).toBe('join')
+    expect(eatViewFromRoute({ query: {} })).toBe('call')
+    expect(eatViewFromRoute({ query: { view: 'bad' } })).toBe('call')
   })
 
   it('EAT_FIRST_ROUTE_NAME is stable', () => {

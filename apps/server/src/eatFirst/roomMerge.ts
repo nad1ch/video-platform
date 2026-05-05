@@ -1,7 +1,7 @@
 import { mergeJson } from './mergePatch'
 
 
-const REPLACE_TOP = new Set(['voting', 'hands', 'playersReady'])
+const REPLACE_TOP = new Set(['voting', 'hands', 'playersReady', 'playerOrder'])
 
 
 

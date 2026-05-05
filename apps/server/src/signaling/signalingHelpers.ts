@@ -18,6 +18,12 @@ export function isMafiaRoomId(roomId: string): boolean {
   return roomId.startsWith(MAFIA_ROOM_PREFIX)
 }
 
+export const EAT_FIRST_ROOM_PREFIX = 'eat:'
+
+export function isEatFirstRoomId(roomId: string): boolean {
+  return roomId.startsWith(EAT_FIRST_ROOM_PREFIX)
+}
+
 export const MAFIA_MAX_SEAT = 12
 
 export function sanitizeUserId(raw: string | undefined): string {

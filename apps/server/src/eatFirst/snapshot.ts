@@ -1,4 +1,9 @@
 import type { PrismaClient } from '@prisma/client'
+import {
+  getEatFirstHostDisplaySeat,
+  isEatFirstPlayerSlotId,
+  resolveEatFirstEffectivePlayerOrder,
+} from './playerOrder'
 import { normalizeEatFirstSlot } from './slot'
 
 function stripKey<T extends Record<string, unknown>>(o: T): T {
@@ -21,6 +26,8 @@ export type EatFirstSnapshot = {
   room: Record<string, unknown>
   players: Array<Record<string, unknown> & { id: string }>
   votes: Array<Record<string, unknown> & { id: string }>
+  /** Server-derived display metadata (not persisted as its own row). */
+  display: { hostDisplaySeat: number; playerCount: number }
 }
 
 export async function eatFirstSnapshot(prisma: PrismaClient, gameId: string): Promise<EatFirstSnapshot> {
@@ -29,10 +36,24 @@ export async function eatFirstSnapshot(prisma: PrismaClient, gameId: string): Pr
     include: { players: true, votes: true },
   })
   if (!g) {
-    return { room: {}, players: [], votes: [] }
+    return { room: {}, players: [], votes: [], display: { hostDisplaySeat: 1, playerCount: 0 } }
   }
-  const room = sanitizeRoom(g.room)
+  const rawRoom =
+    typeof g.room === 'object' && g.room !== null && !Array.isArray(g.room)
+      ? (g.room as Record<string, unknown>)
+      : {}
+  const allowedSlotIds = new Set<string>()
+  for (const p of g.players) {
+    const id = normalizeEatFirstSlot(p.slotId)
+    if (isEatFirstPlayerSlotId(id)) allowedSlotIds.add(id)
+  }
+  const effectivePlayerOrder = resolveEatFirstEffectivePlayerOrder(rawRoom.playerOrder, allowedSlotIds)
+  const room = {
+    ...sanitizeRoom(g.room),
+    playerOrder: effectivePlayerOrder,
+  }
   const players = g.players
+    .filter((p) => isEatFirstPlayerSlotId(normalizeEatFirstSlot(p.slotId)))
     .map((p) => {
       const id = normalizeEatFirstSlot(p.slotId)
       return { id, ...sanitizePlayerData(p.data) } as Record<string, unknown> & { id: string }
@@ -54,5 +75,9 @@ export async function eatFirstSnapshot(prisma: PrismaClient, gameId: string): Pr
     .sort((a, b) =>
       String(a.id).localeCompare(String(b.id), undefined, { numeric: true, sensitivity: 'base' }),
     )
-  return { room, players, votes }
+  const display = {
+    hostDisplaySeat: getEatFirstHostDisplaySeat(effectivePlayerOrder),
+    playerCount: effectivePlayerOrder.length,
+  }
+  return { room, players, votes, display }
 }

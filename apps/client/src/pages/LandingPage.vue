@@ -295,7 +295,7 @@ const landingGameCards = computed<LandingGameCard[]>(() => [
   {
     id: 'eat-first',
     title: t('home.gameEatFirst'),
-    to: { name: 'home', query: { comingSoon: 'eat-first' } },
+    to: { name: 'eat' },
     image: eatFirstIcon,
     imageWebp: eatFirstIconWebp,
     ariaLabel: t('home.openEatFirst'),
