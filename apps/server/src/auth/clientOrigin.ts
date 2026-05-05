@@ -2,10 +2,21 @@
 
 
 
+const DEFAULT_CLIENT_ORIGINS = Object.freeze([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://app.streamassist.net',
+])
+
+function normalizeOrigin(raw: unknown): string {
+  return typeof raw === 'string' ? raw.trim().replace(/\/$/, '') : ''
+}
+
 export function clientPublicOrigin(): string {
   const raw = process.env.BASE_URL ?? process.env.NADLE_CLIENT_ORIGIN
-  if (typeof raw === 'string' && raw.trim().length > 0) {
-    return raw.trim().replace(/\/$/, '')
+  const normalized = normalizeOrigin(raw)
+  if (normalized.length > 0) {
+    return normalized
   }
   if (process.env.NODE_ENV === 'production') {
     throw new Error(
@@ -21,13 +32,16 @@ export function clientPublicOrigin(): string {
  */
 export function corsAllowedOrigins(): string[] {
   const set = new Set<string>()
-  set.add('http://localhost:5173')
+  for (const origin of DEFAULT_CLIENT_ORIGINS) {
+    set.add(origin)
+  }
   const raw = process.env.BASE_URL ?? process.env.NADLE_CLIENT_ORIGIN
-  if (typeof raw === 'string' && raw.trim().length > 0) {
-    set.add(raw.trim().replace(/\/$/, ''))
+  const normalizedPrimary = normalizeOrigin(raw)
+  if (normalizedPrimary.length > 0) {
+    set.add(normalizedPrimary)
   }
   for (const part of (process.env.CORS_ORIGINS ?? '').split(',')) {
-    const t = part.trim().replace(/\/$/, '')
+    const t = normalizeOrigin(part)
     if (t.length > 0) {
       set.add(t)
     }

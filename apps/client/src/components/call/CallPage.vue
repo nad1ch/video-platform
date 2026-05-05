@@ -67,6 +67,8 @@ import EatFirstHostActionsBar from '@/eat-first/components/EatFirstHostActionsBa
 import EatFirstSpeakingQueueBar from '@/eat-first/components/EatFirstSpeakingQueueBar.vue'
 import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
 import { EatFirstWs } from '@/eat-first/eatFirstWsProtocol'
+import { getActiveEatFirstSlotForSession } from '@/eat-first/utils/joinTokenStore.js'
+import { getOrCreateDeviceId } from '@/eat-first/utils/deviceId.js'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
 import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
 import { mafiaEliminationAvatarKindForPeerId } from '@/utils/mafiaEliminationAvatarKind'
@@ -299,7 +301,12 @@ const EAT_FIRST_TRAIT_REVEAL_REQUEST_SIGNAL = EatFirstWs.traitRevealRequest
 const EAT_FIRST_TRAIT_REVEALED_SIGNAL = EatFirstWs.traitRevealed
 const EAT_FIRST_TRAIT_REGENERATE_REQUEST_SIGNAL = EatFirstWs.traitRegenerateRequest
 const EAT_FIRST_TRAIT_REGENERATED_SIGNAL = EatFirstWs.traitRegenerated
+const EAT_FIRST_TRAIT_TYPE_REROLL_REQUEST_SIGNAL = EatFirstWs.traitTypeRerollRequest
+const EAT_FIRST_TRAIT_TYPE_REROLLED_SIGNAL = EatFirstWs.traitTypeRerolled
+const EAT_FIRST_ACTION_CARD_REROLL_REQUEST_SIGNAL = EatFirstWs.actionCardRerollRequest
+const EAT_FIRST_ACTION_CARD_REROLLED_SIGNAL = EatFirstWs.actionCardRerolled
 const EAT_FIRST_TRAIT_STATE_SYNC_SIGNAL = EatFirstWs.traitStateSync
+const EAT_FIRST_SLOT_CLAIM_SIGNAL = EatFirstWs.slotClaim
 
 type EatFirstTraitKey =
   | 'gender'
@@ -310,6 +317,17 @@ type EatFirstTraitKey =
   | 'phobia'
   | 'fact'
   | 'baggage'
+
+const EAT_FIRST_TRAIT_ORDER: readonly EatFirstTraitKey[] = [
+  'gender',
+  'age',
+  'profession',
+  'health',
+  'hobby',
+  'phobia',
+  'fact',
+  'baggage',
+]
 
 function mafiaSignalPayload(data: unknown, type: string): Record<string, unknown> | null {
   if (data == null || typeof data !== 'object') {
@@ -480,16 +498,29 @@ const remoteVideoSuppressDelayTimerByPeer = new Map<string, ReturnType<typeof se
 const remoteVideoSuppressPendingKind = new Map<string, 'offscreen' | 'outside-budget'>()
 const remoteVideoPlaybackSuppressed = shallowRef(new Map<string, boolean>())
 const eatFirstShell = useEatFirstCallShellStore()
-const eatFirstRevealedByPeer = shallowRef<Record<string, Record<string, boolean>>>({})
-const eatFirstOverridesByPeer = shallowRef<Record<string, Record<string, string>>>({})
-const eatFirstOpenedByPlayerByPeer = shallowRef<Record<string, Record<string, boolean>>>({})
+/**
+ * Eat First trait state is keyed by **slotId** (`p1..p11`), not peerId.
+ * Server-side `revealedBySlot`/`overridesBySlot`/`openedBySlot` is the source
+ * of truth; on a hard refresh the new peer rebinds via `eat:slot-claim` and
+ * the same reveal/override state re-attaches to it.
+ */
+const eatFirstRevealedBySlot = shallowRef<Record<string, Record<string, boolean>>>({})
+const eatFirstOverridesBySlot = shallowRef<Record<string, Record<string, string>>>({})
+const eatFirstOpenedBySlot = shallowRef<Record<string, Record<string, boolean>>>({})
+/**
+ * Server-authoritative `peerId → slotId` map broadcast in `eat:trait-state-sync`.
+ * Replaces the old `eatFirstSeatByPeer` (which derived seat from local tile
+ * index and made every client see only the first player's traits).
+ */
+const eatFirstSlotByPeer = shallowRef<Record<string, string>>({})
 
 watch(
   () => session.roomId,
   () => {
-    eatFirstRevealedByPeer.value = {}
-    eatFirstOverridesByPeer.value = {}
-    eatFirstOpenedByPlayerByPeer.value = {}
+    eatFirstRevealedBySlot.value = {}
+    eatFirstOverridesBySlot.value = {}
+    eatFirstOpenedBySlot.value = {}
+    eatFirstSlotByPeer.value = {}
   },
 )
 
@@ -782,11 +813,42 @@ async function onEatFirstReshuffle(): Promise<void> {
   sendSignalingMessage({ type: EAT_FIRST_RESHUFFLE_CAMERAS_SIGNAL, payload: { peerOrder: nextOrder } })
 }
 
+function attemptEatFirstSlotClaim(): void {
+  if (!isEatFirstRoute.value) return
+  const gid = (() => {
+    const q = route.query?.game
+    return typeof q === 'string' ? q.trim() : ''
+  })()
+  if (!gid) return
+  const active = getActiveEatFirstSlotForSession(gid)
+  if (!active) return
+  const deviceId = typeof active.deviceId === 'string' ? active.deviceId.trim() : ''
+  const fallbackDevice = getOrCreateDeviceId()
+  const finalDeviceId = deviceId.length > 0 ? deviceId : fallbackDevice
+  if (typeof finalDeviceId !== 'string' || finalDeviceId.length < 1) return
+  const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
+  if (import.meta.env.DEV) {
+    callPageLog.info('[eat-first:slot-claim:send]', {
+      gameId: gid,
+      slotId: active.slotId,
+      peerId: selfId || null,
+    })
+  }
+  sendSignalingMessage({
+    type: EAT_FIRST_SLOT_CLAIM_SIGNAL,
+    payload: { slotId: active.slotId, joinToken: active.joinToken, deviceId: finalDeviceId },
+  })
+}
+
 const offEatFirstForceControls = subscribeSignalingMessage((data) => {
   if (!isEatFirstRoute.value) {
     return
   }
   const rec = data as { type?: unknown; payload?: unknown }
+  if (rec.type === 'room-state') {
+    attemptEatFirstSlotClaim()
+    return
+  }
   if (rec.type === EAT_FIRST_HOST_UPDATED_SIGNAL) {
     const payload =
       rec.payload != null && typeof rec.payload === 'object'
@@ -817,54 +879,39 @@ const offEatFirstForceControls = subscribeSignalingMessage((data) => {
         : null
     if (!payload) return
     const revealedRaw =
-      payload.revealedByPeer && typeof payload.revealedByPeer === 'object' && !Array.isArray(payload.revealedByPeer)
-        ? (payload.revealedByPeer as Record<string, unknown>)
+      payload.revealedBySlot && typeof payload.revealedBySlot === 'object' && !Array.isArray(payload.revealedBySlot)
+        ? (payload.revealedBySlot as Record<string, unknown>)
         : {}
     const overridesRaw =
-      payload.overridesByPeer && typeof payload.overridesByPeer === 'object' && !Array.isArray(payload.overridesByPeer)
-        ? (payload.overridesByPeer as Record<string, unknown>)
+      payload.overridesBySlot && typeof payload.overridesBySlot === 'object' && !Array.isArray(payload.overridesBySlot)
+        ? (payload.overridesBySlot as Record<string, unknown>)
         : {}
-    const openedByPlayerRaw =
-      payload.openedByPlayerByPeer &&
-      typeof payload.openedByPlayerByPeer === 'object' &&
-      !Array.isArray(payload.openedByPlayerByPeer)
-        ? (payload.openedByPlayerByPeer as Record<string, unknown>)
+    const openedRaw =
+      payload.openedBySlot && typeof payload.openedBySlot === 'object' && !Array.isArray(payload.openedBySlot)
+        ? (payload.openedBySlot as Record<string, unknown>)
         : {}
-    const nextRevealedByPeer: Record<string, Record<string, boolean>> = { ...eatFirstRevealedByPeer.value }
-    const nextOverridesByPeer: Record<string, Record<string, string>> = { ...eatFirstOverridesByPeer.value }
-    const nextOpenedByPlayerByPeer: Record<string, Record<string, boolean>> = { ...eatFirstOpenedByPlayerByPeer.value }
-    const nextRevealed: Record<number, Record<string, boolean>> = { ...eatFirstShell.revealedTraitsBySeat }
-    const nextOverrides: Record<number, Record<string, string>> = { ...eatFirstShell.traitOverridesBySeat }
-    for (const [peerId, keysUnknown] of Object.entries(revealedRaw)) {
-      const seat = eatFirstSeatByPeer.value.get(peerId)
-      if (seat == null || !Array.isArray(keysUnknown)) continue
-      const row: Record<string, boolean> = {}
-      for (const k of keysUnknown) {
-        if (typeof k === 'string' && k.trim().length > 0) {
-          row[k.trim()] = true
-        }
-      }
-      if (Object.keys(row).length > 0) {
-        nextRevealed[seat] = { ...(nextRevealed[seat] ?? {}), ...row }
-        nextRevealedByPeer[peerId] = { ...(nextRevealedByPeer[peerId] ?? {}), ...row }
-      }
+    const slotByPeerRaw =
+      payload.slotByPeer && typeof payload.slotByPeer === 'object' && !Array.isArray(payload.slotByPeer)
+        ? (payload.slotByPeer as Record<string, unknown>)
+        : {}
+    const nextSlotByPeer: Record<string, string> = {}
+    for (const [peerId, slotUnknown] of Object.entries(slotByPeerRaw)) {
+      if (typeof slotUnknown !== 'string') continue
+      const slot = slotUnknown.trim()
+      if (slot.length < 1) continue
+      nextSlotByPeer[peerId] = slot
     }
-    for (const [peerId, rowUnknown] of Object.entries(overridesRaw)) {
-      const seat = eatFirstSeatByPeer.value.get(peerId)
-      if (seat == null || !rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
-      const row = rowUnknown as Record<string, unknown>
-      const out: Record<string, string> = {}
-      for (const [k, v] of Object.entries(row)) {
-        if (typeof k === 'string' && k.trim().length > 0 && typeof v === 'string' && v.trim().length > 0) {
-          out[k.trim()] = v.trim()
-        }
-      }
-      if (Object.keys(out).length > 0) {
-        nextOverrides[seat] = { ...(nextOverrides[seat] ?? {}), ...out }
-        nextOverridesByPeer[peerId] = { ...(nextOverridesByPeer[peerId] ?? {}), ...out }
-      }
+    eatFirstSlotByPeer.value = nextSlotByPeer
+    if (import.meta.env.DEV) {
+      callPageLog.info('[eat-first:slot-map:update]', {
+        selfPeerId: selfPeerId.value,
+        selfSlotId: selfPeerId.value ? nextSlotByPeer[selfPeerId.value] ?? null : null,
+      })
     }
-    for (const [peerId, keysUnknown] of Object.entries(openedByPlayerRaw)) {
+    const nextRevealedBySlot: Record<string, Record<string, boolean>> = {}
+    const nextOverridesBySlot: Record<string, Record<string, string>> = {}
+    const nextOpenedBySlot: Record<string, Record<string, boolean>> = {}
+    for (const [slotId, keysUnknown] of Object.entries(revealedRaw)) {
       if (!Array.isArray(keysUnknown)) continue
       const row: Record<string, boolean> = {}
       for (const k of keysUnknown) {
@@ -872,15 +919,32 @@ const offEatFirstForceControls = subscribeSignalingMessage((data) => {
           row[k.trim()] = true
         }
       }
-      if (Object.keys(row).length > 0) {
-        nextOpenedByPlayerByPeer[peerId] = { ...(nextOpenedByPlayerByPeer[peerId] ?? {}), ...row }
-      }
+      if (Object.keys(row).length > 0) nextRevealedBySlot[slotId] = row
     }
-    eatFirstRevealedByPeer.value = nextRevealedByPeer
-    eatFirstOverridesByPeer.value = nextOverridesByPeer
-    eatFirstOpenedByPlayerByPeer.value = nextOpenedByPlayerByPeer
-    eatFirstShell.setRevealedTraitsBySeat(nextRevealed)
-    eatFirstShell.setTraitOverridesBySeat(nextOverrides)
+    for (const [slotId, rowUnknown] of Object.entries(overridesRaw)) {
+      if (!rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
+      const row = rowUnknown as Record<string, unknown>
+      const out: Record<string, string> = {}
+      for (const [k, v] of Object.entries(row)) {
+        if (typeof k === 'string' && k.trim().length > 0 && typeof v === 'string' && v.trim().length > 0) {
+          out[k.trim()] = v.trim()
+        }
+      }
+      if (Object.keys(out).length > 0) nextOverridesBySlot[slotId] = out
+    }
+    for (const [slotId, keysUnknown] of Object.entries(openedRaw)) {
+      if (!Array.isArray(keysUnknown)) continue
+      const row: Record<string, boolean> = {}
+      for (const k of keysUnknown) {
+        if (typeof k === 'string' && k.trim().length > 0) {
+          row[k.trim()] = true
+        }
+      }
+      if (Object.keys(row).length > 0) nextOpenedBySlot[slotId] = row
+    }
+    eatFirstRevealedBySlot.value = nextRevealedBySlot
+    eatFirstOverridesBySlot.value = nextOverridesBySlot
+    eatFirstOpenedBySlot.value = nextOpenedBySlot
     return
   }
   if (rec.type === EAT_FIRST_TRAIT_REVEALED_SIGNAL) {
@@ -888,21 +952,40 @@ const offEatFirstForceControls = subscribeSignalingMessage((data) => {
       rec.payload != null && typeof rec.payload === 'object'
         ? (rec.payload as Record<string, unknown>)
         : null
-    const peerId = typeof payload?.peerId === 'string' ? payload.peerId.trim() : ''
+    const slotId = typeof payload?.slotId === 'string' ? payload.slotId.trim() : ''
     const traitKey = typeof payload?.traitKey === 'string' ? payload.traitKey.trim() : ''
     const openedBy = payload?.openedBy === 'host' ? 'host' : 'player'
-    if (!peerId || !traitKey) return
-    const seat = eatFirstSeatByPeer.value.get(peerId)
-    if (seat == null) return
-    eatFirstShell.markTraitRevealedBySeat(seat, traitKey)
-    eatFirstRevealedByPeer.value = {
-      ...eatFirstRevealedByPeer.value,
-      [peerId]: { ...(eatFirstRevealedByPeer.value[peerId] ?? {}), [traitKey]: true },
+    const closed = payload?.closed === true
+    if (!slotId || !traitKey) return
+    if (closed) {
+      const prevRevealed = eatFirstRevealedBySlot.value[slotId]
+      if (prevRevealed && prevRevealed[traitKey]) {
+        const nextRow = { ...prevRevealed }
+        delete nextRow[traitKey]
+        const next = { ...eatFirstRevealedBySlot.value }
+        if (Object.keys(nextRow).length > 0) next[slotId] = nextRow
+        else delete next[slotId]
+        eatFirstRevealedBySlot.value = next
+      }
+      const prevOpened = eatFirstOpenedBySlot.value[slotId]
+      if (prevOpened && prevOpened[traitKey]) {
+        const nextRow = { ...prevOpened }
+        delete nextRow[traitKey]
+        const next = { ...eatFirstOpenedBySlot.value }
+        if (Object.keys(nextRow).length > 0) next[slotId] = nextRow
+        else delete next[slotId]
+        eatFirstOpenedBySlot.value = next
+      }
+      return
+    }
+    eatFirstRevealedBySlot.value = {
+      ...eatFirstRevealedBySlot.value,
+      [slotId]: { ...(eatFirstRevealedBySlot.value[slotId] ?? {}), [traitKey]: true },
     }
     if (openedBy === 'player') {
-      eatFirstOpenedByPlayerByPeer.value = {
-        ...eatFirstOpenedByPlayerByPeer.value,
-        [peerId]: { ...(eatFirstOpenedByPlayerByPeer.value[peerId] ?? {}), [traitKey]: true },
+      eatFirstOpenedBySlot.value = {
+        ...eatFirstOpenedBySlot.value,
+        [slotId]: { ...(eatFirstOpenedBySlot.value[slotId] ?? {}), [traitKey]: true },
       }
     }
     return
@@ -912,17 +995,58 @@ const offEatFirstForceControls = subscribeSignalingMessage((data) => {
       rec.payload != null && typeof rec.payload === 'object'
         ? (rec.payload as Record<string, unknown>)
         : null
-    const peerId = typeof payload?.peerId === 'string' ? payload.peerId.trim() : ''
+    const slotId = typeof payload?.slotId === 'string' ? payload.slotId.trim() : ''
     const traitKey = typeof payload?.traitKey === 'string' ? payload.traitKey.trim() : ''
     const value = typeof payload?.value === 'string' ? payload.value.trim() : ''
-    if (!peerId || !traitKey || !value) return
-    const seat = eatFirstSeatByPeer.value.get(peerId)
-    if (seat == null) return
-    eatFirstShell.setTraitOverrideBySeat(seat, traitKey, value)
-    eatFirstOverridesByPeer.value = {
-      ...eatFirstOverridesByPeer.value,
-      [peerId]: { ...(eatFirstOverridesByPeer.value[peerId] ?? {}), [traitKey]: value },
+    if (!slotId || !traitKey || !value) return
+    eatFirstOverridesBySlot.value = {
+      ...eatFirstOverridesBySlot.value,
+      [slotId]: { ...(eatFirstOverridesBySlot.value[slotId] ?? {}), [traitKey]: value },
     }
+    mergeTraitLineForSlot(slotId, traitKey as EatFirstTraitKey, value)
+    return
+  }
+  if (rec.type === EAT_FIRST_TRAIT_TYPE_REROLLED_SIGNAL) {
+    const payload =
+      rec.payload != null && typeof rec.payload === 'object'
+        ? (rec.payload as Record<string, unknown>)
+        : null
+    const traitKey = typeof payload?.traitKey === 'string' ? payload.traitKey.trim() : ''
+    const valuesBySlotRaw =
+      payload?.valuesBySlot &&
+      typeof payload.valuesBySlot === 'object' &&
+      !Array.isArray(payload.valuesBySlot)
+        ? (payload.valuesBySlot as Record<string, unknown>)
+        : null
+    if (!traitKey || !valuesBySlotRaw) return
+    const next = { ...eatFirstOverridesBySlot.value }
+    for (const [slotId, valueUnknown] of Object.entries(valuesBySlotRaw)) {
+      if (typeof valueUnknown !== 'string') continue
+      const value = valueUnknown.trim()
+      if (value.length < 1) continue
+      next[slotId] = { ...(next[slotId] ?? {}), [traitKey]: value }
+      mergeTraitLineForSlot(slotId, traitKey as EatFirstTraitKey, value)
+    }
+    eatFirstOverridesBySlot.value = next
+    return
+  }
+  if (rec.type === EAT_FIRST_ACTION_CARD_REROLLED_SIGNAL) {
+    const payload =
+      rec.payload != null && typeof rec.payload === 'object'
+        ? (rec.payload as Record<string, unknown>)
+        : null
+    const slotId = typeof payload?.slotId === 'string' ? payload.slotId.trim() : ''
+    const card =
+      payload?.card && typeof payload.card === 'object' && !Array.isArray(payload.card)
+        ? (payload.card as Record<string, unknown>)
+        : null
+    if (!slotId || !card) return
+    const title = typeof card.title === 'string' ? card.title : ''
+    const description = typeof card.description === 'string' ? card.description : ''
+    const templateId = typeof card.templateId === 'string' ? card.templateId : ''
+    const effectId = typeof card.effectId === 'string' ? card.effectId : ''
+    const used = card.used === true
+    eatFirstShell.setActionCardForSlot(slotId, { title, description, templateId, effectId, used })
     return
   }
   if (rec.type !== EAT_FIRST_FORCE_MUTE_ALL_SIGNAL || rec.payload == null || typeof rec.payload !== 'object') return
@@ -937,6 +1061,49 @@ const offEatFirstForceControls = subscribeSignalingMessage((data) => {
 })
 
 onBeforeUnmount(offEatFirstForceControls)
+
+/**
+ * Host-panel <-> CallPage bridge. The panel is rendered as a sibling of
+ * `<CallPage />` (Teleport-d to body from `EatFirstCallPage`), so it cannot
+ * call signaling methods directly. Instead the panel dispatches a typed
+ * `CustomEvent` on `window` and CallPage forwards it through the live socket.
+ * Listener is removed on unmount; only acts when on the Eat First route AND
+ * the local user is the room host (server still re-validates).
+ */
+function onEatFirstHostActionEvent(ev: Event): void {
+  if (!isEatFirstRoute.value) return
+  if (!eatFirstShell.isEatFirstRoomHost) return
+  const detail = (ev as CustomEvent).detail
+  if (!detail || typeof detail !== 'object') return
+  const action = (detail as { action?: unknown }).action
+  if (action === 'trait-type-reroll-all') {
+    const traitKey = (detail as { traitKey?: unknown }).traitKey
+    if (typeof traitKey !== 'string') return
+    sendSignalingMessage({
+      type: EAT_FIRST_TRAIT_TYPE_REROLL_REQUEST_SIGNAL,
+      payload: { traitKey },
+    })
+    return
+  }
+  if (action === 'action-card-reroll') {
+    const slotId = (detail as { slotId?: unknown }).slotId
+    if (typeof slotId !== 'string' || slotId.length < 1) return
+    sendSignalingMessage({
+      type: EAT_FIRST_ACTION_CARD_REROLL_REQUEST_SIGNAL,
+      payload: { slotId },
+    })
+    return
+  }
+}
+
+const EAT_FIRST_HOST_ACTION_EVENT = 'streamassist:eat-first:host-action'
+
+if (typeof window !== 'undefined') {
+  window.addEventListener(EAT_FIRST_HOST_ACTION_EVENT, onEatFirstHostActionEvent)
+  onBeforeUnmount(() => {
+    window.removeEventListener(EAT_FIRST_HOST_ACTION_EVENT, onEatFirstHostActionEvent)
+  })
+}
 
 function onMafiaObsUrlCopiedToast(): void {
   const id = `mafia-obs-${Date.now()}`
@@ -1337,13 +1504,22 @@ const eatFirstSeatByPeer = computed(() => {
   return m
 })
 
+const eatFirstActiveTabSlotId = computed(() => {
+  if (!isEatFirstRoute.value) return ''
+  const gid = typeof route.query?.game === 'string' ? route.query.game.trim() : ''
+  if (!gid) return ''
+  const active = getActiveEatFirstSlotForSession(gid)
+  return active?.slotId ?? ''
+})
+
 function eatFirstTraitsForPeer(peerId: string): string[] {
   if (!isEatFirstRoute.value) return []
-  const seat = eatFirstSeatByPeer.value.get(peerId)
-  if (seat == null) return []
-  const traits = eatFirstShell.traitsBySeat[seat]
-  if (!Array.isArray(traits) || traits.length === 0) return []
-  return traits
+  const slot = eatFirstSlotByPeer.value[peerId]
+  if (typeof slot === 'string' && slot.length > 0) {
+    const bySlot = eatFirstShell.traitsBySlot[slot]
+    if (Array.isArray(bySlot) && bySlot.length > 0) return bySlot
+  }
+  return []
 }
 
 function eatFirstTraitHostView(): boolean {
@@ -1351,50 +1527,181 @@ function eatFirstTraitHostView(): boolean {
 }
 
 function eatFirstTraitOwnerView(peerId: string): boolean {
-  return isEatFirstRoute.value && peerId === selfPeerId.value
+  if (!isEatFirstRoute.value) return false
+  const peerSlot = eatFirstSlotForPeer(peerId)
+  const tabSlot = eatFirstActiveTabSlotId.value
+  const isHost = eatFirstShell.isEatFirstRoomHost
+  const canReveal = Boolean(peerSlot) && (isHost || (tabSlot.length > 0 && peerSlot === tabSlot))
+  if (import.meta.env.DEV) {
+    callPageLog.debug('[eat-first:eye-visibility]', {
+      peerId,
+      peerSlot: peerSlot || null,
+      currentTabSlotId: tabSlot || null,
+      isHost,
+      canReveal,
+    })
+  }
+  return canReveal && !isHost
+}
+
+function eatFirstSlotForPeer(peerId: string): string {
+  if (!isEatFirstRoute.value) return ''
+  const slot = eatFirstSlotByPeer.value[peerId]
+  return typeof slot === 'string' ? slot : ''
+}
+
+function parseEatFirstTraitLine(raw: string): { key: EatFirstTraitKey; value: string } | null {
+  const text = String(raw ?? '').trim()
+  if (!text) return null
+  const pairs: Array<{ key: EatFirstTraitKey; re: RegExp }> = [
+    { key: 'gender', re: /^(стать|gender)\s*[:：-]\s*/i },
+    { key: 'age', re: /^(вік|возраст|age)\s*[:：-]\s*/i },
+    { key: 'profession', re: /^(професія|профессия|profession)\s*[:：-]\s*/i },
+    { key: 'health', re: /^(здоров['’`]?я|здоровье|health)\s*[:：-]\s*/i },
+    { key: 'hobby', re: /^(хобі|хобби|hobby|quirk|особливість)\s*[:：-]\s*/i },
+    { key: 'phobia', re: /^(фобія|фобия|phobia)\s*[:：-]\s*/i },
+    { key: 'fact', re: /^(факт|fact)\s*[:：-]\s*/i },
+    { key: 'baggage', re: /^(багаж|luggage|bag)\s*[:：-]\s*/i },
+  ]
+  for (const pair of pairs) {
+    if (!pair.re.test(text)) continue
+    const value = text.replace(pair.re, '').trim()
+    return { key: pair.key, value }
+  }
+  return null
+}
+
+function eatFirstTraitLabel(key: EatFirstTraitKey): string {
+  const map: Record<EatFirstTraitKey, string> = {
+    gender: 'Стать',
+    age: 'Вік',
+    profession: 'Професія',
+    health: 'Здоров’я',
+    hobby: 'Хобі',
+    phobia: 'Фобія',
+    fact: 'Факт',
+    baggage: 'Багаж',
+  }
+  return map[key]
+}
+
+function mergeTraitLineForSlot(slotId: string, traitKey: EatFirstTraitKey, value: string): void {
+  const sid = String(slotId ?? '').trim()
+  const nextValue = String(value ?? '').trim()
+  if (!sid || !nextValue) return
+  const currentBySlot = eatFirstShell.traitsBySlot
+  const currentLines = Array.isArray(currentBySlot[sid]) ? currentBySlot[sid] : []
+  const parsed = new Map<EatFirstTraitKey, string>()
+  for (const line of currentLines) {
+    const hit = parseEatFirstTraitLine(line)
+    if (!hit || !hit.value) continue
+    parsed.set(hit.key, hit.value)
+  }
+  parsed.set(traitKey, nextValue)
+  const mergedLines: string[] = []
+  for (const key of EAT_FIRST_TRAIT_ORDER) {
+    const traitValue = parsed.get(key)
+    if (!traitValue) continue
+    mergedLines.push(`${eatFirstTraitLabel(key)}: ${traitValue}`)
+  }
+  if (mergedLines.length < 1) return
+  eatFirstShell.setTraitsBySlot({
+    ...currentBySlot,
+    [sid]: mergedLines,
+  })
 }
 
 function eatFirstRevealedTraitsForPeer(peerId: string): string[] {
   if (!isEatFirstRoute.value) return []
-  const byPeer = eatFirstRevealedByPeer.value[peerId]
-  if (!byPeer || typeof byPeer !== 'object') return []
-  return Object.entries(byPeer)
-    .filter(([_, open]) => open === true)
-    .map(([k]) => k)
+  const slot = eatFirstSlotForPeer(peerId)
+  if (!slot) return []
+  const bySlot = eatFirstRevealedBySlot.value[slot]
+  if (!bySlot || typeof bySlot !== 'object') return []
+  const out: string[] = []
+  for (const [k, open] of Object.entries(bySlot)) {
+    if (open === true) out.push(k)
+  }
+  return out
 }
 
 function eatFirstTraitOverridesForPeer(peerId: string): Record<string, string> {
   if (!isEatFirstRoute.value) return {}
-  const byPeer = eatFirstOverridesByPeer.value[peerId]
-  return byPeer && typeof byPeer === 'object' ? byPeer : {}
+  const slot = eatFirstSlotForPeer(peerId)
+  if (!slot) return {}
+  const bySlot = eatFirstOverridesBySlot.value[slot]
+  return bySlot && typeof bySlot === 'object' ? bySlot : {}
 }
 
 function eatFirstOpenedByPlayerTraitsForPeer(peerId: string): string[] {
   if (!isEatFirstRoute.value) return []
-  const byPeer = eatFirstOpenedByPlayerByPeer.value[peerId]
-  if (!byPeer || typeof byPeer !== 'object') return []
-  return Object.entries(byPeer)
-    .filter(([_, open]) => open === true)
-    .map(([k]) => k)
+  const slot = eatFirstSlotForPeer(peerId)
+  if (!slot) return []
+  const bySlot = eatFirstOpenedBySlot.value[slot]
+  if (!bySlot || typeof bySlot !== 'object') return []
+  const out: string[] = []
+  for (const [k, open] of Object.entries(bySlot)) {
+    if (open === true) out.push(k)
+  }
+  return out
 }
 
-function onEatFirstRevealTrait(payload: { peerId: string; traitKey: EatFirstTraitKey }): void {
+function eatFirstActionCardForPeer(peerId: string): {
+  title: string
+  description: string
+  templateId: string
+} | null {
+  if (!isEatFirstRoute.value) return null
+  if (!eatFirstShell.isEatFirstRoomHost) return null
+  const slot = eatFirstSlotForPeer(peerId)
+  if (!slot) return null
+  const card = eatFirstShell.actionCardBySlot[slot]
+  if (!card) return null
+  const title = typeof card.title === 'string' ? card.title : ''
+  if (title.length < 1) return null
+  return {
+    title,
+    description: typeof card.description === 'string' ? card.description : '',
+    templateId: typeof card.templateId === 'string' ? card.templateId : '',
+  }
+}
+
+function onEatFirstRevealTrait(payload: {
+  peerId: string
+  traitKey: EatFirstTraitKey
+  closed?: boolean
+}): void {
   if (!isEatFirstRoute.value) return
   const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
-  if (!peerId) return
+  const slotId = eatFirstSlotForPeer(peerId)
+  if (!slotId) return
+  const close = payload.closed === true
   sendSignalingMessage({
     type: EAT_FIRST_TRAIT_REVEAL_REQUEST_SIGNAL,
-    payload: { peerId, traitKey: payload.traitKey },
+    payload: close
+      ? { slotId, traitKey: payload.traitKey, closed: true }
+      : { slotId, traitKey: payload.traitKey },
   })
 }
 
 function onEatFirstGenerateTrait(payload: { peerId: string; traitKey: EatFirstTraitKey }): void {
   if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) return
   const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
-  if (!peerId) return
+  const slotId = eatFirstSlotForPeer(peerId)
+  if (!slotId) return
   sendSignalingMessage({
     type: EAT_FIRST_TRAIT_REGENERATE_REQUEST_SIGNAL,
-    payload: { peerId, traitKey: payload.traitKey },
+    payload: { slotId, traitKey: payload.traitKey },
+  })
+}
+
+function onEatFirstRerollActionCard(payload: { peerId: string }): void {
+  if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) return
+  const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
+  const slotId = eatFirstSlotForPeer(peerId)
+  if (!slotId) return
+  sendSignalingMessage({
+    type: EAT_FIRST_ACTION_CARD_REROLL_REQUEST_SIGNAL,
+    payload: { slotId },
   })
 }
 
@@ -2410,6 +2717,7 @@ watch(joining, (j) => {
                 :eat-first-revealed-trait-keys="isEatFirstRoute ? eatFirstRevealedTraitsForPeer(row.tile.peerId) : []"
                 :eat-first-trait-overrides="isEatFirstRoute ? eatFirstTraitOverridesForPeer(row.tile.peerId) : {}"
                 :eat-first-opened-by-player-trait-keys="isEatFirstRoute ? eatFirstOpenedByPlayerTraitsForPeer(row.tile.peerId) : []"
+                :eat-first-action-card="isEatFirstRoute ? eatFirstActionCardForPeer(row.tile.peerId) : null"
                 :mafia-elimination-kind="mafiaEliminationAvatarKindForPeerId(row.tile.peerId)"
                 :mafia-elimination-background="mafiaGameStore.eliminationBackgroundForPeer(row.tile.peerId)"
                 :mafia-dead-background-url="isMafiaRoute ? mafiaGameStore.activeDeadBackgroundUrl() : null"
@@ -2433,6 +2741,7 @@ watch(joining, (j) => {
                 @remote-playback-stall="onRemotePlaybackStall"
                 @eat-first-reveal-trait="onEatFirstRevealTrait"
                 @eat-first-generate-trait="onEatFirstGenerateTrait"
+                @eat-first-reroll-action-card="onEatFirstRerollActionCard"
               />
               <button
                 v-if="!mafiaViewUi"

@@ -30,6 +30,14 @@ export class Peer {
   
   mafiaSessionId = ''
   /**
+   * Eat First identity: server-validated slot id (`p1`..`p11`) the peer
+   * claimed via `eat:slot-claim` (gated by `verifyEatFirstSlotAuth`). Host
+   * peers do not occupy a slot and keep this `null`. Used by Eat First
+   * trait-overlay logic to map call peers to authoritative `EatFirstPlayer`
+   * rows; never trusted from the client without slot-auth verification.
+   */
+  eatFirstSlotId: string | null = null
+  /**
    * Set during full-peer removal (`removePeerFromNetwork`) before
    * `closeAllMedia()` is invoked. The `transportclose` listeners installed
    * on producers run synchronously inside `closeAllMedia()` and would each

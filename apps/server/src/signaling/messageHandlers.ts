@@ -22,6 +22,7 @@ import type { MafiaBackgroundItem, MafiaPageBackgroundItem, MafiaPlayerLifeState
 import type { RoomManager } from '../rooms/RoomManager'
 import { MafiaWs } from './mafiaWsProtocol'
 import {
+  EAT_FIRST_ROOM_PREFIX,
   MAFIA_MAX_SEAT,
   isMafiaRoomId,
   isEatFirstRoomId,
@@ -31,6 +32,13 @@ import {
   sanitizeSessionId,
   sanitizeUserId,
 } from './signalingHelpers'
+import { eatFirstMergePlayerAdmin, verifyEatFirstSlotAuth } from '../eatFirst/service'
+import { isEatFirstPlayerSlotId } from '../eatFirst/playerOrder'
+import { normalizeEatFirstSlot } from '../eatFirst/slot'
+import {
+  pickRandomEatFirstActiveCard,
+  type EatFirstActiveCardSnapshot,
+} from '../eatFirst/activeCards'
 
 export { clientMessageSchema, type ClientMessage } from './clientMessageSchema'
 
@@ -174,14 +182,42 @@ export type ServerMessage =
   | { type: 'mafia:force-mute-all'; payload: { muted?: boolean } }
   | { type: 'eat:host-updated'; payload: { hostPeerId: string | null } }
   | { type: 'eat:force-mute-all'; payload: { muted?: boolean } }
-  | { type: 'eat:trait-revealed'; payload: { peerId: string; traitKey: EatFirstTraitKey; openedBy: 'player' | 'host' } }
-  | { type: 'eat:trait-regenerated'; payload: { peerId: string; traitKey: EatFirstTraitKey; value: string } }
+  | {
+      type: 'eat:trait-revealed'
+      payload: {
+        slotId: string
+        traitKey: EatFirstTraitKey
+        openedBy: 'player' | 'host'
+        /** When true the trait was hidden again. Mirrors the open path so clients can run a single shared handler. */
+        closed?: boolean
+      }
+    }
+  | { type: 'eat:trait-regenerated'; payload: { slotId: string; traitKey: EatFirstTraitKey; value: string } }
+  | {
+      /** Whole-table reroll of one trait type. `valuesBySlot` is the new override per slot. */
+      type: 'eat:trait-type-rerolled'
+      payload: { traitKey: EatFirstTraitKey; valuesBySlot: Record<string, string> }
+    }
+  | {
+      type: 'eat:action-card-rerolled'
+      payload: { slotId: string; card: EatFirstActiveCardSnapshot }
+    }
   | {
       type: 'eat:trait-state-sync'
       payload: {
-        revealedByPeer: Record<string, EatFirstTraitKey[]>
-        overridesByPeer: Record<string, Partial<Record<EatFirstTraitKey, string>>>
-        openedByPlayerByPeer: Record<string, EatFirstTraitKey[]>
+        /** slotId → trait keys revealed (visible to every viewer). */
+        revealedBySlot: Record<string, EatFirstTraitKey[]>
+        /** slotId → trait values that overrode the snapshot value (host rerolls). */
+        overridesBySlot: Record<string, Partial<Record<EatFirstTraitKey, string>>>
+        /** slotId → trait keys opened by the player (yellow highlight rule). */
+        openedBySlot: Record<string, EatFirstTraitKey[]>
+        /**
+         * peerId → Eat First slot (`p1..p11`) the peer claimed via `eat:slot-claim`.
+         * Authoritative identity for trait/action-card lookups; missing entries
+         * mean the peer is a viewer/host (no slot). Refreshed on every join/leave
+         * and on every successful slot-claim.
+         */
+        slotByPeer: Record<string, string>
       }
     }
 
@@ -531,7 +567,7 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
     broadcastEatFirstHostUpdated(room)
     broadcastServerMessageToRoom(room, {
       type: 'eat:trait-state-sync',
-      payload: eatFirstTraitStatePayload(room.id),
+      payload: eatFirstTraitStatePayload(room),
     })
   }
   broadcastMafiaHostUpdated(room)
@@ -745,7 +781,7 @@ export async function handleJoinRoom(
     broadcastEatFirstHostUpdated(room)
     sendServerMessage(socket, {
       type: 'eat:trait-state-sync',
-      payload: eatFirstTraitStatePayload(room.id),
+      payload: eatFirstTraitStatePayload(room),
     })
   }
 
@@ -1274,6 +1310,16 @@ export async function handleEatFirstForceMuteAll(
   broadcastServerMessageToRoom(room, { type: 'eat:force-mute-all', payload: { muted } })
 }
 
+/**
+ * Eat First trait state is keyed by **`slotId`** (`p1..p11`), not `peerId`.
+ * Slot id is the persistent identity (`EatFirstPlayer.id`), so reveal/override
+ * state survives a hard refresh: the new peer rebinds via `eat:slot-claim`
+ * and the old reveals re-attach to the same slot.
+ *
+ * Maps live as long as the room has at least one peer (cleared in
+ * `finalizeRoomIfEmpty`); host actions can always start a fresh table by
+ * issuing a `eat:trait-type-reroll-request` for every key.
+ */
 const eatFirstRevealedByRoom = new Map<string, Map<string, Set<EatFirstTraitKey>>>()
 const eatFirstOverridesByRoom = new Map<string, Map<string, Map<EatFirstTraitKey, string>>>()
 const eatFirstOpenedByPlayerByRoom = new Map<string, Map<string, Set<EatFirstTraitKey>>>()
@@ -1305,24 +1351,26 @@ function roomOpenedByPlayerMap(roomId: string): Map<string, Set<EatFirstTraitKey
   return m
 }
 
-function eatFirstTraitStatePayload(roomId: string): {
-  revealedByPeer: Record<string, EatFirstTraitKey[]>
-  overridesByPeer: Record<string, Partial<Record<EatFirstTraitKey, string>>>
-  openedByPlayerByPeer: Record<string, EatFirstTraitKey[]>
+function eatFirstTraitStatePayload(room: Room): {
+  revealedBySlot: Record<string, EatFirstTraitKey[]>
+  overridesBySlot: Record<string, Partial<Record<EatFirstTraitKey, string>>>
+  openedBySlot: Record<string, EatFirstTraitKey[]>
+  slotByPeer: Record<string, string>
 } {
-  const revealMap = roomRevealMap(roomId)
-  const overrideMap = roomOverrideMap(roomId)
-  const openedByPlayerMap = roomOpenedByPlayerMap(roomId)
-  const revealedByPeer: Record<string, EatFirstTraitKey[]> = {}
-  const overridesByPeer: Record<string, Partial<Record<EatFirstTraitKey, string>>> = {}
-  const openedByPlayerByPeer: Record<string, EatFirstTraitKey[]> = {}
-  for (const [peerId, keys] of revealMap) {
+  const revealMap = roomRevealMap(room.id)
+  const overrideMap = roomOverrideMap(room.id)
+  const openedByPlayerMap = roomOpenedByPlayerMap(room.id)
+  const revealedBySlot: Record<string, EatFirstTraitKey[]> = {}
+  const overridesBySlot: Record<string, Partial<Record<EatFirstTraitKey, string>>> = {}
+  const openedBySlot: Record<string, EatFirstTraitKey[]> = {}
+  const slotByPeer: Record<string, string> = {}
+  for (const [slotId, keys] of revealMap) {
     const arr = [...keys]
     if (arr.length > 0) {
-      revealedByPeer[peerId] = arr
+      revealedBySlot[slotId] = arr
     }
   }
-  for (const [peerId, byKey] of overrideMap) {
+  for (const [slotId, byKey] of overrideMap) {
     const row: Partial<Record<EatFirstTraitKey, string>> = {}
     for (const [key, value] of byKey) {
       if (typeof value === 'string' && value.trim().length > 0) {
@@ -1330,78 +1378,298 @@ function eatFirstTraitStatePayload(roomId: string): {
       }
     }
     if (Object.keys(row).length > 0) {
-      overridesByPeer[peerId] = row
+      overridesBySlot[slotId] = row
     }
   }
-  for (const [peerId, keys] of openedByPlayerMap) {
+  for (const [slotId, keys] of openedByPlayerMap) {
     const arr = [...keys]
     if (arr.length > 0) {
-      openedByPlayerByPeer[peerId] = arr
+      openedBySlot[slotId] = arr
     }
   }
-  return { revealedByPeer, overridesByPeer, openedByPlayerByPeer }
+  for (const p of room.getPeers()) {
+    if (typeof p.eatFirstSlotId === 'string' && p.eatFirstSlotId.length > 0) {
+      slotByPeer[p.id] = p.eatFirstSlotId
+    }
+  }
+  return { revealedBySlot, overridesBySlot, openedBySlot, slotByPeer }
 }
 
+/** Strip the `eat:` signaling prefix; the remainder is the persistent Eat First gameId. */
+function eatFirstGameIdFromRoomId(roomId: string): string {
+  return roomId.startsWith(EAT_FIRST_ROOM_PREFIX) ? roomId.slice(EAT_FIRST_ROOM_PREFIX.length) : ''
+}
+
+/**
+ * Bind the call peer to an Eat First slot id (`p1..p11`) after verifying the
+ * client-supplied `joinToken`+`deviceId` against `EatFirstPlayer.data` (mirrors
+ * REST player-action auth in `authorizePlayerAction`). On success rebroadcasts
+ * `eat:trait-state-sync` so every participant sees the refreshed peer→slot map.
+ *
+ * Idempotent: re-claiming the same slot is a no-op; claiming a different slot
+ * for the same peer rebinds (last write wins, both must pass token auth). A
+ * different peer claiming a slot already bound to another peer is rejected to
+ * keep the mapping authoritative.
+ */
+export async function handleEatFirstSlotClaim(
+  socket: WsSocket,
+  payload: { slotId: string; joinToken: string; deviceId: string },
+  deps: SignalingDeps,
+): Promise<void> {
+  const peer = deps.socketPeer.get(socket)
+  if (!peer) return
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room || !isEatFirstRoomId(room.id)) return
+  const gameId = eatFirstGameIdFromRoomId(room.id)
+  if (!gameId) return
+  const slotId = normalizeEatFirstSlot(payload.slotId)
+  if (!isEatFirstPlayerSlotId(slotId)) return
+  const token = typeof payload.joinToken === 'string' ? payload.joinToken.trim() : ''
+  const deviceId = typeof payload.deviceId === 'string' ? payload.deviceId.trim() : ''
+  if (token.length === 0 || deviceId.length === 0) return
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[eat-first:slot-claim:recv]', {
+      roomId: room.id,
+      gameId,
+      peerId: peer.id,
+      slotId,
+    })
+  }
+  const verdict = await verifyEatFirstSlotAuth(gameId, slotId, deviceId, token)
+  if (!verdict.ok) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.info('[eat-first:slot-claim:reject]', {
+        roomId: room.id,
+        gameId,
+        peerId: peer.id,
+        slotId,
+        reason: verdict.reason,
+      })
+    }
+    return
+  }
+  // Reject if a different live peer already holds this slot — the mapping must
+  // stay 1:1 to keep trait/action-card lookups deterministic.
+  for (const other of room.getPeers()) {
+    if (other.id !== peer.id && other.eatFirstSlotId === slotId) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[eat-first:slot-claim:reject]', {
+          roomId: room.id,
+          gameId,
+          peerId: peer.id,
+          slotId,
+          reason: 'slot-occupied',
+          occupiedByPeerId: other.id,
+        })
+      }
+      return
+    }
+  }
+  if (peer.eatFirstSlotId === slotId) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.info('[eat-first:slot-claim:noop]', {
+        roomId: room.id,
+        gameId,
+        peerId: peer.id,
+        slotId,
+      })
+    }
+    return
+  }
+  peer.eatFirstSlotId = slotId
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[eat-first:slot-claim:accept]', {
+      roomId: room.id,
+      gameId,
+      peerId: peer.id,
+      slotId,
+    })
+  }
+  broadcastServerMessageToRoom(room, {
+    type: 'eat:trait-state-sync',
+    payload: eatFirstTraitStatePayload(room),
+  })
+}
+
+/**
+ * Reveal/close one trait for a given slot. Peers may only request their own
+ * slot (`peer.eatFirstSlotId === slotId`); the room host may toggle any slot.
+ * Stale clients still sending peerId-based payloads are silently rejected by
+ * the schema, which keeps the wire shape strict.
+ */
 export function handleEatFirstTraitRevealRequest(
   socket: WsSocket,
-  payload: { peerId: string; traitKey: EatFirstTraitKey },
+  payload: { slotId: string; traitKey: EatFirstTraitKey; closed?: boolean },
   deps: SignalingDeps,
 ): void {
   const rp = resolveEatFirstPeerAndRoom(socket, deps)
   if (!rp) return
   const { peer, room } = rp
-  const targetPeerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
-  if (!targetPeerId) return
+  const slotId = normalizeEatFirstSlot(payload.slotId)
+  if (!isEatFirstPlayerSlotId(slotId)) return
   const traitKey = payload.traitKey
   const isHost = isEatFirstHostPeer(room, peer)
-  if (!isHost && targetPeerId !== peer.id) {
+  if (!isHost && peer.eatFirstSlotId !== slotId) {
     return
   }
-  const target = room.getPeer(targetPeerId)
-  if (!target) return
-  const byPeer = roomRevealMap(room.id)
-  const set = byPeer.get(targetPeerId) ?? new Set<EatFirstTraitKey>()
+  const close = payload.closed === true
+  const revealMap = roomRevealMap(room.id)
+  const set = revealMap.get(slotId) ?? new Set<EatFirstTraitKey>()
+  if (close) {
+    if (!set.has(traitKey)) {
+      return
+    }
+    set.delete(traitKey)
+    if (set.size === 0) {
+      revealMap.delete(slotId)
+    } else {
+      revealMap.set(slotId, set)
+    }
+    const openedBySlot = roomOpenedByPlayerMap(room.id)
+    const openedSet = openedBySlot.get(slotId)
+    if (openedSet) {
+      openedSet.delete(traitKey)
+      if (openedSet.size === 0) {
+        openedBySlot.delete(slotId)
+      } else {
+        openedBySlot.set(slotId, openedSet)
+      }
+    }
+    broadcastServerMessageToRoom(room, {
+      type: 'eat:trait-revealed',
+      payload: { slotId, traitKey, openedBy: isHost ? 'host' : 'player', closed: true },
+    })
+    return
+  }
   if (set.has(traitKey)) {
     return
   }
   set.add(traitKey)
-  byPeer.set(targetPeerId, set)
+  revealMap.set(slotId, set)
   const openedBy: 'player' | 'host' = isHost ? 'host' : 'player'
   if (openedBy === 'player') {
-    const openedByPeer = roomOpenedByPlayerMap(room.id)
-    const openedSet = openedByPeer.get(targetPeerId) ?? new Set<EatFirstTraitKey>()
+    const openedBySlot = roomOpenedByPlayerMap(room.id)
+    const openedSet = openedBySlot.get(slotId) ?? new Set<EatFirstTraitKey>()
     openedSet.add(traitKey)
-    openedByPeer.set(targetPeerId, openedSet)
+    openedBySlot.set(slotId, openedSet)
   }
   broadcastServerMessageToRoom(room, {
     type: 'eat:trait-revealed',
-    payload: { peerId: targetPeerId, traitKey, openedBy },
+    payload: { slotId, traitKey, openedBy },
   })
 }
 
 export function handleEatFirstTraitRegenerateRequest(
   socket: WsSocket,
-  payload: { peerId: string; traitKey: EatFirstTraitKey },
+  payload: { slotId: string; traitKey: EatFirstTraitKey },
   deps: SignalingDeps,
 ): void {
   const rp = resolveEatFirstPeerAndRoom(socket, deps)
   if (!rp) return
   const { peer, room } = rp
   if (!isEatFirstHostPeer(room, peer)) return
-  const targetPeerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
-  if (!targetPeerId) return
-  const target = room.getPeer(targetPeerId)
-  if (!target) return
+  const slotId = normalizeEatFirstSlot(payload.slotId)
+  if (!isEatFirstPlayerSlotId(slotId)) return
   const traitKey = payload.traitKey
   const byPeer = roomOverrideMap(room.id)
-  const row = byPeer.get(targetPeerId) ?? new Map<EatFirstTraitKey, string>()
+  const row = byPeer.get(slotId) ?? new Map<EatFirstTraitKey, string>()
   const nextValue = pickEatFirstTraitValue(traitKey, row.get(traitKey))
   row.set(traitKey, nextValue)
-  byPeer.set(targetPeerId, row)
+  byPeer.set(slotId, row)
   broadcastServerMessageToRoom(room, {
     type: 'eat:trait-regenerated',
-    payload: { peerId: targetPeerId, traitKey, value: nextValue },
+    payload: { slotId, traitKey, value: nextValue },
   })
+}
+
+/**
+ * Reroll one trait type for **every** active slot in the room. Active slots
+ * are derived from `peer.eatFirstSlotId` (set after `eat:slot-claim`); peers
+ * without a slot are skipped — viewer/host tabs never get phantom overrides.
+ *
+ * The new value bypasses the legacy `traitsBySlot` snapshot by going through
+ * the override map, so the host can rotate values mid-game without touching
+ * the persistent player records.
+ */
+export function handleEatFirstTraitTypeRerollRequest(
+  socket: WsSocket,
+  payload: { traitKey: EatFirstTraitKey },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveEatFirstPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isEatFirstHostPeer(room, peer)) return
+  const traitKey = payload.traitKey
+  const byPeer = roomOverrideMap(room.id)
+  const valuesBySlot: Record<string, string> = {}
+  const seen = new Set<string>()
+  for (const p of room.getPeers()) {
+    const slot = p.eatFirstSlotId
+    if (typeof slot !== 'string' || slot.length < 1) continue
+    if (seen.has(slot)) continue
+    seen.add(slot)
+    const row = byPeer.get(slot) ?? new Map<EatFirstTraitKey, string>()
+    const nextValue = pickEatFirstTraitValue(traitKey, row.get(traitKey))
+    row.set(traitKey, nextValue)
+    byPeer.set(slot, row)
+    valuesBySlot[slot] = nextValue
+  }
+  if (Object.keys(valuesBySlot).length < 1) return
+  broadcastServerMessageToRoom(room, {
+    type: 'eat:trait-type-rerolled',
+    payload: { traitKey, valuesBySlot },
+  })
+}
+
+/**
+ * Reroll the action card for one slot, or for every active slot when
+ * `slotId === '*'`. The card snapshot is persisted on `EatFirstPlayer.data`
+ * via `eatFirstMergePlayerAdmin` so the next `efSnapshot` poll surfaces the
+ * fresh card; the signaling broadcast is a fast-path so call tiles update
+ * without waiting for the next poll cycle.
+ */
+export async function handleEatFirstActionCardRerollRequest(
+  socket: WsSocket,
+  payload: { slotId: string },
+  deps: SignalingDeps,
+): Promise<void> {
+  const rp = resolveEatFirstPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isEatFirstHostPeer(room, peer)) return
+  const gameId = eatFirstGameIdFromRoomId(room.id)
+  if (!gameId) return
+  const wantAll = payload.slotId === '*'
+  const targetSlots: string[] = []
+  if (wantAll) {
+    const seen = new Set<string>()
+    for (const p of room.getPeers()) {
+      const slot = p.eatFirstSlotId
+      if (typeof slot !== 'string' || slot.length < 1) continue
+      if (!isEatFirstPlayerSlotId(slot)) continue
+      if (seen.has(slot)) continue
+      seen.add(slot)
+      targetSlots.push(slot)
+    }
+  } else {
+    const slot = normalizeEatFirstSlot(payload.slotId)
+    if (!isEatFirstPlayerSlotId(slot)) return
+    targetSlots.push(slot)
+  }
+  for (const slotId of targetSlots) {
+    const card = pickRandomEatFirstActiveCard()
+    try {
+      await eatFirstMergePlayerAdmin(gameId, slotId, { activeCard: card }, peer.userId || null)
+    } catch {
+      // Persistence failure should not block the rest of a "reroll all" loop.
+      continue
+    }
+    broadcastServerMessageToRoom(room, {
+      type: 'eat:action-card-rerolled',
+      payload: { slotId, card },
+    })
+  }
 }
 
 function broadcastMafiaPlayersUpdate(

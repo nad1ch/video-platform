@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-const props = defineProps<{
+defineProps<{
   gameId: string
   /** i18n key for the role pill */
   roleBadgeKey: string

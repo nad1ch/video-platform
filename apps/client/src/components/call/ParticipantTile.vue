@@ -49,8 +49,9 @@ const emit = defineEmits<{
   'mafia-viewport-layers': [visible: boolean]
   
   'remote-playback-stall': [payload: { peerId: string; stalling: boolean }]
-  'eat-first-reveal-trait': [payload: { peerId: string; traitKey: EatFirstTraitKey }]
+  'eat-first-reveal-trait': [payload: { peerId: string; traitKey: EatFirstTraitKey; closed?: boolean }]
   'eat-first-generate-trait': [payload: { peerId: string; traitKey: EatFirstTraitKey }]
+  'eat-first-reroll-action-card': [payload: { peerId: string }]
 }>()
 
 const props = withDefaults(
@@ -95,6 +96,12 @@ const props = withDefaults(
     eatFirstRevealedTraitKeys?: string[]
     eatFirstTraitOverrides?: Record<string, string>
     eatFirstOpenedByPlayerTraitKeys?: string[]
+    /**
+     * Host-only snapshot of this slot's action card. Regular players never
+     * receive this prop (parent passes `null`); the host UI renders a small
+     * chip below the trait grid with a dice-icon to reroll the card.
+     */
+    eatFirstActionCard?: { title: string; description: string; templateId: string } | null
     
 
 
@@ -135,6 +142,7 @@ const props = withDefaults(
     eatFirstRevealedTraitKeys: () => [],
     eatFirstTraitOverrides: () => ({}),
     eatFirstOpenedByPlayerTraitKeys: () => [],
+    eatFirstActionCard: null,
   },
 )
 
@@ -310,7 +318,6 @@ const eatFirstTraitItems = computed(() =>
     ? props.eatFirstTraits
         .map((v) => String(v ?? '').trim())
         .filter((v) => v.length > 0)
-        .slice(0, 6)
     : [],
 )
 
@@ -453,7 +460,24 @@ function eatFirstValueText(key: EatFirstTraitKey, rawValue: string): string {
 function onEatFirstReveal(key: EatFirstTraitKey, label: string): void {
   if (!canRevealTrait()) return
   const current = eatFirstTraitStateFor(key)
-  if (current === 'pending' || current === 'revealed') return
+  // Toggle: clicking a revealed trait emits a close-request so the server
+  // strips it from `revealedByPeer`/`openedByPlayerByPeer`. The server then
+  // re-broadcasts and the parent CallPage updates `eatFirstRevealedTraitKeys`.
+  if (current === 'revealed') {
+    const t = eatFirstRevealTimers.get(key)
+    if (t != null) {
+      clearTimeout(t)
+      eatFirstRevealTimers.delete(key)
+    }
+    eatFirstRevealState.value = { ...eatFirstRevealState.value, [key]: 'hidden' }
+    emit('eat-first-reveal-trait', {
+      peerId: typeof props.peerId === 'string' ? props.peerId : '',
+      traitKey: key,
+      closed: true,
+    })
+    return
+  }
+  if (current === 'pending') return
   eatFirstRevealState.value = { ...eatFirstRevealState.value, [key]: 'pending' }
   eatFirstToastLabel.value = label
   eatFirstToastVisible.value = true
@@ -494,6 +518,13 @@ function onEatFirstGenerateTrait(key: EatFirstTraitKey): void {
   emit('eat-first-generate-trait', {
     peerId: typeof props.peerId === 'string' ? props.peerId : '',
     traitKey: key,
+  })
+}
+
+function onEatFirstRerollActionCard(): void {
+  if (!isEatFirstTraitHostView()) return
+  emit('eat-first-reroll-action-card', {
+    peerId: typeof props.peerId === 'string' ? props.peerId : '',
   })
 }
 
@@ -1123,6 +1154,37 @@ if (import.meta.env.DEV) {
               </span>
             </button>
           </div>
+        </div>
+
+        <div
+          v-if="
+            isEatFirstTraitHostView() &&
+            eatFirstActionCard != null &&
+            eatFirstActionCard.title.length > 0
+          "
+          class="tile-eat-first-action-card"
+          role="group"
+          aria-label="Активна карта гравця"
+        >
+          <span class="tile-eat-first-action-card__title">
+            {{ eatFirstActionCard.title }}
+          </span>
+          <button
+            type="button"
+            class="tile-eat-first-action-card__btn"
+            :title="'Перекинути активну карту'"
+            :aria-label="'Перекинути активну карту'"
+            @click.stop="onEatFirstRerollActionCard"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+              <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" stroke-width="1.8" />
+              <circle cx="9" cy="9" r="1.3" fill="currentColor" />
+              <circle cx="15" cy="9" r="1.3" fill="currentColor" />
+              <circle cx="12" cy="12" r="1.3" fill="currentColor" />
+              <circle cx="9" cy="15" r="1.3" fill="currentColor" />
+              <circle cx="15" cy="15" r="1.3" fill="currentColor" />
+            </svg>
+          </button>
         </div>
 
         <div v-if="eatFirstToastVisible" class="tile-eat-first-toast" role="status" aria-live="polite">
@@ -1864,6 +1926,70 @@ if (import.meta.env.DEV) {
 .tile-eat-first-card__action-btn--dice:hover {
   border-color: rgb(196 181 253 / 0.62);
   color: rgb(233 213 255 / 0.98);
+}
+
+.tile-eat-first-action-card {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(85%, 22rem);
+  padding: 4px 6px 4px 10px;
+  background: linear-gradient(
+    140deg,
+    rgb(140 99 220 / 0.92) 0%,
+    rgb(98 64 168 / 0.95) 60%,
+    rgb(64 38 124 / 0.95) 100%
+  );
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.25),
+    0 6px 14px rgb(20 8 50 / 0.45);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  pointer-events: auto;
+  z-index: 5;
+}
+
+.tile-eat-first-action-card__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-eat-first-action-card__btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.tile-eat-first-action-card__btn:hover {
+  background: rgb(255 255 255 / 0.24);
+  transform: scale(1.05);
+}
+
+.tile-eat-first-action-card__btn:active {
+  transform: scale(0.96);
 }
 
 .tile-eat-first-toast {
