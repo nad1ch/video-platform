@@ -30,8 +30,11 @@ import {
   handleMafiaForceCameraOff,
   handleMafiaForceMuteAll,
   handleEatFirstForceMuteAll,
+  handleEatFirstSlotClaim,
   handleEatFirstTraitRevealRequest,
   handleEatFirstTraitRegenerateRequest,
+  handleEatFirstTraitTypeRerollRequest,
+  handleEatFirstActionCardRerollRequest,
   handleProduce,
   handleProducerVideoSource,
   handleSetOutboundVideoPaused,
@@ -311,12 +314,24 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               await handleEatFirstForceMuteAll(socket, parsed.data.payload, deps)
               break
             }
+            case 'eat:slot-claim': {
+              await handleEatFirstSlotClaim(socket, parsed.data.payload, deps)
+              break
+            }
             case 'eat:trait-reveal-request': {
               handleEatFirstTraitRevealRequest(socket, parsed.data.payload, deps)
               break
             }
             case 'eat:trait-regenerate-request': {
               handleEatFirstTraitRegenerateRequest(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'eat:trait-type-reroll-request': {
+              handleEatFirstTraitTypeRerollRequest(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'eat:action-card-reroll-request': {
+              await handleEatFirstActionCardRerollRequest(socket, parsed.data.payload, deps)
               break
             }
             case 'request-producer-sync': {

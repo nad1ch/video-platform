@@ -317,15 +317,48 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('eat:trait-reveal-request'),
     payload: z.object({
-      peerId: z.string().min(1),
+      slotId: z.string().regex(/^p([1-9]|1[01])$/),
       traitKey: z.enum(['gender', 'age', 'profession', 'health', 'hobby', 'phobia', 'fact', 'baggage']),
+      closed: z.boolean().optional(),
     }).strict(),
   }),
   z.object({
     type: z.literal('eat:trait-regenerate-request'),
     payload: z.object({
-      peerId: z.string().min(1),
+      slotId: z.string().regex(/^p([1-9]|1[01])$/),
       traitKey: z.enum(['gender', 'age', 'profession', 'health', 'hobby', 'phobia', 'fact', 'baggage']),
+    }).strict(),
+  }),
+  z.object({
+    type: z.literal('eat:trait-type-reroll-request'),
+    payload: z.object({
+      traitKey: z.enum(['gender', 'age', 'profession', 'health', 'hobby', 'phobia', 'fact', 'baggage']),
+    }).strict(),
+  }),
+  /**
+   * Reroll the action card for one slot or for every active slot. `'*'` is
+   * the server-side wildcard for "every slot in the room". Anything else
+   * must match `p1..p11`.
+   */
+  z.object({
+    type: z.literal('eat:action-card-reroll-request'),
+    payload: z.object({
+      slotId: z.union([z.literal('*'), z.string().regex(/^p([1-9]|1[01])$/)]),
+    }).strict(),
+  }),
+  /**
+   * Eat First slot claim: the call peer announces which `EatFirstPlayer`
+   * slot they own. Server validates `joinToken`+`deviceId` against the
+   * stored `EatFirstPlayer.data` (mirrors REST player-action auth) before
+   * binding `peer.eatFirstSlotId`. Sent after `room-state` so the client
+   * already has its peerId; safe to retry on reconnect (idempotent).
+   */
+  z.object({
+    type: z.literal('eat:slot-claim'),
+    payload: z.object({
+      slotId: z.string().regex(/^p([1-9]|1[01])$/),
+      joinToken: z.string().min(1).max(128),
+      deviceId: z.string().min(8).max(128),
     }).strict(),
   }),
 ])

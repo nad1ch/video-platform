@@ -2,6 +2,9 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import mafiaTimerClock from '@/assets/mafia/ui/timer-clock.svg'
+// gameService is JS without TS d.ts; the helpers below already validate input.
+import { clearSpeakingTimer, startSpeakingTimer } from '@/eat-first/services/gameService.js'
+import { createLogger } from '@/utils/logger'
 
 const props = withDefaults(
   defineProps<{
@@ -11,13 +14,16 @@ const props = withDefaults(
     timerStartedAt: string
     timerPaused: boolean
     frozenRemainingSec: number | null
+    gameId: string
   }>(),
   {
     timerStartedAt: '',
+    gameId: '',
   },
 )
 
 const { t } = useI18n()
+const log = createLogger('eat-first:call-timer-strip')
 
 const TIMER_PRESET_SEC = [30, 60, 90, 120] as const
 
@@ -93,12 +99,49 @@ function onSelectPreset(sec: (typeof TIMER_PRESET_SEC)[number]): void {
   selectedPresetSec.value = sec
 }
 
+const timerActionPending = ref(false)
+
+const timerActionLabel = computed(() =>
+  isRunning.value || props.timerPaused
+    ? t('eatFirstCall.timerStopLabel')
+    : t('eatFirstCall.timerStartLabel'),
+)
+
+const timerActionTitle = computed(() =>
+  isRunning.value || props.timerPaused
+    ? t('eatFirstCall.timerStopHint')
+    : t('eatFirstCall.timerStartHint'),
+)
+
+const timerActionDisabled = computed(() => {
+  if (timerActionPending.value) return true
+  if (typeof props.gameId !== 'string' || props.gameId.length < 1) return true
+  return false
+})
+
 /**
- * TODO: Wire to Eat First server timer APIs (`efPatchRoom` / gameService speaking timer)
- * when host timer actions are product-ready. Presets + start/stop must remain server-authoritative.
+ * Host-only start/stop. Persists via `gameService.startSpeakingTimer` /
+ * `clearSpeakingTimer` (PATCH `/games/{id}/room`); the snapshot poller in
+ * `useEatFirstCallGameSnapshot` round-trips the new room fields and the
+ * countdown re-renders for every tab.
  */
-function onTimerActionClick(): void {
-  /* intentionally no-op */
+async function onTimerActionClick(): Promise<void> {
+  if (!props.isEatFirstHost || props.viewMode) return
+  if (typeof props.gameId !== 'string' || props.gameId.length < 1) return
+  if (timerActionPending.value) return
+  timerActionPending.value = true
+  try {
+    if (isRunning.value || props.timerPaused) {
+      await clearSpeakingTimer(props.gameId)
+    } else {
+      const sec = Math.max(1, Math.floor(Number(selectedPresetSec.value) || 30))
+      await startSpeakingTimer(props.gameId, '', sec)
+    }
+  } catch (e) {
+    log.warn('timer action failed', e)
+  } finally {
+    timerActionPending.value = false
+  }
 }
 </script>
 
@@ -143,12 +186,12 @@ function onTimerActionClick(): void {
           <button
             type="button"
             class="sa-chip-btn eat-first-call-timer__action"
-            :title="t('eatFirstCall.timerStartDisabledHint')"
-            :aria-label="t('eatFirstCall.timerStartDisabledHint')"
-            :disabled="true"
+            :title="timerActionTitle"
+            :aria-label="timerActionTitle"
+            :disabled="timerActionDisabled"
             @click="onTimerActionClick"
           >
-            {{ t('eatFirstCall.timerStartLabel') }}
+            {{ timerActionLabel }}
           </button>
         </div>
       </div>

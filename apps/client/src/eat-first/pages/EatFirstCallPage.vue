@@ -52,6 +52,9 @@ watch(
 
 function normalizedTraitValue(data: Record<string, unknown>, key: string): string {
   const chunk = data[key]
+  if (typeof chunk === 'string') {
+    return chunk.trim()
+  }
   if (!chunk || typeof chunk !== 'object' || Array.isArray(chunk)) return ''
   const value = (chunk as { value?: unknown }).value
   return typeof value === 'string' ? value.trim() : ''
@@ -127,6 +130,25 @@ function seatTraitsForPlayer(row: Record<string, unknown>, roomTraits: string[])
   ]
 }
 
+function actionCardFromRow(row: Record<string, unknown>): {
+  title: string
+  description: string
+  templateId: string
+  effectId: string
+  used: boolean
+} | null {
+  const ac = row.activeCard
+  if (!ac || typeof ac !== 'object' || Array.isArray(ac)) return null
+  const r = ac as Record<string, unknown>
+  const title = typeof r.title === 'string' ? r.title.trim() : ''
+  const description = typeof r.description === 'string' ? r.description.trim() : ''
+  const templateId = typeof r.templateId === 'string' ? r.templateId.trim() : ''
+  const effectId = typeof r.effectId === 'string' ? r.effectId.trim() : ''
+  const used = r.used === true
+  if (title.length < 1 && templateId.length < 1) return null
+  return { title, description, templateId, effectId, used }
+}
+
 watch(
   () => [snapshot.value?.players, room.value.playerOrder] as const,
   ([playersRaw, orderRaw]) => {
@@ -145,7 +167,13 @@ watch(
       if (!id) continue
       byId.set(id, row as Record<string, unknown>)
     }
-    const next: Record<number, string[]> = {}
+    const nextSeat: Record<number, string[]> = {}
+    const nextSlot: Record<string, string[]> = {}
+    const nextActionCard: Record<
+      string,
+      { title: string; description: string; templateId: string; effectId: string; used: boolean }
+    > = {}
+    let lastUsed: { slotId: string; title: string; description: string } | null = null
     order.forEach((slotId, index) => {
       const row = byId.get(slotId)
       if (!row) return
@@ -157,11 +185,25 @@ watch(
           .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
           .map((x) => normalizeLegacyTraitText(x))
       })()
-      next[index + 1] = seatTraitsForPlayer(row, fromRoom)
+      const traits = seatTraitsForPlayer(row, fromRoom)
+      nextSeat[index + 1] = traits
+      nextSlot[slotId] = traits
+      const ac = actionCardFromRow(row)
+      if (ac) {
+        nextActionCard[slotId] = ac
+        if (ac.used && ac.title.length > 0) {
+          lastUsed = { slotId, title: ac.title, description: ac.description }
+        }
+      }
     })
-    if (Object.keys(next).length > 0) {
-      eatFirstShell.setTraitsBySeat(next)
+    if (Object.keys(nextSeat).length > 0) {
+      eatFirstShell.setTraitsBySeat(nextSeat)
     }
+    if (Object.keys(nextSlot).length > 0) {
+      eatFirstShell.setTraitsBySlot(nextSlot)
+    }
+    eatFirstShell.setActionCardBySlot(nextActionCard)
+    eatFirstShell.setLastUsedActionCard(lastUsed)
   },
   { immediate: true },
 )
@@ -216,6 +258,7 @@ onUnmounted(() => {
       :timer-started-at="timerRoomFields.startedAt"
       :timer-paused="timerRoomFields.paused"
       :frozen-remaining-sec="timerRoomFields.frozenRemainingSec"
+      :game-id="gameId"
     />
     <EatFirstCallHostPanel
       v-if="showHostPanel"

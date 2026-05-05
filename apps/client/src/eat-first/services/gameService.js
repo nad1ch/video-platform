@@ -27,6 +27,7 @@ import { logListenerDetach } from '../utils/appLogger.js'
 import { getOrCreateDeviceId } from '../utils/deviceId.js'
 import {
   getEatFirstJoinToken,
+  setActiveEatFirstSlotForSession,
   saveEatFirstJoinToken,
 } from '../utils/joinTokenStore.js'
 
@@ -370,6 +371,7 @@ export async function claimPlayerSlot(gameId, playerId, options = {}) {
       
       
       saveEatFirstJoinToken(gid, pid, out.token)
+      setActiveEatFirstSlotForSession(gid, pid, out.token, deviceId)
       return { ok: true, token: out.token }
     }
     if (out && out.ok === false && out.reason) {

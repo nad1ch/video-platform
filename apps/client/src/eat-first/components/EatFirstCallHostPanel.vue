@@ -2,8 +2,10 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import { createLogger } from '@/utils/logger'
 import { efPatchRoom } from '@/eat-first/services/eatFirstTransport'
+import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
 
 const log = createLogger('eat-first:call-host-panel')
 
@@ -16,16 +18,69 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const router = useRouter()
+const eatFirstShell = useEatFirstCallShellStore()
+const { lastUsedActionCard } = storeToRefs(eatFirstShell)
 
 type EfPhaseKey = 'intro' | 'discussion' | 'voting' | 'final'
 const PHASE_KEYS: EfPhaseKey[] = ['intro', 'discussion', 'voting', 'final']
 
-// ── Drag / collapse ────────────────────────────────────────────
-const MIN_W = 281
+type EfTraitKey = 'gender' | 'age' | 'profession' | 'health' | 'hobby' | 'phobia' | 'fact' | 'baggage'
+const TRAIT_KEYS: EfTraitKey[] = [
+  'gender',
+  'age',
+  'profession',
+  'health',
+  'hobby',
+  'phobia',
+  'fact',
+  'baggage',
+]
+
+const EAT_FIRST_HOST_ACTION_EVENT = 'streamassist:eat-first:host-action'
+
+function dispatchHostAction(detail: Record<string, unknown>): void {
+  if (typeof window === 'undefined') return
+  const ev = new CustomEvent(EAT_FIRST_HOST_ACTION_EVENT, { detail })
+  window.dispatchEvent(ev)
+}
+
+function rerollTraitForAll(traitKey: EfTraitKey): void {
+  dispatchHostAction({ action: 'trait-type-reroll-all', traitKey })
+}
+
+function rerollAllActionCards(): void {
+  dispatchHostAction({ action: 'action-card-reroll', slotId: '*' })
+}
+
+const lastUsedCardLine = computed(() => {
+  const card = lastUsedActionCard.value
+  if (!card || typeof card !== 'object') return ''
+  const title = typeof card.title === 'string' ? card.title.trim() : ''
+  const slot = typeof card.slotId === 'string' ? card.slotId.trim() : ''
+  if (title.length < 1) return ''
+  if (slot.length < 1) return title
+  return `${slot.toUpperCase()} · ${title}`
+})
+
+function traitButtonLabel(key: EfTraitKey): string {
+  const map: Record<EfTraitKey, string> = {
+    gender: 'Стать',
+    age: 'Вік',
+    profession: 'Професія',
+    health: 'Здоров’я',
+    hobby: 'Хобі',
+    phobia: 'Фобія',
+    fact: 'Факт',
+    baggage: 'Багаж',
+  }
+  return map[key] ?? key
+}
+
+const MIN_W = 320
 const MARGIN = 8
 const DEFAULT_LEFT_INSET = 70
 const DEFAULT_BOTTOM_INSET = 25
-const PANEL_H = 116
+const PANEL_H = 320
 const PANEL_Z = 38
 
 const collapsed = ref(false)
@@ -280,27 +335,80 @@ async function copyOverlayPageUrl(): Promise<void> {
       </header>
 
       <div class="ef-host-panel__scroller">
-        <div
-          class="ef-host-panel__phase-row"
-          role="group"
-          :aria-label="t('eatFirstCall.hostPhasesAria')"
+        <section
+          class="ef-host-panel__section"
+          :aria-label="'Остання використана карта'"
         >
+          <h3 class="ef-host-panel__section-title">Остання карта</h3>
+          <div class="ef-host-panel__last-card">
+            <span v-if="lastUsedCardLine.length > 0" class="ef-host-panel__last-card-line">
+              {{ lastUsedCardLine }}
+            </span>
+            <span v-else class="ef-host-panel__last-card-empty">— ще ніхто не зіграв карту —</span>
+          </div>
+        </section>
+
+        <section class="ef-host-panel__section" aria-label="Перекинути риси для всіх гравців">
+          <h3 class="ef-host-panel__section-title">Перекинути для всіх</h3>
+          <div class="ef-host-panel__trait-grid">
+            <button
+              v-for="key in TRAIT_KEYS"
+              :key="`reroll-${key}`"
+              type="button"
+              class="ef-host-panel__trait-btn"
+              :title="`Перекинути ${traitButtonLabel(key)} для всіх гравців`"
+              :aria-label="`Перекинути ${traitButtonLabel(key)} для всіх гравців`"
+              @click="rerollTraitForAll(key)"
+            >
+              {{ traitButtonLabel(key) }}
+            </button>
+          </div>
+        </section>
+
+        <section class="ef-host-panel__section" aria-label="Активні карти">
+          <h3 class="ef-host-panel__section-title">Активні карти</h3>
           <button
-            v-for="key in PHASE_KEYS"
-            :key="key"
             type="button"
-            class="ef-host-panel__phase-col h-focus-ring"
-            :class="{ 'ef-host-panel__phase-col--on': isActivePhase(key) }"
-            :disabled="phasePending != null"
-            :aria-pressed="isActivePhase(key)"
-            :aria-label="labelForPhase(key)"
-            :title="labelForPhase(key)"
-            @click="setPhase(key)"
+            class="ef-host-panel__action-card-btn"
+            title="Перекинути активні карти для всіх гравців"
+            @click="rerollAllActionCards"
           >
-            <span class="ef-host-panel__phase-label">{{ labelForPhase(key) }}</span>
-            <span class="ef-host-panel__phase-bar" aria-hidden="true" />
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+              <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" stroke-width="1.8" />
+              <circle cx="9" cy="9" r="1.3" fill="currentColor" />
+              <circle cx="15" cy="9" r="1.3" fill="currentColor" />
+              <circle cx="12" cy="12" r="1.3" fill="currentColor" />
+              <circle cx="9" cy="15" r="1.3" fill="currentColor" />
+              <circle cx="15" cy="15" r="1.3" fill="currentColor" />
+            </svg>
+            <span>Перекинути карти всім</span>
           </button>
-        </div>
+        </section>
+
+        <section class="ef-host-panel__section" aria-label="Фази гри">
+          <h3 class="ef-host-panel__section-title">Фаза</h3>
+          <div
+            class="ef-host-panel__phase-row"
+            role="group"
+            :aria-label="t('eatFirstCall.hostPhasesAria')"
+          >
+            <button
+              v-for="key in PHASE_KEYS"
+              :key="key"
+              type="button"
+              class="ef-host-panel__phase-col h-focus-ring"
+              :class="{ 'ef-host-panel__phase-col--on': isActivePhase(key) }"
+              :disabled="phasePending != null"
+              :aria-pressed="isActivePhase(key)"
+              :aria-label="labelForPhase(key)"
+              :title="labelForPhase(key)"
+              @click="setPhase(key)"
+            >
+              <span class="ef-host-panel__phase-label">{{ labelForPhase(key) }}</span>
+              <span class="ef-host-panel__phase-bar" aria-hidden="true" />
+            </button>
+          </div>
+        </section>
       </div>
     </aside>
   </Teleport>
@@ -420,15 +528,102 @@ async function copyOverlayPageUrl(): Promise<void> {
   background: rgb(84 57 132 / 0.78);
 }
 
-/* ── Phase tab row ───────────────────────────────────────────── */
+/* ── Body ────────────────────────────────────────────────────── */
 .ef-host-panel__scroller {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 0 4px 6px;
+  padding: 6px 8px 10px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  gap: 8px;
   box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.ef-host-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ef-host-panel__section-title {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.ef-host-panel__last-card {
+  padding: 6px 9px;
+  background: rgb(74 50 116 / 0.55);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.25;
+  color: #fff;
+  word-break: break-word;
+}
+
+.ef-host-panel__last-card-line {
+  font-weight: 500;
+}
+
+.ef-host-panel__last-card-empty {
+  color: rgb(255 255 255 / 0.55);
+  font-style: italic;
+}
+
+.ef-host-panel__trait-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.ef-host-panel__trait-btn {
+  padding: 5px 4px;
+  font-size: 10px;
+  line-height: 1.1;
+  text-transform: none;
+  font-weight: 500;
+  color: #fff;
+  background: rgb(74 50 116 / 0.69);
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.1s ease;
+}
+
+.ef-host-panel__trait-btn:hover {
+  background: rgb(102 56 143 / 0.85);
+}
+
+.ef-host-panel__trait-btn:active {
+  transform: scale(0.97);
+}
+
+.ef-host-panel__action-card-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgb(140 99 220 / 0.92), rgb(64 38 124 / 0.95));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.ef-host-panel__action-card-btn:hover {
+  box-shadow: 0 4px 14px rgb(20 8 50 / 0.45);
+}
+
+.ef-host-panel__action-card-btn:active {
+  transform: scale(0.98);
 }
 
 .ef-host-panel__phase-row {

@@ -11,9 +11,39 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
   const hostPeerId = ref<string | null>(null)
   const currentGameId = ref('')
   const playerOrder = ref<string[]>([])
+  /** Legacy seat-keyed mirror; the canonical lookup is `traitsBySlot[slotId]`. */
   const traitsBySeat = ref<Record<number, string[]>>({})
   const revealedTraitsBySeat = ref<Record<number, Record<string, boolean>>>({})
   const traitOverridesBySeat = ref<Record<number, Record<string, string>>>({})
+  /**
+   * Authoritative trait list per slot id (`p1`..`p11`). Populated from the
+   * Eat First snapshot polling; consumed by call-tile overlay through the
+   * peer→slot map broadcast in `eat:trait-state-sync`.
+   */
+  const traitsBySlot = ref<Record<string, string[]>>({})
+  /** Action card snapshot per slot — host-only display in call tiles + host panel. */
+  const actionCardBySlot = ref<
+    Record<
+      string,
+      {
+        title: string
+        description: string
+        templateId: string
+        effectId: string
+        used: boolean
+      }
+    >
+  >({})
+  /**
+   * Last used action card (host panel "Останньо використано"). Snapshot picks
+   * the player with `activeCard.used === true` whose patch was most recently
+   * persisted; pure UI hint, never authoritative game state.
+   */
+  const lastUsedActionCard = ref<{
+    slotId: string
+    title: string
+    description: string
+  } | null>(null)
   const playerCount = ref(0)
   const connectedPlayerCount = ref(0)
 
@@ -55,6 +85,51 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
 
   function setTraitsBySeat(next: Record<number, string[]>): void {
     traitsBySeat.value = next
+  }
+
+  function setTraitsBySlot(next: Record<string, string[]>): void {
+    traitsBySlot.value = next
+  }
+
+  function setActionCardBySlot(
+    next: Record<
+      string,
+      {
+        title: string
+        description: string
+        templateId: string
+        effectId: string
+        used: boolean
+      }
+    >,
+  ): void {
+    actionCardBySlot.value = next
+  }
+
+  /**
+   * Patch a single slot's action card without dropping cards we already
+   * hydrated for other slots — used by the `eat:action-card-rerolled`
+   * signaling fast-path so the host UI updates before the next snapshot poll.
+   */
+  function setActionCardForSlot(
+    slotId: string,
+    card: {
+      title: string
+      description: string
+      templateId: string
+      effectId: string
+      used: boolean
+    },
+  ): void {
+    const sid = String(slotId ?? '').trim()
+    if (sid.length < 1) return
+    actionCardBySlot.value = { ...actionCardBySlot.value, [sid]: card }
+  }
+
+  function setLastUsedActionCard(
+    next: { slotId: string; title: string; description: string } | null,
+  ): void {
+    lastUsedActionCard.value = next
   }
 
   function setRevealedTraitsBySeat(next: Record<number, Record<string, boolean>>): void {
@@ -151,6 +226,9 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
     currentGameId,
     playerOrder,
     traitsBySeat,
+    traitsBySlot,
+    actionCardBySlot,
+    lastUsedActionCard,
     revealedTraitsBySeat,
     traitOverridesBySeat,
     playerCount,
@@ -162,6 +240,10 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
     setGameId,
     setPlayerOrder,
     setTraitsBySeat,
+    setTraitsBySlot,
+    setActionCardBySlot,
+    setActionCardForSlot,
+    setLastUsedActionCard,
     setRevealedTraitsBySeat,
     setTraitOverridesBySeat,
     markTraitRevealedBySeat,
