@@ -22,6 +22,18 @@ const tileLog = createLogger('participant-tile')
 
 const { t } = useI18n()
 
+type EatFirstTraitKey =
+  | 'gender'
+  | 'age'
+  | 'profession'
+  | 'health'
+  | 'hobby'
+  | 'phobia'
+  | 'fact'
+  | 'baggage'
+
+type EatFirstRevealState = 'hidden' | 'pending' | 'revealed'
+
 const emit = defineEmits<{
   'update:listenVolume': [value: number]
   'update:listenMuted': [value: boolean]
@@ -37,6 +49,8 @@ const emit = defineEmits<{
   'mafia-viewport-layers': [visible: boolean]
   
   'remote-playback-stall': [payload: { peerId: string; stalling: boolean }]
+  'eat-first-reveal-trait': [payload: { peerId: string; traitKey: EatFirstTraitKey }]
+  'eat-first-generate-trait': [payload: { peerId: string; traitKey: EatFirstTraitKey }]
 }>()
 
 const props = withDefaults(
@@ -75,6 +89,12 @@ const props = withDefaults(
     avatarUrl?: string
     
     mafiaSeatIndex?: number
+    eatFirstTraits?: string[]
+    eatFirstTraitHostView?: boolean
+    eatFirstTraitOwnerView?: boolean
+    eatFirstRevealedTraitKeys?: string[]
+    eatFirstTraitOverrides?: Record<string, string>
+    eatFirstOpenedByPlayerTraitKeys?: string[]
     
 
 
@@ -110,6 +130,11 @@ const props = withDefaults(
     mafiaLayerViewportObserve: false,
     videoPlaybackSuppressed: false,
     rowSpeaking: false,
+    eatFirstTraitHostView: false,
+    eatFirstTraitOwnerView: false,
+    eatFirstRevealedTraitKeys: () => [],
+    eatFirstTraitOverrides: () => ({}),
+    eatFirstOpenedByPlayerTraitKeys: () => [],
   },
 )
 
@@ -273,11 +298,204 @@ onUnmounted(() => {
     document.removeEventListener('pointerdown', onDocPointerDown, true)
   }
   clearSplitHolder(audioSplitStream)
+  clearEatFirstTimers()
 })
 
 const showMafiaSeat = computed(
   () => typeof props.mafiaSeatIndex === 'number' && props.mafiaSeatIndex > 0,
 )
+
+const eatFirstTraitItems = computed(() =>
+  Array.isArray(props.eatFirstTraits)
+    ? props.eatFirstTraits
+        .map((v) => String(v ?? '').trim())
+        .filter((v) => v.length > 0)
+        .slice(0, 6)
+    : [],
+)
+
+const EAT_FIRST_TRAIT_LABELS: Record<EatFirstTraitKey, string> = {
+  gender: 'Стать',
+  age: 'Вік',
+  profession: 'Професія',
+  health: 'Здоровʼя',
+  hobby: 'Хобі',
+  phobia: 'Фобія',
+  fact: 'Факт',
+  baggage: 'Багаж',
+}
+
+const EAT_FIRST_INDEX_FALLBACK: EatFirstTraitKey[] = ['profession', 'health', 'phobia', 'baggage', 'fact', 'hobby']
+const EAT_FIRST_REVEAL_DELAY_MS = 3000
+
+const eatFirstRevealState = ref<Partial<Record<EatFirstTraitKey, EatFirstRevealState>>>({})
+const eatFirstRevealTimers = new Map<EatFirstTraitKey, ReturnType<typeof setTimeout>>()
+const eatFirstToastVisible = ref(false)
+const eatFirstToastLabel = ref('')
+let eatFirstToastTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearEatFirstTimers(): void {
+  for (const timer of eatFirstRevealTimers.values()) {
+    clearTimeout(timer)
+  }
+  eatFirstRevealTimers.clear()
+  if (eatFirstToastTimer != null) {
+    clearTimeout(eatFirstToastTimer)
+    eatFirstToastTimer = null
+  }
+}
+
+function normalizeTraitLineValue(raw: string): string {
+  const text = String(raw ?? '').trim()
+  if (!text) return ''
+  return text.replace(/\s+/g, ' ')
+}
+
+function parseEatFirstTraits(lines: string[]): Partial<Record<EatFirstTraitKey, string>> {
+  const out: Partial<Record<EatFirstTraitKey, string>> = {}
+  const matchers: Array<{ key: EatFirstTraitKey; pattern: RegExp }> = [
+    { key: 'gender', pattern: /^(стать|gender)\s*[:：-]\s*/i },
+    { key: 'age', pattern: /^(вік|возраст|age)\s*[:：-]\s*/i },
+    { key: 'profession', pattern: /^(професія|профессия|profession)\s*[:：-]\s*/i },
+    { key: 'health', pattern: /^(здоров['’`]?я|здоровье|health)\s*[:：-]\s*/i },
+    { key: 'hobby', pattern: /^(хобі|хобби|hobby|quirk|особливість)\s*[:：-]\s*/i },
+    { key: 'phobia', pattern: /^(фобія|фобия|phobia)\s*[:：-]\s*/i },
+    { key: 'fact', pattern: /^(факт|fact)\s*[:：-]\s*/i },
+    { key: 'baggage', pattern: /^(багаж|luggage|bag)\s*[:：-]\s*/i },
+  ]
+  lines.forEach((line, index) => {
+    const text = normalizeTraitLineValue(line)
+    if (!text) return
+    for (const { key, pattern } of matchers) {
+      if (pattern.test(text)) {
+        out[key] = text.replace(pattern, '').trim() || 'Невідомо'
+        return
+      }
+    }
+    const fallbackKey = EAT_FIRST_INDEX_FALLBACK[index]
+    if (fallbackKey && !out[fallbackKey]) {
+      out[fallbackKey] = text
+    }
+  })
+  return out
+}
+
+const eatFirstTraitValues = computed(() => parseEatFirstTraits(eatFirstTraitItems.value))
+
+const eatFirstTraitsBySection = computed(() => {
+  const values = eatFirstTraitValues.value
+  return {
+    top: [
+      { key: 'gender' as const, label: EAT_FIRST_TRAIT_LABELS.gender, value: values.gender ?? 'Невідомо' },
+      { key: 'age' as const, label: EAT_FIRST_TRAIT_LABELS.age, value: values.age ?? 'Невідомо' },
+    ],
+    left: [
+      { key: 'profession' as const, label: EAT_FIRST_TRAIT_LABELS.profession, value: values.profession ?? 'Невідомо' },
+      { key: 'health' as const, label: EAT_FIRST_TRAIT_LABELS.health, value: values.health ?? 'Невідомо' },
+      { key: 'hobby' as const, label: EAT_FIRST_TRAIT_LABELS.hobby, value: values.hobby ?? 'Невідомо' },
+    ],
+    right: [
+      { key: 'phobia' as const, label: EAT_FIRST_TRAIT_LABELS.phobia, value: values.phobia ?? 'Невідомо' },
+      { key: 'fact' as const, label: EAT_FIRST_TRAIT_LABELS.fact, value: values.fact ?? 'Невідомо' },
+      { key: 'baggage' as const, label: EAT_FIRST_TRAIT_LABELS.baggage, value: values.baggage ?? 'Невідомо' },
+    ],
+  }
+})
+
+watch(
+  () => [props.peerId, eatFirstTraitItems.value.join('\u0000')] as const,
+  () => {
+    clearEatFirstTimers()
+    eatFirstRevealState.value = {}
+    eatFirstToastVisible.value = false
+    eatFirstToastLabel.value = ''
+  },
+)
+
+function isEatFirstTraitOwnerView(): boolean {
+  return props.eatFirstTraitOwnerView === true && !props.streamViewMode
+}
+
+function isEatFirstTraitHostView(): boolean {
+  return props.eatFirstTraitHostView === true && !props.streamViewMode
+}
+
+function canRevealTrait(): boolean {
+  return isEatFirstTraitOwnerView() || isEatFirstTraitHostView()
+}
+
+function canGenerateTrait(): boolean {
+  return isEatFirstTraitHostView()
+}
+
+function eatFirstTraitStateFor(key: EatFirstTraitKey): EatFirstRevealState {
+  if (Array.isArray(props.eatFirstRevealedTraitKeys) && props.eatFirstRevealedTraitKeys.includes(key)) {
+    return 'revealed'
+  }
+  return eatFirstRevealState.value[key] ?? 'hidden'
+}
+
+function eatFirstCanRevealValue(key: EatFirstTraitKey): boolean {
+  if (props.eatFirstTraitHostView || props.eatFirstTraitOwnerView) return true
+  return eatFirstTraitStateFor(key) === 'revealed'
+}
+
+function eatFirstValueText(key: EatFirstTraitKey, rawValue: string): string {
+  const override =
+    props.eatFirstTraitOverrides && typeof props.eatFirstTraitOverrides === 'object'
+      ? props.eatFirstTraitOverrides[key]
+      : ''
+  const effectiveValue = typeof override === 'string' && override.trim().length > 0 ? override.trim() : rawValue
+  if (eatFirstCanRevealValue(key)) return effectiveValue || '*********'
+  return '*********'
+}
+
+function onEatFirstReveal(key: EatFirstTraitKey, label: string): void {
+  if (!canRevealTrait()) return
+  const current = eatFirstTraitStateFor(key)
+  if (current === 'pending' || current === 'revealed') return
+  eatFirstRevealState.value = { ...eatFirstRevealState.value, [key]: 'pending' }
+  eatFirstToastLabel.value = label
+  eatFirstToastVisible.value = true
+  if (eatFirstToastTimer != null) {
+    clearTimeout(eatFirstToastTimer)
+  }
+  eatFirstToastTimer = setTimeout(() => {
+    eatFirstToastVisible.value = false
+    eatFirstToastTimer = null
+  }, EAT_FIRST_REVEAL_DELAY_MS)
+  const existing = eatFirstRevealTimers.get(key)
+  if (existing != null) {
+    clearTimeout(existing)
+  }
+  const timer = setTimeout(() => {
+    eatFirstRevealState.value = { ...eatFirstRevealState.value, [key]: 'revealed' }
+    eatFirstRevealTimers.delete(key)
+    emit('eat-first-reveal-trait', {
+      peerId: typeof props.peerId === 'string' ? props.peerId : '',
+      traitKey: key,
+    })
+  }, EAT_FIRST_REVEAL_DELAY_MS)
+  eatFirstRevealTimers.set(key, timer)
+}
+
+function isOwnerOpenedGoldAccent(key: EatFirstTraitKey): boolean {
+  if (eatFirstTraitStateFor(key) !== 'revealed') return false
+  const openedByPlayer =
+    Array.isArray(props.eatFirstOpenedByPlayerTraitKeys) && props.eatFirstOpenedByPlayerTraitKeys.includes(key)
+  if (!openedByPlayer) return false
+  if (isEatFirstTraitOwnerView()) return true
+  if (isEatFirstTraitHostView()) return true
+  return false
+}
+
+function onEatFirstGenerateTrait(key: EatFirstTraitKey): void {
+  if (!canGenerateTrait()) return
+  emit('eat-first-generate-trait', {
+    peerId: typeof props.peerId === 'string' ? props.peerId : '',
+    traitKey: key,
+  })
+}
 
 
 const mafiaCallPrimaryLine = computed(() => {
@@ -617,6 +835,303 @@ if (import.meta.env.DEV) {
     :style="mafiaDeadBackgroundStyle"
   >
     <div class="tile-media">
+      <div v-if="eatFirstTraitItems.length > 0" class="tile-eat-first-overlay" aria-hidden="false">
+        <div class="tile-eat-first-overlay__top">
+          <button
+            v-for="item in eatFirstTraitsBySection.top"
+            :key="`eatf-top-${item.key}`"
+            type="button"
+            class="tile-eat-first-card tile-eat-first-card--mini"
+            :class="{
+              'tile-eat-first-card--pending': eatFirstTraitStateFor(item.key) === 'pending',
+              'tile-eat-first-card--revealed': eatFirstTraitStateFor(item.key) === 'revealed',
+              'tile-eat-first-card--owner-opened': isOwnerOpenedGoldAccent(item.key),
+            }"
+            :disabled="!canRevealTrait()"
+            @click.stop="onEatFirstReveal(item.key, item.label)"
+          >
+            <span class="tile-eat-first-card__icon" aria-hidden="true">
+              <svg
+                v-if="item.key === 'gender'"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+              >
+                <path d="M15 3h6v6" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M21 3l-5 5" stroke-linecap="round" stroke-linejoin="round" />
+                <circle cx="10" cy="14" r="5" />
+              </svg>
+              <svg
+                v-else
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+              >
+                <rect x="3.5" y="5.5" width="17" height="15" rx="2.2" />
+                <path d="M8 3.5v4M16 3.5v4M3.5 10.5h17" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <span class="tile-eat-first-card__main">
+              <span class="tile-eat-first-card__title">{{ item.label.toUpperCase() }}</span>
+              <span class="tile-eat-first-card__value">{{ eatFirstValueText(item.key, item.value) }}</span>
+            </span>
+            <span v-if="canRevealTrait()" class="tile-eat-first-card__actions" aria-hidden="true">
+              <button
+                v-if="canGenerateTrait()"
+                type="button"
+                class="tile-eat-first-card__action-btn tile-eat-first-card__action-btn--dice"
+                @click.stop="onEatFirstGenerateTrait(item.key)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <rect x="5" y="5" width="14" height="14" rx="2.4" />
+                  <circle cx="9" cy="9" r="1.1" fill="currentColor" stroke="none" />
+                  <circle cx="15" cy="15" r="1.1" fill="currentColor" stroke="none" />
+                  <circle cx="9" cy="15" r="1.1" fill="currentColor" stroke="none" />
+                  <circle cx="15" cy="9" r="1.1" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+              <span class="tile-eat-first-card__eye">
+              <svg
+                v-if="eatFirstTraitStateFor(item.key) !== 'hidden' || eatFirstCanRevealValue(item.key)"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+              >
+                <path d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z" />
+                <circle cx="12" cy="12" r="3.2" />
+              </svg>
+              <svg
+                v-else
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+              >
+                <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M10.8 6.1A12.6 12.6 0 0 1 12 5.8c6.7 0 10.5 6.2 10.5 6.2a18 18 0 0 1-3.1 3.9" />
+                <path d="M14.2 14.2a3.2 3.2 0 0 1-4.4-4.4" />
+                <path d="M6.1 8.1A18.8 18.8 0 0 0 1.5 12s3.8 6.2 10.5 6.2a12.6 12.6 0 0 0 3.3-.4" />
+              </svg>
+            </span>
+            </span>
+          </button>
+        </div>
+
+        <div class="tile-eat-first-overlay__columns">
+          <div class="tile-eat-first-overlay__column tile-eat-first-overlay__column--left">
+            <button
+              v-for="item in eatFirstTraitsBySection.left"
+              :key="`eatf-left-${item.key}`"
+              type="button"
+              class="tile-eat-first-card"
+              :class="{
+                'tile-eat-first-card--pending': eatFirstTraitStateFor(item.key) === 'pending',
+                'tile-eat-first-card--revealed': eatFirstTraitStateFor(item.key) === 'revealed',
+                'tile-eat-first-card--owner-opened': isOwnerOpenedGoldAccent(item.key),
+              }"
+              :disabled="!canRevealTrait()"
+              @click.stop="onEatFirstReveal(item.key, item.label)"
+            >
+              <span class="tile-eat-first-card__icon" aria-hidden="true">
+                <svg
+                  v-if="item.key === 'profession'"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <rect x="3.5" y="7" width="17" height="12" rx="2.2" />
+                  <path d="M9 7V5.5h6V7M3.5 11.5h17" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <svg
+                  v-else-if="item.key === 'health'"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <path
+                    d="M3 12h3l2-3 3 7 2-4h3l2-3 3 3"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <svg
+                  v-else
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <path d="M6 9.5h12M7 9.5V8a2 2 0 1 1 4 0v1.5M13 9.5V8a2 2 0 1 1 4 0v1.5" />
+                  <rect x="4" y="9.5" width="16" height="9.5" rx="3" />
+                  <path d="M9.5 14h5" stroke-linecap="round" />
+                </svg>
+              </span>
+              <span class="tile-eat-first-card__main">
+                <span class="tile-eat-first-card__title">{{ item.label.toUpperCase() }}</span>
+                <span class="tile-eat-first-card__value">{{ eatFirstValueText(item.key, item.value) }}</span>
+              </span>
+              <span v-if="canRevealTrait()" class="tile-eat-first-card__actions" aria-hidden="true">
+                <button
+                  v-if="canGenerateTrait()"
+                  type="button"
+                  class="tile-eat-first-card__action-btn tile-eat-first-card__action-btn--dice"
+                  @click.stop="onEatFirstGenerateTrait(item.key)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <rect x="5" y="5" width="14" height="14" rx="2.4" />
+                    <circle cx="9" cy="9" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="15" cy="15" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="9" cy="15" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="15" cy="9" r="1.1" fill="currentColor" stroke="none" />
+                  </svg>
+                </button>
+                <span class="tile-eat-first-card__eye">
+                <svg
+                  v-if="eatFirstTraitStateFor(item.key) !== 'hidden' || eatFirstCanRevealValue(item.key)"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <path d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z" />
+                  <circle cx="12" cy="12" r="3.2" />
+                </svg>
+                <svg
+                  v-else
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M10.8 6.1A12.6 12.6 0 0 1 12 5.8c6.7 0 10.5 6.2 10.5 6.2a18 18 0 0 1-3.1 3.9" />
+                  <path d="M14.2 14.2a3.2 3.2 0 0 1-4.4-4.4" />
+                  <path d="M6.1 8.1A18.8 18.8 0 0 0 1.5 12s3.8 6.2 10.5 6.2a12.6 12.6 0 0 0 3.3-.4" />
+                </svg>
+              </span>
+              </span>
+            </button>
+          </div>
+
+          <div class="tile-eat-first-overlay__column tile-eat-first-overlay__column--right">
+            <button
+              v-for="item in eatFirstTraitsBySection.right"
+              :key="`eatf-right-${item.key}`"
+              type="button"
+              class="tile-eat-first-card"
+              :class="{
+                'tile-eat-first-card--pending': eatFirstTraitStateFor(item.key) === 'pending',
+                'tile-eat-first-card--revealed': eatFirstTraitStateFor(item.key) === 'revealed',
+                'tile-eat-first-card--owner-opened': isOwnerOpenedGoldAccent(item.key),
+              }"
+              :disabled="!canRevealTrait()"
+              @click.stop="onEatFirstReveal(item.key, item.label)"
+            >
+              <span class="tile-eat-first-card__icon" aria-hidden="true">
+                <svg
+                  v-if="item.key === 'phobia'"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <circle cx="12" cy="12" r="2.3" />
+                  <path d="M12 4v3M12 17v3M4 12h3M17 12h3M6.2 6.2l2.1 2.1M15.7 15.7l2.1 2.1M17.8 6.2l-2.1 2.1M8.3 15.7l-2.1 2.1" />
+                </svg>
+                <svg
+                  v-else-if="item.key === 'fact'"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <path d="M12 3l1.9 4.1L18 9l-4.1 1.9L12 15l-1.9-4.1L6 9l4.1-1.9Z" />
+                </svg>
+                <svg
+                  v-else
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <rect x="5" y="8" width="14" height="11" rx="2.2" />
+                  <path d="M9 8V6h6v2M12 11.5v4M10 13.5h4" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="tile-eat-first-card__main">
+                <span class="tile-eat-first-card__title">{{ item.label.toUpperCase() }}</span>
+                <span class="tile-eat-first-card__value">{{ eatFirstValueText(item.key, item.value) }}</span>
+              </span>
+              <span v-if="canRevealTrait()" class="tile-eat-first-card__actions" aria-hidden="true">
+                <button
+                  v-if="canGenerateTrait()"
+                  type="button"
+                  class="tile-eat-first-card__action-btn tile-eat-first-card__action-btn--dice"
+                  @click.stop="onEatFirstGenerateTrait(item.key)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <rect x="5" y="5" width="14" height="14" rx="2.4" />
+                    <circle cx="9" cy="9" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="15" cy="15" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="9" cy="15" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="15" cy="9" r="1.1" fill="currentColor" stroke="none" />
+                  </svg>
+                </button>
+                <span class="tile-eat-first-card__eye">
+                <svg
+                  v-if="eatFirstTraitStateFor(item.key) !== 'hidden' || eatFirstCanRevealValue(item.key)"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <path d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z" />
+                  <circle cx="12" cy="12" r="3.2" />
+                </svg>
+                <svg
+                  v-else
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M10.8 6.1A12.6 12.6 0 0 1 12 5.8c6.7 0 10.5 6.2 10.5 6.2a18 18 0 0 1-3.1 3.9" />
+                  <path d="M14.2 14.2a3.2 3.2 0 0 1-4.4-4.4" />
+                  <path d="M6.1 8.1A18.8 18.8 0 0 0 1.5 12s3.8 6.2 10.5 6.2a12.6 12.6 0 0 0 3.3-.4" />
+                </svg>
+              </span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="eatFirstToastVisible" class="tile-eat-first-toast" role="status" aria-live="polite">
+          <p class="tile-eat-first-toast__line">
+            Ти відкриваєш: <span class="tile-eat-first-toast__accent">{{ eatFirstToastLabel }}</span>
+          </p>
+          <p class="tile-eat-first-toast__line">Інші гравці побачать через 3 сек.</p>
+        </div>
+      </div>
       <!-- v-memo: label/speaking zoom/etc. must not re-patch WebRTC elements when only metadata changes. -->
       <StreamAudio
         v-if="!isLocal && audioSplitStream"
@@ -682,10 +1197,12 @@ if (import.meta.env.DEV) {
               aria-hidden="true"
               >{{ mafiaRoleLabel }}</span
             >
-            <span
-              class="tile-overlay__display-name"
-              :class="{ 'tile-overlay__display-name--editable': !streamViewMode }"
-            >{{ mafiaCallPrimaryLine }}</span>
+            <span class="tile-overlay__identity">
+              <span
+                class="tile-overlay__display-name"
+                :class="{ 'tile-overlay__display-name--editable': !streamViewMode }"
+              >{{ mafiaCallPrimaryLine }}</span>
+            </span>
           </div>
           <div v-else class="tile-overlay__name-edit">
             <span v-if="showMafiaSeat" class="tile-overlay__seat-badge" aria-hidden="true">{{ mafiaSeatIndex }}</span>
@@ -789,10 +1306,12 @@ if (import.meta.env.DEV) {
               aria-hidden="true"
               >{{ mafiaRoleLabel }}</span
             >
-            <span
-              class="tile-overlay__display-name"
-              :class="{ 'tile-overlay__display-name--editable': !streamViewMode }"
-            >{{ mafiaCallPrimaryLine }}</span>
+            <span class="tile-overlay__identity">
+              <span
+                class="tile-overlay__display-name"
+                :class="{ 'tile-overlay__display-name--editable': !streamViewMode }"
+              >{{ mafiaCallPrimaryLine }}</span>
+            </span>
           </div>
           <div v-else class="tile-overlay__name-edit">
             <span v-if="showMafiaSeat" class="tile-overlay__seat-badge" aria-hidden="true">{{ mafiaSeatIndex }}</span>
@@ -1176,6 +1695,208 @@ if (import.meta.env.DEV) {
   }
 }
 
+.tile-eat-first-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  padding: 7px;
+  border-radius: 14px;
+  border: 1px solid rgb(168 85 247 / 0.34);
+  box-shadow:
+    inset 0 0 0 1px rgb(168 85 247 / 0.08),
+    0 0 16px rgb(88 28 135 / 0.16);
+  pointer-events: none;
+}
+
+.tile-eat-first-overlay__top {
+  position: absolute;
+  left: 7px;
+  top: 6px;
+  display: flex;
+  gap: 6px;
+  max-width: calc(62% - 10px);
+}
+
+.tile-eat-first-overlay__columns {
+  position: absolute;
+  inset: auto 7px 48px 7px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 14%;
+}
+
+.tile-eat-first-overlay__column {
+  width: min(36%, 170px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tile-eat-first-overlay__column--right {
+  align-items: flex-end;
+}
+
+.tile-eat-first-card {
+  pointer-events: auto;
+  width: 100%;
+  min-height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgb(168 85 247 / 0.33);
+  background: linear-gradient(135deg, rgb(13 8 28 / 0.87), rgb(8 5 20 / 0.8));
+  box-shadow:
+    0 2px 12px rgb(0 0 0 / 0.35),
+    inset 0 0 0 1px rgb(255 255 255 / 0.03);
+  color: rgb(237 233 254 / 0.96);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  padding: 5px 7px;
+}
+
+.tile-eat-first-card--mini {
+  width: 94px;
+  min-height: 40px;
+}
+
+.tile-eat-first-card--pending {
+  border-color: rgb(250 204 21 / 0.62);
+  box-shadow:
+    0 0 12px rgb(250 204 21 / 0.22),
+    0 2px 12px rgb(0 0 0 / 0.35);
+}
+
+.tile-eat-first-card--revealed {
+  border-color: rgb(168 85 247 / 0.62);
+  box-shadow:
+    0 0 14px rgb(168 85 247 / 0.26),
+    0 2px 12px rgb(0 0 0 / 0.35);
+}
+
+.tile-eat-first-card--owner-opened {
+  border-color: rgb(250 204 21 / 0.68);
+  box-shadow:
+    0 0 14px rgb(250 204 21 / 0.28),
+    0 2px 12px rgb(0 0 0 / 0.35);
+}
+
+.tile-eat-first-card:disabled {
+  cursor: default;
+}
+
+.tile-eat-first-card__icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: rgb(192 132 252 / 0.95);
+}
+
+.tile-eat-first-card__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.tile-eat-first-card__main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tile-eat-first-card__title {
+  font-size: 0.46rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  color: rgb(196 181 253 / 0.95);
+}
+
+.tile-eat-first-card__value {
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.12;
+  color: rgb(248 250 252 / 0.98);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tile-eat-first-card__eye {
+  width: 18px;
+  height: 18px;
+  color: rgb(248 250 252 / 0.86);
+  flex-shrink: 0;
+}
+
+.tile-eat-first-card__eye svg {
+  width: 100%;
+  height: 100%;
+}
+
+.tile-eat-first-card__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.tile-eat-first-card__action-btn {
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgb(168 85 247 / 0.36);
+  border-radius: 999px;
+  background: rgb(17 11 35 / 0.9);
+  color: rgb(196 181 253 / 0.92);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.tile-eat-first-card__action-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.tile-eat-first-card__action-btn--dice:hover {
+  border-color: rgb(196 181 253 / 0.62);
+  color: rgb(233 213 255 / 0.98);
+}
+
+.tile-eat-first-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 58px;
+  transform: translateX(-50%);
+  min-width: 210px;
+  max-width: min(72%, 320px);
+  padding: 7px 10px;
+  border-radius: 12px;
+  border: 1px solid rgb(250 204 21 / 0.45);
+  background: linear-gradient(135deg, rgb(20 14 8 / 0.94), rgb(12 8 6 / 0.92));
+  box-shadow: 0 6px 22px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+}
+
+.tile-eat-first-toast__line {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: rgb(250 250 250 / 0.97);
+}
+
+.tile-eat-first-toast__line + .tile-eat-first-toast__line {
+  margin-top: 3px;
+}
+
+.tile-eat-first-toast__accent {
+  color: rgb(196 181 253 / 0.98);
+}
+
 .tile-overlay {
   position: absolute;
   left: 0;
@@ -1262,6 +1983,14 @@ if (import.meta.env.DEV) {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+.tile-overlay__identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
+  gap: 1px;
 }
 
 .tile-overlay__display-name--editable {

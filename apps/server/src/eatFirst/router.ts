@@ -16,6 +16,7 @@ import {
   eatFirstMergeRoomAdmin,
   eatFirstPostHand,
   eatFirstPostReady,
+  eatFirstHostReshuffleAdmin,
   eatFirstReviveEliminatedAdmin,
   eatFirstSnapshot,
   eatFirstSubmitVote,
@@ -307,6 +308,22 @@ export function mountEatFirstRoutes(app: Express): void {
         if (!(await requireEatFirstHostForGame(req, res, gameId))) return
         const n = await eatFirstReviveEliminatedAdmin(gameId)
         res.json({ updated: n })
+      } catch (err) {
+        sendErr(res, err)
+      }
+    })()
+  })
+
+  app.post(`${base}/games/:gameId/host-reshuffle`, (req, res) => {
+    void (async () => {
+      try {
+        const gameId = String(req.params.gameId ?? '')
+        if (!(await requireEatFirstHostForGame(req, res, gameId))) return
+        const ownerUserId = await resolveMutationOwnerUserId(req)
+        const body = req.body as { participantCount?: unknown }
+        const participantCount = Number(body?.participantCount ?? 0)
+        const out = await eatFirstHostReshuffleAdmin(gameId, participantCount, ownerUserId)
+        res.json(out)
       } catch (err) {
         sendErr(res, err)
       }

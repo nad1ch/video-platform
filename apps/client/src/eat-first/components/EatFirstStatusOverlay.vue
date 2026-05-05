@@ -8,6 +8,10 @@ const props = defineProps<{
   roleBadgeKey: string
   gamePhase: string
   timerDisplay: string
+  /** Server-derived: host visible seat number (player count + 1). */
+  hostDisplaySeat: number
+  /** Current player count (0..11). */
+  playerCount: number
   loading?: boolean
 }>()
 
@@ -37,6 +41,16 @@ const ariaLabel = computed(() => t('eatFirstCall.statusAria'))
     <div class="eat-first-status__row">
       <span class="eat-first-status__label">{{ t('eatFirstCall.timer') }}</span>
       <span>{{ timerDisplay }}</span>
+    </div>
+    <div class="eat-first-status__row">
+      <span class="eat-first-status__label">{{ t('eatFirstCall.seats') }}</span>
+      <span>{{
+        t('eatFirstCall.seatSummary', {
+          hostSeat: hostDisplaySeat,
+          players: playerCount,
+          maxPlayers: 11,
+        })
+      }}</span>
     </div>
   </div>
 </template>

@@ -308,6 +308,26 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       muted: z.boolean().optional(),
     }).strict(),
   }),
+  z.object({
+    type: z.literal('eat:force-mute-all'),
+    payload: z.object({
+      muted: z.boolean().optional(),
+    }).strict(),
+  }),
+  z.object({
+    type: z.literal('eat:trait-reveal-request'),
+    payload: z.object({
+      peerId: z.string().min(1),
+      traitKey: z.enum(['gender', 'age', 'profession', 'health', 'hobby', 'phobia', 'fact', 'baggage']),
+    }).strict(),
+  }),
+  z.object({
+    type: z.literal('eat:trait-regenerate-request'),
+    payload: z.object({
+      peerId: z.string().min(1),
+      traitKey: z.enum(['gender', 'age', 'profession', 'health', 'hobby', 'phobia', 'fact', 'baggage']),
+    }).strict(),
+  }),
 ])
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>
