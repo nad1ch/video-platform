@@ -1372,15 +1372,6 @@ function toggleRemoteListenMuted(): void {
   remoteListenMuted.value = !remoteListenMuted.value
 }
 
-function remoteVoiceLevel(peerId: string): number {
-  return checkersVoice.audioLevelsByPeerId.value[peerId] ?? 0
-}
-
-function isRemoteVoiceDucked(peerId: string): boolean {
-  const dominant = checkersVoice.dominantSpeakerPeerId.value
-  return dominant !== null && dominant !== peerId
-}
-
 watch(checkersVoiceDisplayName, (displayName) => {
   checkersVoice.session.selfDisplayName = displayName
 }, { immediate: true })
@@ -1933,9 +1924,6 @@ function handleCellClick(pos: CheckersPosition): void {
         :play-rev="tile.playRev"
         :listen-volume="remoteListenVolume"
         :listen-muted="!remoteAudioUnlocked || remoteListenMuted"
-        :audio-level="remoteVoiceLevel(tile.peerId)"
-        :voice-ducked="isRemoteVoiceDucked(tile.peerId)"
-        audio-processing
       />
     </div>
     

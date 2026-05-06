@@ -1380,16 +1380,11 @@ if (import.meta.env.DEV) {
           playRev ?? 0,
           remoteListenVolume ?? 1,
           remoteListenMuted ?? false,
-          remoteAudioLevel ?? 0,
-          remoteVoiceDucked ?? false,
         ]"
         :stream="audioSplitStream"
         :play-rev="playRev"
         :listen-volume="remoteListenVolume ?? 1"
         :listen-muted="remoteListenMuted ?? false"
-        :audio-level="remoteAudioLevel ?? 0"
-        :voice-ducked="remoteVoiceDucked ?? false"
-        audio-processing
       />
       <div
         v-if="showVideo"
@@ -1916,8 +1911,12 @@ if (import.meta.env.DEV) {
   border-radius: inherit;
   overflow: hidden;
   z-index: 0;
-  
+
   clip-path: inset(0 round 14px);
+  /* The clip already has `overflow: hidden` + `clip-path`, so painting is bounded.
+     `contain: layout paint` lets the browser decouple internal video relayouts
+     and decode-driven repaints from the grid, without changing visuals. */
+  contain: layout paint;
 }
 
 .tile-video-wrap :deep(.stream-video) {

@@ -186,6 +186,7 @@ const {
   receiveDeviceProfile,
   serverActiveSpeakerPeerId,
   playbackRenderFpsPressureByPeerId,
+  setPeerVisible,
 } = useCallOrchestrator({ allowManualVideoQuality, joinAvatarUrl, joinUserId, role: callEngineRole })
 
 /**
@@ -597,6 +598,48 @@ function remoteListenMutedHandler(peerId: string) {
 
 const callTileViewportVisibleByPeer = shallowRef(new Map<string, boolean>())
 
+/**
+ * Per-tile server-side video pause hysteresis.
+ * Resume on visible is immediate; pause on hidden waits a short window so
+ * a quick scroll-by does not flap `setPeerVisible` (which sends WS messages
+ * and triggers keyframe requests on resume).
+ */
+const SET_PEER_VISIBLE_HIDE_DEBOUNCE_MS = 500
+const setPeerVisibleHideTimerByPeer = new Map<string, ReturnType<typeof setTimeout>>()
+const lastSentPeerVisibleByPeer = new Map<string, boolean>()
+
+function cancelSetPeerVisibleHideTimer(peerId: string): void {
+  const t = setPeerVisibleHideTimerByPeer.get(peerId)
+  if (t != null) {
+    clearTimeout(t)
+    setPeerVisibleHideTimerByPeer.delete(peerId)
+  }
+}
+
+function applyPeerVisible(peerId: string, visible: boolean): void {
+  if (lastSentPeerVisibleByPeer.get(peerId) === visible) {
+    return
+  }
+  lastSentPeerVisibleByPeer.set(peerId, visible)
+  setPeerVisible(peerId, visible)
+}
+
+function scheduleSetPeerVisible(peerId: string, visible: boolean): void {
+  if (visible) {
+    cancelSetPeerVisibleHideTimer(peerId)
+    applyPeerVisible(peerId, true)
+    return
+  }
+  if (setPeerVisibleHideTimerByPeer.has(peerId)) {
+    return
+  }
+  const t = setTimeout(() => {
+    setPeerVisibleHideTimerByPeer.delete(peerId)
+    applyPeerVisible(peerId, false)
+  }, SET_PEER_VISIBLE_HIDE_DEBOUNCE_MS)
+  setPeerVisibleHideTimerByPeer.set(peerId, t)
+}
+
 const remoteVideoSuppressDelayTimerByPeer = new Map<string, ReturnType<typeof setTimeout>>()
 
 const remoteVideoSuppressPendingKind = new Map<string, 'offscreen' | 'outside-budget'>()
@@ -737,6 +780,12 @@ function onCallTileViewportForLayers(peerId: string, visible: boolean): void {
   const nextMap = new Map(callTileViewportVisibleByPeer.value)
   nextMap.set(id, visible)
   callTileViewportVisibleByPeer.value = nextMap
+  // Server-side video consumer pause for tiles that scroll out / are hidden.
+  // Audio consumers are never paused (call-core invariant); only the video
+  // consumer for this peer is affected. Hysteresis lives in scheduler.
+  if (id !== selfPeerId.value) {
+    scheduleSetPeerVisible(id, visible)
+  }
   if (import.meta.env.DEV) {
     callPageLog.info('[call-qa:viewport] remote tile IO', {
       peerId: id,
@@ -766,6 +815,12 @@ watch(
     }
     if (vmChanged) {
       callTileViewportVisibleByPeer.value = vm
+    }
+    for (const id of [...setPeerVisibleHideTimerByPeer.keys()]) {
+      if (!ids.has(id)) {
+        cancelSetPeerVisibleHideTimer(id)
+        lastSentPeerVisibleByPeer.delete(id)
+      }
     }
     const o = localTileDisplayOverrides.value
     let next: Record<string, string> | null = null
@@ -3004,6 +3059,10 @@ onUnmounted(() => {
   window.removeEventListener(EAT_FIRST_OBS_URL_TOAST_EVENT, onEatFirstObsUrlCopiedToast)
   window.removeEventListener(MAFIA_SETTINGS_TOAST_EVENT, onMafiaSettingsToast)
   document.documentElement.classList.remove(CALL_ROUTE_HTML_CLASS)
+  for (const id of [...setPeerVisibleHideTimerByPeer.keys()]) {
+    cancelSetPeerVisibleHideTimer(id)
+  }
+  lastSentPeerVisibleByPeer.clear()
   if (import.meta.env.DEV) {
     delete (globalThis as unknown as { __CALL_DEBUG__?: unknown }).__CALL_DEBUG__
   }

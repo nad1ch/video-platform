@@ -52,6 +52,8 @@ let bindGeneration = 0
 let gateOpen = true
 let smoothGainRaf = 0
 let currentGain = 1
+let lastBoundAudioTrackId: string | null = null
+let lastBoundUsingWebAudio = false
 
 function shouldUseWebAudioPlayback(): boolean {
   if (props.listenMuted) {
@@ -143,10 +145,15 @@ function stepSmoothGain(): void {
     return
   }
   const nextTarget = targetGain()
-  currentGain += (nextTarget - currentGain) * GAIN_LERP
-  if (Math.abs(nextTarget - currentGain) < 0.001) {
+  const delta = nextTarget - currentGain
+  // Stable: snap, write once, exit. The `audioLevel` / `voiceDucked` watcher restarts the loop on change.
+  if (Math.abs(delta) < 0.001) {
     currentGain = nextTarget
+    gainNode.gain.value = currentGain
+    smoothGainRaf = 0
+    return
   }
+  currentGain += delta * GAIN_LERP
   gainNode.gain.value = currentGain
   smoothGainRaf = requestAnimationFrame(stepSmoothGain)
 }
@@ -216,28 +223,73 @@ async function bindAudioGraph(): Promise<void> {
   if (generation !== bindGeneration) {
     return
   }
+
+  const s = props.stream
+  const newTrackId = s?.getAudioTracks()[0]?.id ?? null
+  const targetUsingWebAudio = !!s && typeof AudioContext !== 'undefined' && shouldUseWebAudioPlayback()
+
+  // Fast path: same audio track id + same playback path → skip teardown so a
+  // `playRev` bump from an unrelated track event (video-source swap, screen
+  // share start) does not introduce an audible audio gap.
+  if (
+    newTrackId !== null &&
+    newTrackId === lastBoundAudioTrackId &&
+    targetUsingWebAudio === lastBoundUsingWebAudio
+  ) {
+    if (usingWebAudio) {
+      applyGain()
+    } else {
+      // Mirror `bindElementFallback`'s tail so a listen-mute toggle on an
+      // existing track does not leave the <audio> element silently paused
+      // (slow-path mounted muted → fast-path unmute would otherwise just
+      // flip `muted=false` without resuming playback).
+      applyElementVolume()
+      const a = el.value
+      if (a) {
+        if (props.listenMuted) {
+          try {
+            a.pause()
+          } catch {
+            /* ignore */
+          }
+        } else {
+          void a.play().catch(() => {
+            /* idempotent: already-playing resolves; abort/autoplay handled by slow path on next bind */
+          })
+        }
+      }
+    }
+    return
+  }
+
   clearPlayUnlock()
   teardownWebAudio()
 
-  const s = props.stream
-
   if (!s) {
     silenceElement(true)
+    lastBoundAudioTrackId = null
+    lastBoundUsingWebAudio = false
     return
   }
 
   if (s.getAudioTracks().length === 0) {
     silenceElement(true)
+    lastBoundAudioTrackId = null
+    lastBoundUsingWebAudio = false
     return
   }
 
   if (typeof AudioContext === 'undefined') {
     await bindElementFallback(s, generation)
+    lastBoundAudioTrackId = newTrackId
+    lastBoundUsingWebAudio = false
     return
   }
 
   if (!shouldUseWebAudioPlayback()) {
     await bindElementFallback(s, generation)
+    lastBoundAudioTrackId = newTrackId
+    lastBoundUsingWebAudio = false
     return
   }
 
@@ -256,6 +308,8 @@ async function bindAudioGraph(): Promise<void> {
     currentGain = targetGain()
     gainNode.gain.value = currentGain
     applyGain()
+    lastBoundAudioTrackId = newTrackId
+    lastBoundUsingWebAudio = true
 
     if (isAudioPlaybackUnlocked()) {
       requestAnimationFrame(() => {
@@ -269,6 +323,8 @@ async function bindAudioGraph(): Promise<void> {
     streamAudioLog.warn('Web Audio path failed, falling back to element', err)
     teardownWebAudio()
     await bindElementFallback(s, generation)
+    lastBoundAudioTrackId = newTrackId
+    lastBoundUsingWebAudio = false
   }
 }
 
@@ -366,6 +422,8 @@ onUnmounted(() => {
   clearPlayUnlock()
   teardownWebAudio()
   silenceElement(true)
+  lastBoundAudioTrackId = null
+  lastBoundUsingWebAudio = false
 })
 </script>
 
