@@ -1385,7 +1385,6 @@ if (import.meta.env.DEV) {
         :play-rev="playRev"
         :listen-volume="remoteListenVolume ?? 1"
         :listen-muted="remoteListenMuted ?? false"
-        :soft-noise-cleanup="true"
       />
       <div
         v-if="showVideo"

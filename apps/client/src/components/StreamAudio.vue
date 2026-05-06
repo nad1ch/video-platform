@@ -13,26 +13,18 @@ const streamAudioLog = createLogger('stream-audio')
 const props = withDefaults(
   defineProps<{
     stream: MediaStream | null
-
+    
     playRev?: number
-
+    
     listenVolume?: number
-
+    
     listenMuted?: boolean
-
+    
     audioLevel?: number
-
+    
     voiceDucked?: boolean
-
-    /** Legacy hard gate + duck path — keep off for call tiles. */
+    
     audioProcessing?: boolean
-
-    /**
-     * Gentle downward expansion on remote decode: reduces steady idle noise without
-     * muting to zero, without server `audioLevel`, and without voice ducking.
-     * Separate from {@link audioProcessing}; never gates to 0.
-     */
-    softNoiseCleanup?: boolean
   }>(),
   {
     playRev: 0,
@@ -41,7 +33,6 @@ const props = withDefaults(
     audioLevel: 0,
     voiceDucked: false,
     audioProcessing: false,
-    softNoiseCleanup: false,
   },
 )
 
@@ -51,22 +42,11 @@ const NOISE_GATE_CLOSE = 0.02
 const DUCKED_GAIN = 0.68
 const GAIN_LERP = 0.25
 
-/** Soft expander: poll analyser at fixed rate (no perpetual rAF). */
-const SOFT_EXPAND_POLL_MS = 80
-/** Minimum gain when expanded “closed” — not zero; prefer slight noise over cutting voice. */
-const SOFT_EXPAND_MIN_ATTENUATION = 0.58
-const SOFT_EXPAND_OPEN_RMS = 0.017
-const SOFT_EXPAND_CLOSE_RMS = 0.0095
-const SOFT_EXPAND_HOLD_MS = 210
-const SOFT_EXPAND_RMS_BLEND = 0.18
-const SOFT_EXPAND_TARGET_TAU_SEC = 0.072
-const SOFT_EXPAND_FFT = 256
 
 let playUnlockHandler: (() => void) | null = null
 
 let sourceNode: MediaStreamAudioSourceNode | null = null
 let gainNode: GainNode | null = null
-let analyserNode: AnalyserNode | null = null
 let usingWebAudio = false
 let bindGeneration = 0
 let gateOpen = true
@@ -75,24 +55,11 @@ let currentGain = 1
 let lastBoundAudioTrackId: string | null = null
 let lastBoundUsingWebAudio = false
 
-let softExpandPollId: ReturnType<typeof setInterval> | null = null
-let softExpandRms = 0
-let softExpandBelowCloseMs = 0
-let softExpandEnvOpen = true
-let softExpandLastScheduledProduct = Number.NaN
-
-function effectiveSoftNoiseCleanup(): boolean {
-  return Boolean(props.softNoiseCleanup) && !props.audioProcessing
-}
-
 function shouldUseWebAudioPlayback(): boolean {
   if (props.listenMuted) {
     return false
   }
   if (props.audioProcessing) {
-    return true
-  }
-  if (effectiveSoftNoiseCleanup()) {
     return true
   }
   const raw = Number(props.listenVolume ?? 1)
@@ -117,21 +84,8 @@ function clearPlayUnlock(): void {
   }
 }
 
-function stopSoftExpandPoll(): void {
-  if (softExpandPollId !== null) {
-    clearInterval(softExpandPollId)
-    softExpandPollId = null
-  }
-  analyserNode = null
-  softExpandRms = 0
-  softExpandBelowCloseMs = 0
-  softExpandEnvOpen = true
-  softExpandLastScheduledProduct = Number.NaN
-}
-
 function teardownWebAudio(): void {
   stopSmoothGainLoop()
-  stopSoftExpandPoll()
   try {
     sourceNode?.disconnect()
   } catch {
@@ -145,70 +99,6 @@ function teardownWebAudio(): void {
   }
   gainNode = null
   usingWebAudio = false
-}
-
-function rmsFromAnalyser(analyser: AnalyserNode, buf: Uint8Array<ArrayBuffer>): number {
-  analyser.getByteTimeDomainData(buf)
-  let sum = 0
-  for (let i = 0; i < buf.length; i++) {
-    const v = (buf[i]! - 128) / 128
-    sum += v * v
-  }
-  return Math.min(1, Math.sqrt(sum / buf.length))
-}
-
-function listenBaseScalar(): number {
-  const muted = Boolean(props.listenMuted)
-  const raw = Number(props.listenVolume ?? 1)
-  return muted ? 0 : Math.min(2, Math.max(0, Number.isFinite(raw) ? raw : 1))
-}
-
-function scheduleSoftExpandOutputGain(ctx: AudioContext): void {
-  if (!gainNode || !effectiveSoftNoiseCleanup()) {
-    return
-  }
-  const base = listenBaseScalar()
-  const att = softExpandEnvOpen ? 1 : SOFT_EXPAND_MIN_ATTENUATION
-  const product = base * att
-  if (
-    Number.isFinite(softExpandLastScheduledProduct) &&
-    Math.abs(product - softExpandLastScheduledProduct) < 0.004
-  ) {
-    return
-  }
-  softExpandLastScheduledProduct = product
-  const g = gainNode.gain
-  const t = ctx.currentTime
-  g.setTargetAtTime(product, t, SOFT_EXPAND_TARGET_TAU_SEC)
-}
-
-function startSoftExpandPoll(ctx: AudioContext): void {
-  stopSoftExpandPoll()
-  if (!analyserNode || !gainNode) {
-    return
-  }
-  const buf = new Uint8Array(new ArrayBuffer(analyserNode.fftSize))
-  const tick = (): void => {
-    if (!gainNode || !analyserNode || !usingWebAudio || !effectiveSoftNoiseCleanup()) {
-      return
-    }
-    const raw = rmsFromAnalyser(analyserNode, buf)
-    softExpandRms = softExpandRms * (1 - SOFT_EXPAND_RMS_BLEND) + raw * SOFT_EXPAND_RMS_BLEND
-    if (softExpandRms >= SOFT_EXPAND_OPEN_RMS) {
-      softExpandEnvOpen = true
-      softExpandBelowCloseMs = 0
-    } else if (softExpandRms <= SOFT_EXPAND_CLOSE_RMS) {
-      softExpandBelowCloseMs += SOFT_EXPAND_POLL_MS
-      if (softExpandBelowCloseMs >= SOFT_EXPAND_HOLD_MS) {
-        softExpandEnvOpen = false
-      }
-    } else {
-      softExpandBelowCloseMs = 0
-    }
-    scheduleSoftExpandOutputGain(ctx)
-  }
-  tick()
-  softExpandPollId = window.setInterval(tick, SOFT_EXPAND_POLL_MS)
 }
 
 function updateNoiseGate(): void {
@@ -256,6 +146,7 @@ function stepSmoothGain(): void {
   }
   const nextTarget = targetGain()
   const delta = nextTarget - currentGain
+  // Stable: snap, write once, exit. The `audioLevel` / `voiceDucked` watcher restarts the loop on change.
   if (Math.abs(delta) < 0.001) {
     currentGain = nextTarget
     gainNode.gain.value = currentGain
@@ -280,11 +171,6 @@ function applyGain(): void {
   }
   if (props.audioProcessing) {
     startSmoothGainLoop()
-    return
-  }
-  if (effectiveSoftNoiseCleanup()) {
-    const ctx = getSharedCallPlaybackContext()
-    scheduleSoftExpandOutputGain(ctx)
     return
   }
   stopSmoothGainLoop()
@@ -342,6 +228,9 @@ async function bindAudioGraph(): Promise<void> {
   const newTrackId = s?.getAudioTracks()[0]?.id ?? null
   const targetUsingWebAudio = !!s && typeof AudioContext !== 'undefined' && shouldUseWebAudioPlayback()
 
+  // Fast path: same audio track id + same playback path → skip teardown so a
+  // `playRev` bump from an unrelated track event (video-source swap, screen
+  // share start) does not introduce an audible audio gap.
   if (
     newTrackId !== null &&
     newTrackId === lastBoundAudioTrackId &&
@@ -350,6 +239,10 @@ async function bindAudioGraph(): Promise<void> {
     if (usingWebAudio) {
       applyGain()
     } else {
+      // Mirror `bindElementFallback`'s tail so a listen-mute toggle on an
+      // existing track does not leave the <audio> element silently paused
+      // (slow-path mounted muted → fast-path unmute would otherwise just
+      // flip `muted=false` without resuming playback).
       applyElementVolume()
       const a = el.value
       if (a) {
@@ -360,7 +253,9 @@ async function bindAudioGraph(): Promise<void> {
             /* ignore */
           }
         } else {
-          void a.play().catch(() => {})
+          void a.play().catch(() => {
+            /* idempotent: already-playing resolves; abort/autoplay handled by slow path on next bind */
+          })
         }
       }
     }
@@ -408,26 +303,11 @@ async function bindAudioGraph(): Promise<void> {
     sourceNode = ctx.createMediaStreamSource(s)
     gainNode = ctx.createGain()
     sourceNode.connect(gainNode)
-    if (effectiveSoftNoiseCleanup()) {
-      analyserNode = ctx.createAnalyser()
-      analyserNode.fftSize = SOFT_EXPAND_FFT
-      sourceNode.connect(analyserNode)
-      softExpandRms = 0
-      softExpandBelowCloseMs = 0
-      softExpandEnvOpen = true
-      softExpandLastScheduledProduct = -1
-    }
     gainNode.connect(ctx.destination)
     usingWebAudio = true
     currentGain = targetGain()
-    if (effectiveSoftNoiseCleanup()) {
-      gainNode.gain.value = listenBaseScalar()
-      scheduleSoftExpandOutputGain(ctx)
-      startSoftExpandPoll(ctx)
-    } else {
-      gainNode.gain.value = currentGain
-      applyGain()
-    }
+    gainNode.gain.value = currentGain
+    applyGain()
     lastBoundAudioTrackId = newTrackId
     lastBoundUsingWebAudio = true
 
@@ -509,8 +389,7 @@ watch(
 )
 
 watch(
-  () =>
-    [props.listenVolume ?? 1, props.listenMuted ?? false, props.audioProcessing, props.softNoiseCleanup] as const,
+  () => [props.listenVolume ?? 1, props.listenMuted ?? false, props.audioProcessing] as const,
   () => {
     const s = props.stream
     if (s && s.getAudioTracks().length > 0) {

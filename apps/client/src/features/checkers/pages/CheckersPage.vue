@@ -1924,7 +1924,6 @@ function handleCellClick(pos: CheckersPosition): void {
         :play-rev="tile.playRev"
         :listen-volume="remoteListenVolume"
         :listen-muted="!remoteAudioUnlocked || remoteListenMuted"
-        :soft-noise-cleanup="true"
       />
     </div>
     
