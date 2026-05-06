@@ -481,6 +481,17 @@
   /* Matches GRID_CONTENT_INSET_PX in getGrid (6px each side): space for drag-active ring without clipping. */
   padding: 6px;
   box-sizing: border-box;
+  /**
+   * Decouple grid-internal layout from the rest of the page (chat panel, dock,
+   * host panel drag, mafia overlays) so toggling a speaker / drag class on one
+   * tile does not force a layout pass at the parent level. We deliberately keep
+   * `paint` out of the containment list: `.tile-menu__dropdown` is `position:
+   * absolute; top: calc(100% + 8px)` and bottom-row tiles rely on the parent
+   * `.call-page__stage` (which has `overflow: hidden` + bottom padding) for
+   * the dropdown's visible strip — adding `contain: paint` here would clip
+   * those dropdowns at the grid edge.
+   */
+  contain: layout;
 }
 
 .call-page__grid--spotlight {
@@ -525,6 +536,14 @@
   position: relative;
   z-index: 0;
   isolation: isolate;
+  /**
+   * Layout-only containment is safe here: the speaking ring and drag-active outline
+   * intentionally extend past the wrap into adjacent grid cells (see “Сусідня клітина”
+   * note below), so we must NOT add `paint` containment, which would clip them.
+   * Layout containment still helps: a speaker-class toggle / hover on one wrap no
+   * longer forces the grid container to recompute layout for siblings.
+   */
+  contain: layout;
   cursor: grab;
   /* Match `.tile` in ParticipantTile (14px); stable radius avoids jitter vs --over-only radius + shadow animation. */
   border-radius: 14px;
