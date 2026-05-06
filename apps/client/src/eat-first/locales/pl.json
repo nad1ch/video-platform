@@ -614,6 +614,8 @@
     "nightResultDied": "{label} odpadł",
     "headerCenterObsButton": "🎥 OBS",
     "headerCenterHostButton": "🎮 Prowadzący",
+    "speakingTargetAlreadyNominatedToast": "Miejsce nr {target} jest już nominowane (przez miejsce nr {by}).",
+    "speakingByAlreadyNominatedToast": "Miejsce nr {by} już nominowało miejsce nr {target}.",
     "obsViewUrlCopiedToast": "Skopiowano link — wklej go w OBS"
   },
   "callPage": {

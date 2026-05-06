@@ -18,6 +18,23 @@ import type {
 } from '@/utils/mafiaGameTypes'
 import { MafiaWs } from './mafiaWsProtocol'
 
+function normalizeMafiaSpeakingQueueFlat(raw: unknown): number[] {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  const out: number[] = []
+  for (const x of raw) {
+    if (typeof x === 'number' && Number.isInteger(x) && x >= 1) {
+      out.push(x)
+      if (out.length >= 24) break
+    }
+  }
+  if (out.length % 2 === 1) {
+    out.pop()
+  }
+  return out
+}
+
 function parseMafiaHostUpdated(
   data: unknown,
 ): { hostPeerId: string | null; hostUserId: string | null; hostSessionId: string | null } | null {
@@ -60,12 +77,7 @@ function parseMafiaQueueUpdate(data: unknown): { speakingQueue: number[] } | nul
   if (!Array.isArray(q)) {
     return null
   }
-  const out: number[] = []
-  for (const x of q) {
-    if (typeof x === 'number' && Number.isInteger(x) && x >= 1) {
-      out.push(x)
-    }
-  }
+  const out = normalizeMafiaSpeakingQueueFlat(q)
   return { speakingQueue: out }
 }
 
@@ -137,12 +149,7 @@ function parseMafiaPlayersUpdate(data: unknown): MafiaPlayersUpdatePayload | nul
   if (!Array.isArray(sq)) {
     return null
   }
-  const outQ: number[] = []
-  for (const x of sq) {
-    if (typeof x === 'number' && Number.isInteger(x) && x >= 1) {
-      outQ.push(x)
-    }
-  }
+  const outQ = normalizeMafiaSpeakingQueueFlat(sq)
   const naRaw = (p as { nightActions?: unknown }).nightActions
   const nightActions: MafiaPlayersUpdatePayload['nightActions'] = {}
   if (naRaw && typeof naRaw === 'object') {

@@ -1045,14 +1045,11 @@ async function hostToggleNomination({ target, by }) {
   if (!targetSlot || !bySlot) return
   try {
     loadError.value = null
-    const onePer = Boolean(gameRoom.value?.nominationOneTargetPerRound)
     let cur = nominationsFromRoom(gameRoom.value)
     const exists = cur.some((x) => x.target === targetSlot && x.by === bySlot)
     let next
     if (exists) {
       next = cur.filter((x) => !(x.target === targetSlot && x.by === bySlot))
-    } else if (onePer) {
-      next = [...cur.filter((x) => x.by !== bySlot), { target: targetSlot, by: bySlot }]
     } else {
       next = [...cur, { target: targetSlot, by: bySlot }]
     }
@@ -1731,17 +1728,6 @@ async function hostDismissEliminateSuggested() {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
 }
-
-async function persistNominationOnePerRound(val) {
-  if (!isAdmin.value) return
-  try {
-    loadError.value = null
-    await saveGameRoom(gameId.value, { nominationOneTargetPerRound: Boolean(val) })
-  } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
-  }
-}
-
 
 async function appendVoteTargetsThisRound(slotRaw) {
   if (!isAdmin.value) return
@@ -2638,7 +2624,6 @@ function rerollActiveCardOnly() {
     panelHydrating,
     pendingPlayerDeletes,
     persistHostStats,
-    persistNominationOnePerRound,
     persistScenarioChoice,
     personalUrlAbsolute,
     playerDocJoinToken,

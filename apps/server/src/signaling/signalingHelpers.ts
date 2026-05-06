@@ -81,8 +81,8 @@ export function sanitizeMafiaSpeakingQueueList(raw: unknown, maxSeat: number): n
     return []
   }
   const out: number[] = []
-  const seen = new Set<number>()
   const cap = Math.max(1, Math.min(MAFIA_MAX_SEAT, maxSeat))
+  const maxLen = cap * 2
   for (const x of raw) {
     if (typeof x !== 'number' || !Number.isInteger(x)) {
       continue
@@ -90,11 +90,13 @@ export function sanitizeMafiaSpeakingQueueList(raw: unknown, maxSeat: number): n
     if (x < 1 || x > cap) {
       continue
     }
-    if (seen.has(x)) {
-      continue
-    }
-    seen.add(x)
     out.push(x)
+    if (out.length >= maxLen) {
+      break
+    }
+  }
+  if (out.length % 2 === 1) {
+    out.pop()
   }
   return out
 }

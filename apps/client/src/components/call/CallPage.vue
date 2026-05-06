@@ -81,7 +81,7 @@ import { MAFIA_OBS_URL_TOAST_EVENT, MAFIA_SETTINGS_TOAST_EVENT } from '@/composa
 import { MafiaWs } from '@/composables/mafiaWsProtocol'
 import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
 import type { MafiaEliminationBackground } from '@/utils/mafiaGameTypes'
-import { nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
+import { decodeSpeakingNominationFlat, nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
 
 type VideoQualityUiChoice = 'auto' | VideoQualityPreset
 
@@ -830,6 +830,14 @@ type CallToast = { id: string; text: string; kind: 'join' | 'leave' }
 
 const callToasts = ref<CallToast[]>([])
 let lastPresenceToastSourceId = ''
+
+function pushCallToast(text: string, kind: 'join' | 'leave' = 'join', ttlMs = 4200): void {
+  const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  callToasts.value = [...callToasts.value, { id, text, kind }]
+  window.setTimeout(() => {
+    callToasts.value = callToasts.value.filter((x) => x.id !== id)
+  }, ttlMs)
+}
 
 
 watch(
@@ -2612,11 +2620,49 @@ function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value
   }
   if (mafiaGameStore.hostInteractionMode === 'speaking') {
     const draft = mafiaGameStore.speakingNominationDraftBySeat
+    const segments = decodeSpeakingNominationFlat(mafiaGameStore.speakingQueue)
     if (draft == null) {
+      const existingBy = segments.find((seg) => seg.bySeat === seat)
+      if (existingBy) {
+        pushCallToast(
+          t('mafiaPage.speakingByAlreadyNominatedToast', {
+            by: seat,
+            target: existingBy.targetSeat,
+          }),
+          'leave',
+        )
+        ev.stopPropagation()
+        return
+      }
       mafiaGameStore.setSpeakingNominationDraftBySeat(seat)
     } else if (draft === seat) {
       mafiaGameStore.setSpeakingNominationDraftBySeat(null)
     } else {
+      const existingTarget = segments.find((seg) => seg.targetSeat === seat)
+      if (existingTarget) {
+        pushCallToast(
+          t('mafiaPage.speakingTargetAlreadyNominatedToast', {
+            target: seat,
+            by: existingTarget.bySeat ?? '?',
+          }),
+          'leave',
+        )
+        ev.stopPropagation()
+        return
+      }
+      const existingBy = segments.find((seg) => seg.bySeat === draft)
+      if (existingBy) {
+        pushCallToast(
+          t('mafiaPage.speakingByAlreadyNominatedToast', {
+            by: draft,
+            target: existingBy.targetSeat,
+          }),
+          'leave',
+        )
+        mafiaGameStore.setSpeakingNominationDraftBySeat(null)
+        ev.stopPropagation()
+        return
+      }
       mafiaGameStore.appendSpeakingNominationPair(draft, seat)
     }
   } else {

@@ -614,6 +614,8 @@
     "nightResultDied": "{label} пішов",
     "headerCenterObsButton": "🎥 OBS",
     "headerCenterHostButton": "🎮 Ведучий",
+    "speakingTargetAlreadyNominatedToast": "Гравець №{target} уже виставлений (виставив №{by}).",
+    "speakingByAlreadyNominatedToast": "Гравець №{by} уже виставляв гравця №{target}.",
     "obsViewUrlCopiedToast": "Посилання скопійоване — вставте його в OBS"
   },
   "callPage": {

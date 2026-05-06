@@ -1349,7 +1349,9 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   function applySpeakingQueueFromSignaling(seats: number[]): void {
     if (!Array.isArray(seats)) {
       speakingQueue.value = []
-      clearSpeakingNominationDraft()
+      if (!isMafiaHost.value) {
+        clearSpeakingNominationDraft()
+      }
       return
     }
     const next: number[] = []
@@ -1358,8 +1360,15 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
         next.push(x)
       }
     }
+    if (next.length % 2 === 1) {
+      next.pop()
+    }
     speakingQueue.value = next
-    clearSpeakingNominationDraft()
+    // Host may already be in the middle of selecting the next [by, target] pair;
+    // keep that draft across own queue echo updates.
+    if (!isMafiaHost.value) {
+      clearSpeakingNominationDraft()
+    }
   }
 
   type ReshuffleResult = { ok: true } | { ok: false; error: 'count' | 'empty' | 'message'; messageKey?: string }

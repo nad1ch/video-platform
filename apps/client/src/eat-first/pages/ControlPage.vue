@@ -155,7 +155,6 @@ const {
   panelHydrating,
   pendingPlayerDeletes,
   persistHostStats,
-  persistNominationOnePerRound,
   persistScenarioChoice,
   personalUrlAbsolute,
   playerDocJoinToken,
@@ -508,19 +507,6 @@ const {
           @bulk-clear="clearBulkSelection"
           @apply-ballot-order="hostApplyBallotFromNominations"
         />
-        <div class="host-nom-rule-wrap">
-          <label class="host-nom-rule ui-checkbox ui-checkbox--text ui-checkbox--lg">
-            <span class="ui-checkbox__hit">
-              <input
-                type="checkbox"
-                :checked="Boolean(gameRoom.nominationOneTargetPerRound)"
-                @change="persistNominationOnePerRound($event.target.checked)"
-              />
-              <span class="ui-checkbox__box" aria-hidden="true" />
-            </span>
-            <span>{{ t('control.nominationOnePerRound') }}</span>
-          </label>
-        </div>
         <aside class="side-tools side-tools--inline">
           <label class="field-label" for="host-side-game-id">{{ t('control.gameId') }}</label>
           <div class="inline">
@@ -2875,22 +2861,6 @@ html[data-theme='light'] .host-forget-btn:hover {
 
 .denied-back:hover {
   filter: brightness(1.06);
-}
-
-.host-nom-rule-wrap {
-  margin: 0.5rem 0 0.85rem;
-}
-
-.host-nom-rule {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  cursor: pointer;
-  user-select: none;
 }
 
 .host-modal-backdrop {

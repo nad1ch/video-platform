@@ -196,7 +196,9 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     type: z.literal(MafiaWs.queueUpdate),
     payload: z.object({
       
-      speakingQueue: z.array(z.number().int().min(1).max(12)).max(16),
+      speakingQueue: z.array(z.number().int().min(1).max(12)).max(24).refine((q) => q.length % 2 === 0, {
+        message: 'speakingQueue must be pair-encoded [by,target,...]',
+      }),
     }),
   }),
   z.object({
@@ -229,7 +231,9 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
         })
         .strict()
         .optional(),
-      speakingQueue: z.array(z.number().int().min(1).max(12)).max(16),
+      speakingQueue: z.array(z.number().int().min(1).max(12)).max(24).refine((q) => q.length % 2 === 0, {
+        message: 'speakingQueue must be pair-encoded [by,target,...]',
+      }),
     }),
   }),
   z.object({

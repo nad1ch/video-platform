@@ -614,6 +614,8 @@
     "nightResultDied": "{label} died",
     "headerCenterObsButton": "🎥 OBS",
     "headerCenterHostButton": "🎮 Host",
+    "speakingTargetAlreadyNominatedToast": "Seat #{target} is already nominated (by seat #{by}).",
+    "speakingByAlreadyNominatedToast": "Seat #{by} already nominated seat #{target}.",
     "obsViewUrlCopiedToast": "Link copied — paste it into OBS"
   },
   "callPage": {
