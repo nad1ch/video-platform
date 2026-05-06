@@ -95,6 +95,7 @@ const props = withDefaults(
     videoPresentation?: 'camera' | 'screen' | 'none'
     
     avatarUrl?: string
+    canEditDisplayName?: boolean
     
     mafiaSeatIndex?: number
     eatFirstTraits?: Record<EatFirstTraitKey, string> | null
@@ -145,6 +146,7 @@ const props = withDefaults(
     eatFirstTraitOwnerView: false,
     eatFirstRevealedTraitKeys: () => [],
     eatFirstActionCard: null,
+    canEditDisplayName: true,
   },
 )
 
@@ -179,7 +181,7 @@ const remotePlaybackStallPeerIdForVideo = computed(() => {
 })
 
 function startNameEdit(): void {
-  if (props.streamViewMode) {
+  if (props.streamViewMode || props.canEditDisplayName !== true) {
     return
   }
   const id = peerIdForNameEdit()
@@ -201,6 +203,10 @@ function cancelNameEdit(): void {
 
 function finishNameEdit(): void {
   if (!editingName.value) {
+    return
+  }
+  if (props.canEditDisplayName !== true) {
+    editingName.value = false
     return
   }
   editingName.value = false

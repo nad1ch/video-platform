@@ -114,6 +114,11 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
   
   const numberingOrder = ref<string[]>([])
+  /**
+   * True only after explicit host-driven order sync (`players-update` / reshuffle / seat-swap).
+   * Until then, UI order should follow deterministic engine peer order for all clients.
+   */
+  const numberingOrderAuthoritative = ref(false)
 
   const roleByPeerId = shallowRef<Record<string, MafiaRole>>({})
   const playerOverlayStateByPeerId = shallowRef<Record<string, MafiaPlayerOverlayState>>({})
@@ -258,7 +263,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   )
 
   function getDisplayNumberingOrder(engineJoin: string[]): string[] {
-    if (numberingOrder.value.length === 0) {
+    if (!numberingOrderAuthoritative.value || numberingOrder.value.length === 0) {
       return engineJoin
     }
     return numberingOrder.value
@@ -268,19 +273,25 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
 
   function reconcileNumberingWithEngine(engineOrder: string[]): void {
-    if (numberingOrder.value.length === 0) {
+    if (numberingOrder.value.length === 0 || !numberingOrderAuthoritative.value) {
+      numberingOrder.value = [...engineOrder]
+      pinMafiaHostPeerToEndOfNumberingOrder()
       return
     }
-    const inEngine = new Set<string>()
-    for (const id of engineOrder) {
-      if (typeof id === 'string' && id.length > 0) {
-        inEngine.add(id)
-      }
-    }
-    const filtered = numberingOrder.value.filter((id) => inEngine.has(id))
+    const filtered = [...numberingOrder.value]
+    const explicitHostId = typeof mafiaHostPeerId.value === 'string' ? mafiaHostPeerId.value.trim() : ''
+    const hostAnchorId =
+      explicitHostId.length > 0
+        ? explicitHostId
+        : filtered.length > 0
+          ? filtered[filtered.length - 1] ?? ''
+          : ''
     const next: string[] = []
     const seen = new Set<string>()
     for (const id of filtered) {
+      if (hostAnchorId.length > 0 && id === hostAnchorId) {
+        continue
+      }
       if (!seen.has(id)) {
         seen.add(id)
         next.push(id)
@@ -295,6 +306,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
         next.push(id)
       }
     }
+    if (hostAnchorId.length > 0 && !seen.has(hostAnchorId)) {
+      next.push(hostAnchorId)
+      seen.add(hostAnchorId)
+    }
     const nextKey = next.join('\u0000')
     const curKey = numberingOrder.value.join('\u0000')
     if (nextKey === curKey) {
@@ -307,6 +322,12 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
   
   function pruneGameStateToPeers(engineOrder: string[]): void {
+    if (numberingOrderAuthoritative.value) {
+      // After host-defined order/roles are established, keep seat+role across
+      // transient disconnect/reload. Host reshuffle / explicit players-update
+      // remains the authority for changing this mapping.
+      return
+    }
     const s = new Set<string>()
     for (const id of engineOrder) {
       if (typeof id === 'string' && id.length > 0) {
@@ -1135,6 +1156,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     ;[order[ia], order[ib]] = [order[ib]!, order[ia]!]
 
     applyingPlayersUpdateFromSignaling.value = true
+    numberingOrderAuthoritative.value = true
     numberingOrder.value = order
     remapNightActionsForSeatSwap(seatA, seatB)
     remapSpeakingQueueForSeatSwap(seatA, seatB)
@@ -1157,6 +1179,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       }
       o.add(id)
     }
+    numberingOrderAuthoritative.value = true
     numberingOrder.value = [...payload.order]
     pinMafiaHostPeerToEndOfNumberingOrder()
     if (payload.clearRoles === true) {
@@ -1391,6 +1414,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       r[p.peerId] = p.role as MafiaRole
     }
     beginMafiaReshuffleApply()
+    numberingOrderAuthoritative.value = true
     numberingOrder.value = order
     roleByPeerId.value = r
     pinMafiaHostPeerToEndOfNumberingOrder()
@@ -1418,7 +1442,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     if (oldMafiaMode.value) {
       beginMafiaReshuffleApply()
       const shuffledIds = fisherYatesShuffle([...ids])
-      numberingOrder.value = shuffledIds
+      const orderedIds = pinHostPeerToEndOfOrder(shuffledIds, mafiaHostPeerId.value)
+      numberingOrderAuthoritative.value = true
+      numberingOrder.value = orderedIds
+      pinMafiaHostPeerToEndOfNumberingOrder()
       roleByPeerId.value = {}
       playerOverlayStateByPeerId.value = {}
       eliminationBackgroundByPeerId.value = {}
@@ -1432,7 +1459,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       timerStopBroadcastPayload.value = TIMER_STOP_SENTINEL
       mafiaGameLog.info('reshuffle: players shuffled, roles cleared (old mafia)', { n: ids.length, phase: phase.value })
       playersUpdateBroadcastPayload.value = {
-        order: [...shuffledIds],
+        order: [...orderedIds],
         nightActions: {},
         speakingQueue: [],
         clearRoles: true,
@@ -1456,14 +1483,18 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
     beginMafiaReshuffleApply()
     const shuffledIds = fisherYatesShuffle([...ids])
-    numberingOrder.value = shuffledIds
+    const orderedIds = pinHostPeerToEndOfOrder(shuffledIds, mafiaHostPeerId.value)
+    numberingOrderAuthoritative.value = true
+    numberingOrder.value = orderedIds
+    pinMafiaHostPeerToEndOfNumberingOrder()
 
     const shuffledRoles = fisherYatesShuffle([...deck])
     const r: Record<string, MafiaRole> = {}
-    for (let i = 0; i < shuffledIds.length; i += 1) {
-      r[shuffledIds[i]!] = shuffledRoles[i]!
+    for (let i = 0; i < orderedIds.length; i += 1) {
+      r[orderedIds[i]!] = shuffledRoles[i]!
     }
     roleByPeerId.value = r
+    pinMafiaHostPeerToEndOfNumberingOrder()
 
     playerOverlayStateByPeerId.value = {}
     eliminationBackgroundByPeerId.value = {}
@@ -1477,7 +1508,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     mafiaTimer.value = null
     timerStopBroadcastPayload.value = TIMER_STOP_SENTINEL
     mafiaGameLog.info('reshuffle: players shuffled, roles assigned', { n: ids.length, phase: phase.value })
-    reshuffleBroadcastPayload.value = buildReshufflePayloadFromState(shuffledIds, r)
+    reshuffleBroadcastPayload.value = buildReshufflePayloadFromState(orderedIds, r)
     return { ok: true }
   }
 
@@ -1523,6 +1554,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       return
     }
     numberingOrder.value = []
+    numberingOrderAuthoritative.value = false
     roleByPeerId.value = {}
     playerOverlayStateByPeerId.value = {}
     eliminationBackgroundByPeerId.value = {}

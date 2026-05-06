@@ -478,19 +478,29 @@ const mafiaNicknameOverrideByPeerId = shallowRef<Record<string, string>>({})
 
 const localTileDisplayOverrides = shallowRef<Record<string, string>>(loadCallTileLocalDisplayOverrides())
 
+function canEditTileDisplayName(peerId: string): boolean {
+  const id = typeof peerId === 'string' ? peerId.trim() : ''
+  if (!id) {
+    return false
+  }
+  const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
+  const isLocalTile = tiles.value.some((x) => x.peerId === id && x.isLocal)
+  if (isMafiaRoute.value) {
+    return mafiaGameStore.isMafiaHost || (selfId.length > 0 && id === selfId) || isLocalTile
+  }
+  return (selfId.length > 0 && id === selfId) || isLocalTile
+}
+
 function onCommitLocalTileDisplayName(payload: { peerId: string; name: string | null }): void {
   const id = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
   if (!id) {
     return
   }
+  if (!canEditTileDisplayName(id)) {
+    return
+  }
   const t = payload.name != null ? normalizeDisplayName(payload.name).slice(0, 64) : ''
   if (isMafiaRoute.value) {
-    const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
-    const isLocalTile = tiles.value.some((x) => x.peerId === id && x.isLocal)
-    const canRenameTarget = mafiaGameStore.isMafiaHost || (selfId.length > 0 && id === selfId) || isLocalTile
-    if (!canRenameTarget) {
-      return
-    }
     sendSignalingMessage({ type: MafiaWs.playerNameUpdate, payload: { targetPeerId: id, displayName: t } })
     // Optimistic UI update: server will broadcast the same value (or clear) back.
     // Without this, the label snaps back to the old value until the WS roundtrip completes.
@@ -1774,12 +1784,22 @@ watch(
           : sorted
     }
     if (isMafiaRoute.value) {
-      const hostId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId : ''
+      const explicitHostId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
+      const prevDisplayOrder = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
+      const fallbackHostId =
+        explicitHostId.length > 0
+          ? ''
+          : prevDisplayOrder.length > 0
+            ? prevDisplayOrder[prevDisplayOrder.length - 1] ?? ''
+            : ''
+      const hostId = explicitHostId.length > 0 ? explicitHostId : fallbackHostId
       const sorted = [...ids].sort((a, b) => a.localeCompare(b))
       ids =
         hostId && sorted.includes(hostId)
           ? [...sorted.filter((id) => id !== hostId), hostId]
           : sorted
+      tileOrder.value = ids
+      return
     }
     const prev = tileOrder.value
     const next: string[] = []
@@ -1814,8 +1834,14 @@ const mafiaNumberByPeer = computed(() => {
     return new Map<string, number>()
   }
   const m = new Map<string, number>()
-  const hostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId : ''
   const order = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
+  const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
+  const hostPeerId =
+    explicitHostPeerId.length > 0
+      ? explicitHostPeerId
+      : order.length > 0
+        ? order[order.length - 1] ?? ''
+        : ''
   const numbered = hostPeerId.length > 0 ? order.filter((id) => id !== hostPeerId) : order
   numbered.forEach((id, i) => {
     m.set(id, i + 1)
@@ -2034,9 +2060,14 @@ function onEatFirstPlayerUseActionCard(payload: { peerId: string }): void {
 const orderedTiles = computed(() => {
   const list = tiles.value.slice()
   if (isMafiaRoute.value && list.length > 0) {
-    const hostPidRaw = mafiaGameStore.mafiaHostPeerId
-    const hostPidForGrid = typeof hostPidRaw === 'string' ? hostPidRaw.trim() : ''
     const base = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
+    const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
+    const hostPidForGrid =
+      explicitHostPeerId.length > 0
+        ? explicitHostPeerId
+        : base.length > 0
+          ? base[base.length - 1] ?? ''
+          : ''
     const order = hostPidForGrid.length > 0 ? pinHostPeerToEndOfOrder(base, hostPidForGrid) : base.slice()
 
     const orderIndex = new Map<string, number>()
@@ -2425,10 +2456,17 @@ const orderedGridRows = computed(() => {
   }
   const names = displayNameUiByPeerId.value
   const overrides = localTileDisplayOverrides.value
+  const mafiaNicknames = mafiaNicknameOverrideByPeerId.value
   return orderedTiles.value.map((tile) => {
     const ov = overrides[tile.peerId]
     if (typeof ov === 'string' && normalizeDisplayName(ov)) {
       return { tile, displayName: normalizeDisplayName(ov).slice(0, 64) }
+    }
+    if (isMafiaRoute.value) {
+      const n = mafiaNicknames[tile.peerId]
+      if (typeof n === 'string' && normalizeDisplayName(n)) {
+        return { tile, displayName: normalizeDisplayName(n).slice(0, 64) }
+      }
     }
     return {
       tile,
@@ -2627,7 +2665,13 @@ function refreshMafiaPlayersState(): void {
   if (mafiaGameStore.isApplyingMafiaReshuffle) {
     const engine = tileOrder.value
     const order = mafiaGameStore.getDisplayNumberingOrder(engine)
-    const hostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId : ''
+    const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
+    const hostPeerId =
+      explicitHostPeerId.length > 0
+        ? explicitHostPeerId
+        : order.length > 0
+          ? order[order.length - 1] ?? ''
+          : ''
     const playersOnly = hostPeerId.length > 0 ? order.filter((peerId) => peerId !== hostPeerId) : order
     mafiaPlayersStore.setPlayerRowsDisplay(
       playersOnly.map((peerId, i) => ({
@@ -2643,7 +2687,13 @@ function refreshMafiaPlayersState(): void {
   mafiaGameStore.reconcileNumberingWithEngine(engine)
   mafiaGameStore.pruneGameStateToPeers(engine)
   const order = mafiaGameStore.getDisplayNumberingOrder(engine)
-  const hostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId : ''
+  const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
+  const hostPeerId =
+    explicitHostPeerId.length > 0
+      ? explicitHostPeerId
+      : order.length > 0
+        ? order[order.length - 1] ?? ''
+        : ''
   const seatCount = hostPeerId.length > 0 && order.includes(hostPeerId) ? order.length - 1 : order.length
   mafiaGameStore.pruneNightActionsToMaxSeat(seatCount)
   if (mafiaGameStore.isMafiaHost) {
@@ -3070,6 +3120,7 @@ watch(joining, (j) => {
                 :peer-id="row.tile.peerId"
                 :display-name="row.displayName"
                 :avatar-fallback-name="peerAvatarFallbackName(row.tile.peerId)"
+                :can-edit-display-name="canEditTileDisplayName(row.tile.peerId)"
                 :mafia-seat-index="
                   isMafiaRoute
                     ? mafiaNumberByPeer.get(row.tile.peerId)

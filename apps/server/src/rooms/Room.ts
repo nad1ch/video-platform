@@ -440,8 +440,25 @@ export class Room {
     if (snap == null) return null
     const live = new Set(this.getPeers().map((p) => p.id))
     if (snap.order.length !== live.size) return null
-    for (const id of snap.order) {
-      if (!live.has(id)) return null
+    const snapIds = new Set(snap.order)
+    const missingFromLive = snap.order.filter((id) => !live.has(id))
+    const extraInLive = [...live].filter((id) => !snapIds.has(id))
+    if (!(missingFromLive.length === 0 && extraInLive.length === 0)) {
+      // Single-peer reconnect with a new peerId: preserve seat by replacing
+      // the vanished id with the only new live id in the same order slot.
+      if (missingFromLive.length !== 1 || extraInLive.length !== 1) {
+        return null
+      }
+      const staleId = missingFromLive[0]!
+      const replacementId = extraInLive[0]!
+      const remappedOrder = snap.order.map((id) => (id === staleId ? replacementId : id))
+      return {
+        order: remappedOrder,
+        speakingQueue: [...snap.speakingQueue],
+        ...(snap.clearRoles === true ? { clearRoles: true } : {}),
+        ...(typeof snap.oldMafiaMode === 'boolean' ? { oldMafiaMode: snap.oldMafiaMode } : {}),
+        ...(snap.nightActions && typeof snap.nightActions === 'object' ? { nightActions: { ...snap.nightActions } } : {}),
+      }
     }
     return {
       order: [...snap.order],
@@ -485,8 +502,24 @@ export class Room {
     if (snap == null) return null
     const live = new Set(this.getPeers().map((p) => p.id))
     if (snap.players.length !== live.size) return null
-    for (const entry of snap.players) {
-      if (!live.has(entry.peerId)) return null
+    const snapIds = new Set(snap.players.map((p) => p.peerId))
+    const missingFromLive = snap.players.filter((entry) => !live.has(entry.peerId)).map((entry) => entry.peerId)
+    const extraInLive = [...live].filter((id) => !snapIds.has(id))
+    if (!(missingFromLive.length === 0 && extraInLive.length === 0)) {
+      // Same recovery rule as players-update: one stale id can be replaced by
+      // one new live id while preserving seat index and role assignment.
+      if (missingFromLive.length !== 1 || extraInLive.length !== 1) {
+        return null
+      }
+      const staleId = missingFromLive[0]!
+      const replacementId = extraInLive[0]!
+      return {
+        players: snap.players.map((p) => ({
+          peerId: p.peerId === staleId ? replacementId : p.peerId,
+          seat: p.seat,
+          role: p.role,
+        })),
+      }
     }
     return {
       players: snap.players.map((p) => ({ peerId: p.peerId, seat: p.seat, role: p.role })),

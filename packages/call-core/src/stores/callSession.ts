@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { isVideoQualityPreset, type VideoQualityPreset } from '../media/videoQualityPreset'
 import { guestDisplayNameForPeerId } from '../utils/participantsMapper'
 import { normalizeDisplayName } from '../utils/normalizeDisplayName'
-import { newCallTabPeerId } from '../utils/callTabPeerId'
+import { newCallTabPeerId, resetCallTabPeerId } from '../utils/callTabPeerId'
 
 const LS_VIDEO_PRESET = 'streamassist_call_video_quality_preset'
 
@@ -183,7 +183,7 @@ export const useCallSessionStore = defineStore('callSession', () => {
   }
 
   function resetSessionIdentity(): void {
-    selfPeerId.value = newCallTabPeerId()
+    selfPeerId.value = resetCallTabPeerId()
   }
 
   function setSignalingAuthUserId(id: string | null | undefined): void {

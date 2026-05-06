@@ -809,9 +809,20 @@ export async function handleJoinRoom(
   
   const isMafiaRoom = isMafiaRoomId(room.id)
   let mafiaHostAssignedOnJoin = false
-  if (isMafiaRoom && room.getMafiaHostUserId() == null && userId.length > 0) {
-    room.setMafiaHostUserId(userId)
-    mafiaHostAssignedOnJoin = true
+  if (isMafiaRoom && userId.length > 0) {
+    const hostUserId = room.getMafiaHostUserId()
+    const hostPeerId = room.getMafiaHostPeerId()
+    const hostPeerOnline = hostPeerId != null && room.getPeer(hostPeerId) != null
+    if (hostUserId == null) {
+      room.setMafiaHostUserId(userId)
+      room.setMafiaHostPeerId(peer.id)
+      mafiaHostAssignedOnJoin = true
+    } else if (hostUserId === userId && !hostPeerOnline) {
+      // Host page reload / transient reconnect: keep one host owner and rebind
+      // host peer id immediately so clients keep "host is last" ordering.
+      room.setMafiaHostPeerId(peer.id)
+      mafiaHostAssignedOnJoin = true
+    }
   }
 
   const others = peersInRoomExcept(room, peerId)
