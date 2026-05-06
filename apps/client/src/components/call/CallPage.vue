@@ -2562,12 +2562,12 @@ function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value
     if (!eatFirstShell.speakingMode) {
       return
     }
-    const t = ev.target
-    if (t instanceof Element) {
-      if (t.closest('button, input, textarea, a, [data-no-mafia-tile-host]')) {
+    const clickTarget = ev.target
+    if (clickTarget instanceof Element) {
+      if (clickTarget.closest('button, input, textarea, a, [data-no-mafia-tile-host]')) {
         return
       }
-      if (t.closest('.tile-overlay__label-group, .tile-overlay__name-input, .tile-overlay__name-edit')) {
+      if (clickTarget.closest('.tile-overlay__label-group, .tile-overlay__name-input, .tile-overlay__name-edit')) {
         return
       }
     }
@@ -2592,12 +2592,12 @@ function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value
   if (!isMafiaRoute.value || !mafiaGameStore.isMafiaHost) {
     return
   }
-  const t = ev.target
-  if (t instanceof Element) {
-    if (t.closest('button, input, textarea, a, [data-no-mafia-tile-host]')) {
+  const clickTarget = ev.target
+  if (clickTarget instanceof Element) {
+    if (clickTarget.closest('button, input, textarea, a, [data-no-mafia-tile-host]')) {
       return
     }
-    if (t.closest('.tile-overlay__label-group, .tile-overlay__name-input, .tile-overlay__name-edit')) {
+    if (clickTarget.closest('.tile-overlay__label-group, .tile-overlay__name-input, .tile-overlay__name-edit')) {
       return
     }
   }
