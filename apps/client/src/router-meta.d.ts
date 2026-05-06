@@ -14,7 +14,5 @@ declare module 'vue-router' {
     requiresAuth?: boolean
     /** Лише `user.role === 'admin'` (інше — редірект на `/app`). */
     requiresAdmin?: boolean
-    /** Temporary beta gate for resource-heavy video experiences. */
-    requiresBetaAccess?: boolean
   }
 }
