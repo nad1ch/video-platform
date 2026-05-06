@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
 import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
 import mafiaHostMuteAllActive from '@/assets/mafia/ui/host-mute-all-active.svg'
@@ -36,7 +37,16 @@ function onMuteAll(): void {
   emit('force-mute-all', muteAllActive.value)
 }
 
+const reshuffleConfirmOpen = ref(false)
+
 function onReshuffle(): void {
+  if (!isMafiaHost.value || !canReshuffle.value) {
+    return
+  }
+  reshuffleConfirmOpen.value = true
+}
+
+function onReshuffleConfirmed(): void {
   if (!isMafiaHost.value || !canReshuffle.value) {
     return
   }
@@ -73,6 +83,14 @@ function onReshuffle(): void {
     >
       <img class="mafia-host-actions__roles-art" :src="mafiaHostRoles" alt="" aria-hidden="true" />
     </button>
+    <ConfirmDialog
+      v-model:open="reshuffleConfirmOpen"
+      :title="t('mafiaPage.reshuffleConfirmTitle')"
+      :message="t('mafiaPage.reshuffleConfirmBody')"
+      :confirm-label="t('mafiaPage.reshuffleConfirmProceed')"
+      :cancel-label="t('mafiaPage.reshuffleConfirmCancel')"
+      @confirm="onReshuffleConfirmed"
+    />
   </div>
 </template>
 

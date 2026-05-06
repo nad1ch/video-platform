@@ -201,6 +201,9 @@ function onRemove(pairIndex: number, ev: MouseEvent): void {
 
 .ef-vote-hud__tool--on {
   filter: brightness(1.15);
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, #facc15 70%, transparent),
+    0 0 0 1px rgb(250 204 21 / 0.28);
 }
 
 .ef-vote-hud__tool-art {

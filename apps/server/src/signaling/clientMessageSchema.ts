@@ -233,6 +233,14 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     }),
   }),
   z.object({
+    type: z.literal(MafiaWs.playerNameUpdate),
+    payload: z.object({
+      targetPeerId: z.string().min(1),
+      /** Empty string resets back to the server-sanitized default. */
+      displayName: z.string().max(64),
+    }),
+  }),
+  z.object({
     type: z.literal(MafiaWs.modeUpdate),
     payload: z.object({
       mode: z.union([z.literal('old'), z.literal('new')]),

@@ -20,6 +20,7 @@ import {
   handleMafiaQueueUpdate,
   handleMafiaReshuffle,
   handleMafiaPlayersUpdate,
+  handleMafiaPlayerNameUpdate,
   handleMafiaModeUpdate,
   handleMafiaSettingsUpdate,
   handleMafiaPageBackgroundSettings,
@@ -278,6 +279,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'mafia:players-update': {
               handleMafiaPlayersUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:player-name-update': {
+              handleMafiaPlayerNameUpdate(socket, parsed.data.payload, deps)
               break
             }
             case 'mafia:mode-update': {
