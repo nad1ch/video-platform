@@ -15,6 +15,8 @@ import {
   type VideoPublishTier,
 } from '../media/videoQualityPreset'
 import { ensureDisplayCaptureVideoTrackEnabled } from '../screenShare/displayCaptureVideoTrack'
+import { buildCallAudioDevMicSnapshot, logCallAudioDevDiagnostics } from '../audio/callAudioDevDiagnostics'
+import { resolveCallOutboundOpusDtxForProduce } from '../audio/callOutboundOpusPolicy'
 import { waitForSignalingMessage } from '../signaling/signalingWait'
 
 function isTransportCreatedMessage(
@@ -296,13 +298,25 @@ export function useSendTransport() {
             transportState: transport.connectionState,
           })
         }
+        const opusDtxForProduce = resolveCallOutboundOpusDtxForProduce()
+        logCallAudioDevDiagnostics('before-audio-produce', {
+          opusDtxForProduce,
+          opusDtxNote:
+            'opusDtx is fixed at Producer creation; change requires new audio producer (rejoin) — replaceTrack does not update it.',
+          ...buildCallAudioDevMicSnapshot(track),
+        })
         const audioProducer = await transport.produce({
           track,
           codecOptions: {
-            opusDtx: true,
+            opusDtx: opusDtxForProduce,
             opusFec: true,
             opusMaxAverageBitrate: OUTBOUND_AUDIO_OPUS_MAX_AVG_BITRATE_BPS,
           },
+        })
+        logCallAudioDevDiagnostics('after-audio-produce', {
+          producerId: audioProducer.id,
+          opusDtxUsed: opusDtxForProduce,
+          ...buildCallAudioDevMicSnapshot(track),
         })
         if (import.meta.env.DEV) {
           console.log('[produce-audio] created', {

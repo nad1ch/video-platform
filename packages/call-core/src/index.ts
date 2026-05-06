@@ -43,6 +43,20 @@ export {
 } from './audio/noiseSuppressionPreference'
 
 export {
+  CALL_AUDIO_DEV_DIAGNOSTICS_STORAGE_KEY,
+  buildCallAudioDevMicSnapshot,
+  isCallAudioDevDiagnosticsEnabled,
+  logCallAudioDevDiagnostics,
+  type CallAudioDevMicSnapshot,
+} from './audio/callAudioDevDiagnostics'
+
+export {
+  CALL_AUDIO_DEV_OPUS_DTX_OFF_STORAGE_KEY,
+  CALL_AUDIO_OPUS_DTX_ENABLED,
+  resolveCallOutboundOpusDtxForProduce,
+} from './audio/callOutboundOpusPolicy'
+
+export {
   applyWebcamContentHint,
   DEFAULT_CALL_AUDIO_CONSTRAINTS,
   DEFAULT_CALL_VIDEO_CONSTRAINTS,
