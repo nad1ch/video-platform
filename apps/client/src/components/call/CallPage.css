@@ -1304,36 +1304,6 @@
   object-fit: contain;
 }
 
-/*
- * Inline headphones glyph for the "Light noise suppression" toggle.
- * Drawn with `stroke="currentColor"` so the active accent (yellow) and
- * default neutral states reuse the existing button colour stack — no
- * hover animation, no extra asset import.
- */
-.call-page__dock-btn--noise {
-  border-color: transparent;
-  box-shadow: none;
-}
-
-.call-page__dock-btn--noise:hover:not(:disabled) {
-  background: rgb(102 56 143 / 0.47);
-  box-shadow: none;
-}
-
-.call-page__dock-btn--noise-active {
-  border-color: color-mix(in srgb, #facc15 70%, rgb(255 255 255 / 0.12));
-  color: #fef9c3;
-  box-shadow: 0 0 0 1px rgb(250 204 21 / 0.3);
-}
-
-.call-page__dock-noise-svg {
-  display: block;
-  width: 1.25rem;
-  height: 1.25rem;
-  color: inherit;
-  pointer-events: none;
-}
-
 .call-page__dock-ico--emoji {
   font-size: 1.05rem;
   line-height: 1;

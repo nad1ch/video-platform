@@ -23,33 +23,21 @@ import callControlCameraOn from '@/assets/call-controls/split-camera-on.svg'
 
 type CallDeviceChoice = { deviceId: string; label: string }
 
-withDefaults(
-  defineProps<{
-    joining: boolean
-    micEnabled: boolean
-    camEnabled: boolean
-    handRaised: boolean
-    screenSharing: boolean
-    chatOpen: boolean
-    showMediaDevicePickers: boolean
-    micPickerOpen: boolean
-    camPickerOpen: boolean
-    /**
-     * Light noise suppression toggle state (default `true` to match the
-     * historical {@link DEFAULT_CALL_AUDIO_CONSTRAINTS}). Click toggles the
-     * preference; the actual effect is applied locally via
-     * `MediaStreamTrack.applyConstraints` and never recreates producers.
-     */
-    noiseSuppressionEnabled?: boolean
-    audioInputDevices: readonly CallDeviceChoice[]
-    videoInputDevices: readonly CallDeviceChoice[]
-    localAudioInputDeviceId?: string | null
-    localVideoInputDeviceId?: string | null
-  }>(),
-  {
-    noiseSuppressionEnabled: true,
-  },
-)
+defineProps<{
+  joining: boolean
+  micEnabled: boolean
+  camEnabled: boolean
+  handRaised: boolean
+  screenSharing: boolean
+  chatOpen: boolean
+  showMediaDevicePickers: boolean
+  micPickerOpen: boolean
+  camPickerOpen: boolean
+  audioInputDevices: readonly CallDeviceChoice[]
+  videoInputDevices: readonly CallDeviceChoice[]
+  localAudioInputDeviceId?: string | null
+  localVideoInputDeviceId?: string | null
+}>()
 
 const emit = defineEmits<{
   'update:micPickerOpen': [value: boolean]
@@ -59,7 +47,6 @@ const emit = defineEmits<{
   'toggle-cam': []
   'toggle-raise-hand': []
   'toggle-screen-share': []
-  'toggle-noise-suppression': []
   leave: []
   'pick-audio-input': [deviceId: string]
   'pick-video-input': [deviceId: string]
@@ -184,33 +171,6 @@ defineExpose({ containsDevicePickerTarget })
         </button>
       </div>
     </div>
-    <button
-      type="button"
-      class="call-page__dock-btn call-page__dock-btn--noise call-page__dock-btn--compact-narrow-hide"
-      :class="{ 'call-page__dock-btn--noise-active': noiseSuppressionEnabled }"
-      :aria-label="t('callPage.noiseSuppressionTitle')"
-      :title="t('callPage.noiseSuppressionTitle')"
-      :aria-pressed="noiseSuppressionEnabled"
-      @click="emit('toggle-noise-suppression')"
-    >
-      <svg
-        class="call-page__dock-noise-svg"
-        viewBox="0 0 24 24"
-        width="20"
-        height="20"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path d="M4 13a8 8 0 0 1 16 0" />
-        <path d="M4 13v3a2 2 0 0 0 2 2h1a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H4z" />
-        <path d="M20 13v3a2 2 0 0 1-2 2h-1a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h3z" />
-      </svg>
-    </button>
     <div
       ref="camSplitRef"
       class="call-page__dock-split call-page__dock-split--figma call-page__dock-split--camera"
