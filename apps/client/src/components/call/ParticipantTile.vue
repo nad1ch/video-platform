@@ -1380,16 +1380,11 @@ if (import.meta.env.DEV) {
           playRev ?? 0,
           remoteListenVolume ?? 1,
           remoteListenMuted ?? false,
-          remoteAudioLevel ?? 0,
-          remoteVoiceDucked ?? false,
         ]"
         :stream="audioSplitStream"
         :play-rev="playRev"
         :listen-volume="remoteListenVolume ?? 1"
         :listen-muted="remoteListenMuted ?? false"
-        :audio-level="remoteAudioLevel ?? 0"
-        :voice-ducked="remoteVoiceDucked ?? false"
-        audio-processing
       />
       <div
         v-if="showVideo"
