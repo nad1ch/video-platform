@@ -239,7 +239,25 @@ async function bindAudioGraph(): Promise<void> {
     if (usingWebAudio) {
       applyGain()
     } else {
+      // Mirror `bindElementFallback`'s tail so a listen-mute toggle on an
+      // existing track does not leave the <audio> element silently paused
+      // (slow-path mounted muted → fast-path unmute would otherwise just
+      // flip `muted=false` without resuming playback).
       applyElementVolume()
+      const a = el.value
+      if (a) {
+        if (props.listenMuted) {
+          try {
+            a.pause()
+          } catch {
+            /* ignore */
+          }
+        } else {
+          void a.play().catch(() => {
+            /* idempotent: already-playing resolves; abort/autoplay handled by slow path on next bind */
+          })
+        }
+      }
     }
     return
   }
