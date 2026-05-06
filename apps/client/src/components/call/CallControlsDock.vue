@@ -4,10 +4,14 @@ import { useI18n } from 'vue-i18n'
 import callControlChat from '@/assets/call-controls/chat.svg'
 import callControlHand from '@/assets/call-controls/hand.svg'
 import callControlHandActive from '@/assets/call-controls/hand-active.svg'
+import callControlHeadphonesDeafen from '@/assets/call-controls/split-headphones-deafen.svg'
+import callControlHeadphonesOn from '@/assets/call-controls/split-headphones-on.svg'
 import callControlIconCameraOff from '@/assets/call-controls/icon-camera-off.svg'
 import callControlIconCameraOn from '@/assets/call-controls/icon-camera-on.svg'
 import callControlIconHand from '@/assets/call-controls/icon-hand.svg'
 import callControlIconHandActive from '@/assets/call-controls/icon-hand-active.svg'
+import callControlIconHeadphonesDeafen from '@/assets/call-controls/icon-headphones-deafen.svg'
+import callControlIconHeadphonesOn from '@/assets/call-controls/icon-headphones-on.svg'
 import callControlIconLeave from '@/assets/call-controls/icon-leave.svg'
 import callControlIconMicOff from '@/assets/call-controls/icon-mic-off.svg'
 import callControlIconMicOn from '@/assets/call-controls/icon-mic-on.svg'
@@ -27,34 +31,42 @@ defineProps<{
   joining: boolean
   micEnabled: boolean
   camEnabled: boolean
+  callDeafened: boolean
   handRaised: boolean
   screenSharing: boolean
   chatOpen: boolean
   showMediaDevicePickers: boolean
   micPickerOpen: boolean
   camPickerOpen: boolean
+  speakerPickerOpen: boolean
   audioInputDevices: readonly CallDeviceChoice[]
   videoInputDevices: readonly CallDeviceChoice[]
+  audioOutputDevices: readonly CallDeviceChoice[]
   localAudioInputDeviceId?: string | null
   localVideoInputDeviceId?: string | null
+  localAudioOutputDeviceId?: string | null
 }>()
 
 const emit = defineEmits<{
   'update:micPickerOpen': [value: boolean]
   'update:camPickerOpen': [value: boolean]
+  'update:speakerPickerOpen': [value: boolean]
   'update:chatOpen': [value: boolean]
   'toggle-mic': []
   'toggle-cam': []
+  'toggle-deafen': []
   'toggle-raise-hand': []
   'toggle-screen-share': []
   leave: []
   'pick-audio-input': [deviceId: string]
   'pick-video-input': [deviceId: string]
+  'pick-audio-output': [deviceId: string]
 }>()
 
 const { t } = useI18n()
 
 const micSplitRef = ref<HTMLElement | null>(null)
+const headSplitRef = ref<HTMLElement | null>(null)
 const camSplitRef = ref<HTMLElement | null>(null)
 
 const callControlArt = {
@@ -63,6 +75,8 @@ const callControlArt = {
   chat: callControlChat,
   hand: callControlHand,
   handActive: callControlHandActive,
+  headphonesDeafen: callControlHeadphonesDeafen,
+  headphonesOn: callControlHeadphonesOn,
   leave: callControlLeave,
   micOff: callControlMicOff,
   micOn: callControlMicOn,
@@ -75,6 +89,8 @@ const callControlIconArt = {
   cameraOn: callControlIconCameraOn,
   hand: callControlIconHand,
   handActive: callControlIconHandActive,
+  headphonesDeafen: callControlIconHeadphonesDeafen,
+  headphonesOn: callControlIconHeadphonesOn,
   leave: callControlIconLeave,
   micOff: callControlIconMicOff,
   micOn: callControlIconMicOn,
@@ -86,6 +102,7 @@ function openMicPicker(open: boolean): void {
   emit('update:micPickerOpen', open)
   if (open) {
     emit('update:camPickerOpen', false)
+    emit('update:speakerPickerOpen', false)
   }
 }
 
@@ -93,11 +110,24 @@ function openCamPicker(open: boolean): void {
   emit('update:camPickerOpen', open)
   if (open) {
     emit('update:micPickerOpen', false)
+    emit('update:speakerPickerOpen', false)
+  }
+}
+
+function openSpeakerPicker(open: boolean): void {
+  emit('update:speakerPickerOpen', open)
+  if (open) {
+    emit('update:micPickerOpen', false)
+    emit('update:camPickerOpen', false)
   }
 }
 
 function containsDevicePickerTarget(target: Node): boolean {
-  return Boolean(micSplitRef.value?.contains(target) || camSplitRef.value?.contains(target))
+  return Boolean(
+    micSplitRef.value?.contains(target) ||
+      headSplitRef.value?.contains(target) ||
+      camSplitRef.value?.contains(target),
+  )
 }
 
 defineExpose({ containsDevicePickerTarget })
@@ -166,6 +196,67 @@ defineExpose({ containsDevicePickerTarget })
           :aria-checked="d.deviceId === localAudioInputDeviceId"
           :class="{ 'call-page__device-pop__opt--active': d.deviceId === localAudioInputDeviceId }"
           @click="emit('pick-audio-input', d.deviceId)"
+        >
+          {{ d.label }}
+        </button>
+      </div>
+    </div>
+    <div
+      ref="headSplitRef"
+      class="call-page__dock-split call-page__dock-split--figma call-page__dock-split--headphones"
+      :class="{
+        'call-page__dock-split--open': speakerPickerOpen,
+        'call-page__dock-split--solo': !showMediaDevicePickers || audioOutputDevices.length === 0,
+      }"
+    >
+      <img
+        class="call-page__dock-control-art"
+        :src="callDeafened ? callControlArt.headphonesDeafen : callControlArt.headphonesOn"
+        alt=""
+        aria-hidden="true"
+      />
+      <img
+        :key="callDeafened ? 'head-deafen' : 'head-on'"
+        class="call-page__dock-control-icon call-page__dock-control-icon--split"
+        :src="callDeafened ? callControlIconArt.headphonesDeafen : callControlIconArt.headphonesOn"
+        alt=""
+        aria-hidden="true"
+      />
+      <button
+        type="button"
+        class="call-page__dock-btn call-page__dock-btn--split-main"
+        :class="{ 'call-page__dock-btn--danger': callDeafened }"
+        :aria-label="callDeafened ? t('callPage.deafenOffAria') : t('callPage.deafenOnAria')"
+        :title="callDeafened ? t('callPage.deafenOffAria') : t('callPage.deafenOnAria')"
+        :aria-pressed="callDeafened"
+        @click="emit('toggle-deafen')"
+      />
+      <button
+        v-if="showMediaDevicePickers && audioOutputDevices.length > 0"
+        type="button"
+        class="call-page__dock-btn call-page__dock-btn--split-chev"
+        :aria-label="t('callPage.speakerOutputMenu')"
+        :title="t('callPage.speakerOutputMenu')"
+        :aria-expanded="speakerPickerOpen"
+        aria-haspopup="menu"
+        @click.stop="openSpeakerPicker(!speakerPickerOpen)"
+      />
+      <div
+        v-if="speakerPickerOpen && showMediaDevicePickers && audioOutputDevices.length > 0"
+        class="call-page__device-pop sa-scrollbar"
+        role="menu"
+        :aria-label="t('callPage.speakerOutputMenu')"
+      >
+        <p class="call-page__device-pop__title">{{ t('callPage.chooseSpeaker') }}</p>
+        <button
+          v-for="d in audioOutputDevices"
+          :key="d.deviceId"
+          type="button"
+          role="menuitemradio"
+          class="call-page__device-pop__opt"
+          :aria-checked="d.deviceId === localAudioOutputDeviceId"
+          :class="{ 'call-page__device-pop__opt--active': d.deviceId === localAudioOutputDeviceId }"
+          @click="emit('pick-audio-output', d.deviceId)"
         >
           {{ d.label }}
         </button>

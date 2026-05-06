@@ -240,8 +240,9 @@ export function useCallEngine(options?: CallEngineOptions) {
     refreshMediaDevices,
     startLocalMedia,
     stopLocalMedia,
-    toggleMic,
+    toggleMic: toggleMicRaw,
     toggleCam: toggleLocalCam,
+    audioOutputDevices,
     swapLocalAudioInput,
     swapLocalVideoInput,
   } = useLocalMedia({
@@ -450,11 +451,35 @@ export function useCallEngine(options?: CallEngineOptions) {
     saveRemoteListeningPrefs(roomStorageKey(), remoteListenPrefs.value)
   }
 
+  function clampRemoteListenGain(v: number): number {
+    if (!Number.isFinite(v)) {
+      return 1
+    }
+    return Math.min(2, Math.max(0, v))
+  }
+
+  function resolveRemoteListenNz(prev: RemoteListenEntry, clampedVolume: number): number {
+    if (clampedVolume > 0.0001) {
+      return clampedVolume
+    }
+    const fromNz =
+      typeof prev.nz === 'number' && Number.isFinite(prev.nz) ? clampRemoteListenGain(prev.nz) : null
+    if (fromNz !== null && fromNz > 0.0001) {
+      return fromNz
+    }
+    if (prev.volume > 0.0001) {
+      return clampRemoteListenGain(prev.volume)
+    }
+    return 1
+  }
+
   function setRemoteListenVolume(peerId: string, volume: number): void {
     const next = new Map(remoteListenPrefs.value)
     const key = remoteListenPrefsKey(peerId)
     const prev = next.get(key) ?? next.get(peerId) ?? { volume: 1, muted: false }
-    const entry = { ...prev, volume: Math.min(2, Math.max(0, volume)) }
+    const clamped = clampRemoteListenGain(volume)
+    const nz = resolveRemoteListenNz(prev, clamped)
+    const entry: RemoteListenEntry = { ...prev, volume: clamped, nz }
     next.delete(peerId)
     next.set(key, entry)
     remoteListenPrefs.value = next
@@ -465,11 +490,77 @@ export function useCallEngine(options?: CallEngineOptions) {
     const next = new Map(remoteListenPrefs.value)
     const key = remoteListenPrefsKey(peerId)
     const prev = next.get(key) ?? next.get(peerId) ?? { volume: 1, muted: false }
-    const entry = { ...prev, muted }
+    let volume = clampRemoteListenGain(prev.volume)
+    let nz = resolveRemoteListenNz(prev, volume)
+    if (!muted && volume <= 0.0001) {
+      volume = nz > 0.0001 ? nz : 1
+      nz = volume
+    }
+    const entry: RemoteListenEntry = { ...prev, muted, volume, nz }
     next.delete(peerId)
     next.set(key, entry)
     remoteListenPrefs.value = next
     persistListenPrefs()
+  }
+
+  const callDeafened = ref(false)
+  const deafenListenPrefsSnapshot = shallowRef<Map<string, RemoteListenEntry> | null>(null)
+  let deafenMicWasEnabled = false
+
+  function cloneRemoteListenPrefsMap(m: Map<string, RemoteListenEntry>): Map<string, RemoteListenEntry> {
+    const n = new Map<string, RemoteListenEntry>()
+    for (const [k, v] of m) {
+      n.set(k, { ...v })
+    }
+    return n
+  }
+
+  function enterCallDeafen(): void {
+    if (callDeafened.value) {
+      return
+    }
+    deafenListenPrefsSnapshot.value = cloneRemoteListenPrefsMap(remoteListenPrefs.value)
+    deafenMicWasEnabled = micEnabled.value
+    callDeafened.value = true
+    if (micEnabled.value) {
+      toggleMicRaw()
+    }
+  }
+
+  function leaveCallDeafen(source: 'headphones' | 'mic'): void {
+    if (!callDeafened.value) {
+      return
+    }
+    const snap = deafenListenPrefsSnapshot.value
+    callDeafened.value = false
+    deafenListenPrefsSnapshot.value = null
+    if (snap) {
+      remoteListenPrefs.value = cloneRemoteListenPrefsMap(snap)
+      persistListenPrefs()
+    }
+    if (source === 'headphones' && deafenMicWasEnabled && !micEnabled.value) {
+      toggleMicRaw()
+    }
+  }
+
+  function toggleCallDeafen(): void {
+    if (callDeafened.value) {
+      leaveCallDeafen('headphones')
+    } else {
+      enterCallDeafen()
+    }
+  }
+
+  function toggleMic(): void {
+    if (callDeafened.value) {
+      const stream = localStream.value
+      const t = stream?.getAudioTracks()[0]
+      const willEnable = t ? !t.enabled : false
+      if (willEnable) {
+        leaveCallDeafen('mic')
+      }
+    }
+    toggleMicRaw()
   }
 
   function pushCallPresence(kind: 'join' | 'leave', peerId: string): void {
@@ -958,7 +1049,10 @@ export function useCallEngine(options?: CallEngineOptions) {
         videoPresentation: remoteSource,
         playRev: remotePeerPlayRevs.value.get(peerId) ?? 0,
         remoteListenVolume: (remoteListenPrefs.value.get(remoteListenPrefsKey(peerId)) ?? remoteListenPrefs.value.get(peerId))?.volume ?? 1,
-        remoteListenMuted: (remoteListenPrefs.value.get(remoteListenPrefsKey(peerId)) ?? remoteListenPrefs.value.get(peerId))?.muted ?? false,
+        remoteListenMuted:
+          callDeafened.value ||
+          ((remoteListenPrefs.value.get(remoteListenPrefsKey(peerId)) ?? remoteListenPrefs.value.get(peerId))?.muted ??
+            false),
         handRaised: Boolean(peerHandRaised.value[peerId]),
       })
     }
@@ -1214,6 +1308,8 @@ export function useCallEngine(options?: CallEngineOptions) {
   }
 
   function teardownMedia(): void {
+    callDeafened.value = false
+    deafenListenPrefsSnapshot.value = null
     lastPickedAudioInputId.value = ''
     lastPickedVideoInputId.value = ''
     teardownScreenShare()
@@ -1433,10 +1529,13 @@ export function useCallEngine(options?: CallEngineOptions) {
     micEnabled,
     camEnabled,
     toggleMic,
+    toggleCallDeafen,
+    callDeafened,
     toggleCam,
     audioInputDevices,
     videoInputDevices,
     refreshMediaDevices,
+    audioOutputDevices,
     localAudioInputDeviceId,
     localVideoInputDeviceId,
     setCallAudioInputDevice,

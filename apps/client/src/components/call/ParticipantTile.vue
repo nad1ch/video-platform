@@ -157,9 +157,6 @@ const MAFIA_ELIMINATION_BACKGROUND_OPTIONS = Object.freeze([
   'gray',
 ] as const satisfies readonly MafiaEliminationBackground[])
 
-const menuOpen = ref(false)
-const menuRoot = ref<HTMLElement | null>(null)
-
 const tileRootRef = ref<HTMLElement | null>(null)
 let mafiaLayerObserver: IntersectionObserver | null = null
 let mafiaLayerLastEmitted: boolean | null = null
@@ -228,28 +225,6 @@ function onNameInputEnter(ev: KeyboardEvent): void {
   }
 }
 
-function onDocPointerDown(ev: PointerEvent): void {
-  if (!menuOpen.value) {
-    return
-  }
-  const root = menuRoot.value
-  if (root && ev.target instanceof Node && root.contains(ev.target)) {
-    return
-  }
-  menuOpen.value = false
-}
-
-watch(menuOpen, (open) => {
-  if (typeof document === 'undefined') {
-    return
-  }
-  if (open) {
-    document.addEventListener('pointerdown', onDocPointerDown, true)
-  } else {
-    document.removeEventListener('pointerdown', onDocPointerDown, true)
-  }
-})
-
 function initials(name: string): string {
   const n = normalizeDisplayName(name)
   const parts = n.split(/\s+/).filter(Boolean).slice(0, 2)
@@ -310,9 +285,6 @@ watch(
 )
 
 onUnmounted(() => {
-  if (typeof document !== 'undefined') {
-    document.removeEventListener('pointerdown', onDocPointerDown, true)
-  }
   clearSplitHolder(audioSplitStream)
   clearEatFirstTimers()
 })
@@ -685,6 +657,16 @@ const volumePercentUi = computed(() =>
   Math.min(200, Math.max(0, Math.round((props.remoteListenVolume ?? 1) * 100))),
 )
 
+const localListenSilenced = computed(
+  () =>
+    Boolean(props.remoteListenMuted) ||
+    (Number(props.remoteListenVolume ?? 1) <= 0.0001),
+)
+
+const localListenIconAria = computed(() =>
+  localListenSilenced.value ? t('callPage.localListenUnmuteAria') : t('callPage.localListenMuteAria'),
+)
+
 /**
  * Stable DOM identity for `<StreamVideo>`: peer id only (no playRev/stream in key).
  * Track/cam changes are handled inside `StreamVideo` via `playRev` + `bindStream`; remounting on every bump was redundant and costly at scale.
@@ -714,15 +696,19 @@ function onVolumeSliderInput(ev: Event): void {
   const pct = Math.min(200, Math.max(0, Number(t.value)))
   const gain = pct / 100
   emit('update:listenVolume', gain)
+  if (pct > 0 && (props.remoteListenMuted ?? false)) {
+    emit('update:listenMuted', false)
+  }
 }
 
-function onMuteCheckboxChange(ev: Event): void {
-  const t = ev.target as HTMLInputElement
-  emit('update:listenMuted', t.checked)
-}
-
-function toggleMenu(): void {
-  menuOpen.value = !menuOpen.value
+function onLocalListenIconClick(): void {
+  const vol = Number(props.remoteListenVolume ?? 1)
+  const muted = Boolean(props.remoteListenMuted)
+  if (!muted && vol > 0.0001) {
+    emit('update:listenMuted', true)
+    return
+  }
+  emit('update:listenMuted', false)
 }
 
 const mafiaKillAnim = ref(false)
@@ -910,7 +896,6 @@ if (import.meta.env.DEV) {
       {
         'is-speaking': isSpeaking,
         'tile--speaking': isSpeaking,
-        'tile--menu-open': menuOpen,
         'tile--mafia-kill-anim': mafiaKillAnim,
         'tile--mafia-revive-glow': mafiaReviveAnim,
       },
@@ -1628,21 +1613,54 @@ if (import.meta.env.DEV) {
             mafiaIsDead ? '👤' : '💀'
           }}</span>
         </button>
-        <div ref="menuRoot" class="tile-menu-hoverable tile-menu-hoverable--remote">
+        <div class="tile-remote-volume tile-menu-hoverable tile-menu-hoverable--remote">
           <div class="tile-menu tile-menu--remote">
             <button
               type="button"
-              class="tile-menu__trigger"
+              class="tile-remote-volume__trigger"
               draggable="false"
-              :aria-expanded="menuOpen"
-              :aria-label="t('callPage.participantMenu')"
-              @click.stop="toggleMenu"
+              :aria-label="localListenIconAria"
+              :aria-pressed="localListenSilenced"
+              @click.stop="onLocalListenIconClick"
             >
-              ⋯
+              <svg
+                v-if="!localListenSilenced"
+                class="tile-remote-volume__ico"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                width="18"
+                height="18"
+                aria-hidden="true"
+              >
+                <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              </svg>
+              <svg
+                v-else
+                class="tile-remote-volume__ico"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                width="18"
+                height="18"
+                aria-hidden="true"
+              >
+                <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+                <path d="m22 9-6 6M16 9l6 6" />
+              </svg>
             </button>
             <div
-              v-if="menuOpen"
-              class="tile-menu__dropdown"
+              class="tile-menu__dropdown tile-remote-volume__dropdown"
               draggable="false"
               @click.stop
               @dragstart.stop.prevent
@@ -1659,7 +1677,9 @@ if (import.meta.env.DEV) {
                 type="range"
                 min="0"
                 max="200"
+                step="1"
                 :value="volumePercentUi"
+                :aria-label="t('callPage.localListenVolumeSliderAria')"
                 draggable="false"
                 @input="onVolumeSliderInput"
                 @click.stop
@@ -1668,18 +1688,6 @@ if (import.meta.env.DEV) {
                 @pointerdown.stop
                 @touchstart.stop
               />
-              <label class="tile-menu__row tile-menu__row--check">
-                <input
-                  type="checkbox"
-                  :checked="remoteListenMuted ?? false"
-                  @change="onMuteCheckboxChange"
-                  @click.stop
-                  @mousedown.stop
-                  @pointerdown.stop
-                  @touchstart.stop
-                />
-                <span>{{ t('callPage.listenMuteLocal') }}</span>
-              </label>
               <div v-if="mafiaIsDead" class="tile-menu__row tile-menu__row--mafia-bg">
                 <span class="tile-menu__label">{{ t('mafiaPage.eliminationBackgroundLabel') }}</span>
                 <div class="tile-menu__swatches" role="group" :aria-label="t('mafiaPage.eliminationBackgroundLabel')">
@@ -1743,7 +1751,8 @@ if (import.meta.env.DEV) {
   border-color: color-mix(in srgb, var(--sa-color-border, #2e303a) 80%, transparent);
 }
 
-.tile--menu-open {
+.tile:has(.tile-remote-volume:hover),
+.tile:has(.tile-remote-volume:focus-within) {
   overflow: visible;
   z-index: 4;
 }
@@ -2578,46 +2587,44 @@ if (import.meta.env.DEV) {
 }
 
 
-.tile-menu-hoverable--remote {
+.tile-menu-hoverable--remote,
+.tile-remote-volume {
   position: relative;
   transition: opacity 0.15s ease;
 }
 
-@media (max-width: 768px), (hover: none) {
-  .tile-menu__life,
-  .tile-menu-hoverable--remote {
-    opacity: 1;
-    pointer-events: auto;
-  }
+/**
+ * Hover bridge: (1) vertical padding under the trigger covers the gap before the
+ * absolute popover. (2) Horizontal padding + negative margin widens the hit box
+ * leftward so diagonal paths toward the slider stay inside `.tile-remote-volume:hover`
+ * without widening the flex row (negative margin). Life button keeps higher z-index for clicks.
+ */
+.tile-remote-volume {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  box-sizing: border-box;
+  padding-left: clamp(4rem, 36vw, 11rem);
+  margin-left: clamp(-11rem, -36vw, -4rem);
+  padding-bottom: 22px;
+  margin-bottom: -22px;
 }
 
-@media (min-width: 769px) and (hover: hover) {
-  .tile-menu__life,
-  .tile-menu-hoverable--remote {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .tile:hover .tile-menu__life,
-  .tile:focus-within .tile-menu__life,
-  .tile--menu-open .tile-menu__life,
-  .tile:hover .tile-menu-hoverable--remote,
-  .tile:focus-within .tile-menu-hoverable--remote,
-  .tile--menu-open .tile-menu-hoverable--remote {
-    opacity: 1;
-    pointer-events: auto;
-  }
+.tile-remote-volume > .tile-menu.tile-menu--remote {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
 }
 
-.tile-menu__trigger {
+.tile-remote-volume__trigger {
   width: 24px;
   height: 24px;
   padding: 0;
   border-radius: 999px;
   border: 0;
-  background: url('@/assets/mafia/ui/tile-menu.svg') center / 24px 24px no-repeat;
+  background: rgb(0 0 0 / 0.38);
   color: #f3f4f6;
-  font-size: 0;
   line-height: 1;
   cursor: pointer;
   display: flex;
@@ -2629,10 +2636,62 @@ if (import.meta.env.DEV) {
     transform 0.12s ease;
 }
 
-.tile-menu__trigger:hover {
-  box-shadow: none;
+.tile-remote-volume__trigger:hover {
   filter: brightness(1.08);
   transform: scale(1.04);
+}
+
+.tile-remote-volume__ico {
+  display: block;
+  flex-shrink: 0;
+}
+
+.tile-remote-volume__dropdown {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.12s ease,
+    visibility 0.12s ease;
+}
+
+.tile-remote-volume:hover .tile-remote-volume__dropdown,
+.tile-remote-volume:focus-within .tile-remote-volume__dropdown {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.tile-remote-volume__dropdown.tile-menu__dropdown {
+  top: calc(100% + 4px);
+}
+
+@media (max-width: 768px), (hover: none) {
+  .tile-menu__life,
+  .tile-menu-hoverable--remote,
+  .tile-remote-volume {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (min-width: 769px) and (hover: hover) {
+  .tile-menu__life,
+  .tile-menu-hoverable--remote,
+  .tile-remote-volume {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .tile:hover .tile-menu__life,
+  .tile:focus-within .tile-menu__life,
+  .tile:hover .tile-menu-hoverable--remote,
+  .tile:focus-within .tile-menu-hoverable--remote,
+  .tile:hover .tile-remote-volume,
+  .tile:focus-within .tile-remote-volume {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .tile-menu__dropdown {
@@ -2665,17 +2724,6 @@ if (import.meta.env.DEV) {
   margin-bottom: 0.5rem;
 }
 
-.tile-menu__row--check {
-  margin-bottom: 0;
-  margin-top: 0.65rem;
-  padding-top: 0.65rem;
-  border-top: 1px solid rgb(0 0 0 / 0.35);
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: #dbdee1;
-  cursor: pointer;
-}
-
 .tile-menu__label {
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -2693,13 +2741,6 @@ if (import.meta.env.DEV) {
   margin: 0;
   height: 5px;
   border-radius: 3px;
-  accent-color: #5865f2;
-  cursor: pointer;
-}
-
-.tile-menu__row--check input[type='checkbox'] {
-  width: 1rem;
-  height: 1rem;
   accent-color: #5865f2;
   cursor: pointer;
 }

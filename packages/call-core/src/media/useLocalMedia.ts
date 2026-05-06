@@ -109,6 +109,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
 
   const audioInputDevices = ref<CallMediaDeviceOption[]>([])
   const videoInputDevices = ref<CallMediaDeviceOption[]>([])
+  const audioOutputDevices = ref<CallMediaDeviceOption[]>([])
 
   function mapInputs(list: MediaDeviceInfo[], kind: MediaDeviceKind): CallMediaDeviceOption[] {
     return list
@@ -124,10 +125,21 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
       }))
   }
 
+  function mapAudioOutputs(list: MediaDeviceInfo[]): CallMediaDeviceOption[] {
+    return list
+      .filter((d) => d.kind === 'audiooutput')
+      .map((d) => ({
+        deviceId: d.deviceId,
+        label:
+          typeof d.label === 'string' && d.label.trim().length > 0 ? d.label.trim() : 'Speaker',
+      }))
+  }
+
   async function refreshMediaDevices(): Promise<void> {
     const all = await safeEnumerateDevices()
     audioInputDevices.value = mapInputs(all, 'audioinput')
     videoInputDevices.value = mapInputs(all, 'videoinput')
+    audioOutputDevices.value = mapAudioOutputs(all)
   }
 
   function onDeviceChange(): void {
@@ -442,6 +454,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     camEnabled,
     audioInputDevices,
     videoInputDevices,
+    audioOutputDevices,
     refreshMediaDevices,
     startLocalMedia,
     stopLocalMedia,

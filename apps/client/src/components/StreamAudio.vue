@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { nextTick, onUnmounted, ref, watch } from 'vue'
+import type { Ref } from 'vue'
+import { inject, nextTick, onUnmounted, ref, watch } from 'vue'
 import {
   isAudioPlaybackUnlocked,
   playAllPageAudioThrottled,
   registerAudioUnlockHook,
 } from 'call-core/audio-unlock'
 import { getSharedCallPlaybackContext, resumeSharedCallPlaybackContext } from '@/audio/callPlaybackAudioContext'
+import { CALL_AUDIO_OUTPUT_DEVICE_ID_KEY } from '@/audio/callAudioOutputInjection'
 import { createLogger } from '@/utils/logger'
 
 const streamAudioLog = createLogger('stream-audio')
@@ -37,6 +39,25 @@ const props = withDefaults(
 )
 
 const el = ref<HTMLAudioElement | null>(null)
+
+const callAudioOutputDeviceId = inject<Ref<string> | null>(CALL_AUDIO_OUTPUT_DEVICE_ID_KEY, null)
+
+async function applyCallOutputSinkToElement(): Promise<void> {
+  const id = callAudioOutputDeviceId?.value?.trim() ?? ''
+  const a = el.value
+  if (!a || id.length < 1) {
+    return
+  }
+  const ext = a as HTMLAudioElement & { setSinkId?: (sinkId: string) => Promise<void> }
+  if (typeof ext.setSinkId !== 'function') {
+    return
+  }
+  try {
+    await ext.setSinkId(id)
+  } catch (err) {
+    streamAudioLog.warn('setSinkId', err)
+  }
+}
 const NOISE_GATE_OPEN = 0.05
 const NOISE_GATE_CLOSE = 0.02
 const DUCKED_GAIN = 0.68
@@ -412,6 +433,14 @@ watch(
     if (usingWebAudio && props.audioProcessing) {
       startSmoothGainLoop()
     }
+  },
+  { flush: 'post' },
+)
+
+watch(
+  () => [callAudioOutputDeviceId?.value ?? '', el.value] as const,
+  () => {
+    void applyCallOutputSinkToElement()
   },
   { flush: 'post' },
 )

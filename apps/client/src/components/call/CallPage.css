@@ -1243,6 +1243,12 @@
     call-page-dock-icon-camera-scan 1.32s ease-in-out infinite;
 }
 
+.call-page__dock-split--headphones > .call-page__dock-control-icon {
+  animation:
+    call-page-dock-icon-swap 0.18s ease both,
+    call-page-dock-icon-mic-sway 1.28s ease-in-out infinite;
+}
+
 .call-page__dock-btn--hand .call-page__dock-control-icon {
   animation:
     call-page-dock-icon-swap 0.18s ease both,

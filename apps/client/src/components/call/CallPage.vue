@@ -6,6 +6,7 @@ import {
   onBeforeUnmount,
   onMounted,
   onUnmounted,
+  provide,
   ref,
   shallowRef,
   watch,
@@ -82,8 +83,14 @@ import { MafiaWs } from '@/composables/mafiaWsProtocol'
 import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
 import type { MafiaEliminationBackground } from '@/utils/mafiaGameTypes'
 import { decodeSpeakingNominationFlat, nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
+import {
+  applyCallAudioOutputSinkToStreamAudios,
+  CALL_AUDIO_OUTPUT_DEVICE_ID_KEY,
+} from '@/audio/callAudioOutputInjection'
 
 type VideoQualityUiChoice = 'auto' | VideoQualityPreset
+
+const CALL_AUDIO_OUTPUT_LS_KEY = 'streamassist_call_audio_out_v1'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -158,10 +165,13 @@ const {
   localAudioSourceStream,
   micEnabled,
   camEnabled,
+  callDeafened,
   toggleMic,
   toggleCam,
+  toggleCallDeafen,
   audioInputDevices,
   videoInputDevices,
+  audioOutputDevices,
   refreshMediaDevices,
   localAudioInputDeviceId,
   localVideoInputDeviceId,
@@ -1540,6 +1550,60 @@ const {
 
 const micPickerOpen = ref(false)
 const camPickerOpen = ref(false)
+const speakerPickerOpen = ref(false)
+const lastPickedAudioOutputId = ref('')
+const callAudioOutputDeviceId = ref('')
+
+provide(CALL_AUDIO_OUTPUT_DEVICE_ID_KEY, callAudioOutputDeviceId)
+
+function readCallAudioOutputFromStorage(): void {
+  if (typeof localStorage === 'undefined') {
+    return
+  }
+  try {
+    const raw = localStorage.getItem(CALL_AUDIO_OUTPUT_LS_KEY)
+    if (typeof raw === 'string' && raw.trim().length > 0) {
+      callAudioOutputDeviceId.value = raw.trim()
+    }
+  } catch {
+    /* ignore */
+  }
+}
+readCallAudioOutputFromStorage()
+
+const localAudioOutputDeviceId = computed((): string | null => {
+  const picked = lastPickedAudioOutputId.value.trim()
+  if (picked && audioOutputDevices.value.some((d) => d.deviceId === picked)) {
+    return picked
+  }
+  const cur = callAudioOutputDeviceId.value.trim()
+  if (cur && audioOutputDevices.value.some((d) => d.deviceId === cur)) {
+    return cur
+  }
+  return null
+})
+
+watch(
+  callAudioOutputDeviceId,
+  async (id) => {
+    const t = typeof id === 'string' ? id.trim() : ''
+    try {
+      if (typeof localStorage !== 'undefined') {
+        if (t.length > 0) {
+          localStorage.setItem(CALL_AUDIO_OUTPUT_LS_KEY, t)
+        } else {
+          localStorage.removeItem(CALL_AUDIO_OUTPUT_LS_KEY)
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    if (t.length > 0) {
+      await applyCallAudioOutputSinkToStreamAudios(t)
+    }
+  },
+  { flush: 'post', immediate: true },
+)
 type CallControlsDockExpose = { containsDevicePickerTarget(target: Node): boolean }
 const callControlsDockRef = ref<CallControlsDockExpose | null>(null)
 const roomJoinDraft = ref('')
@@ -1749,12 +1813,17 @@ function retryJoinCall(): void {
 }
 
 const showMediaDevicePickers = computed(
-  () => session.inCall && (audioInputDevices.value.length > 0 || videoInputDevices.value.length > 0),
+  () =>
+    session.inCall &&
+    (audioInputDevices.value.length > 0 ||
+      videoInputDevices.value.length > 0 ||
+      audioOutputDevices.value.length > 0),
 )
 
 function closeMediaDevicePickers(): void {
   micPickerOpen.value = false
   camPickerOpen.value = false
+  speakerPickerOpen.value = false
 }
 
 function onDocumentPointerForDevicePickers(ev: PointerEvent): void {
@@ -1770,7 +1839,7 @@ function onDocumentPointerForDevicePickers(ev: PointerEvent): void {
   if (callRoomHeaderJoin.roomPopoverOpen) {
     callRoomHeaderJoin.closeRoomPopover()
   }
-  if (!micPickerOpen.value && !camPickerOpen.value) {
+  if (!micPickerOpen.value && !camPickerOpen.value && !speakerPickerOpen.value) {
     return
   }
   if (callControlsDockRef.value?.containsDevicePickerTarget(t)) {
@@ -1795,6 +1864,16 @@ async function pickVideoInput(deviceId: string): Promise<void> {
   } catch (err) {
     callPageLog.warn('video input', err)
   }
+}
+
+async function pickAudioOutput(deviceId: string): Promise<void> {
+  closeMediaDevicePickers()
+  const id = deviceId.trim()
+  if (id.length < 1) {
+    return
+  }
+  lastPickedAudioOutputId.value = id
+  callAudioOutputDeviceId.value = id
 }
 
 async function refreshInboundDebug(): Promise<void> {
@@ -2908,7 +2987,7 @@ function isTileControlDragTarget(target: EventTarget | null): boolean {
   }
   return Boolean(
     target.closest(
-      'button,input,select,textarea,label,.tile-menu-cluster,.tile-menu-hoverable,.tile-menu__dropdown',
+      'button,input,select,textarea,label,.tile-menu-cluster,.tile-menu-hoverable,.tile-menu__dropdown,.tile-remote-volume,.tile-remote-volume__dropdown',
     ),
   )
 }
@@ -3330,24 +3409,30 @@ watch(joining, (j) => {
               ref="callControlsDockRef"
               v-model:mic-picker-open="micPickerOpen"
               v-model:cam-picker-open="camPickerOpen"
+              v-model:speaker-picker-open="speakerPickerOpen"
               v-model:chat-open="chatOpen"
               :joining="joining"
               :mic-enabled="micEnabled"
               :cam-enabled="camEnabled"
+              :call-deafened="callDeafened"
               :hand-raised="handRaised"
               :screen-sharing="screenSharing"
               :show-media-device-pickers="showMediaDevicePickers"
               :audio-input-devices="audioInputDevices"
               :video-input-devices="videoInputDevices"
+              :audio-output-devices="audioOutputDevices"
               :local-audio-input-device-id="localAudioInputDeviceId"
               :local-video-input-device-id="localVideoInputDeviceId"
+              :local-audio-output-device-id="localAudioOutputDeviceId"
               @toggle-mic="toggleMic"
               @toggle-cam="toggleCam"
+              @toggle-deafen="toggleCallDeafen"
               @toggle-raise-hand="toggleRaiseHand"
               @toggle-screen-share="toggleScreenShare"
               @leave="leaveCall"
               @pick-audio-input="pickAudioInput"
               @pick-video-input="pickVideoInput"
+              @pick-audio-output="pickAudioOutput"
             />
             <MafiaSpeakingQueueBar v-if="isMafiaRoute" :show-tools="mafiaGameStore.isMafiaHost" />
             <EatFirstSpeakingQueueBar v-if="isEatFirstRoute" :show-tools="eatFirstShell.isEatFirstRoomHost" />
