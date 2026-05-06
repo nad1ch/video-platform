@@ -1911,8 +1911,12 @@ if (import.meta.env.DEV) {
   border-radius: inherit;
   overflow: hidden;
   z-index: 0;
-  
+
   clip-path: inset(0 round 14px);
+  /* The clip already has `overflow: hidden` + `clip-path`, so painting is bounded.
+     `contain: layout paint` lets the browser decouple internal video relayouts
+     and decode-driven repaints from the grid, without changing visuals. */
+  contain: layout paint;
 }
 
 .tile-video-wrap :deep(.stream-video) {
