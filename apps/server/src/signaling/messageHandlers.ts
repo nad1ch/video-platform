@@ -343,7 +343,8 @@ function serializeTransportOptions(transport: WebRtcTransport): TransportOptions
 }
 
 function collectExistingProducers(room: Room, excludePeerId: string): ExistingProducerInfo[] {
-  const list: ExistingProducerInfo[] = []
+  const audio: ExistingProducerInfo[] = []
+  const video: ExistingProducerInfo[] = []
   for (const p of room.getPeers()) {
     if (p.id === excludePeerId) {
       continue
@@ -356,11 +357,17 @@ function collectExistingProducers(room: Room, excludePeerId: string): ExistingPr
       if (producer.kind === 'video') {
         row.videoSource = p.getVideoProducerSource(producer.id) ?? 'camera'
         row.outboundVideoPaused = producer.paused
+        video.push(row)
+      } else {
+        audio.push(row)
       }
-      list.push(row)
     }
   }
-  return list
+  // Audio first so the joining client starts hearing existing peers without
+  // waiting on its video consumes (paired with audio-first parallel consume in
+  // `useRemoteMedia.syncExistingProducersImpl`). Order within each kind is
+  // preserved (peer iteration order from `room.getPeers()`).
+  return audio.concat(video)
 }
 
 function findProducerInRoom(room: Room, producerId: string): Producer | undefined {

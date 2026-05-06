@@ -1207,7 +1207,40 @@ export function useRemoteMedia() {
       producerInfoById.set(item.producerId, item)
       syncPeerVideoMetadataFromInfo(item)
     }
+    // Audio-first parallel + video sequential.
+    //
+    // Audio consumes are independent (no shared per-producer state outside
+    // `consumeLifecycleManager`, which already deduplicates), and the recv
+    // transport is awaited inside `setupReceivePath` before this runs, so
+    // every parallel `ensureRecvTransport` call here hits the cached fast
+    // path. Running audio in parallel cuts time-to-first-remote-audio in
+    // 12-peer joins from ~3-7s (24 sequential RPC round-trips) to roughly
+    // one audio RPC round-trip.
+    //
+    // Video stays sequential to avoid a burst of `transport.consume` +
+    // `setPreferredLayers` calls that would compete with the audio path
+    // for the WS send buffer; the existing serial behavior is preserved.
+    const audioList: RemoteProducerInfo[] = []
+    const videoList: RemoteProducerInfo[] = []
     for (const item of list) {
+      if (item.kind === 'audio') {
+        audioList.push(item)
+      } else {
+        videoList.push(item)
+      }
+    }
+    if (audioList.length > 0) {
+      const results = await Promise.allSettled(
+        audioList.map((item) => consumeProducer(device, room, item)),
+      )
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i]
+        if (r && r.status === 'rejected') {
+          console.error('[syncExistingProducers] audio consume failed', audioList[i], r.reason)
+        }
+      }
+    }
+    for (const item of videoList) {
       try {
         await consumeProducer(device, room, item)
       } catch (e) {
