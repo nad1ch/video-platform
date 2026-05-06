@@ -28,16 +28,37 @@ export function readOrCreateCallDeviceId(): string {
   }
 }
 
+function navigationTimingType(): string | undefined {
+  if (typeof performance === 'undefined' || typeof performance.getEntriesByType !== 'function') {
+    return undefined
+  }
+  const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+  return nav?.type
+}
+
 /**
- * Mediasoup / signaling peer id: unique per tab (never read from localStorage as the whole id).
- * Includes a short device prefix for support logs; collision across tabs is practically impossible.
+ * Reuse stored peer id only after reload or BFCache back/forward in this tab.
+ * Duplicating a tab clones sessionStorage; treating that like a fresh navigation avoids duplicate peerId eviction on the server.
+ */
+function shouldReusePersistedTabPeerId(): boolean {
+  const t = navigationTimingType()
+  return t === 'reload' || t === 'back_forward'
+}
+
+/**
+ * Mediasoup / signaling peer id: unique per browser tab (never the whole id from localStorage).
+ * Includes a short device prefix for support logs. Duplicate-tab clones sessionStorage — see {@link shouldReusePersistedTabPeerId}.
  */
 export function newCallTabPeerId(): string {
   if (typeof sessionStorage !== 'undefined') {
     try {
-      const existing = sessionStorage.getItem(SS_CALL_TAB_PEER_ID)
-      if (typeof existing === 'string' && existing.trim().length >= 16 && existing.startsWith('peer-')) {
-        return existing.trim()
+      if (shouldReusePersistedTabPeerId()) {
+        const existing = sessionStorage.getItem(SS_CALL_TAB_PEER_ID)
+        if (typeof existing === 'string' && existing.trim().length >= 16 && existing.startsWith('peer-')) {
+          return existing.trim()
+        }
+      } else {
+        sessionStorage.removeItem(SS_CALL_TAB_PEER_ID)
       }
     } catch {
       /* ignore */
