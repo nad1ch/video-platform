@@ -55,11 +55,7 @@ export {
   type CallAudioDevMicSnapshot,
 } from './audio/callAudioDevDiagnostics'
 
-export {
-  CALL_AUDIO_DEV_OPUS_DTX_OFF_STORAGE_KEY,
-  CALL_AUDIO_OPUS_DTX_ENABLED,
-  resolveCallOutboundOpusDtxForProduce,
-} from './audio/callOutboundOpusPolicy'
+export { CALL_AUDIO_OPUS_DTX_ENABLED, resolveCallOutboundOpusDtxForProduce } from './audio/callOutboundOpusPolicy'
 
 export {
   applyWebcamContentHint,

@@ -110,11 +110,9 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
   const localPlayRev = ref(0)
 
   /**
-   * Mirror of the persisted "light noise suppression" preference.
-   * Initialised from localStorage; default `true` matches the historical
-   * `DEFAULT_CALL_AUDIO_CONSTRAINTS.noiseSuppression`.
-   * Affects only the local outgoing track via `applyConstraints` — never
-   * recreates the producer.
+   * Mirror of the persisted sender-side light noise reduction toggle (browser
+   * `noiseSuppression`). Live track updates reaffirm echo cancellation + AGC via
+   * {@link applyNoiseSuppressionToTrack}; never recreates the producer.
    */
   const noiseSuppressionEnabled = ref<boolean>(loadCallNoiseSuppressionPreference())
 
@@ -233,6 +231,10 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
         t.enabled = false
         attachLocalTrackEndedListener(t)
       }
+      const micOnly = stream.getAudioTracks()[0]
+      if (micOnly) {
+        await applyNoiseSuppressionToTrack(micOnly, noiseSuppressionEnabled.value)
+      }
       micEnabled.value = false
       camEnabled.value = false
       localPlayRev.value += 1
@@ -289,6 +291,10 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     for (const t of stream.getVideoTracks()) {
       t.enabled = false
       attachLocalTrackEndedListener(t)
+    }
+    const micAv = stream.getAudioTracks()[0]
+    if (micAv) {
+      await applyNoiseSuppressionToTrack(micAv, noiseSuppressionEnabled.value)
     }
     micEnabled.value = false
     camEnabled.value = false
@@ -380,6 +386,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     logCallAudioDevDiagnostics('after-mic-device-swap', {
       ...buildCallAudioDevMicSnapshot(nt, { requestedAudioConstraints: requestedAudio }),
     })
+    await applyNoiseSuppressionToTrack(nt, noiseSuppressionEnabled.value)
     await refreshMediaDevices()
   }
 
@@ -431,15 +438,13 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
   }
 
   /**
-   * Apply the user's "light noise suppression" preference.
+   * Apply the user's sender-side light noise reduction preference.
    *
-   * Persists in localStorage and best-effort `applyConstraints` on the
-   * currently-published audio track. If the browser rejects the constraint
-   * we silently fall back: the next `getUserMedia` call (mic device swap or
-   * fresh start) will pick up the preference via {@link audioConstraintsWithUserNoiseSuppression}.
+   * Persists in localStorage and best-effort `applyConstraints` (noise +
+   * reaffirmed echo/AGC) on the live mic track. Falls back silently if the
+   * browser rejects constraints; next `getUserMedia` still uses {@link audioConstraintsWithUserNoiseSuppression}.
    *
-   * Never recreates producers, never restarts the track, never emits
-   * `localPlayRev` — so audio publishing keeps flowing without remount loops.
+   * Never recreates producers, never restarts the track, never emits `localPlayRev`.
    */
   async function setLightNoiseSuppression(enabled: boolean): Promise<void> {
     const next = enabled !== false

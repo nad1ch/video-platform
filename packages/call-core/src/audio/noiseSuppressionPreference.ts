@@ -1,16 +1,11 @@
 /**
- * User-controlled override for the browser's `noiseSuppression` audio
- * constraint on the LOCAL outgoing microphone. Persisted in `localStorage`
- * so the choice survives page refresh, but kept entirely client-side —
- * server / signaling are not aware.
+ * Sender-side "light noise reduction" for the LOCAL outgoing microphone: browser
+ * `noiseSuppression` plus reaffirmed `echoCancellation` / `autoGainControl` on the
+ * live track so capture processing stays coherent after `getUserMedia`.
+ * Persisted in `localStorage` (client-only; server unaware).
  *
- * Default `true` matches the historical {@link import('../media/defaultMediaConstraints').DEFAULT_CALL_AUDIO_CONSTRAINTS},
- * so users who never touch the toggle keep getting browser-level noise
- * suppression exactly like before this option existed.
- *
- * Light, additive layer: callers should still spread the existing default
- * audio constraints first and let the override flip only `noiseSuppression`.
- * No custom DSP, no AudioWorklet — just `MediaTrackConstraints`.
+ * Default `true` matches historical {@link import('../media/defaultMediaConstraints').DEFAULT_CALL_AUDIO_CONSTRAINTS}.
+ * No AudioWorklet / WASM — constraints only.
  */
 
 const STORAGE_KEY = 'streamassist:call:light-noise-suppression-v1'
@@ -41,9 +36,8 @@ export function saveCallNoiseSuppressionPreference(enabled: boolean): void {
 }
 
 /**
- * Returns a shallow copy of the supplied base constraints with
- * `noiseSuppression` set to the user's preference. Other fields
- * (`echoCancellation`, `autoGainControl`, `deviceId`, …) are preserved.
+ * Shallow copy of `base` with `noiseSuppression` set from storage. Other fields
+ * (`echoCancellation`, `autoGainControl`, `deviceId`, …) are preserved for gUM.
  */
 export function audioConstraintsWithUserNoiseSuppression(
   base: MediaTrackConstraints,
@@ -52,22 +46,56 @@ export function audioConstraintsWithUserNoiseSuppression(
   return { ...base, noiseSuppression: enabled }
 }
 
+function warnIfNoiseSuppressionMismatch(track: MediaStreamTrack, intent: boolean): void {
+  if (!import.meta.env.DEV) {
+    return
+  }
+  try {
+    const s = typeof track.getSettings === 'function' ? track.getSettings() : null
+    if (s && typeof s.noiseSuppression === 'boolean' && s.noiseSuppression !== intent) {
+      console.warn('[call-mic] noiseSuppression intent vs getSettings()', {
+        intent,
+        effective: s.noiseSuppression,
+      })
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
- * Best-effort live update on an already-published audio track. Returns
- * `true` if the browser accepted the constraint, `false` otherwise.
- * Caller should treat both outcomes as success — falling back silently
- * matches the audit's "do not break WebRTC publishing" / "no audio loops"
- * guarantees.
+ * Best-effort live update on an already-published mic track: applies sender-side
+ * light noise reduction (`noiseSuppression` per user) and reaffirms
+ * `echoCancellation` / `autoGainControl` so browsers do not leave processing in a
+ * partial state after constraint toggles. Falls back to `{ noiseSuppression }` only
+ * if the full bundle is rejected.
+ *
+ * Returns `true` if any `applyConstraints` attempt succeeded. Caller should still
+ * treat failure as non-fatal for publishing continuity.
  */
 export async function applyNoiseSuppressionToTrack(
   track: MediaStreamTrack | null | undefined,
   enabled: boolean,
 ): Promise<boolean> {
-  if (!track || track.readyState !== 'live' || track.kind !== 'audio') return false
+  if (!track || track.readyState !== 'live' || track.kind !== 'audio') {
+    return false
+  }
+  const bundle: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: enabled,
+    autoGainControl: true,
+  }
   try {
-    await track.applyConstraints({ noiseSuppression: enabled })
+    await track.applyConstraints(bundle)
+    warnIfNoiseSuppressionMismatch(track, enabled)
     return true
   } catch {
-    return false
+    try {
+      await track.applyConstraints({ noiseSuppression: enabled })
+      warnIfNoiseSuppressionMismatch(track, enabled)
+      return true
+    } catch {
+      return false
+    }
   }
 }

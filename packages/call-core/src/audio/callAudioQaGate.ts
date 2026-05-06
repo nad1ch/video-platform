@@ -1,13 +1,9 @@
 /**
- * Temporary QA build gate for call audio experiments (Opus DTX override, diagnostics).
- * Remove this module when experiments are finished and product chooses final behavior.
+ * Optional QA build gate for **diagnostics only** (see `callAudioDevDiagnostics.ts`).
+ * Opus DTX is not gated here; production uses {@link import('./callOutboundOpusPolicy').CALL_AUDIO_OPUS_DTX_ENABLED}.
  *
- * Normal production: `VITE_ENABLE_CALL_AUDIO_QA_TOOLS` is unset → {@link allowCallAudioQaStorageOverrides}
- * is false (except local `vite` dev where `import.meta.env.DEV` is true).
- *
- * Preview / prod-like QA: set `VITE_ENABLE_CALL_AUDIO_QA_TOOLS=true` at **build** time, then use
- * `localStorage` keys documented on `CALL_AUDIO_DEV_OPUS_DTX_OFF_STORAGE_KEY` and
- * `CALL_AUDIO_DEV_DIAGNOSTICS_STORAGE_KEY`.
+ * Normal production: `VITE_ENABLE_CALL_AUDIO_QA_TOOLS` unset → {@link allowCallAudioQaStorageOverrides}
+ * is false (except local `vite` dev). Diagnostics never run in production unless that env is set and storage is opted in.
  */
 
 export function isCallAudioQaToolsViteEnabled(): boolean {
