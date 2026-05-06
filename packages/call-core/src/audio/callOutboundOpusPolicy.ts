@@ -3,13 +3,15 @@ import { allowCallAudioQaStorageOverrides } from './callAudioQaGate'
 /**
  * Outbound Opus DTX (`mediasoup` `codecOptions.opusDtx`) for the call audio producer.
  *
- * Product default stays enabled. `opusDtx` is fixed when the audio Producer is created;
- * toggling the localStorage override requires a **new** audio producer (leave room and rejoin, or
- * otherwise recreate publish) — `replaceTrack` does not renegotiate this flag.
+ * TEMPORARY (production validation): default is **off** to test rhythmic silence artifacts
+ * (“train on rails”). Revert or replace with a proper audio mode after results.
+ * `opusDtx` is fixed when the audio Producer is created — reload/rejoin after deploy.
+ * Optional QA localStorage override only applies when {@link allowCallAudioQaStorageOverrides};
+ * `replaceTrack` does not renegotiate this flag.
  */
 
-/** Product default: Opus DTX on outbound call audio (unchanged shipping behavior). */
-export const CALL_AUDIO_OPUS_DTX_ENABLED = true as const
+/** Product default for outbound mic Opus DTX (`false` while validating silence artifacts). */
+export const CALL_AUDIO_OPUS_DTX_ENABLED = false as const
 
 /**
  * localStorage key: `"1"` → next mic `produce` uses `opusDtx: false`.
@@ -19,7 +21,7 @@ export const CALL_AUDIO_DEV_OPUS_DTX_OFF_STORAGE_KEY = 'streamassist:call:dev-op
 
 /**
  * Resolves `codecOptions.opusDtx` for `transport.produce` on the microphone track.
- * Default shipping: always `CALL_AUDIO_OPUS_DTX_ENABLED`. QA/local: may return `false` when storage is set.
+ * Default: `CALL_AUDIO_OPUS_DTX_ENABLED`. QA/local storage may force `false` when allowed.
  */
 export function resolveCallOutboundOpusDtxForProduce(): boolean {
   if (!allowCallAudioQaStorageOverrides()) {
