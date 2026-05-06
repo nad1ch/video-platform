@@ -36,6 +36,13 @@ export { getAudioAnalysisAudioContext } from './audio/audioAnalysisContext'
 export { useActiveSpeaker, type ActiveSpeakerTile } from './audio/useActiveSpeaker'
 
 export {
+  applyNoiseSuppressionToTrack,
+  audioConstraintsWithUserNoiseSuppression,
+  loadCallNoiseSuppressionPreference,
+  saveCallNoiseSuppressionPreference,
+} from './audio/noiseSuppressionPreference'
+
+export {
   applyWebcamContentHint,
   DEFAULT_CALL_AUDIO_CONSTRAINTS,
   DEFAULT_CALL_VIDEO_CONSTRAINTS,

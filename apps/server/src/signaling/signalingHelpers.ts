@@ -102,12 +102,21 @@ export function sanitizeMafiaSpeakingQueueList(raw: unknown, maxSeat: number): n
 /**
  * Eat First nomination flat list: preserves pair order and duplicate seats
  * (same nominator may appear twice); only drops non-integers and out-of-range values.
+ *
+ * `liveSeatCap` (audit P1) tightens the upper bound to the actual live seat
+ * count when supplied, so a host that emits a queue right after a player
+ * leaves cannot broadcast a seat number beyond the table. Falls back to the
+ * static `EAT_FIRST_MAX_SPEAKING_QUEUE_SEAT` (11) when no live count is given
+ * or when the value is invalid.
  */
-export function sanitizeEatFirstSpeakingQueueList(raw: unknown): number[] {
+export function sanitizeEatFirstSpeakingQueueList(raw: unknown, liveSeatCap?: number): number[] {
   if (!Array.isArray(raw)) {
     return []
   }
-  const cap = EAT_FIRST_MAX_SPEAKING_QUEUE_SEAT
+  let cap: number = EAT_FIRST_MAX_SPEAKING_QUEUE_SEAT
+  if (typeof liveSeatCap === 'number' && Number.isInteger(liveSeatCap) && liveSeatCap >= 1) {
+    cap = Math.min(EAT_FIRST_MAX_SPEAKING_QUEUE_SEAT, liveSeatCap)
+  }
   const out: number[] = []
   for (const x of raw) {
     if (typeof x !== 'number' || !Number.isInteger(x)) {

@@ -4,6 +4,29 @@ import { createRouter } from '../mediasoup/createRouter'
 import type { PooledWorker } from '../mediasoup/mediasoupWorkerTypes'
 
 export type MafiaPlayerLifeState = 'alive' | 'dead' | 'ghost'
+export type MafiaRole = 'mafia' | 'don' | 'sheriff' | 'doctor' | 'civilian'
+/** Latest server-accepted Mafia reshuffle payload, kept in memory for late-joiner role replay. */
+export type MafiaReshuffleSnapshotPlayer = {
+  peerId: string
+  seat: number
+  role: MafiaRole
+}
+export type MafiaReshuffleSnapshot = {
+  players: MafiaReshuffleSnapshotPlayer[]
+}
+
+export type MafiaPlayersUpdateSnapshot = {
+  order: string[]
+  clearRoles?: boolean
+  oldMafiaMode?: boolean
+  nightActions?: Partial<{
+    mafia: number
+    doctor: number
+    sheriff: number
+    don: number
+  }>
+  speakingQueue: number[]
+}
 export type MafiaEliminationBackground = 'dark' | 'red' | 'violet' | 'gray'
 export type MafiaBackgroundItem = {
   id: string
@@ -67,6 +90,20 @@ export class Room {
   private mafiaForcedPageBackgroundId: string | null = null
   
   private mafiaPlayerLifeStateByPeerId = new Map<string, Exclude<MafiaPlayerLifeState, 'alive'>>()
+  /**
+   * Last `mafia:reshuffle` payload that the server accepted. Replayed only to
+   * late-joiners when the snapshot still matches the live peer set 1:1.
+   * Cleared when the room disposes (already handled by `finalizeRoomIfEmpty`),
+   * or explicitly when a fresh reshuffle is accepted.
+   */
+  private mafiaReshuffleSnapshot: MafiaReshuffleSnapshot | null = null
+  /**
+   * Latest validated `mafia:players-update` payload. Replayed to late joiners
+   * only when it still maps 1:1 to the current peer set.
+   */
+  private mafiaPlayersUpdateSnapshot: MafiaPlayersUpdateSnapshot | null = null
+  /** Mafia nickname overrides (label only, host-controlled). */
+  private mafiaNicknameByPeerId = new Map<string, string>()
   /**
    * Mafia host enforcement persistence. `Peer.forcedAudioMuted` /
    * `Peer.forcedCameraOff` reset on rejoin (new Peer object), so the room
@@ -365,6 +402,95 @@ export class Room {
 
   clearMafiaPlayerLifeStates(): void {
     this.mafiaPlayerLifeStateByPeerId.clear()
+  }
+
+  /**
+   * Stash the most recent server-accepted reshuffle so a peer that joins
+   * after the broadcast can still see role assignments. Caller must validate
+   * the payload before storing — this does no schema/permutation check.
+   */
+  setMafiaReshuffleSnapshot(snapshot: MafiaReshuffleSnapshot | null): void {
+    if (snapshot == null) {
+      this.mafiaReshuffleSnapshot = null
+      return
+    }
+    this.mafiaReshuffleSnapshot = {
+      players: snapshot.players.map((p) => ({ peerId: p.peerId, seat: p.seat, role: p.role })),
+    }
+  }
+
+  setMafiaPlayersUpdateSnapshot(snapshot: MafiaPlayersUpdateSnapshot | null): void {
+    if (snapshot == null) {
+      this.mafiaPlayersUpdateSnapshot = null
+      return
+    }
+    this.mafiaPlayersUpdateSnapshot = {
+      order: [...snapshot.order],
+      speakingQueue: [...snapshot.speakingQueue],
+      ...(snapshot.clearRoles === true ? { clearRoles: true } : {}),
+      ...(typeof snapshot.oldMafiaMode === 'boolean' ? { oldMafiaMode: snapshot.oldMafiaMode } : {}),
+      ...(snapshot.nightActions && typeof snapshot.nightActions === 'object'
+        ? { nightActions: { ...snapshot.nightActions } }
+        : {}),
+    }
+  }
+
+  getMafiaPlayersUpdateSnapshotIfFresh(): MafiaPlayersUpdateSnapshot | null {
+    const snap = this.mafiaPlayersUpdateSnapshot
+    if (snap == null) return null
+    const live = new Set(this.getPeers().map((p) => p.id))
+    if (snap.order.length !== live.size) return null
+    for (const id of snap.order) {
+      if (!live.has(id)) return null
+    }
+    return {
+      order: [...snap.order],
+      speakingQueue: [...snap.speakingQueue],
+      ...(snap.clearRoles === true ? { clearRoles: true } : {}),
+      ...(typeof snap.oldMafiaMode === 'boolean' ? { oldMafiaMode: snap.oldMafiaMode } : {}),
+      ...(snap.nightActions && typeof snap.nightActions === 'object' ? { nightActions: { ...snap.nightActions } } : {}),
+    }
+  }
+
+  setMafiaNickname(peerId: string, nickname: string | null): void {
+    const id = peerId.trim()
+    if (!id) return
+    if (nickname == null || nickname.trim().length < 1) {
+      this.mafiaNicknameByPeerId.delete(id)
+      return
+    }
+    this.mafiaNicknameByPeerId.set(id, nickname.trim().slice(0, 64))
+  }
+
+  /** Snapshot filtered to the current live peers only. */
+  getMafiaNicknamesSnapshot(): Record<string, string> {
+    const live = new Set(this.getPeers().map((p) => p.id))
+    const out: Record<string, string> = {}
+    for (const [peerId, name] of this.mafiaNicknameByPeerId.entries()) {
+      if (live.has(peerId) && name.trim().length > 0) {
+        out[peerId] = name
+      }
+    }
+    return out
+  }
+
+  /**
+   * Returns the stored reshuffle snapshot only when it still maps 1:1 onto
+   * the current peer set: every snapshot peerId is alive and the live count
+   * matches the snapshot length. Returns `null` otherwise so the join path
+   * never replays a stale payload that would leave gaps in the seat map.
+   */
+  getMafiaReshuffleSnapshotIfFresh(): MafiaReshuffleSnapshot | null {
+    const snap = this.mafiaReshuffleSnapshot
+    if (snap == null) return null
+    const live = new Set(this.getPeers().map((p) => p.id))
+    if (snap.players.length !== live.size) return null
+    for (const entry of snap.players) {
+      if (!live.has(entry.peerId)) return null
+    }
+    return {
+      players: snap.players.map((p) => ({ peerId: p.peerId, seat: p.seat, role: p.role })),
+    }
   }
 
   getMafiaDeadBackgrounds(): MafiaBackgroundItem[] {

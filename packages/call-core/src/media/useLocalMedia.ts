@@ -1,5 +1,11 @@
 import { onUnmounted, ref, shallowRef } from 'vue'
 import { applyWebcamContentHint, DEFAULT_CALL_AUDIO_CONSTRAINTS } from './defaultMediaConstraints'
+import {
+  applyNoiseSuppressionToTrack,
+  audioConstraintsWithUserNoiseSuppression,
+  loadCallNoiseSuppressionPreference,
+  saveCallNoiseSuppressionPreference,
+} from '../audio/noiseSuppressionPreference'
 import type { VideoPublishTier } from './videoQualityPreset'
 import {
   persistVideoInputDeviceIdFromTrack,
@@ -93,11 +99,20 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
   const resolveMediaMode = (): 'audio-video' | 'audio-only' =>
     options?.mediaMode?.() === 'audio-only' ? 'audio-only' : 'audio-video'
   const localStream = shallowRef<MediaStream | null>(null)
-  
+
   const micEnabled = ref(false)
   const camEnabled = ref(false)
-  
+
   const localPlayRev = ref(0)
+
+  /**
+   * Mirror of the persisted "light noise suppression" preference.
+   * Initialised from localStorage; default `true` matches the historical
+   * `DEFAULT_CALL_AUDIO_CONSTRAINTS.noiseSuppression`.
+   * Affects only the local outgoing track via `applyConstraints` — never
+   * recreates the producer.
+   */
+  const noiseSuppressionEnabled = ref<boolean>(loadCallNoiseSuppressionPreference())
 
   const audioInputDevices = ref<CallMediaDeviceOption[]>([])
   const videoInputDevices = ref<CallMediaDeviceOption[]>([])
@@ -199,7 +214,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     const mediaMode = resolveMediaMode()
     if (mediaMode === 'audio-only') {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { ...DEFAULT_CALL_AUDIO_CONSTRAINTS },
+        audio: audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS),
         video: false,
       })
       localStream.value = stream
@@ -223,13 +238,13 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
       preferred !== undefined
         ? await getUserMediaWithDeviceIdExactThenIdeal(
             {
-              audio: { ...DEFAULT_CALL_AUDIO_CONSTRAINTS },
+              audio: audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS),
               video: { ...videoConstraints, deviceId: { ideal: preferred } },
             },
             'video',
           )
         : await navigator.mediaDevices.getUserMedia({
-            audio: { ...DEFAULT_CALL_AUDIO_CONSTRAINTS },
+            audio: audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS),
             video: videoConstraints,
           })
     for (const t of stream.getVideoTracks()) {
@@ -315,7 +330,10 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     const prevEnabled = old ? old.enabled : false
     const tmp = await getUserMediaWithDeviceIdExactThenIdeal(
       {
-        audio: { ...DEFAULT_CALL_AUDIO_CONSTRAINTS, deviceId: { ideal: deviceId } },
+        audio: {
+          ...audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS),
+          deviceId: { ideal: deviceId },
+        },
       },
       'audio',
     )
@@ -390,6 +408,25 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     await refreshMediaDevices()
   }
 
+  /**
+   * Apply the user's "light noise suppression" preference.
+   *
+   * Persists in localStorage and best-effort `applyConstraints` on the
+   * currently-published audio track. If the browser rejects the constraint
+   * we silently fall back: the next `getUserMedia` call (mic device swap or
+   * fresh start) will pick up the preference via {@link audioConstraintsWithUserNoiseSuppression}.
+   *
+   * Never recreates producers, never restarts the track, never emits
+   * `localPlayRev` — so audio publishing keeps flowing without remount loops.
+   */
+  async function setLightNoiseSuppression(enabled: boolean): Promise<void> {
+    const next = enabled !== false
+    noiseSuppressionEnabled.value = next
+    saveCallNoiseSuppressionPreference(next)
+    const track = localStream.value?.getAudioTracks()[0] ?? null
+    await applyNoiseSuppressionToTrack(track, next)
+  }
+
   onUnmounted(() => {
     if (typeof navigator !== 'undefined' && navigator.mediaDevices?.removeEventListener) {
       navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange)
@@ -411,5 +448,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     toggleCam,
     swapLocalAudioInput,
     swapLocalVideoInput,
+    noiseSuppressionEnabled,
+    setLightNoiseSuppression,
   }
 }

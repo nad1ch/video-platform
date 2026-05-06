@@ -25,6 +25,16 @@ export const MafiaWs = {
   reshuffle: 'mafia:reshuffle',
   
   playersUpdate: 'mafia:players-update',
+
+  /**
+   * Host-driven rename for Mafia UI.
+   * Server applies it to the target peer's `displayName` and broadcasts
+   * `peer-display-name` so every client updates via the normal call signaling path.
+   */
+  playerNameUpdate: 'mafia:player-name-update',
+
+  /** Server → client: Mafia nickname override (label only, not identity). */
+  playerNicknameUpdate: 'mafia:player-nickname-update',
   
   modeUpdate: 'mafia:mode-update',
   

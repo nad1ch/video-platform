@@ -60,6 +60,12 @@ const props = withDefaults(
     
     peerId?: string
     displayName: string
+    /**
+     * Stable name for avatar initials fallback. Defaults to `displayName`.
+     * Used to keep the center placeholder identity stable when a route-level
+     * nickname override changes only the visible label.
+     */
+    avatarFallbackName?: string
     stream: MediaStream | null
     isLocal: boolean
     videoEnabled: boolean
@@ -1510,7 +1516,9 @@ if (import.meta.env.DEV) {
             decoding="async"
             loading="lazy"
           />
-          <span v-else-if="showInitialsFallback" class="tile-placeholder-avatar">{{ initials(displayName) }}</span>
+          <span v-else-if="showInitialsFallback" class="tile-placeholder-avatar">{{
+            initials(typeof avatarFallbackName === 'string' && avatarFallbackName.trim().length > 0 ? avatarFallbackName : displayName)
+          }}</span>
         </div>
         <div class="tile-overlay tile-overlay--on-placeholder" aria-hidden="false">
           <div

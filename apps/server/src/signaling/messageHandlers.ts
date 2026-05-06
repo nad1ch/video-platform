@@ -210,6 +210,7 @@ export type ServerMessage =
         speakingQueue: number[]
       }
     }
+  | { type: 'mafia:player-nickname-update'; payload: { peerId: string; displayName: string } }
   | { type: 'mafia:timer-start'; payload: { startedAt: number; duration: number; isRunning: boolean } }
   | { type: 'mafia:timer-stop'; payload: Record<string, never> }
   | { type: 'mafia:player-kick'; payload: { peerId: string } }
@@ -929,6 +930,25 @@ export async function handleJoinRoom(
         room.setMafiaTimer(null)
       }
     }
+    /**
+     * Replay the latest server-accepted reshuffle to this socket only.
+     * Snapshot is gated by `getMafiaReshuffleSnapshotIfFresh`, which returns
+     * the payload only when every peer in the snapshot is currently live and
+     * the live peer count matches the snapshot length — so we never replay a
+     * stale assignment whose seats no longer cover the room.
+     */
+    const reshuffleSnap = room.getMafiaReshuffleSnapshotIfFresh()
+    if (reshuffleSnap != null) {
+      sendServerMessage(socket, { type: MafiaWs.reshuffle, payload: reshuffleSnap })
+    }
+    const playersUpdateSnap = room.getMafiaPlayersUpdateSnapshotIfFresh()
+    if (playersUpdateSnap != null) {
+      sendServerMessage(socket, { type: MafiaWs.playersUpdate, payload: playersUpdateSnap })
+    }
+    const nicks = room.getMafiaNicknamesSnapshot()
+    for (const [peerId, displayName] of Object.entries(nicks)) {
+      sendServerMessage(socket, { type: MafiaWs.playerNicknameUpdate, payload: { peerId, displayName } })
+    }
   }
 }
 
@@ -1102,6 +1122,14 @@ export function handleMafiaQueueUpdate(
     return
   }
   const list = (payload as { speakingQueue?: unknown } | null | undefined)?.speakingQueue
+  /**
+   * Audit P1: tighten the upper bound to actual peer count whenever the
+   * room is non-empty. The previous fallback to `MAFIA_MAX_SEAT` only
+   * applied when the room was empty (no peers); however, after a peer
+   * leaves and before the host's next `mafia:players-update`, the host
+   * can still emit a queue containing the dead seat. Sanitize against
+   * the live count so we never broadcast a phantom seat.
+   */
   const maxSeat = room.getPeers().length > 0 ? room.getPeers().length : MAFIA_MAX_SEAT
   const sanitized = sanitizeMafiaSpeakingQueueList(list, maxSeat)
   room.setMafiaSpeakingQueue(sanitized)
@@ -1118,7 +1146,13 @@ export function handleEatFirstSpeakingQueueUpdate(
   const { peer, room } = rp
   if (!isEatFirstHostPeer(room, peer)) return
   const list = (payload as { speakingQueue?: unknown } | null | undefined)?.speakingQueue
-  const sanitized = sanitizeEatFirstSpeakingQueueList(list)
+  /**
+   * Audit P1: bound by the live active-slot count so the host can never
+   * broadcast a seat that no longer has a player (e.g., after a peer leaves
+   * but before the host's queue update reflects it).
+   */
+  const liveSeatCap = eatFirstActiveSlotsForRoom(room, room.id).length
+  const sanitized = sanitizeEatFirstSpeakingQueueList(list, liveSeatCap)
   room.setEatFirstSpeakingQueue(sanitized)
   broadcastEatFirstSpeakingQueueUpdate(room)
 }
@@ -1169,6 +1203,14 @@ export function handleMafiaReshuffle(
     return
   }
   room.clearMafiaPlayerLifeStates()
+  /**
+   * Persist the validated assignment so a peer joining after this broadcast
+   * still sees roles via the join catch-up. Snapshot is in-memory only; cleared
+   * automatically when the room disposes.
+   */
+  room.setMafiaReshuffleSnapshot({
+    players: payload.players.map((p) => ({ peerId: p.peerId, seat: p.seat, role: p.role })),
+  })
   broadcastMafiaReshuffle(room, payload)
 }
 
@@ -1533,6 +1575,31 @@ export async function handleEatFirstSlotClaim(
     }
     return
   }
+  /**
+   * Audit P1: when a peer rebinds from one slot to another (e.g., after
+   * sessionStorage clear + new claim), cleanly evict the abandoned slot
+   * from in-memory table state IF nobody else holds it. Otherwise the
+   * old slot lingers in `state.traitsBySlot` / `actionCardBySlot` /
+   * reveal maps and surfaces in the next `eat:table-state-sync` as a
+   * phantom seat without a peer mapping.
+   */
+  const previousSlot = peer.eatFirstSlotId
+  if (
+    typeof previousSlot === 'string' &&
+    isEatFirstPlayerSlotId(previousSlot) &&
+    previousSlot !== slotId &&
+    room.getPeers().every((other) => other.id === peer.id || other.eatFirstSlotId !== previousSlot)
+  ) {
+    const state = getEatFirstTableState(room.id)
+    state.traitsBySlot.delete(previousSlot)
+    state.actionCardBySlot.delete(previousSlot)
+    state.revealedBySlot.delete(previousSlot)
+    state.openedByBySlot.delete(previousSlot)
+    if (state.lastUsedActionCard?.slotId === previousSlot) {
+      state.lastUsedActionCard = null
+    }
+    state.playerOrder = state.playerOrder.filter((s) => s !== previousSlot)
+  }
   peer.eatFirstSlotId = slotId
   if (process.env.NODE_ENV !== 'production') {
     console.info('[eat-first:slot-claim:accept]', {
@@ -1689,6 +1756,19 @@ export async function handleEatFirstActionCardRerollRequest(
     const slot = normalizeEatFirstSlot(payload.slotId)
     if (!isEatFirstPlayerSlotId(slot)) return
     targetSlots.push(slot)
+  }
+  /**
+   * Audit P1: when the host re-rolls the same slot whose card is in the
+   * "last used" host-panel chip, that chip needs to clear so it does not
+   * keep advertising a card that no longer exists. Snapshot before mutation
+   * so we can compare against `targetSlots` regardless of '*' vs single.
+   */
+  {
+    const stateBefore = getEatFirstTableState(room.id)
+    const lastUsedSlot = stateBefore.lastUsedActionCard?.slotId
+    if (lastUsedSlot != null && targetSlots.includes(lastUsedSlot)) {
+      stateBefore.lastUsedActionCard = null
+    }
   }
   for (const slotId of targetSlots) {
     const card = pickRandomEatFirstActiveCard()
@@ -2063,7 +2143,39 @@ export function handleMafiaPlayersUpdate(
   if (payload.clearRoles === true) {
     room.clearMafiaPlayerLifeStates()
   }
+  room.setMafiaPlayersUpdateSnapshot(payload)
   broadcastMafiaPlayersUpdate(room, payload)
+}
+
+export function handleMafiaPlayerNameUpdate(
+  socket: WsSocket,
+  payload: { targetPeerId: string; displayName: string },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
+    return
+  }
+  const { peer, room } = rp
+  const targetPeerId = typeof payload.targetPeerId === 'string' ? payload.targetPeerId.trim() : ''
+  if (!targetPeerId) {
+    return
+  }
+  const isSelfRename = targetPeerId === peer.id
+  if (!isSelfRename && !isMafiaHostPeer(room, peer)) {
+    return
+  }
+  const target = room.getPeer(targetPeerId)
+  if (!target) {
+    return
+  }
+  const trimmed = typeof payload.displayName === 'string' ? payload.displayName.trim().slice(0, 64) : ''
+  const name = trimmed.length > 0 ? trimmed : null
+  room.setMafiaNickname(targetPeerId, name)
+  broadcastServerMessageToRoom(room, {
+    type: MafiaWs.playerNicknameUpdate,
+    payload: { peerId: targetPeerId, displayName: name ?? '' },
+  })
 }
 
 export function handleMafiaModeUpdate(

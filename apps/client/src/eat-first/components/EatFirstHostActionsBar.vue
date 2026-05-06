@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
+import ConfirmDialog from '@/eat-first/ui/molecules/ConfirmDialog.vue'
 import mafiaHostMuteAllActive from '@/assets/mafia/ui/host-mute-all-active.svg'
 import mafiaHostMuteAll from '@/assets/mafia/ui/host-mute-all.svg'
 import mafiaHostRoles from '@/assets/mafia/ui/host-roles.svg'
@@ -29,7 +30,24 @@ function onMuteAll(): void {
   emit('force-mute-all', muteAllActive.value)
 }
 
+/**
+ * Lower cube / deal is destructive: server-authoritative `eat:table-round-deal`
+ * wipes the reveal ledger, marks every action card unused, regenerates traits,
+ * and resets the speaking queue. Gate the click behind a confirm step so a
+ * single mis-tap on the icon-only toolbar can't drop a live game's table state.
+ *
+ * Cancel = pure no-op. Confirm runs the original `reshuffle` emit, so the
+ * existing `CallPage` -> `eat:table-round-deal` signaling path is unchanged
+ * (no protocol change, no server change).
+ */
+const reshuffleConfirmOpen = ref(false)
+
 function onReshuffle(): void {
+  if (!isEatFirstRoomHost.value || !canReshuffle.value) return
+  reshuffleConfirmOpen.value = true
+}
+
+function onReshuffleConfirmed(): void {
   if (!isEatFirstRoomHost.value || !canReshuffle.value) return
   emit('reshuffle')
 }
@@ -73,6 +91,14 @@ function onReshuffle(): void {
         aria-hidden="true"
       />
     </button>
+    <ConfirmDialog
+      v-model:open="reshuffleConfirmOpen"
+      :title="t('eatFirstCall.reshuffleConfirmTitle')"
+      :message="t('eatFirstCall.reshuffleConfirmMessage')"
+      :confirm-label="t('eatFirstCall.reshuffleConfirmAction')"
+      :cancel-label="t('eatFirstCall.reshuffleConfirmCancel')"
+      @confirm="onReshuffleConfirmed"
+    />
   </div>
 </template>
 

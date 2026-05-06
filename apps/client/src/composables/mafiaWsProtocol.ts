@@ -17,6 +17,8 @@ export const MafiaWs = {
   queueUpdate: 'mafia:queue-update',
   reshuffle: 'mafia:reshuffle',
   playersUpdate: 'mafia:players-update',
+  playerNameUpdate: 'mafia:player-name-update',
+  playerNicknameUpdate: 'mafia:player-nickname-update',
   modeUpdate: 'mafia:mode-update',
   settingsUpdate: 'mafia:settings-update',
   pageBackgroundSettings: 'mafia:page-background-settings',

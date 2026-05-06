@@ -32,6 +32,7 @@ import {
   loadCallTileLocalDisplayOverrides,
   saveCallTileLocalDisplayOverrides,
 } from '@/utils/callTileLocalDisplayNames'
+import { pinHostPeerToEndOfOrder } from '@/utils/mafiaHostOrdering'
 
 const callPageLog = createLogger('call-page')
 import ParticipantTile from './ParticipantTile.vue'
@@ -178,12 +179,23 @@ const {
   toggleRaiseHand,
   screenSharing,
   toggleScreenShare,
+  noiseSuppressionEnabled,
+  setLightNoiseSuppression,
   sendSignalingMessage,
   subscribeSignalingMessage,
   receiveDeviceProfile,
   serverActiveSpeakerPeerId,
   playbackRenderFpsPressureByPeerId,
 } = useCallOrchestrator({ allowManualVideoQuality, joinAvatarUrl, joinUserId, role: callEngineRole })
+
+/**
+ * Toolbar handler for the "light noise suppression" toggle. Persisted +
+ * applied via `MediaStreamTrack.applyConstraints` inside call-core; failure
+ * is silent (next mic restart picks the preference up automatically).
+ */
+function onToggleLightNoiseSuppression(): void {
+  void setLightNoiseSuppression(!noiseSuppressionEnabled.value)
+}
 
 
 const remotePlaybackWaitingPeerIds = shallowRef(new Set<string>())
@@ -355,6 +367,29 @@ const offMafiaForceControls = subscribeSignalingMessage((data) => {
   if (!isMafiaRoute.value) {
     return
   }
+  const nickPayload = mafiaSignalPayload(data, MafiaWs.playerNicknameUpdate)
+  if (nickPayload != null) {
+    const peerId = typeof nickPayload.peerId === 'string' ? nickPayload.peerId.trim() : ''
+    if (!peerId) {
+      return
+    }
+    const displayName = typeof nickPayload.displayName === 'string' ? nickPayload.displayName.trim().slice(0, 64) : ''
+    const next = { ...mafiaNicknameOverrideByPeerId.value }
+    if (!displayName) {
+      delete next[peerId]
+    } else {
+      next[peerId] = displayName
+    }
+    mafiaNicknameOverrideByPeerId.value = next
+    // Ensure an older local-only rename doesn't shadow the Mafia-synced nickname.
+    if (Object.prototype.hasOwnProperty.call(localTileDisplayOverrides.value, peerId)) {
+      const cleaned = { ...localTileDisplayOverrides.value }
+      delete cleaned[peerId]
+      localTileDisplayOverrides.value = cleaned
+      saveCallTileLocalDisplayOverrides(cleaned)
+    }
+    return
+  }
   const mutePayload = mafiaSignalPayload(data, MAFIA_FORCE_MUTE_ALL_SIGNAL)
   if (mutePayload != null) {
     if (mafiaGameStore.isMafiaHost) {
@@ -438,6 +473,8 @@ const displayNameUiByPeerId = computed(() =>
   }),
 )
 
+const mafiaNicknameOverrideByPeerId = shallowRef<Record<string, string>>({})
+
 
 const localTileDisplayOverrides = shallowRef<Record<string, string>>(loadCallTileLocalDisplayOverrides())
 
@@ -446,8 +483,35 @@ function onCommitLocalTileDisplayName(payload: { peerId: string; name: string | 
   if (!id) {
     return
   }
-  const next = { ...localTileDisplayOverrides.value }
   const t = payload.name != null ? normalizeDisplayName(payload.name).slice(0, 64) : ''
+  if (isMafiaRoute.value) {
+    const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
+    const isLocalTile = tiles.value.some((x) => x.peerId === id && x.isLocal)
+    const canRenameTarget = mafiaGameStore.isMafiaHost || (selfId.length > 0 && id === selfId) || isLocalTile
+    if (!canRenameTarget) {
+      return
+    }
+    sendSignalingMessage({ type: MafiaWs.playerNameUpdate, payload: { targetPeerId: id, displayName: t } })
+    // Optimistic UI update: server will broadcast the same value (or clear) back.
+    // Without this, the label snaps back to the old value until the WS roundtrip completes.
+    const next = { ...mafiaNicknameOverrideByPeerId.value }
+    if (!t) {
+      delete next[id]
+    } else {
+      next[id] = t
+    }
+    mafiaNicknameOverrideByPeerId.value = next
+    // Mafia nickname overrides are server-authoritative; avoid a stale local override
+    // shadowing the optimistic / server nickname.
+    if (Object.prototype.hasOwnProperty.call(localTileDisplayOverrides.value, id)) {
+      const cleaned = { ...localTileDisplayOverrides.value }
+      delete cleaned[id]
+      localTileDisplayOverrides.value = cleaned
+      saveCallTileLocalDisplayOverrides(cleaned)
+    }
+    return
+  }
+  const next = { ...localTileDisplayOverrides.value }
   if (!t) {
     delete next[id]
   } else {
@@ -463,6 +527,25 @@ function peerDisplayName(peerId: string): string {
   if (typeof o === 'string' && normalizeDisplayName(o)) {
     return normalizeDisplayName(o).slice(0, 64)
   }
+  if (isMafiaRoute.value) {
+    const n = mafiaNicknameOverrideByPeerId.value[peerId]
+    if (typeof n === 'string' && normalizeDisplayName(n)) {
+      return normalizeDisplayName(n).slice(0, 64)
+    }
+  }
+  const participants = participantsByPeerId.value
+  const opts = {
+    selfPeerId: selfPeerId.value,
+    selfDisplayName: selfDisplayName.value,
+  }
+  const hit = displayNameUiByPeerId.value.get(peerId)
+  if (hit !== undefined) {
+    return hit
+  }
+  return resolvePeerDisplayNameForUi(peerId, participants, opts)
+}
+
+function peerAvatarFallbackName(peerId: string): string {
   const participants = participantsByPeerId.value
   const opts = {
     selfPeerId: selfPeerId.value,
@@ -1690,6 +1773,14 @@ watch(
           ? [...sorted.filter((id) => id !== hostId), hostId]
           : sorted
     }
+    if (isMafiaRoute.value) {
+      const hostId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId : ''
+      const sorted = [...ids].sort((a, b) => a.localeCompare(b))
+      ids =
+        hostId && sorted.includes(hostId)
+          ? [...sorted.filter((id) => id !== hostId), hostId]
+          : sorted
+    }
     const prev = tileOrder.value
     const next: string[] = []
     for (const id of prev) {
@@ -1723,8 +1814,10 @@ const mafiaNumberByPeer = computed(() => {
     return new Map<string, number>()
   }
   const m = new Map<string, number>()
-  const order = mafiaGameStore.getDisplayNumberingOrder(mafiaPlayersStore.joinOrder)
-  order.forEach((id, i) => {
+  const hostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId : ''
+  const order = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
+  const numbered = hostPeerId.length > 0 ? order.filter((id) => id !== hostPeerId) : order
+  numbered.forEach((id, i) => {
     m.set(id, i + 1)
   })
   return m
@@ -1941,20 +2034,33 @@ function onEatFirstPlayerUseActionCard(payload: { peerId: string }): void {
 const orderedTiles = computed(() => {
   const list = tiles.value.slice()
   if (isMafiaRoute.value && list.length > 0) {
-    const seats = mafiaNumberByPeer.value
+    const hostPidRaw = mafiaGameStore.mafiaHostPeerId
+    const hostPidForGrid = typeof hostPidRaw === 'string' ? hostPidRaw.trim() : ''
+    const base = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
+    const order = hostPidForGrid.length > 0 ? pinHostPeerToEndOfOrder(base, hostPidForGrid) : base.slice()
+
+    const orderIndex = new Map<string, number>()
+    let cursor = 0
+    for (const peerId of order) {
+      if (typeof peerId !== 'string' || peerId.length < 1) continue
+      if (orderIndex.has(peerId)) continue
+      orderIndex.set(peerId, cursor)
+      cursor += 1
+    }
+    const extras = list.filter((t) => !orderIndex.has(t.peerId))
+    const extrasOrdered =
+      hostPidForGrid.length > 0
+        ? [...extras.filter((t) => t.peerId !== hostPidForGrid), ...extras.filter((t) => t.peerId === hostPidForGrid)]
+        : extras.slice()
+    for (const tile of extrasOrdered) {
+      orderIndex.set(tile.peerId, cursor)
+      cursor += 1
+    }
     return [...list].sort((a, b) => {
-      const sa = seats.get(a.peerId)
-      const sb = seats.get(b.peerId)
-      if (sa != null && sb != null && sa !== sb) {
-        return sa - sb
-      }
-      if (sa != null && sb == null) {
-        return -1
-      }
-      if (sa == null && sb != null) {
-        return 1
-      }
-      return 0
+      const ai = orderIndex.get(a.peerId) ?? Number.MAX_SAFE_INTEGER
+      const bi = orderIndex.get(b.peerId) ?? Number.MAX_SAFE_INTEGER
+      if (ai !== bi) return ai - bi
+      return a.peerId.localeCompare(b.peerId)
     })
   }
 
@@ -2519,10 +2625,12 @@ function refreshMafiaPlayersState(): void {
     return
   }
   if (mafiaGameStore.isApplyingMafiaReshuffle) {
-    const engine = mafiaPlayersStore.joinOrder
+    const engine = tileOrder.value
     const order = mafiaGameStore.getDisplayNumberingOrder(engine)
+    const hostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId : ''
+    const playersOnly = hostPeerId.length > 0 ? order.filter((peerId) => peerId !== hostPeerId) : order
     mafiaPlayersStore.setPlayerRowsDisplay(
-      order.map((peerId, i) => ({
+      playersOnly.map((peerId, i) => ({
         peerId,
         number: i + 1,
         displayName: peerDisplayName(peerId),
@@ -2531,16 +2639,19 @@ function refreshMafiaPlayersState(): void {
     return
   }
   mafiaPlayersStore.syncWithPeers(session.roomId, tiles.value.map((t) => t.peerId))
-  const engine = mafiaPlayersStore.joinOrder
+  const engine = tileOrder.value
   mafiaGameStore.reconcileNumberingWithEngine(engine)
   mafiaGameStore.pruneGameStateToPeers(engine)
   const order = mafiaGameStore.getDisplayNumberingOrder(engine)
-  mafiaGameStore.pruneNightActionsToMaxSeat(order.length)
+  const hostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId : ''
+  const seatCount = hostPeerId.length > 0 && order.includes(hostPeerId) ? order.length - 1 : order.length
+  mafiaGameStore.pruneNightActionsToMaxSeat(seatCount)
   if (mafiaGameStore.isMafiaHost) {
-    mafiaGameStore.pruneSpeakingQueueToMaxSeat(order.length)
+    mafiaGameStore.pruneSpeakingQueueToMaxSeat(seatCount)
   }
+  const playersOnly = hostPeerId.length > 0 ? order.filter((peerId) => peerId !== hostPeerId) : order
   mafiaPlayersStore.setPlayerRowsDisplay(
-    order.map((peerId, i) => ({
+    playersOnly.map((peerId, i) => ({
       peerId,
       number: i + 1,
       displayName: peerDisplayName(peerId),
@@ -2845,7 +2956,7 @@ watch(joining, (j) => {
       <section
         class="call-page__active"
         :class="{
-          'call-page__active--with-dock': (session.inCall || joining) && !mafiaViewUi,
+          'call-page__active--with-dock': (session.inCall || joining) && !mafiaViewUi && !eatFirstViewUi,
           'call-page__active--with-mafia-bottom': isMafiaRoute && (session.inCall || joining) && !mafiaViewUi,
         }"
       >
@@ -2958,6 +3069,7 @@ watch(joining, (j) => {
                 class="call-page__tile-inner"
                 :peer-id="row.tile.peerId"
                 :display-name="row.displayName"
+                :avatar-fallback-name="peerAvatarFallbackName(row.tile.peerId)"
                 :mafia-seat-index="
                   isMafiaRoute
                     ? mafiaNumberByPeer.get(row.tile.peerId)
@@ -2968,7 +3080,7 @@ watch(joining, (j) => {
                 :mafia-visible-role="
                   isMafiaRoute && !mafiaViewUi ? mafiaGameStore.getMafiaRoleVisibleForTile(row.tile.peerId) : undefined
                 "
-                :stream-view-mode="mafiaViewUi"
+                :stream-view-mode="mafiaViewUi || eatFirstViewUi"
                 :stream="row.tile.stream"
                 :is-local="row.tile.isLocal"
                 :video-enabled="row.tile.videoEnabled"
@@ -3020,7 +3132,7 @@ watch(joining, (j) => {
                 @eat-first-use-action-card="onEatFirstPlayerUseActionCard"
               />
               <button
-                v-if="!mafiaViewUi"
+                v-if="!mafiaViewUi && !eatFirstViewUi"
                 type="button"
                 class="call-page__pin-btn"
                 :class="{ 'call-page__pin-btn--active': pinnedPeerId === row.tile.peerId }"
@@ -3051,7 +3163,7 @@ watch(joining, (j) => {
         </div>
 
         <div
-          v-if="(session.inCall || joining) && !mafiaViewUi"
+          v-if="(session.inCall || joining) && !mafiaViewUi && !eatFirstViewUi"
           class="call-page__bottom-cluster"
         >
           <div
@@ -3080,6 +3192,7 @@ watch(joining, (j) => {
               :cam-enabled="camEnabled"
               :hand-raised="handRaised"
               :screen-sharing="screenSharing"
+              :noise-suppression-enabled="noiseSuppressionEnabled"
               :show-media-device-pickers="showMediaDevicePickers"
               :audio-input-devices="audioInputDevices"
               :video-input-devices="videoInputDevices"
@@ -3089,6 +3202,7 @@ watch(joining, (j) => {
               @toggle-cam="toggleCam"
               @toggle-raise-hand="toggleRaiseHand"
               @toggle-screen-share="toggleScreenShare"
+              @toggle-noise-suppression="onToggleLightNoiseSuppression"
               @leave="leaveCall"
               @pick-audio-input="pickAudioInput"
               @pick-video-input="pickVideoInput"
@@ -3099,7 +3213,7 @@ watch(joining, (j) => {
         </div>
 
         <CallChatPanel
-          v-if="session.inCall && !mafiaViewUi"
+          v-if="session.inCall && !mafiaViewUi && !eatFirstViewUi"
           v-model:open="chatOpen"
           :messages="callChatMessages"
           :self-peer-id="selfPeerId"
@@ -3112,7 +3226,7 @@ watch(joining, (j) => {
         />
 
         <aside
-          v-if="session.callDebugOverlay && showCallDebugControls && !mafiaViewUi"
+          v-if="session.callDebugOverlay && showCallDebugControls && !mafiaViewUi && !eatFirstViewUi"
           class="call-page__debug"
           :aria-label="t('callPage.debugAria')"
         >

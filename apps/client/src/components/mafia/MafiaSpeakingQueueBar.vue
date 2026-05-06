@@ -241,6 +241,9 @@ function onClearSpeakingQueue(ev: MouseEvent): void {
 
 .mafia-vote-hud__tool--on {
   filter: brightness(1.15);
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, #facc15 70%, transparent),
+    0 0 0 1px rgb(250 204 21 / 0.28);
 }
 
 .mafia-vote-hud__tool-art {
