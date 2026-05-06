@@ -1,6 +1,10 @@
 import { onUnmounted, ref, shallowRef } from 'vue'
 import { applyWebcamContentHint, DEFAULT_CALL_AUDIO_CONSTRAINTS } from './defaultMediaConstraints'
 import {
+  buildCallAudioDevMicSnapshot,
+  logCallAudioDevDiagnostics,
+} from '../audio/callAudioDevDiagnostics'
+import {
   applyNoiseSuppressionToTrack,
   audioConstraintsWithUserNoiseSuppression,
   loadCallNoiseSuppressionPreference,
@@ -213,9 +217,16 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     stopLocalMedia()
     const mediaMode = resolveMediaMode()
     if (mediaMode === 'audio-only') {
+      const requestedAudio = audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS)
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS),
+        audio: requestedAudio,
         video: false,
+      })
+      logCallAudioDevDiagnostics('after-initial-capture', {
+        mediaMode: 'audio-only',
+        ...buildCallAudioDevMicSnapshot(stream.getAudioTracks()[0], {
+          requestedAudioConstraints: requestedAudio,
+        }),
       })
       localStream.value = stream
       for (const t of stream.getAudioTracks()) {
@@ -234,19 +245,26 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     const videoConstraints = {
       ...getCallVideoConstraintsForRuntime(tier, detectMobileForLocalCapture()),
     }
+    const requestedAudio = audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS)
     const stream =
       preferred !== undefined
         ? await getUserMediaWithDeviceIdExactThenIdeal(
             {
-              audio: audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS),
+              audio: requestedAudio,
               video: { ...videoConstraints, deviceId: { ideal: preferred } },
             },
             'video',
           )
         : await navigator.mediaDevices.getUserMedia({
-            audio: audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS),
+            audio: requestedAudio,
             video: videoConstraints,
           })
+    logCallAudioDevDiagnostics('after-initial-capture', {
+      mediaMode: 'audio-video',
+      ...buildCallAudioDevMicSnapshot(stream.getAudioTracks()[0], {
+        requestedAudioConstraints: requestedAudio,
+      }),
+    })
     for (const t of stream.getVideoTracks()) {
       applyWebcamContentHint(t)
     }
@@ -328,12 +346,13 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     }
     const old = stream.getAudioTracks()[0]
     const prevEnabled = old ? old.enabled : false
+    const requestedAudio = {
+      ...audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS),
+      deviceId: { ideal: deviceId },
+    }
     const tmp = await getUserMediaWithDeviceIdExactThenIdeal(
       {
-        audio: {
-          ...audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS),
-          deviceId: { ideal: deviceId },
-        },
+        audio: requestedAudio,
       },
       'audio',
     )
@@ -358,6 +377,9 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     attachLocalTrackEndedListener(nt)
     syncFlagsFromStream()
     localPlayRev.value += 1
+    logCallAudioDevDiagnostics('after-mic-device-swap', {
+      ...buildCallAudioDevMicSnapshot(nt, { requestedAudioConstraints: requestedAudio }),
+    })
     await refreshMediaDevices()
   }
 
@@ -424,7 +446,15 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     noiseSuppressionEnabled.value = next
     saveCallNoiseSuppressionPreference(next)
     const track = localStream.value?.getAudioTracks()[0] ?? null
+    logCallAudioDevDiagnostics('before-noise-toggle-apply', {
+      noiseSuppressionIntent: next,
+      ...buildCallAudioDevMicSnapshot(track ?? undefined),
+    })
     await applyNoiseSuppressionToTrack(track, next)
+    logCallAudioDevDiagnostics('after-noise-toggle-apply', {
+      noiseSuppressionIntent: next,
+      ...buildCallAudioDevMicSnapshot(track ?? undefined, { noiseSuppressionIntent: next }),
+    })
   }
 
   onUnmounted(() => {
