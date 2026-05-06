@@ -1,12 +1,15 @@
+import { allowCallAudioQaStorageOverrides } from './callAudioQaGate'
+
 /**
- * Opt-in DEV-only capture / publish diagnostics. No effect in production builds
- * (`import.meta.env.PROD`) and no logs unless localStorage is set (avoids dev spam).
+ * Opt-in capture / publish diagnostics (`console.info` with `[call-audio-dev]`).
+ * No logs unless {@link allowCallAudioQaStorageOverrides} is true **and** the storage key is `"1"`.
+ * Temporary QA tooling — remove when experiments conclude.
  */
 
 export const CALL_AUDIO_DEV_DIAGNOSTICS_STORAGE_KEY = 'streamassist:call:dev-audio-diagnostics-v1'
 
 export function isCallAudioDevDiagnosticsEnabled(): boolean {
-  if (!import.meta.env.DEV) {
+  if (!allowCallAudioQaStorageOverrides()) {
     return false
   }
   if (typeof localStorage === 'undefined') {
@@ -119,8 +122,7 @@ export function buildCallAudioDevMicSnapshot(
 }
 
 /**
- * Logs one structured line. Gated: DEV build + {@link isCallAudioDevDiagnosticsEnabled}.
- * Uses `console.info` so production tree-shaking still applies to DEV-only branches.
+ * Logs one structured line. Gated: {@link isCallAudioDevDiagnosticsEnabled}.
  */
 export function logCallAudioDevDiagnostics(phase: string, body: Record<string, unknown>): void {
   if (!isCallAudioDevDiagnosticsEnabled()) {

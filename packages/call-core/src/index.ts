@@ -43,6 +43,11 @@ export {
 } from './audio/noiseSuppressionPreference'
 
 export {
+  allowCallAudioQaStorageOverrides,
+  isCallAudioQaToolsViteEnabled,
+} from './audio/callAudioQaGate'
+
+export {
   CALL_AUDIO_DEV_DIAGNOSTICS_STORAGE_KEY,
   buildCallAudioDevMicSnapshot,
   isCallAudioDevDiagnosticsEnabled,
