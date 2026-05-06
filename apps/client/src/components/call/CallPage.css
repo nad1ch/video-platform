@@ -603,10 +603,17 @@
 /**
  * Active speaker ring on the wrap (not the inner `.tile`) so `overflow: hidden` on `.call-page__grid`
  * does not clip the glow. `call-page__tile-wrap--speaking` from `isTileRowSpeaking(row)` (no `:has()`).
+ *
+ * The ring uses a 12 px gaussian blur (was 24 px). Halving the blur radius
+ * substantially shrinks the per-frame rasterisation kernel that the compositor
+ * runs while the speaker class is active and on every speaker change. The
+ * colour, opacity and "speaker is highlighted" intent are unchanged; the halo
+ * is simply tighter. Mobile keeps the existing 2 px tight ring (see media
+ * query at the bottom of this file).
  */
 .call-page__tile-wrap--speaking:not(.call-page__tile-wrap--dragging) {
   --tile-speaking-scale: 1.01;
-  box-shadow: 0 0 24px rgba(140, 90, 255, 0.6);
+  box-shadow: 0 0 12px rgba(140, 90, 255, 0.6);
   /* ENTER is snappier than LEAVE; see base rule for the LEAVE duration. */
   transition:
     box-shadow 0.2s ease,
