@@ -1875,11 +1875,22 @@
 }
 
 /*
- * Mobile-only call-route GPU diet. The 24px speaking glow is the most
- * compositor-expensive element on phone grids (large blurred shadow promoted
- * over decoded video tiles); we keep a tight ring so the highlight is still
- * visually present but cheap to paint. The device popover and chat overlay
- * `backdrop-filter` blurs are also dropped to opaque/semi-opaque fills.
+ * Mobile-only call-route GPU diet. On phones every `backdrop-filter: blur(...)`
+ * promotes its element to its own compositor layer and runs a downsample → blur
+ * → upsample pass over the area BEHIND the element on each frame the element is
+ * visible; under the dock, the chat panel, and the room popover this is a
+ * continuous cost while a call is active. We drop the blur on every continuous
+ * call-route surface and replace it with the existing semi-opaque fill, which
+ * is visually similar but is a single rasterised layer with no per-frame blur.
+ *
+ * Speaking glow is also tightened (24 -> 12 px on desktop, 2 px outline on
+ * mobile here) so the highlight stays visible but cheap to paint.
+ *
+ * The transient `.call-page__device-pop` was already on this diet; chat /
+ * dock / room popover are added so the same rule covers every surface that
+ * is visible for any meaningful fraction of the call. The mafia timer +
+ * speaking-queue pill (`.call-floating-surface`) gets the same treatment in
+ * its own stylesheet. Transient menu dropdowns are intentionally left alone.
  */
 @media (max-width: 768px) {
   .call-page__tile-wrap--speaking:not(.call-page__tile-wrap--dragging) {
@@ -1890,5 +1901,11 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     background: #232428;
+  }
+  .call-page__chat,
+  .call-page__dock,
+  .call-page__room-pop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }

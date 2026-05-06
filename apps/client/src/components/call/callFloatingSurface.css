@@ -13,3 +13,18 @@
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
+
+/**
+ * Mobile GPU diet: drop the 14 px backdrop-filter blur on the floating pill.
+ * The mafia timer / speaking queue HUD is visible the entire game; on phones
+ * the per-frame blur pass over the area behind the pill is a continuous
+ * compositor cost. The opaque-ish surface fill above stays — visually similar
+ * to the blurred version, no glassy tint over moving video tiles. Matches the
+ * mobile rule applied to `.call-page__chat` / `.call-page__dock` / etc.
+ */
+@media (max-width: 768px) {
+  .call-floating-surface {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
