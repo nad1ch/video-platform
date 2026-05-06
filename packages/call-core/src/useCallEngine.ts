@@ -244,8 +244,6 @@ export function useCallEngine(options?: CallEngineOptions) {
     toggleCam: toggleLocalCam,
     swapLocalAudioInput,
     swapLocalVideoInput,
-    noiseSuppressionEnabled,
-    setLightNoiseSuppression,
   } = useLocalMedia({
     getVideoPublishTier: () => wirePublishTier.value,
     mediaMode: () => readMediaMode(options),
@@ -1465,9 +1463,6 @@ export function useCallEngine(options?: CallEngineOptions) {
     isCameraActive,
     isScreenActive,
     toggleScreenShare,
-
-    noiseSuppressionEnabled,
-    setLightNoiseSuppression,
 
     sendSignalingMessage: sendJson,
     subscribeSignalingMessage: addMessageListener,

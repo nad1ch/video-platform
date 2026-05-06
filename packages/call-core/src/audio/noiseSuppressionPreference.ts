@@ -1,18 +1,19 @@
 /**
- * Sender-side "light noise reduction" for the LOCAL outgoing microphone: browser
- * `noiseSuppression` plus reaffirmed `echoCancellation` / `autoGainControl` on the
- * live track so capture processing stays coherent after `getUserMedia`.
- * Persisted in `localStorage` (client-only; server unaware).
- *
- * Default `true` matches historical {@link import('../media/defaultMediaConstraints').DEFAULT_CALL_AUDIO_CONSTRAINTS}.
+ * Sender-side browser capture for the outgoing call microphone: always applies
+ * `echoCancellation`, `noiseSuppression`, and `autoGainControl` on constraints and
+ * on the live track after `getUserMedia` / mic device swap (`applyConstraints`).
  * No AudioWorklet / WASM — constraints only.
+ *
+ * Capture no longer reads a persisted toggle; {@link loadCallNoiseSuppressionPreference} /
+ * {@link saveCallNoiseSuppressionPreference} remain as legacy no-ops for the same storage key
+ * (writes are harmless; reads are unused by call-core).
  */
 
+/** Legacy storage key (capture ignores reads for defaults). */
 const STORAGE_KEY = 'streamassist:call:light-noise-suppression-v1'
 
 /**
- * Read the persisted preference. Returns `true` when storage is unavailable
- * (private mode / SSR) so behaviour matches the historical default.
+ * Legacy read — not used for capture constraints anymore.
  */
 export function loadCallNoiseSuppressionPreference(): boolean {
   if (typeof localStorage === 'undefined') return true
@@ -26,6 +27,9 @@ export function loadCallNoiseSuppressionPreference(): boolean {
   }
 }
 
+/**
+ * Legacy write — not consulted for capture; safe to call from old code paths.
+ */
 export function saveCallNoiseSuppressionPreference(enabled: boolean): void {
   if (typeof localStorage === 'undefined') return
   try {
@@ -36,25 +40,23 @@ export function saveCallNoiseSuppressionPreference(enabled: boolean): void {
 }
 
 /**
- * Shallow copy of `base` with `noiseSuppression` set from storage. Other fields
- * (`echoCancellation`, `autoGainControl`, `deviceId`, …) are preserved for gUM.
+ * Merge `base` audio constraints with the fixed outgoing-mic capture bundle.
  */
-export function audioConstraintsWithUserNoiseSuppression(
+export function mergeCallOutgoingMicAudioCaptureConstraints(
   base: MediaTrackConstraints,
 ): MediaTrackConstraints {
-  const enabled = loadCallNoiseSuppressionPreference()
-  return { ...base, noiseSuppression: enabled }
+  return { ...base, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
 }
 
-function warnIfNoiseSuppressionMismatch(track: MediaStreamTrack, intent: boolean): void {
+function warnIfNoiseSuppressionMismatch(track: MediaStreamTrack): void {
   if (!import.meta.env.DEV) {
     return
   }
   try {
     const s = typeof track.getSettings === 'function' ? track.getSettings() : null
-    if (s && typeof s.noiseSuppression === 'boolean' && s.noiseSuppression !== intent) {
+    if (s && typeof s.noiseSuppression === 'boolean' && s.noiseSuppression !== true) {
       console.warn('[call-mic] noiseSuppression intent vs getSettings()', {
-        intent,
+        intent: true,
         effective: s.noiseSuppression,
       })
     }
@@ -64,35 +66,29 @@ function warnIfNoiseSuppressionMismatch(track: MediaStreamTrack, intent: boolean
 }
 
 /**
- * Best-effort live update on an already-published mic track: applies sender-side
- * light noise reduction (`noiseSuppression` per user) and reaffirms
- * `echoCancellation` / `autoGainControl` so browsers do not leave processing in a
- * partial state after constraint toggles. Falls back to `{ noiseSuppression }` only
- * if the full bundle is rejected.
- *
- * Returns `true` if any `applyConstraints` attempt succeeded. Caller should still
- * treat failure as non-fatal for publishing continuity.
+ * Best-effort live update on an already-published mic track: applies the full
+ * outgoing capture bundle. Falls back to `{ noiseSuppression: true }` only if the
+ * bundle is rejected.
  */
-export async function applyNoiseSuppressionToTrack(
+export async function applyOutgoingCallMicCaptureConstraints(
   track: MediaStreamTrack | null | undefined,
-  enabled: boolean,
 ): Promise<boolean> {
   if (!track || track.readyState !== 'live' || track.kind !== 'audio') {
     return false
   }
   const bundle: MediaTrackConstraints = {
     echoCancellation: true,
-    noiseSuppression: enabled,
+    noiseSuppression: true,
     autoGainControl: true,
   }
   try {
     await track.applyConstraints(bundle)
-    warnIfNoiseSuppressionMismatch(track, enabled)
+    warnIfNoiseSuppressionMismatch(track)
     return true
   } catch {
     try {
-      await track.applyConstraints({ noiseSuppression: enabled })
-      warnIfNoiseSuppressionMismatch(track, enabled)
+      await track.applyConstraints({ noiseSuppression: true })
+      warnIfNoiseSuppressionMismatch(track)
       return true
     } catch {
       return false

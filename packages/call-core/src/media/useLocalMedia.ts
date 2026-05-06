@@ -5,10 +5,8 @@ import {
   logCallAudioDevDiagnostics,
 } from '../audio/callAudioDevDiagnostics'
 import {
-  applyNoiseSuppressionToTrack,
-  audioConstraintsWithUserNoiseSuppression,
-  loadCallNoiseSuppressionPreference,
-  saveCallNoiseSuppressionPreference,
+  applyOutgoingCallMicCaptureConstraints,
+  mergeCallOutgoingMicAudioCaptureConstraints,
 } from '../audio/noiseSuppressionPreference'
 import type { VideoPublishTier } from './videoQualityPreset'
 import {
@@ -109,13 +107,6 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
 
   const localPlayRev = ref(0)
 
-  /**
-   * Mirror of the persisted sender-side light noise reduction toggle (browser
-   * `noiseSuppression`). Live track updates reaffirm echo cancellation + AGC via
-   * {@link applyNoiseSuppressionToTrack}; never recreates the producer.
-   */
-  const noiseSuppressionEnabled = ref<boolean>(loadCallNoiseSuppressionPreference())
-
   const audioInputDevices = ref<CallMediaDeviceOption[]>([])
   const videoInputDevices = ref<CallMediaDeviceOption[]>([])
 
@@ -215,7 +206,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     stopLocalMedia()
     const mediaMode = resolveMediaMode()
     if (mediaMode === 'audio-only') {
-      const requestedAudio = audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS)
+      const requestedAudio = mergeCallOutgoingMicAudioCaptureConstraints(DEFAULT_CALL_AUDIO_CONSTRAINTS)
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: requestedAudio,
         video: false,
@@ -233,7 +224,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
       }
       const micOnly = stream.getAudioTracks()[0]
       if (micOnly) {
-        await applyNoiseSuppressionToTrack(micOnly, noiseSuppressionEnabled.value)
+        await applyOutgoingCallMicCaptureConstraints(micOnly)
       }
       micEnabled.value = false
       camEnabled.value = false
@@ -247,7 +238,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     const videoConstraints = {
       ...getCallVideoConstraintsForRuntime(tier, detectMobileForLocalCapture()),
     }
-    const requestedAudio = audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS)
+    const requestedAudio = mergeCallOutgoingMicAudioCaptureConstraints(DEFAULT_CALL_AUDIO_CONSTRAINTS)
     const stream =
       preferred !== undefined
         ? await getUserMediaWithDeviceIdExactThenIdeal(
@@ -294,7 +285,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     }
     const micAv = stream.getAudioTracks()[0]
     if (micAv) {
-      await applyNoiseSuppressionToTrack(micAv, noiseSuppressionEnabled.value)
+      await applyOutgoingCallMicCaptureConstraints(micAv)
     }
     micEnabled.value = false
     camEnabled.value = false
@@ -353,7 +344,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     const old = stream.getAudioTracks()[0]
     const prevEnabled = old ? old.enabled : false
     const requestedAudio = {
-      ...audioConstraintsWithUserNoiseSuppression(DEFAULT_CALL_AUDIO_CONSTRAINTS),
+      ...mergeCallOutgoingMicAudioCaptureConstraints(DEFAULT_CALL_AUDIO_CONSTRAINTS),
       deviceId: { ideal: deviceId },
     }
     const tmp = await getUserMediaWithDeviceIdExactThenIdeal(
@@ -386,7 +377,7 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     logCallAudioDevDiagnostics('after-mic-device-swap', {
       ...buildCallAudioDevMicSnapshot(nt, { requestedAudioConstraints: requestedAudio }),
     })
-    await applyNoiseSuppressionToTrack(nt, noiseSuppressionEnabled.value)
+    await applyOutgoingCallMicCaptureConstraints(nt)
     await refreshMediaDevices()
   }
 
@@ -437,31 +428,6 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     await refreshMediaDevices()
   }
 
-  /**
-   * Apply the user's sender-side light noise reduction preference.
-   *
-   * Persists in localStorage and best-effort `applyConstraints` (noise +
-   * reaffirmed echo/AGC) on the live mic track. Falls back silently if the
-   * browser rejects constraints; next `getUserMedia` still uses {@link audioConstraintsWithUserNoiseSuppression}.
-   *
-   * Never recreates producers, never restarts the track, never emits `localPlayRev`.
-   */
-  async function setLightNoiseSuppression(enabled: boolean): Promise<void> {
-    const next = enabled !== false
-    noiseSuppressionEnabled.value = next
-    saveCallNoiseSuppressionPreference(next)
-    const track = localStream.value?.getAudioTracks()[0] ?? null
-    logCallAudioDevDiagnostics('before-noise-toggle-apply', {
-      noiseSuppressionIntent: next,
-      ...buildCallAudioDevMicSnapshot(track ?? undefined),
-    })
-    await applyNoiseSuppressionToTrack(track, next)
-    logCallAudioDevDiagnostics('after-noise-toggle-apply', {
-      noiseSuppressionIntent: next,
-      ...buildCallAudioDevMicSnapshot(track ?? undefined, { noiseSuppressionIntent: next }),
-    })
-  }
-
   onUnmounted(() => {
     if (typeof navigator !== 'undefined' && navigator.mediaDevices?.removeEventListener) {
       navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange)
@@ -483,7 +449,5 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     toggleCam,
     swapLocalAudioInput,
     swapLocalVideoInput,
-    noiseSuppressionEnabled,
-    setLightNoiseSuppression,
   }
 }

@@ -179,8 +179,6 @@ const {
   toggleRaiseHand,
   screenSharing,
   toggleScreenShare,
-  noiseSuppressionEnabled,
-  setLightNoiseSuppression,
   sendSignalingMessage,
   subscribeSignalingMessage,
   receiveDeviceProfile,
@@ -188,16 +186,6 @@ const {
   playbackRenderFpsPressureByPeerId,
   setPeerVisible,
 } = useCallOrchestrator({ allowManualVideoQuality, joinAvatarUrl, joinUserId, role: callEngineRole })
-
-/**
- * Toolbar handler for the "light noise suppression" toggle. Persisted +
- * applied via `MediaStreamTrack.applyConstraints` inside call-core; failure
- * is silent (next mic restart picks the preference up automatically).
- */
-function onToggleLightNoiseSuppression(): void {
-  void setLightNoiseSuppression(!noiseSuppressionEnabled.value)
-}
-
 
 const remotePlaybackWaitingPeerIds = shallowRef(new Set<string>())
 
@@ -3348,7 +3336,6 @@ watch(joining, (j) => {
               :cam-enabled="camEnabled"
               :hand-raised="handRaised"
               :screen-sharing="screenSharing"
-              :noise-suppression-enabled="noiseSuppressionEnabled"
               :show-media-device-pickers="showMediaDevicePickers"
               :audio-input-devices="audioInputDevices"
               :video-input-devices="videoInputDevices"
@@ -3358,7 +3345,6 @@ watch(joining, (j) => {
               @toggle-cam="toggleCam"
               @toggle-raise-hand="toggleRaiseHand"
               @toggle-screen-share="toggleScreenShare"
-              @toggle-noise-suppression="onToggleLightNoiseSuppression"
               @leave="leaveCall"
               @pick-audio-input="pickAudioInput"
               @pick-video-input="pickVideoInput"

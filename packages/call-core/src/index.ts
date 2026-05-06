@@ -36,9 +36,9 @@ export { getAudioAnalysisAudioContext } from './audio/audioAnalysisContext'
 export { useActiveSpeaker, type ActiveSpeakerTile } from './audio/useActiveSpeaker'
 
 export {
-  applyNoiseSuppressionToTrack,
-  audioConstraintsWithUserNoiseSuppression,
+  applyOutgoingCallMicCaptureConstraints,
   loadCallNoiseSuppressionPreference,
+  mergeCallOutgoingMicAudioCaptureConstraints,
   saveCallNoiseSuppressionPreference,
 } from './audio/noiseSuppressionPreference'
 
