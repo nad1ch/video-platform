@@ -1,6 +1,24 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { efHostReshuffle } from '@/eat-first/services/eatFirstTransport'
+
+type EatFirstTraitKey =
+  | 'gender'
+  | 'age'
+  | 'profession'
+  | 'health'
+  | 'hobby'
+  | 'phobia'
+  | 'fact'
+  | 'baggage'
+
+type EatFirstTraitsByKey = Record<EatFirstTraitKey, string>
+
+/** Eat First speaking timer from `eat:table-state-sync` (server authoritative). */
+export type EatFirstCallTimerFromTableSync = {
+  startedAt: number
+  durationMs: number
+  isRunning: boolean
+}
 
 /**
  * Minimal shell/header bridge for `/app/eat` call mode only.
@@ -18,10 +36,11 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
   /**
    * Authoritative trait list per slot id (`p1`..`p11`). Populated from the
    * Eat First snapshot polling; consumed by call-tile overlay through the
-   * peer→slot map broadcast in `eat:trait-state-sync`.
+   * peer→slot map and `playerOrder` from signaling (`eat:trait-state-sync` /
+   * `eat:table-state-sync`).
    */
-  const traitsBySlot = ref<Record<string, string[]>>({})
-  /** Action card snapshot per slot — host-only display in call tiles + host panel. */
+  const traitsBySlot = ref<Record<string, EatFirstTraitsByKey>>({})
+  /** Action card snapshot per slot — host sees all seated players; each player sees own tile only (call UI). */
   const actionCardBySlot = ref<
     Record<
       string,
@@ -47,17 +66,31 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
   const playerCount = ref(0)
   const connectedPlayerCount = ref(0)
 
-  /** Speaking queue: ordered array of 1-based player seat numbers. Local-only state (no server sync). */
+  /**
+   * Nomination queue: pair-encoded when even length `[by1, target1, ...]` (same as Mafia call).
+   * Odd length is legacy target-only when decoding. Local-only (no server sync).
+   */
   const speakingQueue = ref<number[]>([])
 
-  /** When true tile clicks in EatFirst call add seats to the speaking queue. */
+  /** When true, tile clicks use two-step nomination (nominator, then nominated). */
   const speakingMode = ref(false)
+
+  /** First click in speaking mode: nominator seat; second click completes the pair. */
+  const speakingNominationDraftBySeat = ref<number | null>(null)
+
+  function clearSpeakingNominationDraft(): void {
+    speakingNominationDraftBySeat.value = null
+  }
+
+  /** Speaking countdown from signaling (`eat:table-state-sync`). Snapshot polling must not replace this. */
+  const eatFirstCallTimerFromTableSync = ref<EatFirstCallTimerFromTableSync | null>(null)
 
   function setEatFirstCallShellHost(isHost: boolean): void {
     isEatFirstRoomHost.value = isHost
     if (!isHost) {
       speakingQueue.value = []
       speakingMode.value = false
+      clearSpeakingNominationDraft()
     }
   }
 
@@ -72,11 +105,20 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
     if (!isEatFirstRoomHost.value) {
       speakingQueue.value = []
       speakingMode.value = false
+      clearSpeakingNominationDraft()
     }
   }
 
   function setGameId(id: string): void {
-    currentGameId.value = id
+    const next = typeof id === 'string' ? id.trim() : ''
+    if (next !== currentGameId.value) {
+      eatFirstCallTimerFromTableSync.value = null
+    }
+    currentGameId.value = next
+  }
+
+  function setEatFirstCallTimerFromTableSync(next: EatFirstCallTimerFromTableSync | null): void {
+    eatFirstCallTimerFromTableSync.value = next
   }
 
   function setPlayerOrder(order: string[]): void {
@@ -87,7 +129,7 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
     traitsBySeat.value = next
   }
 
-  function setTraitsBySlot(next: Record<string, string[]>): void {
+  function setTraitsBySlot(next: Record<string, EatFirstTraitsByKey>): void {
     traitsBySlot.value = next
   }
 
@@ -172,58 +214,68 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
 
   function toggleSpeakingMode(): void {
     speakingMode.value = !speakingMode.value
+    if (!speakingMode.value) {
+      clearSpeakingNominationDraft()
+    }
   }
 
-  function addSpeakingSeat(seat: number): void {
+  function setSpeakingNominationDraftBySeat(seat: number | null): void {
+    if (!isEatFirstRoomHost.value) return
+    if (seat == null) {
+      clearSpeakingNominationDraft()
+      return
+    }
     if (!Number.isInteger(seat) || seat < 1) return
-    if (speakingQueue.value.includes(seat)) return
-    speakingQueue.value = [...speakingQueue.value, seat]
+    speakingNominationDraftBySeat.value = seat
   }
 
-  function removeSpeakingSeat(seat: number): void {
-    speakingQueue.value = speakingQueue.value.filter((s) => s !== seat)
+  function appendSpeakingNominationPair(by: number, target: number): void {
+    if (!isEatFirstRoomHost.value) return
+    if (!Number.isInteger(by) || by < 1 || !Number.isInteger(target) || target < 1) return
+    speakingQueue.value = [...speakingQueue.value, by, target]
+    clearSpeakingNominationDraft()
+  }
+
+  function removeSpeakingNominationPairAt(pairIndex: number): void {
+    if (!isEatFirstRoomHost.value) return
+    if (!Number.isInteger(pairIndex) || pairIndex < 0) return
+    const flat = speakingQueue.value
+    if (flat.length % 2 === 1) {
+      if (pairIndex >= flat.length) return
+      speakingQueue.value = flat.filter((_, i) => i !== pairIndex)
+      return
+    }
+    const i = pairIndex * 2
+    if (i + 1 >= flat.length) return
+    speakingQueue.value = [...flat.slice(0, i), ...flat.slice(i + 2)]
   }
 
   function clearSpeakingQueue(): void {
     speakingQueue.value = []
+    clearSpeakingNominationDraft()
   }
 
-  async function reshufflePlayerOrder(): Promise<{ ok: boolean; reason?: string }> {
-    const gid = currentGameId.value
-    if (!gid) return { ok: false, reason: 'no-game-id' }
-    try {
-      const out = await efHostReshuffle(gid, { participantCount: connectedPlayerCount.value })
-      const nextOrder = Array.isArray(out?.playerOrder)
-        ? out.playerOrder.filter((x: unknown): x is string => typeof x === 'string' && x.trim().length > 0)
-        : []
-      const traitsRaw =
-        out?.traitsBySeat && typeof out.traitsBySeat === 'object' && !Array.isArray(out.traitsBySeat)
-          ? (out.traitsBySeat as Record<string, unknown>)
-          : {}
-      const nextTraits: Record<number, string[]> = {}
-      for (const [k, v] of Object.entries(traitsRaw)) {
-        const seat = Number(k)
-        if (!Number.isFinite(seat) || seat < 1) continue
-        if (!Array.isArray(v)) continue
-        nextTraits[seat] = v.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-      }
-      if (nextOrder.length > 0) {
-        playerOrder.value = nextOrder
-      }
-      if (Object.keys(nextTraits).length > 0) {
-        traitsBySeat.value = nextTraits
-      }
-      return { ok: true }
-    } catch (e) {
-      const reason = e instanceof Error ? e.message : 'reshuffle-failed'
-      return { ok: false, reason }
+  function applySpeakingQueueFromSignaling(seats: unknown): void {
+    if (!Array.isArray(seats)) {
+      speakingQueue.value = []
+      clearSpeakingNominationDraft()
+      return
     }
+    const next: number[] = []
+    for (const x of seats) {
+      if (typeof x === 'number' && Number.isInteger(x) && x >= 1) {
+        next.push(x)
+      }
+    }
+    speakingQueue.value = next
+    clearSpeakingNominationDraft()
   }
 
   return {
     isEatFirstRoomHost,
     hostPeerId,
     currentGameId,
+    eatFirstCallTimerFromTableSync,
     playerOrder,
     traitsBySeat,
     traitsBySlot,
@@ -235,9 +287,11 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
     connectedPlayerCount,
     speakingQueue,
     speakingMode,
+    speakingNominationDraftBySeat,
     setEatFirstCallShellHost,
     setEatFirstHostPeer,
     setGameId,
+    setEatFirstCallTimerFromTableSync,
     setPlayerOrder,
     setTraitsBySeat,
     setTraitsBySlot,
@@ -251,9 +305,10 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
     setPlayerCount,
     setConnectedPlayerCount,
     toggleSpeakingMode,
-    addSpeakingSeat,
-    removeSpeakingSeat,
+    setSpeakingNominationDraftBySeat,
+    appendSpeakingNominationPair,
+    removeSpeakingNominationPairAt,
     clearSpeakingQueue,
-    reshufflePlayerOrder,
+    applySpeakingQueueFromSignaling,
   }
 })

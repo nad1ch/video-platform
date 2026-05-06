@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import CallPage from '@/components/call/CallPage.vue'
@@ -19,11 +20,22 @@ const route = useRoute()
 const { t } = useI18n()
 const { isStreamView } = useEatFirstCallStreamView()
 const eatFirstShell = useEatFirstCallShellStore()
+const { eatFirstCallTimerFromTableSync } = storeToRefs(eatFirstShell)
 
 const gameId = computed(() => {
   const g = route.query.game
   return typeof g === 'string' ? normalizeDisplayName(g) : ''
 })
+
+type EatFirstTraitKey =
+  | 'gender'
+  | 'age'
+  | 'profession'
+  | 'health'
+  | 'hobby'
+  | 'phobia'
+  | 'fact'
+  | 'baggage'
 
 const { snapshot, room, display, speakingTimer, timerRoomFields, gamePhase } = useEatFirstCallGameSnapshot(gameId)
 
@@ -45,7 +57,15 @@ watch(
 watch(
   () => room.value.playerOrder,
   (po) => {
-    eatFirstShell.setPlayerOrder(Array.isArray(po) ? (po as string[]) : [])
+    const next = Array.isArray(po)
+      ? (po as string[]).filter((x) => typeof x === 'string' && /^p([1-9]|1[01])$/i.test(x.trim())).map((x) => x.trim())
+      : []
+    const current = eatFirstShell.playerOrder
+    if (next.length < 1) return
+    // Signaling (`eat:table-state-sync` / `eat:trait-state-sync`) owns order after join; snapshot only seeds empty shell.
+    if (current.length < 1) {
+      eatFirstShell.setPlayerOrder(next)
+    }
   },
   { immediate: true },
 )
@@ -130,6 +150,24 @@ function seatTraitsForPlayer(row: Record<string, unknown>, roomTraits: string[])
   ]
 }
 
+function slotTraitsForPlayer(
+  row: Record<string, unknown>,
+  roomTraits: string[],
+): Record<EatFirstTraitKey, string> | null {
+  const fromRoom = parseRoomTraitLines(roomTraits)
+  const profession = normalizedTraitValue(row, 'profession') || fromRoom.profession || ''
+  const health = normalizedTraitValue(row, 'health') || fromRoom.health || ''
+  const hobby = normalizedTraitValue(row, 'quirk') || fromRoom.hobby || ''
+  const phobia = normalizedTraitValue(row, 'phobia') || fromRoom.phobia || ''
+  const fact = normalizedTraitValue(row, 'fact') || fromRoom.fact || ''
+  const baggage = normalizedTraitValue(row, 'luggage') || fromRoom.baggage || ''
+  const age = typeof row.age === 'string' ? row.age.trim() : ''
+  const gender = typeof row.gender === 'string' ? row.gender.trim() : ''
+  const values = { gender, age, profession, health, hobby, phobia, fact, baggage }
+  const complete = (Object.values(values) as string[]).every((v) => v.length > 0)
+  return complete ? values : null
+}
+
 function actionCardFromRow(row: Record<string, unknown>): {
   title: string
   description: string
@@ -168,7 +206,7 @@ watch(
       byId.set(id, row as Record<string, unknown>)
     }
     const nextSeat: Record<number, string[]> = {}
-    const nextSlot: Record<string, string[]> = {}
+    const nextSlot: Record<string, Record<EatFirstTraitKey, string>> = {}
     const nextActionCard: Record<
       string,
       { title: string; description: string; templateId: string; effectId: string; used: boolean }
@@ -187,7 +225,10 @@ watch(
       })()
       const traits = seatTraitsForPlayer(row, fromRoom)
       nextSeat[index + 1] = traits
-      nextSlot[slotId] = traits
+      const structuredTraits = slotTraitsForPlayer(row, fromRoom)
+      if (structuredTraits) {
+        nextSlot[slotId] = structuredTraits
+      }
       const ac = actionCardFromRow(row)
       if (ac) {
         nextActionCard[slotId] = ac
@@ -199,11 +240,15 @@ watch(
     if (Object.keys(nextSeat).length > 0) {
       eatFirstShell.setTraitsBySeat(nextSeat)
     }
-    if (Object.keys(nextSlot).length > 0) {
+    if (Object.keys(nextSlot).length > 0 && Object.keys(eatFirstShell.traitsBySlot).length < 1) {
       eatFirstShell.setTraitsBySlot(nextSlot)
     }
-    eatFirstShell.setActionCardBySlot(nextActionCard)
-    eatFirstShell.setLastUsedActionCard(lastUsed)
+    if (Object.keys(eatFirstShell.actionCardBySlot).length < 1 && Object.keys(nextActionCard).length > 0) {
+      eatFirstShell.setActionCardBySlot(nextActionCard)
+    }
+    if (eatFirstShell.lastUsedActionCard == null && lastUsed != null) {
+      eatFirstShell.setLastUsedActionCard(lastUsed)
+    }
   },
   { immediate: true },
 )
@@ -237,8 +282,34 @@ watch(
 
 const showHostPanel = computed(() => !isStreamView.value && eatFirstShell.isEatFirstRoomHost)
 
+/** Prefer signaling timer from `eat:table-state-sync`; snapshot fields only when shell has no timer. */
+const eatFirstTimerStripModel = computed(() => {
+  const t = eatFirstCallTimerFromTableSync.value
+  if (
+    t &&
+    t.isRunning &&
+    Number.isFinite(t.startedAt) &&
+    Number.isFinite(t.durationMs) &&
+    t.durationMs >= 5000
+  ) {
+    return {
+      speakingTotalSec: Math.floor(t.durationMs / 1000),
+      timerStartedAt: new Date(t.startedAt).toISOString(),
+      timerPaused: false,
+      frozenRemainingSec: null as number | null,
+    }
+  }
+  return {
+    speakingTotalSec: speakingTimer.value,
+    timerStartedAt: timerRoomFields.value.startedAt,
+    timerPaused: timerRoomFields.value.paused,
+    frozenRemainingSec: timerRoomFields.value.frozenRemainingSec,
+  }
+})
+
 onUnmounted(() => {
   eatFirstShell.setEatFirstCallShellHost(false)
+  eatFirstShell.setEatFirstCallTimerFromTableSync(null)
 })
 </script>
 
@@ -254,10 +325,10 @@ onUnmounted(() => {
     <EatFirstCallTimerStrip
       :view-mode="isStreamView"
       :is-eat-first-host="showHostPanel"
-      :speaking-total-sec="speakingTimer"
-      :timer-started-at="timerRoomFields.startedAt"
-      :timer-paused="timerRoomFields.paused"
-      :frozen-remaining-sec="timerRoomFields.frozenRemainingSec"
+      :speaking-total-sec="eatFirstTimerStripModel.speakingTotalSec"
+      :timer-started-at="eatFirstTimerStripModel.timerStartedAt"
+      :timer-paused="eatFirstTimerStripModel.timerPaused"
+      :frozen-remaining-sec="eatFirstTimerStripModel.frozenRemainingSec"
       :game-id="gameId"
     />
     <EatFirstCallHostPanel
@@ -266,6 +337,10 @@ onUnmounted(() => {
       :host-display-seat="display.hostDisplaySeat"
       :player-count="display.playerCount"
       :game-phase="gamePhase"
+      :timer-speaking-total-sec="eatFirstTimerStripModel.speakingTotalSec"
+      :timer-started-at="eatFirstTimerStripModel.timerStartedAt"
+      :timer-paused="eatFirstTimerStripModel.timerPaused"
+      :timer-frozen-remaining-sec="eatFirstTimerStripModel.frozenRemainingSec"
     />
   </div>
 </template>

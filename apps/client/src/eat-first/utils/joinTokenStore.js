@@ -92,6 +92,28 @@ export function listEatFirstJoinTokensForGame(gameId) {
   return out
 }
 
+/** Stable numeric rank for Eat First slot ids `p1`..`p11` (unknown slots sort last). */
+function eatFirstSlotRank(slotId) {
+  const m = /^p([1-9]|10|11)$/i.exec(String(slotId ?? '').trim())
+  return m ? Number(m[1]) : 999
+}
+
+/**
+ * When sessionStorage has no active slot but localStorage holds multiple join tokens,
+ * pick one deterministic candidate so call signaling can still send `eat:slot-claim`.
+ */
+export function pickPrimaryEatFirstJoinTokenForGame(gameId) {
+  const list = listEatFirstJoinTokensForGame(gameId)
+  if (list.length < 1) return null
+  const sorted = [...list].sort((a, b) => eatFirstSlotRank(a.slotId) - eatFirstSlotRank(b.slotId))
+  const chosen = sorted[0]
+  if (!chosen || typeof chosen.slotId !== 'string' || typeof chosen.token !== 'string') return null
+  const sid = chosen.slotId.trim()
+  const tok = chosen.token.trim()
+  if (!sid || !tok) return null
+  return { slotId: sid, token: tok }
+}
+
 function activeSlotSessionKey(gameId) {
   const gid = String(gameId ?? '').trim()
   return gid ? `${ACTIVE_SLOT_SESSION_PREFIX}${gid}` : ''
@@ -107,13 +129,14 @@ function activeSlotSessionKey(gameId) {
  */
 export function setActiveEatFirstSlotForSession(gameId, slotId, joinToken, deviceId) {
   const k = activeSlotSessionKey(gameId)
+  const gid = String(gameId ?? '').trim()
   const sid = String(slotId ?? '').trim()
   const tok = String(joinToken ?? '').trim()
   const dev = String(deviceId ?? '').trim()
-  if (!k || !sid || !tok || !dev) return
+  if (!k || !gid || !sid || !tok || !dev) return
   if (typeof sessionStorage === 'undefined') return
   try {
-    sessionStorage.setItem(k, JSON.stringify({ slotId: sid, joinToken: tok, deviceId: dev }))
+    sessionStorage.setItem(k, JSON.stringify({ gameId: gid, slotId: sid, joinToken: tok, deviceId: dev }))
   } catch {
     /* private mode / quota */
   }
@@ -121,16 +144,18 @@ export function setActiveEatFirstSlotForSession(gameId, slotId, joinToken, devic
 
 export function getActiveEatFirstSlotForSession(gameId) {
   const k = activeSlotSessionKey(gameId)
+  const expectedGameId = String(gameId ?? '').trim()
   if (!k || typeof sessionStorage === 'undefined') return null
   try {
     const raw = sessionStorage.getItem(k)
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    const storedGameId = typeof parsed.gameId === 'string' ? parsed.gameId.trim() : ''
     const slotId = typeof parsed.slotId === 'string' ? parsed.slotId.trim() : ''
     const joinToken = typeof parsed.joinToken === 'string' ? parsed.joinToken.trim() : ''
     const deviceId = typeof parsed.deviceId === 'string' ? parsed.deviceId.trim() : ''
-    if (!slotId || !joinToken || !deviceId) return null
+    if (!slotId || !joinToken || !deviceId || !storedGameId || storedGameId !== expectedGameId) return null
     return { slotId, joinToken, deviceId }
   } catch {
     return null

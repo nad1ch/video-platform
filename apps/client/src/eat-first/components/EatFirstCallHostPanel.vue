@@ -1,28 +1,35 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { createLogger } from '@/utils/logger'
-import { efPatchRoom } from '@/eat-first/services/eatFirstTransport'
 import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
 
 const log = createLogger('eat-first:call-host-panel')
 
-const props = defineProps<{
-  gameId: string
-  hostDisplaySeat: number
-  playerCount: number
-  gamePhase: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    gameId: string
+    hostDisplaySeat: number
+    playerCount: number
+    gamePhase: string
+    /** Same clock model as `EatFirstCallTimerStrip` / Block 8 signaling. */
+    timerSpeakingTotalSec: number | null
+    timerStartedAt: string
+    timerPaused: boolean
+    timerFrozenRemainingSec: number | null
+  }>(),
+  {
+    timerStartedAt: '',
+    timerSpeakingTotalSec: null,
+    timerPaused: false,
+    timerFrozenRemainingSec: null,
+  },
+)
 
 const { t } = useI18n()
-const router = useRouter()
 const eatFirstShell = useEatFirstCallShellStore()
 const { lastUsedActionCard } = storeToRefs(eatFirstShell)
-
-type EfPhaseKey = 'intro' | 'discussion' | 'voting' | 'final'
-const PHASE_KEYS: EfPhaseKey[] = ['intro', 'discussion', 'voting', 'final']
 
 type EfTraitKey = 'gender' | 'age' | 'profession' | 'health' | 'hobby' | 'phobia' | 'fact' | 'baggage'
 const TRAIT_KEYS: EfTraitKey[] = [
@@ -40,48 +47,74 @@ const EAT_FIRST_HOST_ACTION_EVENT = 'streamassist:eat-first:host-action'
 
 function dispatchHostAction(detail: Record<string, unknown>): void {
   if (typeof window === 'undefined') return
+  if (import.meta.env.DEV) {
+    log.info('[eat-first:host-action:dispatch]', detail)
+  }
   const ev = new CustomEvent(EAT_FIRST_HOST_ACTION_EVENT, { detail })
   window.dispatchEvent(ev)
 }
 
+const tableMutationPending = ref(false)
+let tableMutationUnlockTimer: ReturnType<typeof setTimeout> | null = null
+
+function armTableMutationCooldown(): void {
+  tableMutationPending.value = true
+  if (tableMutationUnlockTimer != null) {
+    clearTimeout(tableMutationUnlockTimer)
+    tableMutationUnlockTimer = null
+  }
+  tableMutationUnlockTimer = window.setTimeout(() => {
+    tableMutationPending.value = false
+    tableMutationUnlockTimer = null
+  }, 750)
+}
+
 function rerollTraitForAll(traitKey: EfTraitKey): void {
+  if (tableMutationPending.value) return
+  armTableMutationCooldown()
   dispatchHostAction({ action: 'trait-type-reroll-all', traitKey })
 }
 
 function rerollAllActionCards(): void {
+  if (tableMutationPending.value) return
+  armTableMutationCooldown()
   dispatchHostAction({ action: 'action-card-reroll', slotId: '*' })
 }
 
-const lastUsedCardLine = computed(() => {
+const lastUsedSlot = computed(() => {
   const card = lastUsedActionCard.value
   if (!card || typeof card !== 'object') return ''
-  const title = typeof card.title === 'string' ? card.title.trim() : ''
   const slot = typeof card.slotId === 'string' ? card.slotId.trim() : ''
-  if (title.length < 1) return ''
-  if (slot.length < 1) return title
-  return `${slot.toUpperCase()} · ${title}`
+  return slot
 })
 
+const lastUsedTitle = computed(() => {
+  const card = lastUsedActionCard.value
+  if (!card || typeof card !== 'object') return ''
+  return typeof card.title === 'string' ? card.title.trim() : ''
+})
+
+const lastUsedDescription = computed(() => {
+  const card = lastUsedActionCard.value
+  if (!card || typeof card !== 'object') return ''
+  return typeof card.description === 'string' ? card.description.trim() : ''
+})
+
+const hasLastUsedCard = computed(() => lastUsedTitle.value.length > 0)
+
 function traitButtonLabel(key: EfTraitKey): string {
-  const map: Record<EfTraitKey, string> = {
-    gender: 'Стать',
-    age: 'Вік',
-    profession: 'Професія',
-    health: 'Здоров’я',
-    hobby: 'Хобі',
-    phobia: 'Фобія',
-    fact: 'Факт',
-    baggage: 'Багаж',
-  }
-  return map[key] ?? key
+  return t(`eatFirstCall.traitLabels.${key}`)
 }
 
 const MIN_W = 320
 const MARGIN = 8
 const DEFAULT_LEFT_INSET = 70
 const DEFAULT_BOTTOM_INSET = 25
-const PANEL_H = 320
+/** Fallback before first layout / ref measure (panel sizes to content, not this height). */
+const PANEL_HEIGHT_FALLBACK = 320
 const PANEL_Z = 38
+
+const panelElRef = ref<HTMLElement | null>(null)
 
 const collapsed = ref(false)
 const pos = ref({ x: DEFAULT_LEFT_INSET, y: 400 })
@@ -99,10 +132,15 @@ const panelStyle = computed(() => {
     left: `${pos.value.x}px`,
     top: `${pos.value.y}px`,
     width: `${MIN_W}px`,
-    height: `${PANEL_H}px`,
     zIndex: PANEL_Z,
   } as Record<string, string | number>
 })
+
+function panelHeightForClamp(): number {
+  const el = panelElRef.value
+  const h = el?.getBoundingClientRect().height
+  return typeof h === 'number' && h > 0 ? h : PANEL_HEIGHT_FALLBACK
+}
 
 const tabStyle = computed(() => ({
   top: `${tabAnchorY.value}px`,
@@ -124,22 +162,25 @@ const collapseArrowPath = computed(() =>
 function clampPos(): void {
   const vw = window.innerWidth
   const vh = window.innerHeight
+  const ph = panelHeightForClamp()
   pos.value.x = Math.min(Math.max(MARGIN, pos.value.x), vw - MIN_W - MARGIN)
-  pos.value.y = Math.min(Math.max(MARGIN, pos.value.y), vh - PANEL_H - MARGIN)
+  pos.value.y = Math.min(Math.max(MARGIN, pos.value.y), vh - ph - MARGIN)
 }
 
 function placeDefault(): void {
   const vw = window.innerWidth
   const vh = window.innerHeight
+  const ph = panelHeightForClamp()
   pos.value = {
     x: Math.max(MARGIN, Math.min(DEFAULT_LEFT_INSET, vw - MIN_W - MARGIN)),
-    y: Math.max(MARGIN, vh - PANEL_H - DEFAULT_BOTTOM_INSET),
+    y: Math.max(MARGIN, vh - ph - DEFAULT_BOTTOM_INSET),
   }
 }
 
 function onWindowResize(): void {
   clampPos()
-  tabAnchorY.value = Math.max(MARGIN, Math.min(pos.value.y + PANEL_H * 0.5, window.innerHeight - MARGIN))
+  const ph = panelHeightForClamp()
+  tabAnchorY.value = Math.max(MARGIN, Math.min(pos.value.y + ph * 0.5, window.innerHeight - MARGIN))
 }
 
 function endDrag(): void {
@@ -182,7 +223,8 @@ function onHeadPointerDown(ev: PointerEvent): void {
 function collapsePanel(): void {
   collapsedSide.value = panelCollapseSide.value
   savedPos.value = { ...pos.value }
-  tabAnchorY.value = Math.max(MARGIN + 20, Math.min(pos.value.y + PANEL_H * 0.45, window.innerHeight - MARGIN - 20))
+  const ph = panelHeightForClamp()
+  tabAnchorY.value = Math.max(MARGIN + 20, Math.min(pos.value.y + ph * 0.45, window.innerHeight - MARGIN - 20))
   endDrag()
   collapsed.value = true
 }
@@ -194,76 +236,29 @@ function expandPanel(): void {
   } else {
     placeDefault()
   }
-  void nextTick(() => clampPos())
+  void nextTick(() => {
+    requestAnimationFrame(() => clampPos())
+  })
 }
 
 onMounted(() => {
-  placeDefault()
+  void nextTick(() => {
+    requestAnimationFrame(() => {
+      placeDefault()
+      clampPos()
+    })
+  })
   window.addEventListener('resize', onWindowResize, { passive: true })
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onWindowResize)
   endDrag()
-  if (copyHintTimer != null) clearTimeout(copyHintTimer)
-})
-
-// ── Phase tabs ────────────────────────────────────────────────
-function isActivePhase(key: EfPhaseKey): boolean {
-  return props.gamePhase.toLowerCase() === key
-}
-
-function labelForPhase(key: EfPhaseKey): string {
-  return t(`gamePhase.${key}`)
-}
-
-const phasePending = ref<EfPhaseKey | null>(null)
-
-async function setPhase(key: EfPhaseKey): Promise<void> {
-  if (!props.gameId.trim()) return
-  if (isActivePhase(key)) return
-  if (phasePending.value != null) return
-  phasePending.value = key
-  try {
-    await efPatchRoom(props.gameId.trim(), { gamePhase: key })
-  } catch (e) {
-    log.warn('set gamePhase failed', e)
-  } finally {
-    phasePending.value = null
+  if (tableMutationUnlockTimer != null) {
+    clearTimeout(tableMutationUnlockTimer)
+    tableMutationUnlockTimer = null
   }
-}
-
-// ── OBS copy ─────────────────────────────────────────────────
-const copyHint = ref<'idle' | 'ok' | 'err'>('idle')
-let copyHintTimer: ReturnType<typeof setTimeout> | null = null
-
-const overlayAbsoluteUrl = computed(() => {
-  if (typeof window === 'undefined' || !props.gameId.trim()) return ''
-  const href = router.resolve({
-    name: 'eat',
-    query: { view: 'overlay', game: props.gameId.trim() },
-  }).href
-  return `${window.location.origin}${href.startsWith('/') ? href : `/${href}`}`
 })
-
-function setCopyHint(next: 'idle' | 'ok' | 'err'): void {
-  copyHint.value = next
-  if (copyHintTimer != null) { clearTimeout(copyHintTimer); copyHintTimer = null }
-  if (next === 'idle') return
-  copyHintTimer = setTimeout(() => { copyHint.value = 'idle'; copyHintTimer = null }, 2200)
-}
-
-async function copyOverlayPageUrl(): Promise<void> {
-  const text = overlayAbsoluteUrl.value
-  if (!text) return
-  try {
-    await navigator.clipboard.writeText(text)
-    setCopyHint('ok')
-  } catch (e) {
-    log.warn('clipboard copy failed', e)
-    setCopyHint('err')
-  }
-}
 </script>
 
 <template>
@@ -288,6 +283,7 @@ async function copyOverlayPageUrl(): Promise<void> {
     <!-- Expanded panel -->
     <aside
       v-else
+      ref="panelElRef"
       class="ef-host-panel ef-host-panel__shell"
       :style="panelStyle"
       :aria-label="t('eatFirstCall.mafiaStyleHostPanelAria')"
@@ -295,19 +291,6 @@ async function copyOverlayPageUrl(): Promise<void> {
       <header class="ef-host-panel__head" @pointerdown="onHeadPointerDown">
         <h2 class="ef-host-panel__title">{{ t('eatFirstCall.leadTitle') }}</h2>
         <div class="ef-host-panel__head-actions" data-no-drag>
-          <button
-            type="button"
-            class="sa-chip-btn ef-host-panel__head-btn ef-host-panel__head-btn--obs"
-            :disabled="!gameId.trim()"
-            :title="copyHint === 'ok' ? t('eatFirstCall.obsCopied') : t('eatFirstCall.btnObsHelp')"
-            :aria-label="t('eatFirstCall.btnObsHelp')"
-            @click="copyOverlayPageUrl"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true" focusable="false">
-              <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </button>
           <button
             type="button"
             class="sa-chip-btn ef-host-panel__head-btn ef-host-panel__head-btn--collapse"
@@ -337,27 +320,37 @@ async function copyOverlayPageUrl(): Promise<void> {
       <div class="ef-host-panel__scroller">
         <section
           class="ef-host-panel__section"
-          :aria-label="'Остання використана карта'"
+          :aria-label="t('eatFirstCall.hostLastCardSectionTitle')"
         >
-          <h3 class="ef-host-panel__section-title">Остання карта</h3>
+          <h3 class="ef-host-panel__section-title">{{ t('eatFirstCall.hostLastCardSectionTitle') }}</h3>
           <div class="ef-host-panel__last-card">
-            <span v-if="lastUsedCardLine.length > 0" class="ef-host-panel__last-card-line">
-              {{ lastUsedCardLine }}
-            </span>
-            <span v-else class="ef-host-panel__last-card-empty">— ще ніхто не зіграв карту —</span>
+            <template v-if="hasLastUsedCard">
+              <div class="ef-host-panel__last-card-head">
+                <span v-if="lastUsedSlot.length > 0" class="ef-host-panel__last-slot">{{ lastUsedSlot.toUpperCase() }}</span>
+                <span class="ef-host-panel__last-title">{{ lastUsedTitle }}</span>
+              </div>
+              <p v-if="lastUsedDescription.length > 0" class="ef-host-panel__last-desc">
+                {{ lastUsedDescription }}
+              </p>
+            </template>
+            <span v-else class="ef-host-panel__last-card-empty">{{ t('eatFirstCall.hostLastCardEmpty') }}</span>
           </div>
         </section>
 
-        <section class="ef-host-panel__section" aria-label="Перекинути риси для всіх гравців">
-          <h3 class="ef-host-panel__section-title">Перекинути для всіх</h3>
+        <section
+          class="ef-host-panel__section"
+          :aria-label="t('eatFirstCall.hostTraitRerollSectionTitle')"
+        >
+          <h3 class="ef-host-panel__section-title">{{ t('eatFirstCall.hostTraitRerollSectionTitle') }}</h3>
           <div class="ef-host-panel__trait-grid">
             <button
               v-for="key in TRAIT_KEYS"
               :key="`reroll-${key}`"
               type="button"
               class="ef-host-panel__trait-btn"
-              :title="`Перекинути ${traitButtonLabel(key)} для всіх гравців`"
-              :aria-label="`Перекинути ${traitButtonLabel(key)} для всіх гравців`"
+              :disabled="tableMutationPending"
+              :title="t('eatFirstCall.hostTraitRerollButtonHint', { trait: traitButtonLabel(key) })"
+              :aria-label="t('eatFirstCall.hostTraitRerollButtonHint', { trait: traitButtonLabel(key) })"
               @click="rerollTraitForAll(key)"
             >
               {{ traitButtonLabel(key) }}
@@ -365,12 +358,14 @@ async function copyOverlayPageUrl(): Promise<void> {
           </div>
         </section>
 
-        <section class="ef-host-panel__section" aria-label="Активні карти">
-          <h3 class="ef-host-panel__section-title">Активні карти</h3>
+        <section class="ef-host-panel__section" :aria-label="t('eatFirstCall.hostActionCardsSectionTitle')">
+          <h3 class="ef-host-panel__section-title">{{ t('eatFirstCall.hostActionCardsSectionTitle') }}</h3>
           <button
             type="button"
             class="ef-host-panel__action-card-btn"
-            title="Перекинути активні карти для всіх гравців"
+            :title="t('eatFirstCall.hostRerollAllActionCardsHint')"
+            :aria-label="t('eatFirstCall.hostRerollAllActionCardsHint')"
+            :disabled="tableMutationPending"
             @click="rerollAllActionCards"
           >
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
@@ -381,33 +376,8 @@ async function copyOverlayPageUrl(): Promise<void> {
               <circle cx="9" cy="15" r="1.3" fill="currentColor" />
               <circle cx="15" cy="15" r="1.3" fill="currentColor" />
             </svg>
-            <span>Перекинути карти всім</span>
+            <span>{{ t('eatFirstCall.hostRerollAllActionCards') }}</span>
           </button>
-        </section>
-
-        <section class="ef-host-panel__section" aria-label="Фази гри">
-          <h3 class="ef-host-panel__section-title">Фаза</h3>
-          <div
-            class="ef-host-panel__phase-row"
-            role="group"
-            :aria-label="t('eatFirstCall.hostPhasesAria')"
-          >
-            <button
-              v-for="key in PHASE_KEYS"
-              :key="key"
-              type="button"
-              class="ef-host-panel__phase-col h-focus-ring"
-              :class="{ 'ef-host-panel__phase-col--on': isActivePhase(key) }"
-              :disabled="phasePending != null"
-              :aria-pressed="isActivePhase(key)"
-              :aria-label="labelForPhase(key)"
-              :title="labelForPhase(key)"
-              @click="setPhase(key)"
-            >
-              <span class="ef-host-panel__phase-label">{{ labelForPhase(key) }}</span>
-              <span class="ef-host-panel__phase-bar" aria-hidden="true" />
-            </button>
-          </div>
         </section>
       </div>
     </aside>
@@ -422,6 +392,8 @@ async function copyOverlayPageUrl(): Promise<void> {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  max-height: calc(100vh - 16px);
+  height: fit-content;
   border-radius: 12.61px;
   background:
     linear-gradient(135deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.025) 42%, transparent 72%),
@@ -504,21 +476,6 @@ async function copyOverlayPageUrl(): Promise<void> {
   transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.ef-host-panel__head-btn--obs {
-  background: rgb(74 50 116 / 0.69);
-  color: rgb(255 255 255 / 0.72);
-}
-
-.ef-host-panel__head-btn--obs:hover:not(:disabled) {
-  background: rgb(84 57 132 / 0.82);
-  color: #fff;
-}
-
-.ef-host-panel__head-btn--obs:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
 .ef-host-panel__head-btn--collapse {
   background: rgb(74 50 116 / 0.69);
   color: rgb(255 255 255 / 0.88);
@@ -555,6 +512,19 @@ async function copyOverlayPageUrl(): Promise<void> {
   color: rgb(255 255 255 / 0.55);
 }
 
+.ef-host-panel__section-title--secondary {
+  font-size: 9px;
+  opacity: 0.92;
+}
+
+.ef-host-panel__section--secondary {
+  opacity: 0.98;
+}
+
+.ef-host-panel__section--secondary .ef-host-panel__phase-row {
+  gap: 2px;
+}
+
 .ef-host-panel__last-card {
   padding: 6px 9px;
   background: rgb(74 50 116 / 0.55);
@@ -565,8 +535,36 @@ async function copyOverlayPageUrl(): Promise<void> {
   word-break: break-word;
 }
 
-.ef-host-panel__last-card-line {
-  font-weight: 500;
+.ef-host-panel__last-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ef-host-panel__last-slot {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.92);
+  background: rgb(32 20 51 / 0.55);
+}
+
+.ef-host-panel__last-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.ef-host-panel__last-desc {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: rgb(255 255 255 / 0.72);
 }
 
 .ef-host-panel__last-card-empty {
@@ -602,6 +600,12 @@ async function copyOverlayPageUrl(): Promise<void> {
   transform: scale(0.97);
 }
 
+.ef-host-panel__trait-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .ef-host-panel__action-card-btn {
   display: inline-flex;
   align-items: center;
@@ -624,6 +628,12 @@ async function copyOverlayPageUrl(): Promise<void> {
 
 .ef-host-panel__action-card-btn:active {
   transform: scale(0.98);
+}
+
+.ef-host-panel__action-card-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .ef-host-panel__phase-row {

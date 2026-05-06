@@ -350,15 +350,65 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
    * Eat First slot claim: the call peer announces which `EatFirstPlayer`
    * slot they own. Server validates `joinToken`+`deviceId` against the
    * stored `EatFirstPlayer.data` (mirrors REST player-action auth) before
-   * binding `peer.eatFirstSlotId`. Sent after `room-state` so the client
-   * already has its peerId; safe to retry on reconnect (idempotent).
+   * binding `peer.eatFirstSlotId`. Host peers must not claim a seat (server rejects).
+   * Sent after `room-state` so the
+   * client already has its peerId; safe to retry on reconnect (idempotent).
    */
   z.object({
     type: z.literal('eat:slot-claim'),
+    payload: z
+      .object({
+        slotId: z.string().regex(/^p([1-9]|1[01])$/),
+        joinToken: z.string().min(1).max(128),
+        deviceId: z.string().min(8).max(128),
+      })
+      .strict(),
+  }),
+  /** Host-only: persist+broadcast the seat order (slot ids). */
+  z.object({
+    type: z.literal('eat:players-update'),
+    payload: z
+      .union([
+        z.object({
+          playerOrder: z.array(z.string().regex(/^p([1-9]|1[01])$/)).min(1).max(11),
+        }).strict(),
+        z.object({
+          order: z.array(z.string().regex(/^p([1-9]|1[01])$/)).min(1).max(11),
+        }).strict(),
+      ]),
+  }),
+  /** Host-only: sync nomination queue (1-based display seats) to all peers in the room. */
+  z.object({
+    type: z.literal('eat:speaking-queue-update'),
+    payload: z
+      .object({
+        speakingQueue: z.array(z.number().int().min(1).max(11)).max(16),
+      })
+      .strict(),
+  }),
+  /** Host-only: full table deal/shuffle — server persists order + traits/cards; payload unused. */
+  z.object({
+    type: z.literal('eat:table-round-deal'),
+    payload: z.object({}).strict(),
+  }),
+  /** Host-only: start the speaking timer (preset durations only). */
+  z.object({
+    type: z.literal('eat:timer-start'),
+    payload: z.object({
+      startedAt: z.number().int(),
+      duration: z.number().int().min(5_000).max(7_200_000),
+    }).strict(),
+  }),
+  /** Host-only: stop the speaking timer immediately. */
+  z.object({
+    type: z.literal('eat:timer-stop'),
+    payload: z.object({}).strict(),
+  }),
+  /** Seat owner marks their card used; host may mark any seated slot. Persists + broadcast. */
+  z.object({
+    type: z.literal('eat:action-card-use'),
     payload: z.object({
       slotId: z.string().regex(/^p([1-9]|1[01])$/),
-      joinToken: z.string().min(1).max(128),
-      deviceId: z.string().min(8).max(128),
     }).strict(),
   }),
 ])

@@ -31,10 +31,9 @@ export class Peer {
   mafiaSessionId = ''
   /**
    * Eat First identity: server-validated slot id (`p1`..`p11`) the peer
-   * claimed via `eat:slot-claim` (gated by `verifyEatFirstSlotAuth`). Host
-   * peers do not occupy a slot and keep this `null`. Used by Eat First
-   * trait-overlay logic to map call peers to authoritative `EatFirstPlayer`
-   * rows; never trusted from the client without slot-auth verification.
+   * claimed via `eat:slot-claim` (token/device auth). Call moderator never binds a seat.
+   * Used by Eat First trait-overlay logic to map call peers to authoritative `EatFirstPlayer`
+   * rows; never trusted from the client without server verification.
    */
   eatFirstSlotId: string | null = null
   /**

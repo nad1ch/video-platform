@@ -35,6 +35,12 @@ import {
   handleEatFirstTraitRegenerateRequest,
   handleEatFirstTraitTypeRerollRequest,
   handleEatFirstActionCardRerollRequest,
+  handleEatFirstActionCardUse,
+  handleEatFirstPlayersUpdate,
+  handleEatFirstSpeakingQueueUpdate,
+  handleEatFirstTableRoundDeal,
+  handleEatFirstTimerStart,
+  handleEatFirstTimerStop,
   handleProduce,
   handleProducerVideoSource,
   handleSetOutboundVideoPaused,
@@ -319,7 +325,7 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'eat:trait-reveal-request': {
-              handleEatFirstTraitRevealRequest(socket, parsed.data.payload, deps)
+              await handleEatFirstTraitRevealRequest(socket, parsed.data.payload, deps)
               break
             }
             case 'eat:trait-regenerate-request': {
@@ -332,6 +338,30 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'eat:action-card-reroll-request': {
               await handleEatFirstActionCardRerollRequest(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'eat:action-card-use': {
+              await handleEatFirstActionCardUse(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'eat:players-update': {
+              await handleEatFirstPlayersUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'eat:speaking-queue-update': {
+              handleEatFirstSpeakingQueueUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'eat:table-round-deal': {
+              await handleEatFirstTableRoundDeal(socket, deps)
+              break
+            }
+            case 'eat:timer-start': {
+              await handleEatFirstTimerStart(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'eat:timer-stop': {
+              await handleEatFirstTimerStop(socket, deps)
               break
             }
             case 'request-producer-sync': {

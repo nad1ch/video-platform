@@ -23,5 +23,20 @@ export const EatFirstWs = {
   /** Host-only: reroll the action card for one slot or for every active slot ('*'). */
   actionCardRerollRequest: 'eat:action-card-reroll-request',
   actionCardRerolled: 'eat:action-card-rerolled',
+  /** Seat owner (or host): mark action card used; server broadcasts `eat:action-card-used` + table sync. */
+  actionCardUse: 'eat:action-card-use',
+  actionCardUsed: 'eat:action-card-used',
+  playersUpdate: 'eat:players-update',
+  /**
+   * Host-only: DB reshuffle + deal full traits/action cards + reset reveal ledger fields,
+   * then broadcast `eat:table-state-sync` (lower cube / table start).
+   */
+  /** Host-only: sync nomination queue to every peer (same shape as Mafia `mafia:queue-update`). */
+  speakingQueueUpdate: 'eat:speaking-queue-update',
+  tableRoundDeal: 'eat:table-round-deal',
+  /** Host-only: speaking timer (milliseconds), mirrored in `eat:table-state-sync`. */
+  timerStart: 'eat:timer-start',
+  timerStop: 'eat:timer-stop',
   traitStateSync: 'eat:trait-state-sync',
+  tableStateSync: 'eat:table-state-sync',
 } as const

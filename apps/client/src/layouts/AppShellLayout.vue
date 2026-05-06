@@ -268,8 +268,8 @@ watch(
 
 watch(() => route.fullPath, tryAutoOnboarding, { immediate: true })
 
-watch(isMafiaRoute, (onMafia) => {
-  if (!onMafia) {
+watch([isMafiaRoute, isEatFirstCallGameView], ([onMafia, eatCall]) => {
+  if (!onMafia && !eatCall) {
     mafiaSettingsOpen.value = false
   }
 })
@@ -336,6 +336,14 @@ const eatFirstHeaderHasGame = computed(() => {
 })
 const callOrMafiaShowVisualSettings = computed(
   () => isCallRoute.value || isMafiaRoute.value || isEatFirstCallGameView.value,
+)
+
+const showEatFirstOrMafiaDeadBackgroundSettings = computed(
+  () =>
+    (isMafiaRoute.value && isCurrentMafiaHost.value) ||
+    (isEatFirstCallGameView.value &&
+      eatFirstShell.isEatFirstRoomHost &&
+      !eatFirstHeaderStreamView.value),
 )
 /** Gear next to logo whenever the `/app` shell header is visible (including `/app` home). */
 const shellShowsHeaderSettingsGear = computed(() => showChrome.value)
@@ -911,11 +919,14 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
                 </label>
               </div>
               <template v-if="callOrMafiaShowVisualSettings">
-              <p v-if="isMafiaRoute && isCurrentMafiaHost" class="app-shell-mafia-settings-popover__title">
+              <p
+                v-if="showEatFirstOrMafiaDeadBackgroundSettings"
+                class="app-shell-mafia-settings-popover__title"
+              >
                 {{ t('mafiaPage.eliminationBackgroundDefault') }}
               </p>
               <div
-                v-if="isMafiaRoute && isCurrentMafiaHost"
+                v-if="showEatFirstOrMafiaDeadBackgroundSettings"
                 class="app-shell-mafia-bg-gallery"
                 role="listbox"
                 :aria-label="t('mafiaPage.eliminationBackgroundDefault')"

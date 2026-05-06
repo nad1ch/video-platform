@@ -20,7 +20,7 @@ const muteAllActive = ref(false)
 
 const muteAllIcon = computed(() => (muteAllActive.value ? mafiaHostMuteAllActive : mafiaHostMuteAll))
 const canReshuffle = computed(
-  () => Math.max(playerOrder.value.length, playerCount.value, connectedPlayerCount.value) >= 5,
+  () => Math.max(playerOrder.value.length, playerCount.value, connectedPlayerCount.value) >= 2,
 )
 
 function onMuteAll(): void {

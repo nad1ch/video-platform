@@ -56,6 +56,8 @@ export class Room {
   private mafiaHostPeerId: string | null = null
   /** Shared Mafia speaking queue (1-based seat indices); host authorizes updates via signaling. */
   private mafiaSpeakingQueue: number[] = []
+  /** Eat First call nomination queue (1-based display seats, pair-encoded); host sync via `eat:speaking-queue-update`. */
+  private eatFirstSpeakingQueue: number[] = []
   
   private mafiaTimer: { startedAt: number; duration: number } | null = null
   private mafiaMode: 'old' | 'new' = 'old'
@@ -302,6 +304,28 @@ export class Room {
       return false
     }
     this.mafiaSpeakingQueue = next
+    return true
+  }
+
+  getEatFirstSpeakingQueue(): number[] {
+    return [...this.eatFirstSpeakingQueue]
+  }
+
+  setEatFirstSpeakingQueue(seats: number[]): void {
+    this.eatFirstSpeakingQueue = [...seats]
+  }
+
+  /**
+   * Drops out-of-range entries (e.g. after layout shrink). Returns true when the queue changed.
+   */
+  pruneEatFirstSpeakingQueueToMaxSeat(maxSeat: number): boolean {
+    const cap = Math.max(0, Math.floor(maxSeat))
+    const before = this.eatFirstSpeakingQueue
+    const next = before.filter((seat) => seat >= 1 && seat <= cap)
+    if (next.length === before.length) {
+      return false
+    }
+    this.eatFirstSpeakingQueue = next
     return true
   }
 

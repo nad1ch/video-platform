@@ -1,7 +1,14 @@
 import { mergeJson } from './mergePatch'
 
 
-const REPLACE_TOP = new Set(['voting', 'hands', 'playersReady', 'playerOrder'])
+const REPLACE_TOP = new Set([
+  'voting',
+  'hands',
+  'playersReady',
+  'playerOrder',
+  /** Full replace: call signaling overlay (reveals, openedBy, last used card). */
+  'callSignalingSnapshot',
+])
 
 
 

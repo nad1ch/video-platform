@@ -398,6 +398,7 @@ export function useMafiaHostSignaling(
     timerStopBroadcastPayload,
     kickBroadcastPayload,
     reviveBroadcastPayload,
+    eatFirstCallEliminationHost,
     modeUpdateBroadcastPayload,
     settingsUpdateBroadcastPayload,
     pageBackgroundSettingsBroadcastPayload,
@@ -696,7 +697,7 @@ export function useMafiaHostSignaling(
         mafia.clearKickBroadcastPayload()
         return
       }
-      if (!isMafiaHost.value) {
+      if (!isMafiaHost.value && !eatFirstCallEliminationHost.value) {
         mafia.clearKickBroadcastPayload()
         return
       }
@@ -720,7 +721,7 @@ export function useMafiaHostSignaling(
         mafia.clearReviveBroadcastPayload()
         return
       }
-      if (!isMafiaHost.value) {
+      if (!isMafiaHost.value && !eatFirstCallEliminationHost.value) {
         mafia.clearReviveBroadcastPayload()
         return
       }

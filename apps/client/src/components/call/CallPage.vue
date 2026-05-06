@@ -67,7 +67,10 @@ import EatFirstHostActionsBar from '@/eat-first/components/EatFirstHostActionsBa
 import EatFirstSpeakingQueueBar from '@/eat-first/components/EatFirstSpeakingQueueBar.vue'
 import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
 import { EatFirstWs } from '@/eat-first/eatFirstWsProtocol'
-import { getActiveEatFirstSlotForSession } from '@/eat-first/utils/joinTokenStore.js'
+import {
+  getActiveEatFirstSlotForSession,
+  pickPrimaryEatFirstJoinTokenForGame,
+} from '@/eat-first/utils/joinTokenStore.js'
 import { getOrCreateDeviceId } from '@/eat-first/utils/deviceId.js'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
 import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
@@ -77,6 +80,7 @@ import { MAFIA_OBS_URL_TOAST_EVENT, MAFIA_SETTINGS_TOAST_EVENT } from '@/composa
 import { MafiaWs } from '@/composables/mafiaWsProtocol'
 import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
 import type { MafiaEliminationBackground } from '@/utils/mafiaGameTypes'
+import { nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
 
 type VideoQualityUiChoice = 'auto' | VideoQualityPreset
 
@@ -296,7 +300,6 @@ const MAFIA_FORCE_CAMERA_OFF_SIGNAL = MafiaWs.forceCameraOff
 const MAFIA_FORCE_MUTE_ALL_SIGNAL = MafiaWs.forceMuteAll
 const EAT_FIRST_FORCE_MUTE_ALL_SIGNAL = EatFirstWs.forceMuteAll
 const EAT_FIRST_HOST_UPDATED_SIGNAL = EatFirstWs.hostUpdated
-const EAT_FIRST_RESHUFFLE_CAMERAS_SIGNAL = EatFirstWs.reshuffleCameras
 const EAT_FIRST_TRAIT_REVEAL_REQUEST_SIGNAL = EatFirstWs.traitRevealRequest
 const EAT_FIRST_TRAIT_REVEALED_SIGNAL = EatFirstWs.traitRevealed
 const EAT_FIRST_TRAIT_REGENERATE_REQUEST_SIGNAL = EatFirstWs.traitRegenerateRequest
@@ -305,8 +308,16 @@ const EAT_FIRST_TRAIT_TYPE_REROLL_REQUEST_SIGNAL = EatFirstWs.traitTypeRerollReq
 const EAT_FIRST_TRAIT_TYPE_REROLLED_SIGNAL = EatFirstWs.traitTypeRerolled
 const EAT_FIRST_ACTION_CARD_REROLL_REQUEST_SIGNAL = EatFirstWs.actionCardRerollRequest
 const EAT_FIRST_ACTION_CARD_REROLLED_SIGNAL = EatFirstWs.actionCardRerolled
+const EAT_FIRST_ACTION_CARD_USE_SIGNAL = EatFirstWs.actionCardUse
+const EAT_FIRST_ACTION_CARD_USED_SIGNAL = EatFirstWs.actionCardUsed
+const EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL = EatFirstWs.tableRoundDeal
+const EAT_FIRST_SPEAKING_QUEUE_UPDATE_SIGNAL = EatFirstWs.speakingQueueUpdate
 const EAT_FIRST_TRAIT_STATE_SYNC_SIGNAL = EatFirstWs.traitStateSync
+const EAT_FIRST_TABLE_STATE_SYNC_SIGNAL = EatFirstWs.tableStateSync
 const EAT_FIRST_SLOT_CLAIM_SIGNAL = EatFirstWs.slotClaim
+
+/** Suppress host echo when applying `eat:speaking-queue-update` from the server. */
+const applyingEatFirstSpeakingQueueFromSignaling = ref(false)
 
 type EatFirstTraitKey =
   | 'gender'
@@ -508,7 +519,7 @@ const eatFirstRevealedBySlot = shallowRef<Record<string, Record<string, boolean>
 const eatFirstOverridesBySlot = shallowRef<Record<string, Record<string, string>>>({})
 const eatFirstOpenedBySlot = shallowRef<Record<string, Record<string, boolean>>>({})
 /**
- * Server-authoritative `peerId → slotId` map broadcast in `eat:trait-state-sync`.
+ * Server-authoritative `peerId → slotId` map and `playerOrder` in `eat:trait-state-sync` / `eat:table-state-sync`.
  * Replaces the old `eatFirstSeatByPeer` (which derived seat from local tile
  * index and made every client see only the first player's traits).
  */
@@ -782,35 +793,17 @@ function onEatFirstForceMuteAll(muted: boolean): void {
   sendSignalingMessage({ type: EAT_FIRST_FORCE_MUTE_ALL_SIGNAL, payload: { muted } })
 }
 
-function shuffledStablePeerOrder(ids: string[]): string[] {
-  const out = ids.slice()
-  for (let i = out.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[out[i], out[j]] = [out[j], out[i]]
-  }
-  if (out.length > 1 && out.every((id, index) => id === ids[index])) {
-    const first = out.shift()
-    if (first != null) out.push(first)
-  }
-  return out
-}
-
-async function onEatFirstReshuffle(): Promise<void> {
+function onEatFirstReshuffle(): void {
   if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) {
     return
   }
-  const reshuffleResult = await eatFirstShell.reshufflePlayerOrder()
-  if (!reshuffleResult.ok) {
-    callPageLog.warn('eat first host reshuffle failed, camera order only', reshuffleResult.reason)
+  if (import.meta.env.DEV) {
+    callPageLog.info('[eat-first:ws:send]', { type: EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL, payload: {} })
   }
-  const list = orderedTiles.value.map((tile) => tile.peerId)
-  const hostId = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId : ''
-  const withoutHost = list.filter((id) => id !== hostId)
-  if (withoutHost.length < 2) return
-  const shuffled = shuffledStablePeerOrder(withoutHost)
-  const nextOrder = hostId ? [...shuffled, hostId] : shuffled
-  tileOrder.value = nextOrder
-  sendSignalingMessage({ type: EAT_FIRST_RESHUFFLE_CAMERAS_SIGNAL, payload: { peerOrder: nextOrder } })
+  sendSignalingMessage({
+    type: EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL,
+    payload: {},
+  })
 }
 
 function attemptEatFirstSlotClaim(): void {
@@ -820,23 +813,57 @@ function attemptEatFirstSlotClaim(): void {
     return typeof q === 'string' ? q.trim() : ''
   })()
   if (!gid) return
-  const active = getActiveEatFirstSlotForSession(gid)
-  if (!active) return
-  const deviceId = typeof active.deviceId === 'string' ? active.deviceId.trim() : ''
-  const fallbackDevice = getOrCreateDeviceId()
-  const finalDeviceId = deviceId.length > 0 ? deviceId : fallbackDevice
-  if (typeof finalDeviceId !== 'string' || finalDeviceId.length < 1) return
+
+  const sessionTok = getActiveEatFirstSlotForSession(gid)
+  const picked = pickPrimaryEatFirstJoinTokenForGame(gid)
+
+  let slotId = ''
+  let joinToken = ''
+  let deviceId = ''
+
+  if (sessionTok && sessionTok.joinToken.length > 0) {
+    slotId = sessionTok.slotId.trim()
+    joinToken = sessionTok.joinToken.trim()
+    deviceId = typeof sessionTok.deviceId === 'string' ? sessionTok.deviceId.trim() : ''
+  } else if (picked && picked.token.trim().length > 0) {
+    slotId = typeof picked.slotId === 'string' ? picked.slotId.trim() : ''
+    joinToken = picked.token.trim()
+    deviceId = ''
+  } else {
+    return
+  }
+
+  if (!slotId) return
+
   const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
-  if (import.meta.env.DEV) {
-    callPageLog.info('[eat-first:slot-claim:send]', {
-      gameId: gid,
-      slotId: active.slotId,
-      peerId: selfId || null,
+
+  if (joinToken.length > 0) {
+    const fallbackDeviceId = deviceId.length >= 8 ? deviceId : getOrCreateDeviceId()
+    if (fallbackDeviceId.length < 8) return
+    if (import.meta.env.DEV) {
+      callPageLog.info('[eat-first:slot-claim:send]', {
+        gameId: gid,
+        slotId,
+        peerId: selfId || null,
+        mode: 'token',
+      })
+    }
+    sendSignalingMessage({
+      type: EAT_FIRST_SLOT_CLAIM_SIGNAL,
+      payload: { slotId, joinToken, deviceId: fallbackDeviceId },
     })
   }
-  sendSignalingMessage({
-    type: EAT_FIRST_SLOT_CLAIM_SIGNAL,
-    payload: { slotId: active.slotId, joinToken: active.joinToken, deviceId: finalDeviceId },
+}
+
+function patchEatFirstTraitForSlot(slotId: string, traitKey: EatFirstTraitKey, value: string): void {
+  const sid = slotId.trim()
+  const nextValue = value.trim()
+  if (!sid || !nextValue) return
+  const prev = eatFirstShell.traitsBySlot[sid]
+  if (!prev || typeof prev !== 'object') return
+  eatFirstShell.setTraitsBySlot({
+    ...eatFirstShell.traitsBySlot,
+    [sid]: { ...prev, [traitKey]: nextValue },
   })
 }
 
@@ -859,17 +886,161 @@ const offEatFirstForceControls = subscribeSignalingMessage((data) => {
     eatFirstShell.setEatFirstHostPeer(hostPeerId || null, selfId || null)
     return
   }
-  if (rec.type === EAT_FIRST_RESHUFFLE_CAMERAS_SIGNAL) {
+  if (rec.type === EAT_FIRST_SPEAKING_QUEUE_UPDATE_SIGNAL) {
     const payload =
       rec.payload != null && typeof rec.payload === 'object'
         ? (rec.payload as Record<string, unknown>)
         : null
-    const incoming = Array.isArray(payload?.peerOrder)
-      ? payload.peerOrder.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
-      : []
-    if (incoming.length > 0) {
-      tileOrder.value = incoming
+    const raw = payload?.speakingQueue
+    applyingEatFirstSpeakingQueueFromSignaling.value = true
+    eatFirstShell.applySpeakingQueueFromSignaling(Array.isArray(raw) ? raw : [])
+    void nextTick(() => {
+      applyingEatFirstSpeakingQueueFromSignaling.value = false
+    })
+    return
+  }
+  if (rec.type === EAT_FIRST_TABLE_STATE_SYNC_SIGNAL) {
+    const payload =
+      rec.payload != null && typeof rec.payload === 'object'
+        ? (rec.payload as Record<string, unknown>)
+        : null
+    if (!payload) return
+    eatFirstOverridesBySlot.value = {}
+    const playerOrderRaw = Array.isArray(payload.playerOrder) ? payload.playerOrder : []
+    const nextPlayerOrder = playerOrderRaw
+      .filter((x): x is string => typeof x === 'string' && /^p([1-9]|1[01])$/i.test(x.trim()))
+      .map((x) => x.trim())
+    if (nextPlayerOrder.length > 0) {
+      eatFirstShell.setPlayerOrder(nextPlayerOrder)
     }
+    const slotByPeerRaw =
+      payload.slotByPeer && typeof payload.slotByPeer === 'object' && !Array.isArray(payload.slotByPeer)
+        ? (payload.slotByPeer as Record<string, unknown>)
+        : {}
+    const nextSlotByPeer: Record<string, string> = {}
+    for (const [peerId, slotUnknown] of Object.entries(slotByPeerRaw)) {
+      if (typeof slotUnknown !== 'string') continue
+      const slot = slotUnknown.trim()
+      if (!/^p([1-9]|1[01])$/i.test(slot)) continue
+      nextSlotByPeer[peerId] = slot
+    }
+    eatFirstSlotByPeer.value = nextSlotByPeer
+    const traitsBySlotRaw =
+      payload.traitsBySlot && typeof payload.traitsBySlot === 'object' && !Array.isArray(payload.traitsBySlot)
+        ? (payload.traitsBySlot as Record<string, unknown>)
+        : {}
+    const mergedTraitsBySlot: Record<string, Record<EatFirstTraitKey, string>> = { ...eatFirstShell.traitsBySlot }
+    for (const [slotId, rowUnknown] of Object.entries(traitsBySlotRaw)) {
+      if (!/^p([1-9]|1[01])$/i.test(String(slotId).trim())) continue
+      if (!rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
+      const row = rowUnknown as Record<string, unknown>
+      const normalized = {} as Record<EatFirstTraitKey, string>
+      let complete = true
+      for (const key of EAT_FIRST_TRAIT_ORDER) {
+        const value = typeof row[key] === 'string' ? row[key].trim() : ''
+        if (value.length < 1) {
+          complete = false
+          break
+        }
+        normalized[key] = value
+      }
+      if (complete) mergedTraitsBySlot[slotId.trim()] = normalized
+    }
+    eatFirstShell.setTraitsBySlot(mergedTraitsBySlot)
+    const actionCardBySlotRaw =
+      payload.actionCardBySlot &&
+      typeof payload.actionCardBySlot === 'object' &&
+      !Array.isArray(payload.actionCardBySlot)
+        ? (payload.actionCardBySlot as Record<string, unknown>)
+        : {}
+    const mergedActionCardBySlot: Record<
+      string,
+      { title: string; description: string; templateId: string; effectId: string; used: boolean }
+    > = { ...eatFirstShell.actionCardBySlot }
+    for (const [slotId, rowUnknown] of Object.entries(actionCardBySlotRaw)) {
+      if (!/^p([1-9]|1[01])$/i.test(String(slotId).trim())) continue
+      if (!rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
+      const row = rowUnknown as Record<string, unknown>
+      const title = typeof row.title === 'string' ? row.title.trim() : ''
+      const description = typeof row.description === 'string' ? row.description.trim() : ''
+      const templateId = typeof row.templateId === 'string' ? row.templateId.trim() : ''
+      const effectId = typeof row.effectId === 'string' ? row.effectId.trim() : ''
+      const used = row.used === true
+      if (title.length < 1 && templateId.length < 1) continue
+      mergedActionCardBySlot[slotId.trim()] = { title, description, templateId, effectId, used }
+    }
+    eatFirstShell.setActionCardBySlot(mergedActionCardBySlot)
+    const lastUsedRaw =
+      payload.lastUsedActionCard &&
+      typeof payload.lastUsedActionCard === 'object' &&
+      !Array.isArray(payload.lastUsedActionCard)
+        ? (payload.lastUsedActionCard as Record<string, unknown>)
+        : null
+    if (lastUsedRaw) {
+      const slotId = typeof lastUsedRaw.slotId === 'string' ? lastUsedRaw.slotId.trim() : ''
+      const title = typeof lastUsedRaw.title === 'string' ? lastUsedRaw.title.trim() : ''
+      const description = typeof lastUsedRaw.description === 'string' ? lastUsedRaw.description.trim() : ''
+      if (slotId.length > 0 && title.length > 0) {
+        eatFirstShell.setLastUsedActionCard({ slotId, title, description })
+      } else {
+        eatFirstShell.setLastUsedActionCard(null)
+      }
+    } else {
+      eatFirstShell.setLastUsedActionCard(null)
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'timer')) {
+      const timerRaw = payload.timer
+      let nextCallTimer: { startedAt: number; durationMs: number; isRunning: boolean } | null = null
+      if (timerRaw === null) {
+        nextCallTimer = null
+      } else if (timerRaw && typeof timerRaw === 'object' && !Array.isArray(timerRaw)) {
+        const tr = timerRaw as Record<string, unknown>
+        const startedAt = typeof tr.startedAt === 'number' ? tr.startedAt : Number.NaN
+        const duration = typeof tr.duration === 'number' ? tr.duration : Number.NaN
+        if (
+          tr.isRunning === true &&
+          Number.isFinite(startedAt) &&
+          Number.isFinite(duration) &&
+          duration >= 5000 &&
+          duration <= 7_200_000
+        ) {
+          nextCallTimer = { startedAt, durationMs: duration, isRunning: true }
+        }
+      }
+      eatFirstShell.setEatFirstCallTimerFromTableSync(nextCallTimer)
+    }
+    const revealedRaw =
+      payload.revealedTraitsBySlot &&
+      typeof payload.revealedTraitsBySlot === 'object' &&
+      !Array.isArray(payload.revealedTraitsBySlot)
+        ? (payload.revealedTraitsBySlot as Record<string, unknown>)
+        : {}
+    const openedRaw =
+      payload.openedByBySlot && typeof payload.openedByBySlot === 'object' && !Array.isArray(payload.openedByBySlot)
+        ? (payload.openedByBySlot as Record<string, unknown>)
+        : {}
+    const nextRevealedBySlot: Record<string, Record<string, boolean>> = {}
+    for (const [slotId, keysUnknown] of Object.entries(revealedRaw)) {
+      if (!Array.isArray(keysUnknown)) continue
+      const row: Record<string, boolean> = {}
+      for (const key of keysUnknown) {
+        if (typeof key === 'string' && key.trim().length > 0) row[key.trim()] = true
+      }
+      if (Object.keys(row).length > 0) nextRevealedBySlot[slotId] = row
+    }
+    const nextOpenedBySlot: Record<string, Record<string, boolean>> = {}
+    for (const [slotId, rowUnknown] of Object.entries(openedRaw)) {
+      if (!rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
+      const row = rowUnknown as Record<string, unknown>
+      const out: Record<string, boolean> = {}
+      for (const [traitKey, openedBy] of Object.entries(row)) {
+        if (openedBy === 'player' || openedBy === 'host') out[traitKey] = true
+      }
+      if (Object.keys(out).length > 0) nextOpenedBySlot[slotId] = out
+    }
+    eatFirstRevealedBySlot.value = nextRevealedBySlot
+    eatFirstOpenedBySlot.value = nextOpenedBySlot
+    attemptEatFirstSlotClaim()
     return
   }
   if (rec.type === EAT_FIRST_TRAIT_STATE_SYNC_SIGNAL) {
@@ -878,6 +1049,13 @@ const offEatFirstForceControls = subscribeSignalingMessage((data) => {
         ? (rec.payload as Record<string, unknown>)
         : null
     if (!payload) return
+    const traitSyncPlayerOrderRaw = Array.isArray(payload.playerOrder) ? payload.playerOrder : []
+    const traitSyncPlayerOrder = traitSyncPlayerOrderRaw
+      .filter((x): x is string => typeof x === 'string' && /^p([1-9]|1[01])$/i.test(x.trim()))
+      .map((x) => x.trim())
+    if (traitSyncPlayerOrder.length > 0) {
+      eatFirstShell.setPlayerOrder(traitSyncPlayerOrder)
+    }
     const revealedRaw =
       payload.revealedBySlot && typeof payload.revealedBySlot === 'object' && !Array.isArray(payload.revealedBySlot)
         ? (payload.revealedBySlot as Record<string, unknown>)
@@ -999,11 +1177,11 @@ const offEatFirstForceControls = subscribeSignalingMessage((data) => {
     const traitKey = typeof payload?.traitKey === 'string' ? payload.traitKey.trim() : ''
     const value = typeof payload?.value === 'string' ? payload.value.trim() : ''
     if (!slotId || !traitKey || !value) return
+    patchEatFirstTraitForSlot(slotId, traitKey as EatFirstTraitKey, value)
     eatFirstOverridesBySlot.value = {
       ...eatFirstOverridesBySlot.value,
       [slotId]: { ...(eatFirstOverridesBySlot.value[slotId] ?? {}), [traitKey]: value },
     }
-    mergeTraitLineForSlot(slotId, traitKey as EatFirstTraitKey, value)
     return
   }
   if (rec.type === EAT_FIRST_TRAIT_TYPE_REROLLED_SIGNAL) {
@@ -1024,8 +1202,8 @@ const offEatFirstForceControls = subscribeSignalingMessage((data) => {
       if (typeof valueUnknown !== 'string') continue
       const value = valueUnknown.trim()
       if (value.length < 1) continue
+      patchEatFirstTraitForSlot(slotId, traitKey as EatFirstTraitKey, value)
       next[slotId] = { ...(next[slotId] ?? {}), [traitKey]: value }
-      mergeTraitLineForSlot(slotId, traitKey as EatFirstTraitKey, value)
     }
     eatFirstOverridesBySlot.value = next
     return
@@ -1047,6 +1225,24 @@ const offEatFirstForceControls = subscribeSignalingMessage((data) => {
     const effectId = typeof card.effectId === 'string' ? card.effectId : ''
     const used = card.used === true
     eatFirstShell.setActionCardForSlot(slotId, { title, description, templateId, effectId, used })
+    return
+  }
+  if (rec.type === EAT_FIRST_ACTION_CARD_USED_SIGNAL) {
+    if (!eatFirstShell.isEatFirstRoomHost) return
+    const payload =
+      rec.payload != null && typeof rec.payload === 'object'
+        ? (rec.payload as Record<string, unknown>)
+        : null
+    const peerId = typeof payload?.peerId === 'string' ? payload.peerId.trim() : ''
+    const title = typeof payload?.title === 'string' ? payload.title.trim() : ''
+    if (!peerId || title.length < 1) return
+    const name = peerDisplayName(peerId)
+    const id = `eat-ac-${Date.now()}-${peerId}`
+    const text = t('eatFirstCall.playerUsedActionCardToast', { name, card: title })
+    callToasts.value = [...callToasts.value, { id, text, kind: 'join' }]
+    window.setTimeout(() => {
+      callToasts.value = callToasts.value.filter((x) => x.id !== id)
+    }, 5200)
     return
   }
   if (rec.type !== EAT_FIRST_FORCE_MUTE_ALL_SIGNAL || rec.payload == null || typeof rec.payload !== 'object') return
@@ -1075,10 +1271,19 @@ function onEatFirstHostActionEvent(ev: Event): void {
   if (!eatFirstShell.isEatFirstRoomHost) return
   const detail = (ev as CustomEvent).detail
   if (!detail || typeof detail !== 'object') return
+  if (import.meta.env.DEV) {
+    callPageLog.info('[eat-first:host-action:received]', detail)
+  }
   const action = (detail as { action?: unknown }).action
   if (action === 'trait-type-reroll-all') {
     const traitKey = (detail as { traitKey?: unknown }).traitKey
     if (typeof traitKey !== 'string') return
+    if (import.meta.env.DEV) {
+      callPageLog.info('[eat-first:ws:send]', {
+        type: EAT_FIRST_TRAIT_TYPE_REROLL_REQUEST_SIGNAL,
+        payload: { traitKey },
+      })
+    }
     sendSignalingMessage({
       type: EAT_FIRST_TRAIT_TYPE_REROLL_REQUEST_SIGNAL,
       payload: { traitKey },
@@ -1088,6 +1293,12 @@ function onEatFirstHostActionEvent(ev: Event): void {
   if (action === 'action-card-reroll') {
     const slotId = (detail as { slotId?: unknown }).slotId
     if (typeof slotId !== 'string' || slotId.length < 1) return
+    if (import.meta.env.DEV) {
+      callPageLog.info('[eat-first:ws:send]', {
+        type: EAT_FIRST_ACTION_CARD_REROLL_REQUEST_SIGNAL,
+        payload: { slotId },
+      })
+    }
     sendSignalingMessage({
       type: EAT_FIRST_ACTION_CARD_REROLL_REQUEST_SIGNAL,
       payload: { slotId },
@@ -1098,10 +1309,36 @@ function onEatFirstHostActionEvent(ev: Event): void {
 
 const EAT_FIRST_HOST_ACTION_EVENT = 'streamassist:eat-first:host-action'
 
+function onEatFirstTimerActionEvent(ev: Event): void {
+  if (!isEatFirstRoute.value) return
+  if (!eatFirstShell.isEatFirstRoomHost) return
+  const detail = (ev as CustomEvent).detail
+  if (!detail || typeof detail !== 'object') return
+  const action = (detail as { action?: unknown }).action
+  if (action === 'timer-start') {
+    const raw = (detail as { durationSec?: unknown }).durationSec
+    const durationSec =
+      typeof raw === 'number' && Number.isFinite(raw) ? Math.max(5, Math.floor(raw)) : 30
+    const durationMs = durationSec * 1000
+    sendSignalingMessage({
+      type: EatFirstWs.timerStart,
+      payload: { startedAt: Date.now(), duration: durationMs },
+    })
+    return
+  }
+  if (action === 'timer-stop') {
+    sendSignalingMessage({ type: EatFirstWs.timerStop, payload: {} })
+  }
+}
+
+const EAT_FIRST_TIMER_ACTION_EVENT = 'streamassist:eat-first:timer-action'
+
 if (typeof window !== 'undefined') {
   window.addEventListener(EAT_FIRST_HOST_ACTION_EVENT, onEatFirstHostActionEvent)
+  window.addEventListener(EAT_FIRST_TIMER_ACTION_EVENT, onEatFirstTimerActionEvent)
   onBeforeUnmount(() => {
     window.removeEventListener(EAT_FIRST_HOST_ACTION_EVENT, onEatFirstHostActionEvent)
+    window.removeEventListener(EAT_FIRST_TIMER_ACTION_EVENT, onEatFirstTimerActionEvent)
   })
 }
 
@@ -1498,11 +1735,73 @@ const eatFirstSeatByPeer = computed(() => {
     return new Map<string, number>()
   }
   const m = new Map<string, number>()
-  orderedTiles.value.forEach((tile, index) => {
-    m.set(tile.peerId, index + 1)
+  for (const [peerId, slotId] of Object.entries(eatFirstSlotByPeer.value)) {
+    if (typeof slotId !== 'string') continue
+    const hit = /^p([1-9]|1[01])$/i.exec(slotId.trim())
+    if (!hit) continue
+    const seat = Number(hit[1])
+    if (Number.isInteger(seat) && seat >= 1) {
+      m.set(peerId, seat)
+    }
+  }
+  return m
+})
+
+/** 1-based position in `playerOrder` for the tile badge (speaking / table order). */
+const eatFirstDisplayOrderByPeer = computed(() => {
+  const m = new Map<string, number>()
+  if (!isEatFirstRoute.value) return m
+  const slotByPeer = eatFirstSlotByPeer.value
+  const peerBySlot = new Map<string, string>()
+  for (const [peerId, slotId] of Object.entries(slotByPeer)) {
+    const sid = typeof slotId === 'string' ? slotId.trim() : ''
+    if (!/^p([1-9]|1[01])$/i.test(sid)) continue
+    peerBySlot.set(sid, peerId)
+  }
+  eatFirstShell.playerOrder.forEach((slotId, idx) => {
+    const peerId = peerBySlot.get(slotId)
+    if (peerId && !m.has(peerId)) {
+      m.set(peerId, idx + 1)
+    }
   })
   return m
 })
+
+/** Same 1-based index as the Eat First tile badge; host nomination queue must match that label, not `pN` slot digits. */
+function eatFirstNominationNumberForPeer(peerId: string): number | undefined {
+  if (!isEatFirstRoute.value) return undefined
+  const disp = eatFirstDisplayOrderByPeer.value.get(peerId)
+  if (typeof disp === 'number' && Number.isInteger(disp) && disp >= 1) return disp
+  const slotNum = eatFirstSeatByPeer.value.get(peerId)
+  if (typeof slotNum === 'number' && Number.isInteger(slotNum) && slotNum >= 1) return slotNum
+  return undefined
+}
+
+watch(
+  () => eatFirstShell.speakingQueue,
+  (q) => {
+    if (applyingEatFirstSpeakingQueueFromSignaling.value) {
+      return
+    }
+    if (!isEatFirstRoute.value) {
+      return
+    }
+    if (!session.inCall) {
+      return
+    }
+    if (wsStatus.value !== 'open') {
+      return
+    }
+    if (!eatFirstShell.isEatFirstRoomHost) {
+      return
+    }
+    sendSignalingMessage({
+      type: EAT_FIRST_SPEAKING_QUEUE_UPDATE_SIGNAL,
+      payload: { speakingQueue: [...q] },
+    })
+  },
+  { deep: true },
+)
 
 const eatFirstActiveTabSlotId = computed(() => {
   if (!isEatFirstRoute.value) return ''
@@ -1512,14 +1811,16 @@ const eatFirstActiveTabSlotId = computed(() => {
   return active?.slotId ?? ''
 })
 
-function eatFirstTraitsForPeer(peerId: string): string[] {
-  if (!isEatFirstRoute.value) return []
+function eatFirstTraitsForPeer(peerId: string): Record<EatFirstTraitKey, string> | null {
+  if (!isEatFirstRoute.value) return null
+  const hostPid = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId.trim() : ''
+  if (hostPid.length > 0 && peerId === hostPid) return null
   const slot = eatFirstSlotByPeer.value[peerId]
   if (typeof slot === 'string' && slot.length > 0) {
     const bySlot = eatFirstShell.traitsBySlot[slot]
-    if (Array.isArray(bySlot) && bySlot.length > 0) return bySlot
+    if (bySlot && typeof bySlot === 'object') return bySlot
   }
-  return []
+  return null
 }
 
 function eatFirstTraitHostView(): boolean {
@@ -1529,86 +1830,18 @@ function eatFirstTraitHostView(): boolean {
 function eatFirstTraitOwnerView(peerId: string): boolean {
   if (!isEatFirstRoute.value) return false
   const peerSlot = eatFirstSlotForPeer(peerId)
+  if (!peerSlot) return false
+  const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
+  if (selfId.length > 0 && peerId === selfId) return true
   const tabSlot = eatFirstActiveTabSlotId.value
-  const isHost = eatFirstShell.isEatFirstRoomHost
-  const canReveal = Boolean(peerSlot) && (isHost || (tabSlot.length > 0 && peerSlot === tabSlot))
-  if (import.meta.env.DEV) {
-    callPageLog.debug('[eat-first:eye-visibility]', {
-      peerId,
-      peerSlot: peerSlot || null,
-      currentTabSlotId: tabSlot || null,
-      isHost,
-      canReveal,
-    })
-  }
-  return canReveal && !isHost
+  if (tabSlot.length > 0 && peerSlot === tabSlot) return true
+  return false
 }
 
 function eatFirstSlotForPeer(peerId: string): string {
   if (!isEatFirstRoute.value) return ''
   const slot = eatFirstSlotByPeer.value[peerId]
   return typeof slot === 'string' ? slot : ''
-}
-
-function parseEatFirstTraitLine(raw: string): { key: EatFirstTraitKey; value: string } | null {
-  const text = String(raw ?? '').trim()
-  if (!text) return null
-  const pairs: Array<{ key: EatFirstTraitKey; re: RegExp }> = [
-    { key: 'gender', re: /^(стать|gender)\s*[:：-]\s*/i },
-    { key: 'age', re: /^(вік|возраст|age)\s*[:：-]\s*/i },
-    { key: 'profession', re: /^(професія|профессия|profession)\s*[:：-]\s*/i },
-    { key: 'health', re: /^(здоров['’`]?я|здоровье|health)\s*[:：-]\s*/i },
-    { key: 'hobby', re: /^(хобі|хобби|hobby|quirk|особливість)\s*[:：-]\s*/i },
-    { key: 'phobia', re: /^(фобія|фобия|phobia)\s*[:：-]\s*/i },
-    { key: 'fact', re: /^(факт|fact)\s*[:：-]\s*/i },
-    { key: 'baggage', re: /^(багаж|luggage|bag)\s*[:：-]\s*/i },
-  ]
-  for (const pair of pairs) {
-    if (!pair.re.test(text)) continue
-    const value = text.replace(pair.re, '').trim()
-    return { key: pair.key, value }
-  }
-  return null
-}
-
-function eatFirstTraitLabel(key: EatFirstTraitKey): string {
-  const map: Record<EatFirstTraitKey, string> = {
-    gender: 'Стать',
-    age: 'Вік',
-    profession: 'Професія',
-    health: 'Здоров’я',
-    hobby: 'Хобі',
-    phobia: 'Фобія',
-    fact: 'Факт',
-    baggage: 'Багаж',
-  }
-  return map[key]
-}
-
-function mergeTraitLineForSlot(slotId: string, traitKey: EatFirstTraitKey, value: string): void {
-  const sid = String(slotId ?? '').trim()
-  const nextValue = String(value ?? '').trim()
-  if (!sid || !nextValue) return
-  const currentBySlot = eatFirstShell.traitsBySlot
-  const currentLines = Array.isArray(currentBySlot[sid]) ? currentBySlot[sid] : []
-  const parsed = new Map<EatFirstTraitKey, string>()
-  for (const line of currentLines) {
-    const hit = parseEatFirstTraitLine(line)
-    if (!hit || !hit.value) continue
-    parsed.set(hit.key, hit.value)
-  }
-  parsed.set(traitKey, nextValue)
-  const mergedLines: string[] = []
-  for (const key of EAT_FIRST_TRAIT_ORDER) {
-    const traitValue = parsed.get(key)
-    if (!traitValue) continue
-    mergedLines.push(`${eatFirstTraitLabel(key)}: ${traitValue}`)
-  }
-  if (mergedLines.length < 1) return
-  eatFirstShell.setTraitsBySlot({
-    ...currentBySlot,
-    [sid]: mergedLines,
-  })
 }
 
 function eatFirstRevealedTraitsForPeer(peerId: string): string[] {
@@ -1624,34 +1857,20 @@ function eatFirstRevealedTraitsForPeer(peerId: string): string[] {
   return out
 }
 
-function eatFirstTraitOverridesForPeer(peerId: string): Record<string, string> {
-  if (!isEatFirstRoute.value) return {}
-  const slot = eatFirstSlotForPeer(peerId)
-  if (!slot) return {}
-  const bySlot = eatFirstOverridesBySlot.value[slot]
-  return bySlot && typeof bySlot === 'object' ? bySlot : {}
-}
-
-function eatFirstOpenedByPlayerTraitsForPeer(peerId: string): string[] {
-  if (!isEatFirstRoute.value) return []
-  const slot = eatFirstSlotForPeer(peerId)
-  if (!slot) return []
-  const bySlot = eatFirstOpenedBySlot.value[slot]
-  if (!bySlot || typeof bySlot !== 'object') return []
-  const out: string[] = []
-  for (const [k, open] of Object.entries(bySlot)) {
-    if (open === true) out.push(k)
-  }
-  return out
-}
-
 function eatFirstActionCardForPeer(peerId: string): {
   title: string
   description: string
   templateId: string
+  used: boolean
 } | null {
   if (!isEatFirstRoute.value) return null
-  if (!eatFirstShell.isEatFirstRoomHost) return null
+  const hostPid = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId.trim() : ''
+  if (hostPid.length > 0 && peerId === hostPid) return null
+  const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
+  const isHost = eatFirstShell.isEatFirstRoomHost === true
+  if (!isHost) {
+    if (!selfId || peerId !== selfId) return null
+  }
   const slot = eatFirstSlotForPeer(peerId)
   if (!slot) return null
   const card = eatFirstShell.actionCardBySlot[slot]
@@ -1662,6 +1881,7 @@ function eatFirstActionCardForPeer(peerId: string): {
     title,
     description: typeof card.description === 'string' ? card.description : '',
     templateId: typeof card.templateId === 'string' ? card.templateId : '',
+    used: card.used === true,
   }
 }
 
@@ -1705,6 +1925,19 @@ function onEatFirstRerollActionCard(payload: { peerId: string }): void {
   })
 }
 
+function onEatFirstPlayerUseActionCard(payload: { peerId: string }): void {
+  if (!isEatFirstRoute.value) return
+  const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
+  const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
+  if (!peerId || peerId !== selfId) return
+  const slotId = eatFirstSlotForPeer(peerId)
+  if (!slotId) return
+  sendSignalingMessage({
+    type: EAT_FIRST_ACTION_CARD_USE_SIGNAL,
+    payload: { slotId },
+  })
+}
+
 const orderedTiles = computed(() => {
   const list = tiles.value.slice()
   if (isMafiaRoute.value && list.length > 0) {
@@ -1727,28 +1960,35 @@ const orderedTiles = computed(() => {
 
   if (isEatFirstRoute.value && list.length > 0) {
     const orderIndex = new Map<string, number>()
-    const present = new Set(list.map((tile) => tile.peerId))
-    let cursor = 0
-    for (const peerId of tileOrder.value) {
-      if (!present.has(peerId) || peerId === eatFirstShell.hostPeerId) {
-        continue
+    const slotByPeer = eatFirstSlotByPeer.value
+    const peerBySlot = new Map<string, string>()
+    for (const [peerId, slotId] of Object.entries(slotByPeer)) {
+      if (typeof slotId === 'string' && /^p([1-9]|1[01])$/i.test(slotId.trim())) {
+        peerBySlot.set(slotId.trim(), peerId)
       }
+    }
+    let cursor = 0
+    for (const slotId of eatFirstShell.playerOrder) {
+      const peerId = peerBySlot.get(slotId)
+      if (!peerId) continue
+      if (orderIndex.has(peerId)) continue
       orderIndex.set(peerId, cursor)
       cursor += 1
     }
-    for (const tile of [...list].sort((a, b) => a.peerId.localeCompare(b.peerId))) {
-      if (orderIndex.has(tile.peerId) || tile.peerId === eatFirstShell.hostPeerId) {
-        continue
-      }
+    const hostPidRaw = eatFirstShell.hostPeerId
+    const hostPidForGrid = typeof hostPidRaw === 'string' ? hostPidRaw.trim() : ''
+    const extras = list.filter((t) => !orderIndex.has(t.peerId))
+    const extrasOrdered =
+      hostPidForGrid.length > 0
+        ? [...extras.filter((t) => t.peerId !== hostPidForGrid), ...extras.filter((t) => t.peerId === hostPidForGrid)]
+        : extras.slice()
+    for (const tile of extrasOrdered) {
       orderIndex.set(tile.peerId, cursor)
       cursor += 1
     }
-    if (typeof eatFirstShell.hostPeerId === 'string' && present.has(eatFirstShell.hostPeerId)) {
-      orderIndex.set(eatFirstShell.hostPeerId, Number.MAX_SAFE_INTEGER)
-    }
     return [...list].sort((a, b) => {
-      const ai = orderIndex.get(a.peerId) ?? Number.MAX_SAFE_INTEGER - 1
-      const bi = orderIndex.get(b.peerId) ?? Number.MAX_SAFE_INTEGER - 1
+      const ai = orderIndex.get(a.peerId) ?? Number.MAX_SAFE_INTEGER
+      const bi = orderIndex.get(b.peerId) ?? Number.MAX_SAFE_INTEGER
       if (ai !== bi) {
         return ai - bi
       }
@@ -2140,8 +2380,8 @@ const mafiaHostNightActionSeatSet = computed(() => {
   return s
 })
 
-const mafiaHostSpeakingQueueSeatSet = computed(
-  () => new Set(mafiaGameStore.speakingQueue),
+const mafiaHostSpeakingNominationTargetSeatSet = computed(() =>
+  nominationTargetSeatsFromSpeakingFlat(mafiaGameStore.speakingQueue),
 )
 
 function isMafiaHostNightActionSeat(seat: number | undefined): boolean {
@@ -2151,11 +2391,18 @@ function isMafiaHostNightActionSeat(seat: number | undefined): boolean {
   return mafiaHostNightActionSeatSet.value.has(seat)
 }
 
-function isMafiaHostSpeakingQueuedSeat(seat: number | undefined): boolean {
+function isMafiaHostSpeakingNominationUiSeat(seat: number | undefined): boolean {
   if (seat == null) {
     return false
   }
-  return mafiaHostSpeakingQueueSeatSet.value.has(seat)
+  return mafiaHostSpeakingNominationTargetSeatSet.value.has(seat)
+}
+
+function isEatFirstHostSpeakingNominationSeat(seat: number | undefined): boolean {
+  if (seat == null) {
+    return false
+  }
+  return nominationTargetSeatsFromSpeakingFlat(eatFirstShell.speakingQueue).has(seat)
 }
 
 function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value)[number]): void {
@@ -2172,14 +2419,17 @@ function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value
         return
       }
     }
-    const seat = eatFirstSeatByPeer.value.get(row.tile.peerId)
+    const seat = eatFirstNominationNumberForPeer(row.tile.peerId)
     if (seat == null) {
       return
     }
-    if (eatFirstShell.speakingQueue.includes(seat)) {
-      eatFirstShell.removeSpeakingSeat(seat)
+    const draft = eatFirstShell.speakingNominationDraftBySeat
+    if (draft == null) {
+      eatFirstShell.setSpeakingNominationDraftBySeat(seat)
+    } else if (draft === seat) {
+      eatFirstShell.setSpeakingNominationDraftBySeat(null)
     } else {
-      eatFirstShell.addSpeakingSeat(seat)
+      eatFirstShell.appendSpeakingNominationPair(draft, seat)
     }
     ev.stopPropagation()
     return
@@ -2217,10 +2467,13 @@ function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value
     return
   }
   if (mafiaGameStore.hostInteractionMode === 'speaking') {
-    if (mafiaHostSpeakingQueueSeatSet.value.has(seat)) {
-      mafiaGameStore.removeSpeakingSeat(seat)
+    const draft = mafiaGameStore.speakingNominationDraftBySeat
+    if (draft == null) {
+      mafiaGameStore.setSpeakingNominationDraftBySeat(seat)
+    } else if (draft === seat) {
+      mafiaGameStore.setSpeakingNominationDraftBySeat(null)
     } else {
-      mafiaGameStore.addSpeakingSeatIfNew(seat)
+      mafiaGameStore.appendSpeakingNominationPair(draft, seat)
     }
   } else {
     mafiaGameStore.assignOrClearNightActionForActiveRole(seat)
@@ -2258,7 +2511,11 @@ watch(
 function refreshMafiaPlayersState(): void {
   if (!isMafiaRoute.value) {
     mafiaPlayersStore.clearPlayerRowsForUi()
-    mafiaGameStore.clearWhenLeavingMafiaRoute()
+    if (isEatFirstRoute.value) {
+      mafiaGameStore.prunePlayerOverlayStateToPeerIds(tiles.value.map((t) => t.peerId))
+    } else {
+      mafiaGameStore.clearWhenLeavingMafiaRoute()
+    }
     return
   }
   if (mafiaGameStore.isApplyingMafiaReshuffle) {
@@ -2332,6 +2589,19 @@ watch(
   mafiaPlayersWatcherKey,
   () => {
     void refreshMafiaPlayersState()
+  },
+  { immediate: true },
+)
+
+watch(
+  () =>
+    [
+      isEatFirstRoute.value,
+      eatFirstShell.isEatFirstRoomHost,
+      eatFirstViewUi.value,
+    ] as const,
+  ([eat, host, view]) => {
+    mafiaGameStore.setEatFirstCallEliminationHost(eat && host && !view)
   },
   { immediate: true },
 )
@@ -2649,7 +2919,11 @@ watch(joining, (j) => {
                 'call-page__tile-wrap--mafia-host-speaking-queued':
                   isMafiaRoute &&
                   !mafiaViewUi &&
-                  isMafiaHostSpeakingQueuedSeat(mafiaNumberByPeer.get(row.tile.peerId)),
+                  isMafiaHostSpeakingNominationUiSeat(mafiaNumberByPeer.get(row.tile.peerId)),
+                'call-page__tile-wrap--eat-first-host-speaking-seat':
+                  isEatFirstRoute &&
+                  !eatFirstViewUi &&
+                  isEatFirstHostSpeakingNominationSeat(eatFirstNominationNumberForPeer(row.tile.peerId)),
                 'call-page__tile-wrap--mafia-host-mode': isMafiaRoute && !mafiaViewUi && mafiaGameStore.isMafiaHost,
                 'call-page__tile-wrap--mafia-host-mode-speaking':
                   isMafiaRoute &&
@@ -2688,7 +2962,7 @@ watch(joining, (j) => {
                   isMafiaRoute
                     ? mafiaNumberByPeer.get(row.tile.peerId)
                     : isEatFirstRoute
-                      ? eatFirstSeatByPeer.get(row.tile.peerId)
+                      ? eatFirstDisplayOrderByPeer.get(row.tile.peerId)
                       : undefined
                 "
                 :mafia-visible-role="
@@ -2710,21 +2984,22 @@ watch(joining, (j) => {
                 :raise-hand="Boolean(row.tile.handRaised)"
                 :video-presentation="row.tile.videoPresentation"
                 :avatar-url="row.tile.avatarUrl ?? ''"
-                :mafia-life-state="isMafiaRoute ? mafiaGameStore.lifeStateForPeer(row.tile.peerId) : 'alive'"
+                :mafia-life-state="
+                  isMafiaRoute || isEatFirstRoute ? mafiaGameStore.lifeStateForPeer(row.tile.peerId) : 'alive'
+                "
                 :eat-first-traits="isEatFirstRoute ? eatFirstTraitsForPeer(row.tile.peerId) : undefined"
                 :eat-first-trait-host-view="isEatFirstRoute ? eatFirstTraitHostView() : false"
                 :eat-first-trait-owner-view="isEatFirstRoute ? eatFirstTraitOwnerView(row.tile.peerId) : false"
                 :eat-first-revealed-trait-keys="isEatFirstRoute ? eatFirstRevealedTraitsForPeer(row.tile.peerId) : []"
-                :eat-first-trait-overrides="isEatFirstRoute ? eatFirstTraitOverridesForPeer(row.tile.peerId) : {}"
-                :eat-first-opened-by-player-trait-keys="isEatFirstRoute ? eatFirstOpenedByPlayerTraitsForPeer(row.tile.peerId) : []"
                 :eat-first-action-card="isEatFirstRoute ? eatFirstActionCardForPeer(row.tile.peerId) : null"
                 :mafia-elimination-kind="mafiaEliminationAvatarKindForPeerId(row.tile.peerId)"
                 :mafia-elimination-background="mafiaGameStore.eliminationBackgroundForPeer(row.tile.peerId)"
-                :mafia-dead-background-url="isMafiaRoute ? mafiaGameStore.activeDeadBackgroundUrl() : null"
+                :mafia-dead-background-url="
+                  isMafiaRoute || isEatFirstRoute ? mafiaGameStore.activeDeadBackgroundUrl() : null
+                "
                 :mafia-host-show-life-toggle="
-                  isMafiaRoute &&
-                  !mafiaViewUi &&
-                  mafiaGameStore.isMafiaHost
+                  (isMafiaRoute && !mafiaViewUi && mafiaGameStore.isMafiaHost) ||
+                  (isEatFirstRoute && !eatFirstViewUi && eatFirstShell.isEatFirstRoomHost)
                 "
                 :mafia-layer-viewport-observe="isCallAppRoute && !row.tile.isLocal"
                 :video-playback-suppressed="
@@ -2742,6 +3017,7 @@ watch(joining, (j) => {
                 @eat-first-reveal-trait="onEatFirstRevealTrait"
                 @eat-first-generate-trait="onEatFirstGenerateTrait"
                 @eat-first-reroll-action-card="onEatFirstRerollActionCard"
+                @eat-first-use-action-card="onEatFirstPlayerUseActionCard"
               />
               <button
                 v-if="!mafiaViewUi"

@@ -701,7 +701,8 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, #a855f7 80%, var(--sa-color-surface) 20%);
 }
 
-.call-page__tile-wrap--mafia-host-speaking-queued {
+.call-page__tile-wrap--mafia-host-speaking-queued,
+.call-page__tile-wrap--eat-first-host-speaking-seat {
   z-index: 2;
   border-radius: 14px;
   box-shadow: 0 0 0 2px color-mix(in srgb, #22d3ee 80%, var(--sa-color-primary, #a78bfa) 10%);

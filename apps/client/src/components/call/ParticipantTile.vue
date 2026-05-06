@@ -52,6 +52,7 @@ const emit = defineEmits<{
   'eat-first-reveal-trait': [payload: { peerId: string; traitKey: EatFirstTraitKey; closed?: boolean }]
   'eat-first-generate-trait': [payload: { peerId: string; traitKey: EatFirstTraitKey }]
   'eat-first-reroll-action-card': [payload: { peerId: string }]
+  'eat-first-use-action-card': [payload: { peerId: string }]
 }>()
 
 const props = withDefaults(
@@ -90,18 +91,15 @@ const props = withDefaults(
     avatarUrl?: string
     
     mafiaSeatIndex?: number
-    eatFirstTraits?: string[]
+    eatFirstTraits?: Record<EatFirstTraitKey, string> | null
     eatFirstTraitHostView?: boolean
     eatFirstTraitOwnerView?: boolean
     eatFirstRevealedTraitKeys?: string[]
-    eatFirstTraitOverrides?: Record<string, string>
-    eatFirstOpenedByPlayerTraitKeys?: string[]
     /**
-     * Host-only snapshot of this slot's action card. Regular players never
-     * receive this prop (parent passes `null`); the host UI renders a small
-     * chip below the trait grid with a dice-icon to reroll the card.
+     * Host sees every seated player's card; a seated player sees only their own.
+     * Host gets a reroll control; the seat owner gets a use button until `used`.
      */
-    eatFirstActionCard?: { title: string; description: string; templateId: string } | null
+    eatFirstActionCard?: { title: string; description: string; templateId: string; used: boolean } | null
     
 
 
@@ -140,8 +138,6 @@ const props = withDefaults(
     eatFirstTraitHostView: false,
     eatFirstTraitOwnerView: false,
     eatFirstRevealedTraitKeys: () => [],
-    eatFirstTraitOverrides: () => ({}),
-    eatFirstOpenedByPlayerTraitKeys: () => [],
     eatFirstActionCard: null,
   },
 )
@@ -313,14 +309,6 @@ const showMafiaSeat = computed(
   () => typeof props.mafiaSeatIndex === 'number' && props.mafiaSeatIndex > 0,
 )
 
-const eatFirstTraitItems = computed(() =>
-  Array.isArray(props.eatFirstTraits)
-    ? props.eatFirstTraits
-        .map((v) => String(v ?? '').trim())
-        .filter((v) => v.length > 0)
-    : [],
-)
-
 const EAT_FIRST_TRAIT_LABELS: Record<EatFirstTraitKey, string> = {
   gender: 'Стать',
   age: 'Вік',
@@ -332,7 +320,6 @@ const EAT_FIRST_TRAIT_LABELS: Record<EatFirstTraitKey, string> = {
   baggage: 'Багаж',
 }
 
-const EAT_FIRST_INDEX_FALLBACK: EatFirstTraitKey[] = ['profession', 'health', 'phobia', 'baggage', 'fact', 'hobby']
 const EAT_FIRST_REVEAL_DELAY_MS = 3000
 
 const eatFirstRevealState = ref<Partial<Record<EatFirstTraitKey, EatFirstRevealState>>>({})
@@ -352,65 +339,49 @@ function clearEatFirstTimers(): void {
   }
 }
 
-function normalizeTraitLineValue(raw: string): string {
-  const text = String(raw ?? '').trim()
-  if (!text) return ''
-  return text.replace(/\s+/g, ' ')
-}
-
-function parseEatFirstTraits(lines: string[]): Partial<Record<EatFirstTraitKey, string>> {
+const eatFirstTraitValues = computed<Partial<Record<EatFirstTraitKey, string>>>(() => {
+  const src =
+    props.eatFirstTraits && typeof props.eatFirstTraits === 'object' && !Array.isArray(props.eatFirstTraits)
+      ? props.eatFirstTraits
+      : null
+  if (!src) return {}
   const out: Partial<Record<EatFirstTraitKey, string>> = {}
-  const matchers: Array<{ key: EatFirstTraitKey; pattern: RegExp }> = [
-    { key: 'gender', pattern: /^(стать|gender)\s*[:：-]\s*/i },
-    { key: 'age', pattern: /^(вік|возраст|age)\s*[:：-]\s*/i },
-    { key: 'profession', pattern: /^(професія|профессия|profession)\s*[:：-]\s*/i },
-    { key: 'health', pattern: /^(здоров['’`]?я|здоровье|health)\s*[:：-]\s*/i },
-    { key: 'hobby', pattern: /^(хобі|хобби|hobby|quirk|особливість)\s*[:：-]\s*/i },
-    { key: 'phobia', pattern: /^(фобія|фобия|phobia)\s*[:：-]\s*/i },
-    { key: 'fact', pattern: /^(факт|fact)\s*[:：-]\s*/i },
-    { key: 'baggage', pattern: /^(багаж|luggage|bag)\s*[:：-]\s*/i },
-  ]
-  lines.forEach((line, index) => {
-    const text = normalizeTraitLineValue(line)
-    if (!text) return
-    for (const { key, pattern } of matchers) {
-      if (pattern.test(text)) {
-        out[key] = text.replace(pattern, '').trim() || 'Невідомо'
-        return
-      }
-    }
-    const fallbackKey = EAT_FIRST_INDEX_FALLBACK[index]
-    if (fallbackKey && !out[fallbackKey]) {
-      out[fallbackKey] = text
-    }
-  })
+  for (const key of Object.keys(EAT_FIRST_TRAIT_LABELS) as EatFirstTraitKey[]) {
+    const value = typeof src[key] === 'string' ? src[key].trim() : ''
+    if (value.length > 0) out[key] = value
+  }
   return out
-}
+})
 
-const eatFirstTraitValues = computed(() => parseEatFirstTraits(eatFirstTraitItems.value))
+const hasEatFirstTraits = computed(() =>
+  (Object.keys(EAT_FIRST_TRAIT_LABELS) as EatFirstTraitKey[]).every((key) => {
+    const value = eatFirstTraitValues.value[key]
+    return typeof value === 'string' && value.length > 0
+  }),
+)
 
 const eatFirstTraitsBySection = computed(() => {
   const values = eatFirstTraitValues.value
   return {
     top: [
-      { key: 'gender' as const, label: EAT_FIRST_TRAIT_LABELS.gender, value: values.gender ?? 'Невідомо' },
-      { key: 'age' as const, label: EAT_FIRST_TRAIT_LABELS.age, value: values.age ?? 'Невідомо' },
+      { key: 'gender' as const, label: EAT_FIRST_TRAIT_LABELS.gender, value: values.gender ?? '' },
+      { key: 'age' as const, label: EAT_FIRST_TRAIT_LABELS.age, value: values.age ?? '' },
     ],
     left: [
-      { key: 'profession' as const, label: EAT_FIRST_TRAIT_LABELS.profession, value: values.profession ?? 'Невідомо' },
-      { key: 'health' as const, label: EAT_FIRST_TRAIT_LABELS.health, value: values.health ?? 'Невідомо' },
-      { key: 'hobby' as const, label: EAT_FIRST_TRAIT_LABELS.hobby, value: values.hobby ?? 'Невідомо' },
+      { key: 'profession' as const, label: EAT_FIRST_TRAIT_LABELS.profession, value: values.profession ?? '' },
+      { key: 'health' as const, label: EAT_FIRST_TRAIT_LABELS.health, value: values.health ?? '' },
+      { key: 'hobby' as const, label: EAT_FIRST_TRAIT_LABELS.hobby, value: values.hobby ?? '' },
     ],
     right: [
-      { key: 'phobia' as const, label: EAT_FIRST_TRAIT_LABELS.phobia, value: values.phobia ?? 'Невідомо' },
-      { key: 'fact' as const, label: EAT_FIRST_TRAIT_LABELS.fact, value: values.fact ?? 'Невідомо' },
-      { key: 'baggage' as const, label: EAT_FIRST_TRAIT_LABELS.baggage, value: values.baggage ?? 'Невідомо' },
+      { key: 'phobia' as const, label: EAT_FIRST_TRAIT_LABELS.phobia, value: values.phobia ?? '' },
+      { key: 'fact' as const, label: EAT_FIRST_TRAIT_LABELS.fact, value: values.fact ?? '' },
+      { key: 'baggage' as const, label: EAT_FIRST_TRAIT_LABELS.baggage, value: values.baggage ?? '' },
     ],
   }
 })
 
 watch(
-  () => [props.peerId, eatFirstTraitItems.value.join('\u0000')] as const,
+  () => [props.peerId, JSON.stringify(eatFirstTraitValues.value)] as const,
   () => {
     clearEatFirstTimers()
     eatFirstRevealState.value = {}
@@ -442,19 +413,83 @@ function eatFirstTraitStateFor(key: EatFirstTraitKey): EatFirstRevealState {
   return eatFirstRevealState.value[key] ?? 'hidden'
 }
 
+/** Remote viewers only: compact chips until publicly revealed. Host and seated player see full labels/values. */
+function eatFirstTraitCellSealed(key: EatFirstTraitKey): boolean {
+  if (isEatFirstTraitHostView() || isEatFirstTraitOwnerView()) return false
+  return eatFirstTraitStateFor(key) !== 'revealed'
+}
+
+function eatFirstTraitInsightLayout(): boolean {
+  return isEatFirstTraitHostView() || isEatFirstTraitOwnerView()
+}
+
 function eatFirstCanRevealValue(key: EatFirstTraitKey): boolean {
   if (props.eatFirstTraitHostView || props.eatFirstTraitOwnerView) return true
   return eatFirstTraitStateFor(key) === 'revealed'
 }
 
 function eatFirstValueText(key: EatFirstTraitKey, rawValue: string): string {
-  const override =
-    props.eatFirstTraitOverrides && typeof props.eatFirstTraitOverrides === 'object'
-      ? props.eatFirstTraitOverrides[key]
-      : ''
-  const effectiveValue = typeof override === 'string' && override.trim().length > 0 ? override.trim() : rawValue
-  if (eatFirstCanRevealValue(key)) return effectiveValue || '*********'
-  return '*********'
+  const effectiveValue = typeof rawValue === 'string' ? rawValue.trim() : ''
+  if (eatFirstCanRevealValue(key)) return effectiveValue || 'Невідомо'
+  return ''
+}
+
+const EAT_FIRST_TRAIT_VALUE_MAX_LINE_CHARS = 18
+
+/** Word-wrapped lines; each line is at most `EAT_FIRST_TRAIT_VALUE_MAX_LINE_CHARS` (long tokens split). */
+function eatFirstWrapTraitValueLines(text: string): string[] {
+  const maxChars = EAT_FIRST_TRAIT_VALUE_MAX_LINE_CHARS
+  const t = text.trim()
+  if (!t) return []
+
+  const lines: string[] = []
+  let line = ''
+
+  const pushLine = (): void => {
+    if (line.length > 0) {
+      lines.push(line)
+      line = ''
+    }
+  }
+
+  const consumeOversizedWord = (word: string): void => {
+    let w = word
+    while (w.length > maxChars) {
+      lines.push(w.slice(0, maxChars))
+      w = w.slice(maxChars)
+    }
+    line = w
+  }
+
+  const words = t.split(/\s+/).filter(Boolean)
+  for (const word of words) {
+    if (word.length > maxChars) {
+      pushLine()
+      consumeOversizedWord(word)
+      continue
+    }
+    const next = line.length === 0 ? word : `${line} ${word}`
+    if (next.length <= maxChars) {
+      line = next
+    } else {
+      pushLine()
+      line = word
+    }
+  }
+  pushLine()
+  return lines
+}
+
+function eatFirstValueDisplayLines(key: EatFirstTraitKey, rawValue: string): string[] {
+  const full = eatFirstValueText(key, rawValue).trim()
+  if (!full) return []
+  return eatFirstWrapTraitValueLines(full)
+}
+
+/** Non-owner/non-host viewers: hidden traits show a crossed-out eye in the value slot (no asterisks). */
+function eatFirstPeerShowsHiddenEyeMark(key: EatFirstTraitKey): boolean {
+  if (canRevealTrait()) return false
+  return eatFirstTraitStateFor(key) !== 'revealed'
 }
 
 function onEatFirstReveal(key: EatFirstTraitKey, label: string): void {
@@ -503,14 +538,10 @@ function onEatFirstReveal(key: EatFirstTraitKey, label: string): void {
   eatFirstRevealTimers.set(key, timer)
 }
 
-function isOwnerOpenedGoldAccent(key: EatFirstTraitKey): boolean {
-  if (eatFirstTraitStateFor(key) !== 'revealed') return false
-  const openedByPlayer =
-    Array.isArray(props.eatFirstOpenedByPlayerTraitKeys) && props.eatFirstOpenedByPlayerTraitKeys.includes(key)
-  if (!openedByPlayer) return false
-  if (isEatFirstTraitOwnerView()) return true
-  if (isEatFirstTraitHostView()) return true
-  return false
+function eatFirstRevealEyeLabel(key: EatFirstTraitKey): string {
+  return eatFirstTraitStateFor(key) === 'revealed'
+    ? 'Приховати характеристику від інших'
+    : 'Показати характеристику всім'
 }
 
 function onEatFirstGenerateTrait(key: EatFirstTraitKey): void {
@@ -524,6 +555,15 @@ function onEatFirstGenerateTrait(key: EatFirstTraitKey): void {
 function onEatFirstRerollActionCard(): void {
   if (!isEatFirstTraitHostView()) return
   emit('eat-first-reroll-action-card', {
+    peerId: typeof props.peerId === 'string' ? props.peerId : '',
+  })
+}
+
+function onEatFirstPlayerUseActionCard(): void {
+  if (!isEatFirstTraitOwnerView() || isEatFirstTraitHostView()) return
+  const card = props.eatFirstActionCard
+  if (!card || card.used === true) return
+  emit('eat-first-use-action-card', {
     peerId: typeof props.peerId === 'string' ? props.peerId : '',
   })
 }
@@ -866,20 +906,23 @@ if (import.meta.env.DEV) {
     :style="mafiaDeadBackgroundStyle"
   >
     <div class="tile-media">
-      <div v-if="eatFirstTraitItems.length > 0" class="tile-eat-first-overlay" aria-hidden="false">
+      <div
+        v-if="hasEatFirstTraits"
+        class="tile-eat-first-overlay"
+        :class="{ 'tile-eat-first-overlay--insight': eatFirstTraitInsightLayout() }"
+        aria-hidden="false"
+      >
         <div class="tile-eat-first-overlay__top">
-          <button
+          <div
             v-for="item in eatFirstTraitsBySection.top"
             :key="`eatf-top-${item.key}`"
-            type="button"
             class="tile-eat-first-card tile-eat-first-card--mini"
             :class="{
               'tile-eat-first-card--pending': eatFirstTraitStateFor(item.key) === 'pending',
               'tile-eat-first-card--revealed': eatFirstTraitStateFor(item.key) === 'revealed',
-              'tile-eat-first-card--owner-opened': isOwnerOpenedGoldAccent(item.key),
+              'tile-eat-first-card--sealed': eatFirstTraitCellSealed(item.key),
+              'tile-eat-first-card--insight': eatFirstTraitInsightLayout(),
             }"
-            :disabled="!canRevealTrait()"
-            @click.stop="onEatFirstReveal(item.key, item.label)"
           >
             <span class="tile-eat-first-card__icon" aria-hidden="true">
               <svg
@@ -908,9 +951,38 @@ if (import.meta.env.DEV) {
             </span>
             <span class="tile-eat-first-card__main">
               <span class="tile-eat-first-card__title">{{ item.label.toUpperCase() }}</span>
-              <span class="tile-eat-first-card__value">{{ eatFirstValueText(item.key, item.value) }}</span>
+              <span
+                class="tile-eat-first-card__value"
+                :class="{ 'tile-eat-first-card__value--peer-hidden': eatFirstPeerShowsHiddenEyeMark(item.key) }"
+              >
+                <template v-if="eatFirstPeerShowsHiddenEyeMark(item.key)">
+                  <span class="tile-eat-first-card__peer-hidden-eye" aria-hidden="true">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                    >
+                      <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round" />
+                      <path d="M10.8 6.1A12.6 12.6 0 0 1 12 5.8c6.7 0 10.5 6.2 10.5 6.2a18 18 0 0 1-3.1 3.9" />
+                      <path d="M14.2 14.2a3.2 3.2 0 0 1-4.4-4.4" />
+                      <path d="M6.1 8.1A18.8 18.8 0 0 0 1.5 12s3.8 6.2 10.5 6.2a12.6 12.6 0 0 0 3.3-.4" />
+                    </svg>
+                  </span>
+                </template>
+                <template v-else>
+                  <span
+                    v-for="(line, eatFirstLineIdx) in eatFirstValueDisplayLines(item.key, item.value)"
+                    :key="`eatf-mini-val-${item.key}-${eatFirstLineIdx}`"
+                    class="tile-eat-first-card__value-line"
+                  >
+                    {{ line }}
+                  </span>
+                </template>
+              </span>
             </span>
-            <span v-if="canRevealTrait()" class="tile-eat-first-card__actions" aria-hidden="true">
+            <span v-if="canGenerateTrait() || canRevealTrait()" class="tile-eat-first-card__actions">
               <button
                 v-if="canGenerateTrait()"
                 type="button"
@@ -925,50 +997,56 @@ if (import.meta.env.DEV) {
                   <circle cx="15" cy="9" r="1.1" fill="currentColor" stroke="none" />
                 </svg>
               </button>
-              <span class="tile-eat-first-card__eye">
-              <svg
-                v-if="eatFirstTraitStateFor(item.key) !== 'hidden' || eatFirstCanRevealValue(item.key)"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
+              <button
+                v-if="canRevealTrait()"
+                type="button"
+                class="tile-eat-first-card__eye-btn"
+                :aria-label="eatFirstRevealEyeLabel(item.key)"
+                @click.stop="onEatFirstReveal(item.key, item.label)"
               >
-                <path d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z" />
-                <circle cx="12" cy="12" r="3.2" />
-              </svg>
-              <svg
-                v-else
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-              >
-                <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M10.8 6.1A12.6 12.6 0 0 1 12 5.8c6.7 0 10.5 6.2 10.5 6.2a18 18 0 0 1-3.1 3.9" />
-                <path d="M14.2 14.2a3.2 3.2 0 0 1-4.4-4.4" />
-                <path d="M6.1 8.1A18.8 18.8 0 0 0 1.5 12s3.8 6.2 10.5 6.2a12.6 12.6 0 0 0 3.3-.4" />
-              </svg>
+                <svg
+                  v-if="eatFirstTraitStateFor(item.key) === 'revealed'"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  aria-hidden="true"
+                >
+                  <path d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z" />
+                  <circle cx="12" cy="12" r="3.2" />
+                </svg>
+                <svg
+                  v-else
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  aria-hidden="true"
+                >
+                  <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M10.8 6.1A12.6 12.6 0 0 1 12 5.8c6.7 0 10.5 6.2 10.5 6.2a18 18 0 0 1-3.1 3.9" />
+                  <path d="M14.2 14.2a3.2 3.2 0 0 1-4.4-4.4" />
+                  <path d="M6.1 8.1A18.8 18.8 0 0 0 1.5 12s3.8 6.2 10.5 6.2a12.6 12.6 0 0 0 3.3-.4" />
+                </svg>
+              </button>
             </span>
-            </span>
-          </button>
+          </div>
         </div>
 
         <div class="tile-eat-first-overlay__columns">
           <div class="tile-eat-first-overlay__column tile-eat-first-overlay__column--left">
-            <button
+            <div
               v-for="item in eatFirstTraitsBySection.left"
               :key="`eatf-left-${item.key}`"
-              type="button"
               class="tile-eat-first-card"
               :class="{
                 'tile-eat-first-card--pending': eatFirstTraitStateFor(item.key) === 'pending',
                 'tile-eat-first-card--revealed': eatFirstTraitStateFor(item.key) === 'revealed',
-                'tile-eat-first-card--owner-opened': isOwnerOpenedGoldAccent(item.key),
+                'tile-eat-first-card--sealed': eatFirstTraitCellSealed(item.key),
+                'tile-eat-first-card--insight': eatFirstTraitInsightLayout(),
               }"
-              :disabled="!canRevealTrait()"
-              @click.stop="onEatFirstReveal(item.key, item.label)"
             >
               <span class="tile-eat-first-card__icon" aria-hidden="true">
                 <svg
@@ -1011,9 +1089,38 @@ if (import.meta.env.DEV) {
               </span>
               <span class="tile-eat-first-card__main">
                 <span class="tile-eat-first-card__title">{{ item.label.toUpperCase() }}</span>
-                <span class="tile-eat-first-card__value">{{ eatFirstValueText(item.key, item.value) }}</span>
+                <span
+                  class="tile-eat-first-card__value"
+                  :class="{ 'tile-eat-first-card__value--peer-hidden': eatFirstPeerShowsHiddenEyeMark(item.key) }"
+                >
+                  <template v-if="eatFirstPeerShowsHiddenEyeMark(item.key)">
+                    <span class="tile-eat-first-card__peer-hidden-eye" aria-hidden="true">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                      >
+                        <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M10.8 6.1A12.6 12.6 0 0 1 12 5.8c6.7 0 10.5 6.2 10.5 6.2a18 18 0 0 1-3.1 3.9" />
+                        <path d="M14.2 14.2a3.2 3.2 0 0 1-4.4-4.4" />
+                        <path d="M6.1 8.1A18.8 18.8 0 0 0 1.5 12s3.8 6.2 10.5 6.2a12.6 12.6 0 0 0 3.3-.4" />
+                      </svg>
+                    </span>
+                  </template>
+                  <template v-else>
+                    <span
+                      v-for="(line, eatFirstLineIdx) in eatFirstValueDisplayLines(item.key, item.value)"
+                      :key="`eatf-left-val-${item.key}-${eatFirstLineIdx}`"
+                      class="tile-eat-first-card__value-line"
+                    >
+                      {{ line }}
+                    </span>
+                  </template>
+                </span>
               </span>
-              <span v-if="canRevealTrait()" class="tile-eat-first-card__actions" aria-hidden="true">
+              <span v-if="canGenerateTrait() || canRevealTrait()" class="tile-eat-first-card__actions">
                 <button
                   v-if="canGenerateTrait()"
                   type="button"
@@ -1028,49 +1135,55 @@ if (import.meta.env.DEV) {
                     <circle cx="15" cy="9" r="1.1" fill="currentColor" stroke="none" />
                   </svg>
                 </button>
-                <span class="tile-eat-first-card__eye">
-                <svg
-                  v-if="eatFirstTraitStateFor(item.key) !== 'hidden' || eatFirstCanRevealValue(item.key)"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
+                <button
+                  v-if="canRevealTrait()"
+                  type="button"
+                  class="tile-eat-first-card__eye-btn"
+                  :aria-label="eatFirstRevealEyeLabel(item.key)"
+                  @click.stop="onEatFirstReveal(item.key, item.label)"
                 >
-                  <path d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z" />
-                  <circle cx="12" cy="12" r="3.2" />
-                </svg>
-                <svg
-                  v-else
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                >
-                  <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round" />
-                  <path d="M10.8 6.1A12.6 12.6 0 0 1 12 5.8c6.7 0 10.5 6.2 10.5 6.2a18 18 0 0 1-3.1 3.9" />
-                  <path d="M14.2 14.2a3.2 3.2 0 0 1-4.4-4.4" />
-                  <path d="M6.1 8.1A18.8 18.8 0 0 0 1.5 12s3.8 6.2 10.5 6.2a12.6 12.6 0 0 0 3.3-.4" />
-                </svg>
+                  <svg
+                    v-if="eatFirstTraitStateFor(item.key) === 'revealed'"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    aria-hidden="true"
+                  >
+                    <path d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z" />
+                    <circle cx="12" cy="12" r="3.2" />
+                  </svg>
+                  <svg
+                    v-else
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M10.8 6.1A12.6 12.6 0 0 1 12 5.8c6.7 0 10.5 6.2 10.5 6.2a18 18 0 0 1-3.1 3.9" />
+                    <path d="M14.2 14.2a3.2 3.2 0 0 1-4.4-4.4" />
+                    <path d="M6.1 8.1A18.8 18.8 0 0 0 1.5 12s3.8 6.2 10.5 6.2a12.6 12.6 0 0 0 3.3-.4" />
+                  </svg>
+                </button>
               </span>
-              </span>
-            </button>
+            </div>
           </div>
 
           <div class="tile-eat-first-overlay__column tile-eat-first-overlay__column--right">
-            <button
+            <div
               v-for="item in eatFirstTraitsBySection.right"
               :key="`eatf-right-${item.key}`"
-              type="button"
               class="tile-eat-first-card"
               :class="{
                 'tile-eat-first-card--pending': eatFirstTraitStateFor(item.key) === 'pending',
                 'tile-eat-first-card--revealed': eatFirstTraitStateFor(item.key) === 'revealed',
-                'tile-eat-first-card--owner-opened': isOwnerOpenedGoldAccent(item.key),
+                'tile-eat-first-card--sealed': eatFirstTraitCellSealed(item.key),
+                'tile-eat-first-card--insight': eatFirstTraitInsightLayout(),
               }"
-              :disabled="!canRevealTrait()"
-              @click.stop="onEatFirstReveal(item.key, item.label)"
             >
               <span class="tile-eat-first-card__icon" aria-hidden="true">
                 <svg
@@ -1108,9 +1221,38 @@ if (import.meta.env.DEV) {
               </span>
               <span class="tile-eat-first-card__main">
                 <span class="tile-eat-first-card__title">{{ item.label.toUpperCase() }}</span>
-                <span class="tile-eat-first-card__value">{{ eatFirstValueText(item.key, item.value) }}</span>
+                <span
+                  class="tile-eat-first-card__value"
+                  :class="{ 'tile-eat-first-card__value--peer-hidden': eatFirstPeerShowsHiddenEyeMark(item.key) }"
+                >
+                  <template v-if="eatFirstPeerShowsHiddenEyeMark(item.key)">
+                    <span class="tile-eat-first-card__peer-hidden-eye" aria-hidden="true">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                      >
+                        <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M10.8 6.1A12.6 12.6 0 0 1 12 5.8c6.7 0 10.5 6.2 10.5 6.2a18 18 0 0 1-3.1 3.9" />
+                        <path d="M14.2 14.2a3.2 3.2 0 0 1-4.4-4.4" />
+                        <path d="M6.1 8.1A18.8 18.8 0 0 0 1.5 12s3.8 6.2 10.5 6.2a12.6 12.6 0 0 0 3.3-.4" />
+                      </svg>
+                    </span>
+                  </template>
+                  <template v-else>
+                    <span
+                      v-for="(line, eatFirstLineIdx) in eatFirstValueDisplayLines(item.key, item.value)"
+                      :key="`eatf-right-val-${item.key}-${eatFirstLineIdx}`"
+                      class="tile-eat-first-card__value-line"
+                    >
+                      {{ line }}
+                    </span>
+                  </template>
+                </span>
               </span>
-              <span v-if="canRevealTrait()" class="tile-eat-first-card__actions" aria-hidden="true">
+              <span v-if="canGenerateTrait() || canRevealTrait()" class="tile-eat-first-card__actions">
                 <button
                   v-if="canGenerateTrait()"
                   type="button"
@@ -1125,51 +1267,74 @@ if (import.meta.env.DEV) {
                     <circle cx="15" cy="9" r="1.1" fill="currentColor" stroke="none" />
                   </svg>
                 </button>
-                <span class="tile-eat-first-card__eye">
-                <svg
-                  v-if="eatFirstTraitStateFor(item.key) !== 'hidden' || eatFirstCanRevealValue(item.key)"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
+                <button
+                  v-if="canRevealTrait()"
+                  type="button"
+                  class="tile-eat-first-card__eye-btn"
+                  :aria-label="eatFirstRevealEyeLabel(item.key)"
+                  @click.stop="onEatFirstReveal(item.key, item.label)"
                 >
-                  <path d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z" />
-                  <circle cx="12" cy="12" r="3.2" />
-                </svg>
-                <svg
-                  v-else
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                >
-                  <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round" />
-                  <path d="M10.8 6.1A12.6 12.6 0 0 1 12 5.8c6.7 0 10.5 6.2 10.5 6.2a18 18 0 0 1-3.1 3.9" />
-                  <path d="M14.2 14.2a3.2 3.2 0 0 1-4.4-4.4" />
-                  <path d="M6.1 8.1A18.8 18.8 0 0 0 1.5 12s3.8 6.2 10.5 6.2a12.6 12.6 0 0 0 3.3-.4" />
-                </svg>
+                  <svg
+                    v-if="eatFirstTraitStateFor(item.key) === 'revealed'"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    aria-hidden="true"
+                  >
+                    <path d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z" />
+                    <circle cx="12" cy="12" r="3.2" />
+                  </svg>
+                  <svg
+                    v-else
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M10.8 6.1A12.6 12.6 0 0 1 12 5.8c6.7 0 10.5 6.2 10.5 6.2a18 18 0 0 1-3.1 3.9" />
+                    <path d="M14.2 14.2a3.2 3.2 0 0 1-4.4-4.4" />
+                    <path d="M6.1 8.1A18.8 18.8 0 0 0 1.5 12s3.8 6.2 10.5 6.2a12.6 12.6 0 0 0 3.3-.4" />
+                  </svg>
+                </button>
               </span>
-              </span>
-            </button>
+            </div>
           </div>
         </div>
 
         <div
-          v-if="
-            isEatFirstTraitHostView() &&
-            eatFirstActionCard != null &&
-            eatFirstActionCard.title.length > 0
-          "
+          v-if="eatFirstActionCard != null && eatFirstActionCard.title.length > 0"
           class="tile-eat-first-action-card"
+          :class="{
+            'tile-eat-first-action-card--used-host':
+              isEatFirstTraitHostView() && eatFirstActionCard.used === true,
+          }"
           role="group"
           aria-label="Активна карта гравця"
         >
-          <span class="tile-eat-first-action-card__title">
+          <button
+            v-if="isEatFirstTraitOwnerView() && !isEatFirstTraitHostView()"
+            type="button"
+            class="tile-eat-first-action-card__use-btn"
+            :disabled="eatFirstActionCard.used === true"
+            :aria-label="
+              eatFirstActionCard.used === true
+                ? t('eatFirstCall.actionCardAlreadyUsedAria')
+                : t('eatFirstCall.useActionCardAria')
+            "
+            @click.stop="onEatFirstPlayerUseActionCard"
+          >
+            {{ eatFirstActionCard.title }}
+          </button>
+          <span v-else class="tile-eat-first-action-card__title">
             {{ eatFirstActionCard.title }}
           </span>
           <button
+            v-if="isEatFirstTraitHostView()"
             type="button"
             class="tile-eat-first-action-card__btn"
             :title="'Перекинути активну карту'"
@@ -1770,11 +1935,20 @@ if (import.meta.env.DEV) {
   pointer-events: none;
 }
 
+.tile-eat-first-overlay--insight .tile-eat-first-overlay__column {
+  width: min(48%, 280px);
+}
+
+.tile-eat-first-overlay--insight .tile-eat-first-overlay__top {
+  max-width: calc(82% - 10px);
+}
+
 .tile-eat-first-overlay__top {
   position: absolute;
   left: 7px;
   top: 6px;
   display: flex;
+  align-items: flex-start;
   gap: 6px;
   max-width: calc(62% - 10px);
 }
@@ -1792,6 +1966,7 @@ if (import.meta.env.DEV) {
   width: min(36%, 170px);
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
 }
 
@@ -1801,7 +1976,9 @@ if (import.meta.env.DEV) {
 
 .tile-eat-first-card {
   pointer-events: auto;
-  width: 100%;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
   min-height: 42px;
   border-radius: 12px;
   border: 1px solid rgb(168 85 247 / 0.33);
@@ -1818,8 +1995,16 @@ if (import.meta.env.DEV) {
 }
 
 .tile-eat-first-card--mini {
-  width: 94px;
   min-height: 40px;
+}
+
+.tile-eat-first-card--sealed {
+  max-width: min(6.75rem, 100%);
+}
+
+.tile-eat-first-card--sealed.tile-eat-first-card--mini {
+  max-width: min(4.35rem, 100%);
+  padding: 4px 6px;
 }
 
 .tile-eat-first-card--pending {
@@ -1830,21 +2015,44 @@ if (import.meta.env.DEV) {
 }
 
 .tile-eat-first-card--revealed {
-  border-color: rgb(168 85 247 / 0.62);
+  max-width: 100%;
+  border-color: rgb(250 204 21 / 0.88);
   box-shadow:
-    0 0 14px rgb(168 85 247 / 0.26),
+    0 0 14px rgb(250 204 21 / 0.38),
     0 2px 12px rgb(0 0 0 / 0.35);
 }
 
-.tile-eat-first-card--owner-opened {
-  border-color: rgb(250 204 21 / 0.68);
-  box-shadow:
-    0 0 14px rgb(250 204 21 / 0.28),
-    0 2px 12px rgb(0 0 0 / 0.35);
+.tile-eat-first-card--revealed .tile-eat-first-card__value {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
+  hyphens: auto;
 }
 
-.tile-eat-first-card:disabled {
-  cursor: default;
+.tile-eat-first-card--insight {
+  max-width: 100%;
+}
+
+.tile-eat-first-card--insight .tile-eat-first-card__main {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tile-eat-first-card--insight .tile-eat-first-card__title {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.18;
+  hyphens: auto;
+}
+
+.tile-eat-first-card--insight .tile-eat-first-card__value {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
+  hyphens: auto;
 }
 
 .tile-eat-first-card__icon {
@@ -1880,21 +2088,74 @@ if (import.meta.env.DEV) {
   font-weight: 700;
   line-height: 1.12;
   color: rgb(248 250 252 / 0.98);
+}
+
+.tile-eat-first-card__value:not(.tile-eat-first-card__value--peer-hidden) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.06em;
+  min-width: 0;
+  white-space: normal;
+  overflow: visible;
+}
+
+.tile-eat-first-card__value-line {
+  display: block;
+  max-width: 100%;
+  line-height: 1.14;
+  word-break: break-word;
+}
+
+.tile-eat-first-card--sealed .tile-eat-first-card__value:not(.tile-eat-first-card__value--peer-hidden) > .tile-eat-first-card__value-line:only-child {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.tile-eat-first-card__eye {
-  width: 18px;
-  height: 18px;
-  color: rgb(248 250 252 / 0.86);
-  flex-shrink: 0;
+.tile-eat-first-card__value--peer-hidden {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.05em;
 }
 
-.tile-eat-first-card__eye svg {
+.tile-eat-first-card__peer-hidden-eye {
+  display: inline-flex;
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  color: rgb(248 250 252 / 0.92);
+}
+
+.tile-eat-first-card__peer-hidden-eye svg {
   width: 100%;
   height: 100%;
+}
+
+.tile-eat-first-card__eye-btn {
+  pointer-events: auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgb(250 204 21 / 0.35);
+  border-radius: 8px;
+  background: rgb(17 11 35 / 0.92);
+  color: rgb(253 224 71 / 0.95);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.tile-eat-first-card__eye-btn:hover {
+  border-color: rgb(250 204 21 / 0.62);
+  color: rgb(254 249 195 / 0.98);
+}
+
+.tile-eat-first-card__eye-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .tile-eat-first-card__actions {
@@ -1958,12 +2219,50 @@ if (import.meta.env.DEV) {
   z-index: 5;
 }
 
+/* Host-only: match revealed-trait gold ring after the seat used their action card. */
+.tile-eat-first-action-card--used-host {
+  border-color: rgb(250 204 21 / 0.88);
+  box-shadow:
+    0 0 14px rgb(250 204 21 / 0.38),
+    0 2px 12px rgb(0 0 0 / 0.35),
+    0 0 0 1px rgb(0 0 0 / 0.25);
+}
+
 .tile-eat-first-action-card__title {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tile-eat-first-action-card__use-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-eat-first-action-card__use-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.tile-eat-first-action-card__use-btn:disabled {
+  cursor: default;
+  opacity: 0.82;
 }
 
 .tile-eat-first-action-card__btn {

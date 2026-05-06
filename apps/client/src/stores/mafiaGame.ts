@@ -30,6 +30,7 @@ import type {
 import { computeMafiaLastNightResult } from '@/utils/mafiaLastNightResult'
 import { fisherYatesShuffle } from '@/utils/fisherYatesShuffle'
 import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
+import { mafiaNightActionMaxSeatForOrder, pinHostPeerToEndOfOrder } from '@/utils/mafiaHostOrdering'
 
 const mafiaGameLog = createLogger('mafia-game')
 
@@ -191,6 +192,19 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   const kickBroadcastPayload = ref<MafiaPlayerKickPayload | null>(null)
   const reviveBroadcastPayload = ref<MafiaPlayerRevivePayload | null>(null)
 
+  /**
+   * Eat First call (`/app/eat` + CallPage): host may eliminate/revive via the same
+   * `mafia:player-kick` / `mafia:player-revive` messages; `isMafiaHost` stays false.
+   */
+  const eatFirstCallEliminationHost = ref(false)
+
+  function setEatFirstCallEliminationHost(on: boolean): void {
+    eatFirstCallEliminationHost.value = on === true
+    if (eatFirstCallEliminationHost.value) {
+      hydratePersistedBackgroundSettingsForHost()
+    }
+  }
+
   function setLocalMafiaUserId(userId: string | null): void {
     localMafiaUserId.value = typeof userId === 'string' && userId.trim().length > 0 ? userId.trim() : null
   }
@@ -200,6 +214,9 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     mafiaHostUserId.value = typeof userId === 'string' && userId.length > 0 ? userId : null
     mafiaHostSessionId.value = typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : null
     hydratePersistedBackgroundSettingsForHost()
+    if (numberingOrder.value.length > 0) {
+      pinMafiaHostPeerToEndOfNumberingOrder()
+    }
     if (isMafiaHost.value) {
       hydratePersistedPageBackgroundSettings()
       emitPageBackgroundSettingsUpdate()
@@ -219,8 +236,19 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   const defaultEliminationBackground = ref<MafiaEliminationBackground>('dark')
   const eliminationBackgroundByPeerId = shallowRef<Record<string, MafiaEliminationBackground>>({})
 
-  /** Shared speaking queue (1-based seat #s); order preserved; host edits, others receive via signaling. */
+  /**
+   * Shared nomination / speaking queue (1-based seat numbers).
+   * Pair-encoded when even length: `[by1, target1, by2, target2, ...]`.
+   * Odd length is treated as legacy target-only lists when decoding for display.
+   */
   const speakingQueue = ref<number[]>([])
+
+  /** Host: first click in speaking mode picks the nominator seat; second click completes the pair. */
+  const speakingNominationDraftBySeat = ref<number | null>(null)
+
+  function clearSpeakingNominationDraft(): void {
+    speakingNominationDraftBySeat.value = null
+  }
 
   const numberingKey = computed(() => numberingOrder.value.join('\u0000'))
 
@@ -270,9 +298,11 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     const nextKey = next.join('\u0000')
     const curKey = numberingOrder.value.join('\u0000')
     if (nextKey === curKey) {
+      pinMafiaHostPeerToEndOfNumberingOrder()
       return
     }
     numberingOrder.value = next
+    pinMafiaHostPeerToEndOfNumberingOrder()
   }
 
   
@@ -319,6 +349,19 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     }
   }
 
+  function pinMafiaHostPeerToEndOfNumberingOrder(): void {
+    const hp = mafiaHostPeerId.value
+    const next = pinHostPeerToEndOfOrder(numberingOrder.value, hp)
+    if (next.join('\u0000') !== numberingOrder.value.join('\u0000')) {
+      numberingOrder.value = next
+    }
+    if (typeof hp === 'string' && hp.length > 0 && roleByPeerId.value[hp] != null) {
+      const nextR = { ...roleByPeerId.value }
+      delete nextR[hp]
+      roleByPeerId.value = nextR
+    }
+  }
+
   function setActiveNightActionRole(k: MafiaNightActionKey): void {
     activeNightActionRole.value = k
   }
@@ -331,6 +374,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       return
     }
     if (!Number.isInteger(seat) || seat < 1) {
+      return
+    }
+    const maxSeat = mafiaNightActionMaxSeatForOrder(numberingOrder.value, mafiaHostPeerId.value)
+    if (maxSeat >= 1 && seat > maxSeat) {
       return
     }
     nightActions.value = { ...nightActions.value, [role]: seat }
@@ -382,6 +429,9 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     hostInteractionMode.value = mode
     if (mode !== 'swap') {
       hostSeatSwapSelectionPeerId.value = null
+    }
+    if (mode !== 'speaking') {
+      clearSpeakingNominationDraft()
     }
   }
 
@@ -437,7 +487,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   }
 
   function setDefaultEliminationBackground(value: MafiaEliminationBackground): void {
-    if (!isMafiaHost.value) {
+    if (!isMafiaHost.value && !eatFirstCallEliminationHost.value) {
       return
     }
     const next = normalizeEliminationBackground(value)
@@ -740,7 +790,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   }
 
   function hydratePersistedBackgroundSettingsForHost(): void {
-    if (!isMafiaHost.value) {
+    if (!isMafiaHost.value && !eatFirstCallEliminationHost.value) {
       return
     }
     const persisted = readPersistedBackgroundSettings()
@@ -778,7 +828,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   }
 
   function setActiveDeadBackgroundId(backgroundId: string | null): void {
-    if (!isMafiaHost.value) {
+    if (!isMafiaHost.value && !eatFirstCallEliminationHost.value) {
       return
     }
     const next = backgroundExists(backgroundId) ? backgroundId : null
@@ -788,7 +838,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   }
 
   function addCustomDeadBackground(url: string): MafiaBackgroundItem | null {
-    if (!isMafiaHost.value) {
+    if (!isMafiaHost.value && !eatFirstCallEliminationHost.value) {
       return null
     }
     const normalizedUrl = normalizeDeadBackgroundUrl(url)
@@ -808,7 +858,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   }
 
   function deleteCustomDeadBackground(backgroundId: string): void {
-    if (!isMafiaHost.value) {
+    if (!isMafiaHost.value && !eatFirstCallEliminationHost.value) {
       return
     }
     const item = deadBackgrounds.value.find((background) => background.id === backgroundId)
@@ -1018,6 +1068,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       return
     }
     numberingOrder.value = [...joinOrder]
+    pinMafiaHostPeerToEndOfNumberingOrder()
   }
 
   function remapNightActionsForSeatSwap(seatA: number, seatB: number): void {
@@ -1064,6 +1115,11 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     if (peerA === peerB) {
       return
     }
+    const hp = mafiaHostPeerId.value
+    if (typeof hp === 'string' && hp.length > 0 && (peerA === hp || peerB === hp)) {
+      mafiaGameLog.info('swap seats: host peer cannot be swapped')
+      return
+    }
     const mafia = useMafiaPlayersStore()
     const joinOrder = mafia.joinOrder
     ensureNumberingOrderMaterialized(joinOrder)
@@ -1102,6 +1158,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       o.add(id)
     }
     numberingOrder.value = [...payload.order]
+    pinMafiaHostPeerToEndOfNumberingOrder()
     if (payload.clearRoles === true) {
       roleByPeerId.value = {}
       playerOverlayStateByPeerId.value = {}
@@ -1146,28 +1203,54 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   
 
 
-  function addSpeakingSeatIfNew(seat: number): void {
+  function setSpeakingNominationDraftBySeat(seat: number | null): void {
     if (!isMafiaHost.value) {
+      return
+    }
+    if (seat == null) {
+      clearSpeakingNominationDraft()
       return
     }
     if (!Number.isInteger(seat) || seat < 1) {
       return
     }
-    if (speakingQueue.value.includes(seat)) {
-      return
-    }
-    speakingQueue.value = [...speakingQueue.value, seat]
-    mafiaGameLog.info('speaking queue add', { seat, order: speakingQueue.value })
+    speakingNominationDraftBySeat.value = seat
   }
 
-  function removeSpeakingSeat(seat: number): void {
+  function appendSpeakingNominationPair(by: number, target: number): void {
     if (!isMafiaHost.value) {
       return
     }
-    speakingQueue.value = speakingQueue.value.filter((n) => n !== seat)
+    if (!Number.isInteger(by) || by < 1 || !Number.isInteger(target) || target < 1) {
+      return
+    }
+    speakingQueue.value = [...speakingQueue.value, by, target]
+    clearSpeakingNominationDraft()
+    mafiaGameLog.info('speaking queue nomination pair', { by, target, order: speakingQueue.value })
   }
 
-  
+  function removeSpeakingNominationPairAt(pairIndex: number): void {
+    if (!isMafiaHost.value) {
+      return
+    }
+    if (!Number.isInteger(pairIndex) || pairIndex < 0) {
+      return
+    }
+    const flat = speakingQueue.value
+    if (flat.length % 2 === 1) {
+      if (pairIndex >= flat.length) {
+        return
+      }
+      speakingQueue.value = flat.filter((_, i) => i !== pairIndex)
+      return
+    }
+    const i = pairIndex * 2
+    if (i + 1 >= flat.length) {
+      return
+    }
+    speakingQueue.value = [...flat.slice(0, i), ...flat.slice(i + 2)]
+  }
+
   function clearSpeakingQueue(): void {
     if (!isMafiaHost.value) {
       return
@@ -1176,6 +1259,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       return
     }
     speakingQueue.value = []
+    clearSpeakingNominationDraft()
     mafiaGameLog.info('speaking queue cleared')
   }
 
@@ -1205,17 +1289,34 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     if (speakingQueue.value.length > 0) {
       speakingQueue.value = []
     }
+    clearSpeakingNominationDraft()
     mafiaGameLog.info('host toolbar: clear all selections')
   }
 
   function pruneSpeakingQueueToMaxSeat(maxSeat: number): void {
     if (maxSeat < 1) {
       speakingQueue.value = []
+      clearSpeakingNominationDraft()
       return
     }
-    const next = speakingQueue.value.filter((n) => n >= 1 && n <= maxSeat)
-    if (next.length !== speakingQueue.value.length) {
-      speakingQueue.value = [...next]
+    const flat = speakingQueue.value
+    if (flat.length % 2 === 1) {
+      const next = flat.filter((n) => n >= 1 && n <= maxSeat)
+      if (next.length !== flat.length) {
+        speakingQueue.value = [...next]
+      }
+      return
+    }
+    const next: number[] = []
+    for (let i = 0; i + 1 < flat.length; i += 2) {
+      const a = flat[i]!
+      const b = flat[i + 1]!
+      if (a >= 1 && a <= maxSeat && b >= 1 && b <= maxSeat) {
+        next.push(a, b)
+      }
+    }
+    if (next.length !== flat.length) {
+      speakingQueue.value = next
     }
   }
 
@@ -1225,21 +1326,17 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   function applySpeakingQueueFromSignaling(seats: number[]): void {
     if (!Array.isArray(seats)) {
       speakingQueue.value = []
+      clearSpeakingNominationDraft()
       return
     }
     const next: number[] = []
-    const seen = new Set<number>()
     for (const x of seats) {
-      if (typeof x !== 'number' || !Number.isInteger(x) || x < 1) {
-        continue
+      if (typeof x === 'number' && Number.isInteger(x) && x >= 1) {
+        next.push(x)
       }
-      if (seen.has(x)) {
-        continue
-      }
-      seen.add(x)
-      next.push(x)
     }
     speakingQueue.value = next
+    clearSpeakingNominationDraft()
   }
 
   type ReshuffleResult = { ok: true } | { ok: false; error: 'count' | 'empty' | 'message'; messageKey?: string }
@@ -1252,7 +1349,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       players: orderedPeerIds.map((peerId, i) => ({
         peerId,
         seat: i + 1,
-        role: roles[peerId]!,
+        role: roles[peerId] ?? null,
       })),
     }
   }
@@ -1281,6 +1378,13 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       }
       seen.add(p.peerId)
       order.push(p.peerId)
+      const isLast = i === list.length - 1
+      if (p.role == null) {
+        if (!isLast) {
+          return
+        }
+        continue
+      }
       if (typeof p.role !== 'string' || !MAFIA_ROLES.has(p.role as MafiaRole)) {
         return
       }
@@ -1289,6 +1393,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     beginMafiaReshuffleApply()
     numberingOrder.value = order
     roleByPeerId.value = r
+    pinMafiaHostPeerToEndOfNumberingOrder()
     playerOverlayStateByPeerId.value = {}
     eliminationBackgroundByPeerId.value = {}
     phase.value = 'night'
@@ -1296,6 +1401,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     activeNightActionRole.value = 'mafia'
     speakingQueue.value = []
     hostInteractionMode.value = 'night'
+    clearSpeakingNominationDraft()
     mafiaTimer.value = null
   }
 
@@ -1321,6 +1427,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       activeNightActionRole.value = 'mafia'
       speakingQueue.value = []
       hostInteractionMode.value = 'night'
+      clearSpeakingNominationDraft()
       mafiaTimer.value = null
       timerStopBroadcastPayload.value = TIMER_STOP_SENTINEL
       mafiaGameLog.info('reshuffle: players shuffled, roles cleared (old mafia)', { n: ids.length, phase: phase.value })
@@ -1366,6 +1473,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     activeNightActionRole.value = 'mafia'
     speakingQueue.value = []
     hostInteractionMode.value = 'night'
+    clearSpeakingNominationDraft()
     mafiaTimer.value = null
     timerStopBroadcastPayload.value = TIMER_STOP_SENTINEL
     mafiaGameLog.info('reshuffle: players shuffled, roles assigned', { n: ids.length, phase: phase.value })
@@ -1422,6 +1530,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     activeNightActionRole.value = 'mafia'
     speakingQueue.value = []
     hostInteractionMode.value = 'night'
+    clearSpeakingNominationDraft()
     hostSeatSwapSelectionPeerId.value = null
     playersUpdateBroadcastPayload.value = null
     settingsUpdateBroadcastPayload.value = null
@@ -1434,6 +1543,25 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     reviveBroadcastPayload.value = null
     isApplyingMafiaReshuffle.value = false
     phase.value = null
+    eatFirstCallEliminationHost.value = false
+  }
+
+  function prunePlayerOverlayStateToPeerIds(peerIds: string[]): void {
+    const allowed = new Set(peerIds.filter((id) => typeof id === 'string' && id.length > 0))
+    const nextOver: Record<string, MafiaPlayerOverlayState> = { ...playerOverlayStateByPeerId.value }
+    for (const id of Object.keys(nextOver)) {
+      if (!allowed.has(id)) {
+        delete nextOver[id]
+      }
+    }
+    playerOverlayStateByPeerId.value = nextOver
+    const nextBg: Record<string, MafiaEliminationBackground> = { ...eliminationBackgroundByPeerId.value }
+    for (const id of Object.keys(nextBg)) {
+      if (!allowed.has(id)) {
+        delete nextBg[id]
+      }
+    }
+    eliminationBackgroundByPeerId.value = nextBg
   }
 
   function fullReset(): void {
@@ -1515,7 +1643,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
 
   function kickPlayer(peerId: string): KickResult {
-    if (!isMafiaHost.value) {
+    if (!isMafiaHost.value && !eatFirstCallEliminationHost.value) {
       return { ok: false, reason: 'not-host' }
     }
     const self = callSession.selfPeerId
@@ -1580,7 +1708,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
 
   function revivePlayer(peerId: string): ReviveResult {
-    if (!isMafiaHost.value) {
+    if (!isMafiaHost.value && !eatFirstCallEliminationHost.value) {
       return { ok: false, reason: 'not-host' }
     }
     const self = callSession.selfPeerId
@@ -1695,8 +1823,10 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     eliminationBackgroundForPeer,
     applyMafiaModeFromSignaling,
     applyMafiaSettingsUpdateFromSignaling,
-    addSpeakingSeatIfNew,
-    removeSpeakingSeat,
+    speakingNominationDraftBySeat,
+    setSpeakingNominationDraftBySeat,
+    appendSpeakingNominationPair,
+    removeSpeakingNominationPairAt,
     clearSpeakingQueue,
     clearNightActions,
     clearHostToolbarSelections,
@@ -1736,6 +1866,9 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     applyMafiaReviveFromSignaling,
     applyMafiaPlayerLifeStateSnapshotFromSignaling,
     clearReviveBroadcastPayload,
+    eatFirstCallEliminationHost,
+    setEatFirstCallEliminationHost,
+    prunePlayerOverlayStateToPeerIds,
     hostToggleMafiaPlayerLife,
     isMafiaPeerEliminated,
     lifeStateForPeer,

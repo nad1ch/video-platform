@@ -70,7 +70,8 @@ export type MafiaPlayersUpdatePayload = {
 export type MafiaReshufflePlayer = {
   peerId: string
   seat: number
-  role: MafiaRole
+  /** `null` = non-player host (must be last seat when present). */
+  role: MafiaRole | null
 }
 
 export type MafiaReshufflePayload = {

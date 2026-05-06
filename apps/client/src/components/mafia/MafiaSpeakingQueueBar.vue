@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
 import { mafiaGameSeatText } from '@/utils/mafiaSeatLabel'
 import type { MafiaHostInteractionMode } from '@/utils/mafiaGameTypes'
+import { decodeSpeakingNominationFlat } from '@/utils/speakingNominationQueue'
 import mafiaVoteClear from '@/assets/mafia/ui/vote-clear.svg'
 import mafiaVoteStart from '@/assets/mafia/ui/vote-start.svg'
 
@@ -24,11 +25,12 @@ const { speakingQueue, hostInteractionMode } = storeToRefs(mafia)
 const readOnly = computed(() => !props.showTools)
 
 const segments = computed(() =>
-  speakingQueue.value.map((targetSeat, i) => ({
-    id: `${targetSeat}-${i}`,
-    voter: i + 1,
-    target: targetSeat,
-    targetLabel: mafiaGameSeatText(targetSeat),
+  decodeSpeakingNominationFlat(speakingQueue.value).map((seg) => ({
+    id: `pair-${seg.pairIndex}`,
+    pairIndex: seg.pairIndex,
+    byLabel: seg.bySeat == null ? '?' : mafiaGameSeatText(seg.bySeat),
+    target: seg.targetSeat,
+    targetLabel: mafiaGameSeatText(seg.targetSeat),
   })),
 )
 
@@ -62,12 +64,12 @@ function isModeOn(mode: MafiaHostInteractionMode): boolean {
   return hostInteractionMode.value === mode
 }
 
-function onRemove(targetSeat: number, ev: MouseEvent): void {
+function onRemove(pairIndex: number, ev: MouseEvent): void {
   ev.stopPropagation()
   if (readOnly.value) {
     return
   }
-  mafia.removeSpeakingSeat(targetSeat)
+  mafia.removeSpeakingNominationPairAt(pairIndex)
 }
 
 function onClearSpeakingQueue(ev: MouseEvent): void {
@@ -135,17 +137,17 @@ function onClearSpeakingQueue(ev: MouseEvent): void {
           :disabled="readOnly"
           :title="
             readOnly
-              ? t('mafiaPage.speakingQueueChipViewOnly', { n: seg.target })
-              : t('mafiaPage.speakingQueueRemoveTitle', { n: seg.target })
+              ? t('mafiaPage.speakingQueueChipViewOnly', { by: seg.byLabel, target: seg.targetLabel })
+              : t('mafiaPage.speakingQueueRemoveTitle', { by: seg.byLabel, target: seg.targetLabel })
           "
           :aria-label="
             readOnly
-              ? t('mafiaPage.speakingQueueChipViewOnly', { n: seg.target })
-              : t('mafiaPage.speakingQueueRemoveTitle', { n: seg.target })
+              ? t('mafiaPage.speakingQueueChipViewOnly', { by: seg.byLabel, target: seg.targetLabel })
+              : t('mafiaPage.speakingQueueRemoveTitle', { by: seg.byLabel, target: seg.targetLabel })
           "
-          @click="onRemove(seg.target, $event)"
+          @click="onRemove(seg.pairIndex, $event)"
         >
-          <span class="mafia-vote-hud__chip-voter">{{ seg.voter }}</span>
+          <span class="mafia-vote-hud__chip-voter">{{ seg.byLabel }}</span>
           <span class="mafia-vote-hud__chip-arrow" aria-hidden="true">↓</span>
           <span class="mafia-vote-hud__chip-target">{{ seg.targetLabel }}</span>
         </button>

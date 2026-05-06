@@ -26,6 +26,9 @@ export function isEatFirstRoomId(roomId: string): boolean {
 
 export const MAFIA_MAX_SEAT = 12
 
+/** Max 1-based display seat index on Eat First call tiles (`playerOrder` length ≤ 11). */
+export const EAT_FIRST_MAX_SPEAKING_QUEUE_SEAT = 11
+
 export function sanitizeUserId(raw: string | undefined): string {
   const t = raw?.trim() ?? ''
   return t.length > 0 ? t.slice(0, 128) : ''
@@ -92,6 +95,31 @@ export function sanitizeMafiaSpeakingQueueList(raw: unknown, maxSeat: number): n
     }
     seen.add(x)
     out.push(x)
+  }
+  return out
+}
+
+/**
+ * Eat First nomination flat list: preserves pair order and duplicate seats
+ * (same nominator may appear twice); only drops non-integers and out-of-range values.
+ */
+export function sanitizeEatFirstSpeakingQueueList(raw: unknown): number[] {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  const cap = EAT_FIRST_MAX_SPEAKING_QUEUE_SEAT
+  const out: number[] = []
+  for (const x of raw) {
+    if (typeof x !== 'number' || !Number.isInteger(x)) {
+      continue
+    }
+    if (x < 1 || x > cap) {
+      continue
+    }
+    out.push(x)
+    if (out.length >= 16) {
+      break
+    }
   }
   return out
 }

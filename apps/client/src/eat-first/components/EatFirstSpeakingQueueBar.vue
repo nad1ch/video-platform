@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
+import { decodeSpeakingNominationFlat } from '@/utils/speakingNominationQueue'
 import mafiaVoteClear from '@/assets/mafia/ui/vote-clear.svg'
 import mafiaVoteStart from '@/assets/mafia/ui/vote-start.svg'
 
@@ -20,11 +21,12 @@ const { speakingQueue, speakingMode } = storeToRefs(eatFirstShell)
 const readOnly = computed(() => !props.showTools)
 
 const segments = computed(() =>
-  speakingQueue.value.map((seat, i) => ({
-    id: `${seat}-${i}`,
-    voter: i + 1,
-    target: seat,
-    targetLabel: String(seat),
+  decodeSpeakingNominationFlat(speakingQueue.value).map((seg) => ({
+    id: `pair-${seg.pairIndex}`,
+    pairIndex: seg.pairIndex,
+    byLabel: seg.bySeat == null ? '?' : String(seg.bySeat),
+    target: seg.targetSeat,
+    targetLabel: String(seg.targetSeat),
   })),
 )
 
@@ -52,10 +54,10 @@ function onClear(ev: MouseEvent): void {
   if (speakingMode.value) eatFirstShell.toggleSpeakingMode()
 }
 
-function onRemove(seat: number, ev: MouseEvent): void {
+function onRemove(pairIndex: number, ev: MouseEvent): void {
   ev.stopPropagation()
   if (readOnly.value) return
-  eatFirstShell.removeSpeakingSeat(seat)
+  eatFirstShell.removeSpeakingNominationPairAt(pairIndex)
 }
 </script>
 
@@ -113,14 +115,14 @@ function onRemove(seat: number, ev: MouseEvent): void {
           class="ef-vote-hud__chip"
           :disabled="readOnly"
           :title="readOnly
-            ? t('eatFirstCall.speakingQueueChipViewOnly', { n: seg.target })
-            : t('eatFirstCall.speakingQueueRemoveTitle', { n: seg.target })"
+            ? t('eatFirstCall.speakingQueueChipViewOnly', { by: seg.byLabel, target: seg.targetLabel })
+            : t('eatFirstCall.speakingQueueRemoveTitle', { by: seg.byLabel, target: seg.targetLabel })"
           :aria-label="readOnly
-            ? t('eatFirstCall.speakingQueueChipViewOnly', { n: seg.target })
-            : t('eatFirstCall.speakingQueueRemoveTitle', { n: seg.target })"
-          @click="onRemove(seg.target, $event)"
+            ? t('eatFirstCall.speakingQueueChipViewOnly', { by: seg.byLabel, target: seg.targetLabel })
+            : t('eatFirstCall.speakingQueueRemoveTitle', { by: seg.byLabel, target: seg.targetLabel })"
+          @click="onRemove(seg.pairIndex, $event)"
         >
-          <span class="ef-vote-hud__chip-voter">{{ seg.voter }}</span>
+          <span class="ef-vote-hud__chip-voter">{{ seg.byLabel }}</span>
           <span class="ef-vote-hud__chip-arrow" aria-hidden="true">↓</span>
           <span class="ef-vote-hud__chip-target">{{ seg.targetLabel }}</span>
         </button>

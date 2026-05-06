@@ -72,4 +72,52 @@ describe('clientMessageSchema', () => {
       expect(parsed.success).toBe(false)
     })
   })
+
+  describe('eat:slot-claim (Eat First — guard wire shape)', () => {
+    it('accepts token + device id binding', () => {
+      const parsed = clientMessageSchema.safeParse({
+        type: 'eat:slot-claim',
+        payload: {
+          slotId: 'p1',
+          joinToken: 'tok',
+          deviceId: '12345678',
+        },
+      })
+      expect(parsed.success).toBe(true)
+    })
+
+    it('rejects empty credentials (moderator never claims a seat via signaling)', () => {
+      const parsed = clientMessageSchema.safeParse({
+        type: 'eat:slot-claim',
+        payload: { slotId: 'p2', joinToken: '', deviceId: '' },
+      })
+      expect(parsed.success).toBe(false)
+    })
+
+    it('rejects partial credentials (token without long device id)', () => {
+      const parsed = clientMessageSchema.safeParse({
+        type: 'eat:slot-claim',
+        payload: { slotId: 'p1', joinToken: 'tok', deviceId: '' },
+      })
+      expect(parsed.success).toBe(false)
+    })
+  })
+
+  describe('eat:speaking-queue-update (Eat First nomination sync)', () => {
+    it('accepts pair-encoded queue within seat bounds', () => {
+      const parsed = clientMessageSchema.safeParse({
+        type: 'eat:speaking-queue-update',
+        payload: { speakingQueue: [2, 5, 1, 3] },
+      })
+      expect(parsed.success).toBe(true)
+    })
+
+    it('rejects seat index above 11', () => {
+      const parsed = clientMessageSchema.safeParse({
+        type: 'eat:speaking-queue-update',
+        payload: { speakingQueue: [1, 12] },
+      })
+      expect(parsed.success).toBe(false)
+    })
+  })
 })

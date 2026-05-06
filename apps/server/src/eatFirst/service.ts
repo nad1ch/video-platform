@@ -11,6 +11,12 @@ import {
 import { mergeEatFirstPlayerData, mergeEatFirstRoom, mergePlayerDeep } from './roomMerge'
 import { eatFirstSnapshot } from './snapshot'
 import { isValidGameId, normalizeEatFirstSlot } from './slot'
+import {
+  EAT_FIRST_TRAIT_KEYS,
+  pickEatFirstTraitValue,
+  type EatFirstTraitKey,
+} from './randomPools'
+import { pickRandomEatFirstActiveCard } from './activeCards'
 
 const MIN_ROUND = 1
 
@@ -235,6 +241,18 @@ export async function verifyEatFirstSlotAuth(
   if (tok.length === 0 || dev.length === 0) return { ok: false, reason: 'forbidden' }
   if (tok !== storedTok || dev !== storedDev) return { ok: false, reason: 'forbidden' }
   return { ok: true }
+}
+
+/** Whether an Eat First player row exists for this game/slot (call slot-claim uses this for host binding). */
+export async function eatFirstPlayerSlotRowExists(gameId: string, slotId: string): Promise<boolean> {
+  if (!isValidGameId(gameId)) return false
+  const pid = normalizeEatFirstSlot(slotId)
+  if (!isEatFirstPlayerSlotId(pid)) return false
+  const row = await prisma.eatFirstPlayer.findUnique({
+    where: { gameId_slotId: { gameId, slotId: pid } },
+    select: { id: true },
+  })
+  return row != null
 }
 
 export async function eatFirstPostHand(
@@ -624,6 +642,42 @@ function shuffledCopyStable<T>(list: T[]): T[] {
   return out
 }
 
+/**
+ * Canonical admin patch shape for persisting the full 8-trait + action card model
+ * after server-side table hydration (call signaling uses the same field layout as DB snapshots).
+ */
+export function eatFirstAdminPatchForFullCharacterDeal(
+  traits: Record<EatFirstTraitKey, string>,
+  card: {
+    title: string
+    description: string
+    templateId: string
+    effectId: string
+    used: boolean
+  },
+): Record<string, unknown> {
+  return {
+    gender: traits.gender,
+    age: traits.age,
+    profession: { value: traits.profession },
+    health: { value: traits.health },
+    quirk: { value: traits.hobby },
+    phobia: { value: traits.phobia },
+    fact: { value: traits.fact },
+    luggage: { value: traits.baggage },
+    activeCard: {
+      title: card.title,
+      description: card.description,
+      templateId: card.templateId,
+      effectId: card.effectId,
+      used: card.used,
+    },
+    revealLedger: { round: 0, count: 0, maxForRound: 0 },
+    demographicsRevealed: false,
+    identityRevealed: false,
+  }
+}
+
 export async function eatFirstHostReshuffleAdmin(
   gameId: string,
   participantCount?: number,
@@ -681,16 +735,73 @@ export async function eatFirstHostReshuffleAdmin(
       if (!isEatFirstPlayerSlotId(slot)) continue
       playersBySlot.set(slot, { id: row.id, data: row.data })
     }
-    const slots = [...playersBySlot.keys()].sort((a, b) =>
+    let slots = [...playersBySlot.keys()].sort((a, b) =>
       a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }),
     )
+    /**
+     * Ensure Prisma has contiguous `p1..pN` up to the live table size. When the DB
+     * already had ≥2 rows (e.g. only `p1`,`p2`) but the call has more peers, the old
+     * `slots.length < 2` branch was skipped and no `p3+` stubs were created — call
+     * tiles beyond the first seats never got traits or slot bindings.
+     */
+    const targetSlotCount = Math.min(11, Math.max(2, fallbackCount, slots.length))
+    let expandedSlots = false
+    for (let n = 1; n <= targetSlotCount; n += 1) {
+      const pid = normalizeEatFirstSlot(`p${n}`)
+      if (!isEatFirstPlayerSlotId(pid) || playersBySlot.has(pid)) continue
+      expandedSlots = true
+      const traits = {} as Record<EatFirstTraitKey, string>
+      for (const key of EAT_FIRST_TRAIT_KEYS) {
+        traits[key] = pickEatFirstTraitValue(key)
+      }
+      const rolled = pickRandomEatFirstActiveCard()
+      const patch = eatFirstAdminPatchForFullCharacterDeal(traits, { ...rolled, used: false })
+      const prevRow = await tx.eatFirstPlayer.findUnique({
+        where: { gameId_slotId: { gameId, slotId: pid } },
+      })
+      const prev =
+        prevRow && typeof prevRow.data === 'object' && prevRow.data !== null && !Array.isArray(prevRow.data)
+          ? (prevRow.data as Record<string, unknown>)
+          : {}
+      const nextData = mergeEatFirstPlayerData(prev, patch) as object
+      const upserted = await tx.eatFirstPlayer.upsert({
+        where: { gameId_slotId: { gameId, slotId: pid } },
+        create: { gameId, slotId: pid, data: nextData },
+        update: { data: nextData },
+      })
+      playersBySlot.set(pid, { id: upserted.id, data: upserted.data })
+    }
+    if (expandedSlots) {
+      const gameReload = await tx.eatFirstGame.findUnique({
+        where: { id: gameId },
+        include: { players: true },
+      })
+      if (!gameReload) {
+        const e = new Error('Not found')
+        ;(e as Error & { status?: number }).status = 404
+        throw e
+      }
+      await eatFirstPersistPlayerOrderReconcile(tx, gameReload)
+      playersBySlot.clear()
+      for (const row of gameReload.players) {
+        const slot = normalizeEatFirstSlot(row.slotId)
+        if (!isEatFirstPlayerSlotId(slot)) continue
+        playersBySlot.set(slot, { id: row.id, data: row.data })
+      }
+      slots = [...playersBySlot.keys()].sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }),
+      )
+    }
     if (slots.length < 2) {
       const room =
         typeof game.room === 'object' && game.room !== null && !Array.isArray(game.room)
           ? (game.room as Record<string, unknown>)
           : {}
       const traitsBySeat = fallbackTraitsBySeat(fallbackCount)
-      const nextRoom = mergeEatFirstRoom(room, { callTraitsBySeat: traitsBySeat }) as object
+      const nextRoom = mergeEatFirstRoom(room, {
+        callTraitsBySeat: traitsBySeat,
+        callSignalingSnapshot: null,
+      }) as object
       await tx.eatFirstGame.update({ where: { id: gameId }, data: { room: nextRoom } })
       return { playerOrder: [] as string[], traitsBySeat }
     }
@@ -714,8 +825,6 @@ export async function eatFirstHostReshuffleAdmin(
         ? (game.room as Record<string, unknown>)
         : {}
     const playerOrder = shuffledCopyStable(slots)
-    const nextRoom = mergeEatFirstRoom(room, { playerOrder }) as object
-    await tx.eatFirstGame.update({ where: { id: gameId }, data: { room: nextRoom } })
     const traitsBySeat: Record<number, string[]> = {}
     for (let i = 0; i < playerOrder.length; i += 1) {
       const row = playersBySlot.get(playerOrder[i])
@@ -733,12 +842,14 @@ export async function eatFirstHostReshuffleAdmin(
         (v) => v.length > 0,
       )
     }
-    const roomWithTraits =
-      typeof game.room === 'object' && game.room !== null && !Array.isArray(game.room)
-        ? (game.room as Record<string, unknown>)
-        : {}
-    const nextRoomWithTraits = mergeEatFirstRoom(roomWithTraits, { callTraitsBySeat: traitsBySeat }) as object
-    await tx.eatFirstGame.update({ where: { id: gameId }, data: { room: nextRoomWithTraits } })
+    // Single persist: a second merge against stale `game.room` dropped `playerOrder`
+    // from the previous update, so every deal after the first looked identical.
+    const nextRoom = mergeEatFirstRoom(room, {
+      playerOrder,
+      callTraitsBySeat: traitsBySeat,
+      callSignalingSnapshot: null,
+    }) as object
+    await tx.eatFirstGame.update({ where: { id: gameId }, data: { room: nextRoom } })
     return { playerOrder, traitsBySeat }
   })
   broadcast(gameId)
