@@ -109,6 +109,11 @@ export {
   VP8_SINGLE_LAYER_ENCODING,
 } from './media/videoSimulcast'
 export {
+  ENABLE_PUBLISHER_SIMULCAST,
+  ENABLE_RECEIVER_ADAPTIVE_LAYERS,
+  SIMULCAST_ACTIVE_CAMERA_THRESHOLD,
+} from './media/adaptiveSimulcastFeatureFlags'
+export {
   assignAdaptivePreferredLayersByPeerId,
   MAX_HIGH_STREAMS,
   MAX_MEDIUM_STREAMS,

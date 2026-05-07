@@ -17,6 +17,11 @@ import {
   resolveOutgoingVideoPublishTier,
   type VideoPublishTier,
 } from './media/videoQualityPreset'
+import {
+  ENABLE_PUBLISHER_SIMULCAST,
+  ENABLE_RECEIVER_ADAPTIVE_LAYERS,
+  SIMULCAST_ACTIVE_CAMERA_THRESHOLD,
+} from './media/adaptiveSimulcastFeatureFlags'
 import { useActiveSpeaker, type ActiveSpeakerTile } from './audio/useActiveSpeaker'
 import { useSendTransport } from './transport/useSendTransport'
 import { buildRequestProducerSyncPayload } from './media/recoveryCoordinator'
@@ -1113,6 +1118,12 @@ export function useCallEngine(options?: CallEngineOptions) {
     activeCameraPublishersAtWire: lastWireActiveCameraPublishers.value,
     peerCountAtWire: lastWirePeerCount.value,
     publishSimulcast: lastWireVideoSimulcast.value,
+    /** Phase 1 adaptive simulcast feature flags — surfaced so QA can verify rollout state without grepping. */
+    adaptiveSimulcastFlags: {
+      ENABLE_PUBLISHER_SIMULCAST,
+      ENABLE_RECEIVER_ADAPTIVE_LAYERS,
+      SIMULCAST_ACTIVE_CAMERA_THRESHOLD,
+    },
     effectiveActiveSpeakerPeerId: activeSpeakerPeerId.value ?? serverActiveSpeakerPeerId.value,
     activeSpeakerPeerId: activeSpeakerPeerId.value,
     dominantSpeakerPeerId: dominantSpeakerPeerId.value,
