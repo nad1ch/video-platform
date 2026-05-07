@@ -170,7 +170,7 @@
     "openMafia": "Open Mafia",
     "openNadle": "Open Nadle",
     "openNadraw": "Open Nadraw",
-    "openDurak": "Open Durak",
+    "openDurak": "Go to Durak",
     "openCheckers": "Open Chesters",
     "openSpy": "Open Spy party roles",
     "openHotSeat": "Open Hot Seat",
@@ -199,7 +199,98 @@
     "nadle": "Nadle",
     "admin": "Admin",
     "nadrawShow": "Nadraw",
-    "coinHub": "Coin Hub"
+    "coinHub": "Coin Hub",
+    "durak": "Durak"
+  },
+  "durak": {
+    "demoNotice": "Demo layout — rules and realtime sync will ship in later PRs.",
+    "localPrototype": "Local prototype — two seats on one device. Server sync later.",
+    "lobby": {
+      "subtitle": "Choose how you want to play. Matchmaking and invites are UI previews only.",
+      "playerCountLegend": "Number of players",
+      "modesLegend": "Mode",
+      "multiplayerNote": "Real multiplayer sync will be added in a later PR."
+    },
+    "modes": {
+      "matchmaking": {
+        "title": "Quick match",
+        "body": "Find opponents at your skill level. This screen simulates searching — no queue yet."
+      },
+      "friend": {
+        "title": "Play with a friend",
+        "body": "Share a room link so a friend can join. Invite links here are mock-only until server rooms ship."
+      },
+      "bots": {
+        "title": "Play vs bots",
+        "body": "Practice on the local table with a simple chat-seat bot. Roster size is shown for future 2–6 seats."
+      }
+    },
+    "searching": {
+      "subtitle": "Looking for a match…",
+      "title": "Searching",
+      "body": "We are pretending to search the matchmaking pool.",
+      "mockHint": "No real queue or ELO yet — this is a UI placeholder.",
+      "cancel": "Back to lobby"
+    },
+    "friendRoom": {
+      "subtitle": "Invite friend",
+      "title": "Mock invite room",
+      "body": "This is a demo invite link. Until server rooms are added, opening it still shows the normal lobby.",
+      "inviteLabel": "Invite link (preview)",
+      "copy": "Copy link",
+      "copied": "Copied",
+      "back": "Back to lobby"
+    },
+    "table": {
+      "backToLobby": "Back to lobby",
+      "rosterLine": "Roster: {n} players",
+      "localTwoSeatHint": "Table rules still use the local two-seat prototype; extra seats will activate when multiplayer sync lands."
+    },
+    "aria": {
+      "opponentRegion": "Opponent",
+      "tableRegion": "Table",
+      "yourHandRegion": "Your hand"
+    },
+    "deck": "Deck",
+    "trump": "Trump",
+    "emptyDefender": "Empty defender slot",
+    "roleStreamer": "Streamer",
+    "roleChat": "Twitch chat",
+    "cards": "{n} cards",
+    "yourTurn": "Your turn",
+    "chatTurn": "Chat's turn",
+    "turnLocal": "Your turn to act",
+    "turnOpponent": "Chat's turn — use “Chat plays” or wait",
+    "phase": {
+      "idle": "Phase: idle",
+      "attack": "Phase: attack",
+      "defend": "Phase: defend",
+      "take": "Phase: take",
+      "discard": "Phase: discard"
+    },
+    "actions": {
+      "playCard": "Play card",
+      "endAttack": "End attack",
+      "beat": "Beat",
+      "take": "Take",
+      "newGame": "New game",
+      "chatPlay": "Chat plays"
+    },
+    "errors": {
+      "notAttackPhase": "Not in attack phase.",
+      "notAttackerTurn": "Only the attacker can play attack cards now.",
+      "notDefendPhase": "Not in defend phase.",
+      "notDefenderTurn": "Only the defender can play defense cards now.",
+      "cardNotInHand": "That card is not in this hand.",
+      "invalidAttack": "This card cannot be added to the attack (rank rule).",
+      "invalidDefend": "This card cannot beat that attack card.",
+      "tableEmpty": "The table is empty.",
+      "nothingToDefend": "Nothing to defend right now.",
+      "incompleteDefense": "Some attack cards are still undefended.",
+      "notChatTurn": "It is not the chat seat’s turn.",
+      "chatNoLegalAttack": "Chat has no legal attack card.",
+      "chatNoLegalDefend": "Chat has no legal defense — use Take."
+    }
   },
   "betaAccess": {
     "routeTitle": "Beta access",
@@ -791,6 +882,7 @@
     "navCallTitle": "Video call",
     "navCall": "Call",
     "navMafia": "Mafia",
+    "navDurak": "Durak",
     "navCoinHub": "Coin Hub",
     "navNadle": "Nadle",
     "navNadrawShow": "Nadraw",

@@ -119,6 +119,14 @@ function goEatBack() {
       </RouterLink>
       <RouterLink
         class="stream-nav__link"
+        :to="{ name: 'durak' }"
+        :title="t('routes.durak')"
+        :aria-label="t('routes.durak')"
+      >
+        {{ t('app.navDurak') }}
+      </RouterLink>
+      <RouterLink
+        class="stream-nav__link"
         :to="{ name: 'coin-hub' }"
         :title="t('routes.coinHub')"
         :aria-label="t('app.navCoinHub')"

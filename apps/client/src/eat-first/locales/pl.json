@@ -170,7 +170,7 @@
     "openMafia": "Otwórz Mafię",
     "openNadle": "Otwórz Nadle",
     "openNadraw": "Otwórz Nadraw",
-    "openDurak": "Otwórz Durak",
+    "openDurak": "Przejdź do Duraka",
     "openCheckers": "Otwórz Chesters",
     "openSpy": "Otwórz role Szpiega",
     "openHotSeat": "Otwórz Hot Seat",
@@ -199,7 +199,98 @@
     "nadle": "Nadle",
     "admin": "Admin",
     "nadrawShow": "Nadraw",
-    "coinHub": "Coin Hub"
+    "coinHub": "Coin Hub",
+    "durak": "Durak"
+  },
+  "durak": {
+    "demoNotice": "Układ demo — zasady i synchronizacja w kolejnych PR.",
+    "localPrototype": "Lokalny prototyp — dwa miejsca na jednym urządzeniu. Sync z serwerem później.",
+    "lobby": {
+      "subtitle": "Wybierz sposób gry. Matchmaking i zaproszenia to na razie tylko UI.",
+      "playerCountLegend": "Liczba graczy",
+      "modesLegend": "Tryb",
+      "multiplayerNote": "Prawdziwa synchronizacja multiplayer pojawi się w kolejnym PR."
+    },
+    "modes": {
+      "matchmaking": {
+        "title": "Szybki mecz",
+        "body": "Szukanie przeciwników na podobnym poziomie. Tu tylko symulacja — brak prawdziwej kolejki."
+      },
+      "friend": {
+        "title": "Graj ze znajomym",
+        "body": "Udostępnij link do pokoju. Linki są mockiem do czasu pokoi serwerowych."
+      },
+      "bots": {
+        "title": "Przeciwko botom",
+        "body": "Trening na lokalnym stole z prostym botem na miejscu czatu. Rozmiar rosteru — pod przyszłe 2–6 miejsc."
+      }
+    },
+    "searching": {
+      "subtitle": "Szukamy meczu…",
+      "title": "Szukanie",
+      "body": "Symulujemy wyszukiwanie w puli matchmakingu.",
+      "mockHint": "Brak prawdziwej kolejki i ELO — to placeholder UI.",
+      "cancel": "Wróć do lobby"
+    },
+    "friendRoom": {
+      "subtitle": "Zaproszenie znajomego",
+      "title": "Mock pokoju",
+      "body": "To demonstracyjny link zaproszenia. Dopóki nie pojawią się pokoje na serwerze, otwarcie linku nadal pokazuje zwykłe lobby.",
+      "inviteLabel": "Link zaproszenia (podgląd)",
+      "copy": "Kopiuj link",
+      "copied": "Skopiowano",
+      "back": "Wróć do lobby"
+    },
+    "table": {
+      "backToLobby": "Wróć do lobby",
+      "rosterLine": "Skład: {n} graczy",
+      "localTwoSeatHint": "Zasady nadal na lokalnym prototypie dwóch miejsc; dodatkowe miejsca włączą się z sync multiplayer."
+    },
+    "aria": {
+      "opponentRegion": "Przeciwnik",
+      "tableRegion": "Stół",
+      "yourHandRegion": "Twoja ręka"
+    },
+    "deck": "Talia",
+    "trump": "Atut",
+    "emptyDefender": "Pusty slot obrony",
+    "roleStreamer": "Streamer",
+    "roleChat": "Czat Twitch",
+    "cards": "{n} kart",
+    "yourTurn": "Twoja kolej",
+    "chatTurn": "Kolej czatu",
+    "turnLocal": "Twoja kolej",
+    "turnOpponent": "Kolej czatu — użyj „Czat gra”",
+    "phase": {
+      "idle": "Faza: pauza",
+      "attack": "Faza: atak",
+      "defend": "Faza: obrona",
+      "take": "Faza: zbiór",
+      "discard": "Faza: odrzut"
+    },
+    "actions": {
+      "playCard": "Zagraj kartę",
+      "endAttack": "Zakończ atak",
+      "beat": "Zbite",
+      "take": "Biorę",
+      "newGame": "Nowa gra",
+      "chatPlay": "Czat gra"
+    },
+    "errors": {
+      "notAttackPhase": "To nie faza ataku.",
+      "notAttackerTurn": "Teraz tylko atakujący może dodać karty.",
+      "notDefendPhase": "To nie faza obrony.",
+      "notDefenderTurn": "Teraz tylko obrońca może grać.",
+      "cardNotInHand": "Tej karty nie ma na ręce.",
+      "invalidAttack": "Tej karty nie można dodać do ataku (rang).",
+      "invalidDefend": "Ta karta nie bije ataku.",
+      "tableEmpty": "Stół jest pusty.",
+      "nothingToDefend": "Nie ma czego odbijać.",
+      "incompleteDefense": "Są jeszcze nieodbite ataki.",
+      "notChatTurn": "To nie kolej czatu.",
+      "chatNoLegalAttack": "Czat nie ma legalnego ataku.",
+      "chatNoLegalDefend": "Czat nie ma legalnej obrony — użyj „Biorę”."
+    }
   },
   "betaAccess": {
     "routeTitle": "Beta access",
@@ -791,6 +882,7 @@
     "navCallTitle": "Połączenie wideo",
     "navCall": "Call",
     "navMafia": "Mafia",
+    "navDurak": "Durak",
     "navCoinHub": "Coin Hub",
     "navNadle": "Nadle",
     "navNadrawShow": "Nadraw",

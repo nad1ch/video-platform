@@ -17,7 +17,7 @@ import checkersMarkImage from '@/assets/landing/checkers-mark.svg'
 import durakCardImage from '@/assets/landing/durak-card.svg'
 import { useAuth } from '@/composables/useAuth'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
-import { loadCheckersPage, loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
+import { loadCheckersPage, loadDurakPage, loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
 import { prefetchRoute } from '@/utils/routePrefetch'
 
 type AppGameCard = {
@@ -53,6 +53,7 @@ const callRoute = { name: 'call' } satisfies RouteLocationRaw
 const eatFirstRoute = { name: 'eat' } satisfies RouteLocationRaw
 const mafiaRoute = { name: 'mafia' } satisfies RouteLocationRaw
 const checkersRoute = { name: 'checkers', params: { roomId: 'lobby' }, query: { defaultMode: 'rated' } } satisfies RouteLocationRaw
+const durakRoute = { name: 'durak' } satisfies RouteLocationRaw
 const economyComingSoonRoute = { name: 'home', query: { comingSoon: 'economy' } } satisfies RouteLocationRaw
 
 const nadleRoute = computed<RouteLocationRaw>(() => ({
@@ -68,6 +69,7 @@ const nadrawRoute = computed<RouteLocationRaw>(() => ({
 const prefetchMafia = () => prefetchRoute(loadMafiaPage)
 const prefetchNadle = () => prefetchRoute(loadNadleStreamPage)
 const prefetchCheckers = () => prefetchRoute(loadCheckersPage)
+const prefetchDurak = () => prefetchRoute(loadDurakPage)
 const prefetchEatFirst = () => prefetchRoute(loadEatFirstPage)
 
 const gameCards = computed<AppGameCard[]>(() => [
@@ -113,15 +115,11 @@ const gameCards = computed<AppGameCard[]>(() => [
   {
     id: 'durak',
     title: t('home.gameDurak'),
+    to: durakRoute,
     image: durakCardImage,
     ariaLabel: t('home.openDurak'),
     tone: 'slate',
-    comingSoon: {
-      eyebrow: t('home.comingSoonEyebrow'),
-      title: t('home.gameDurak'),
-      description: t('home.gameDurakComingSoonDesc'),
-      status: t('home.comingSoonStatus'),
-    },
+    prefetch: prefetchDurak,
   },
   {
     id: 'checkers',

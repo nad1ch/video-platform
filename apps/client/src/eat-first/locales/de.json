@@ -170,7 +170,7 @@
     "openMafia": "Mafia öffnen",
     "openNadle": "Nadle öffnen",
     "openNadraw": "Nadraw öffnen",
-    "openDurak": "Durak öffnen",
+    "openDurak": "Zu Durak",
     "openCheckers": "Chesters öffnen",
     "openSpy": "Spy-Rollen öffnen",
     "openHotSeat": "Hot Seat öffnen",
@@ -199,7 +199,98 @@
     "nadle": "Nadle",
     "admin": "Admin",
     "nadrawShow": "Nadraw",
-    "coinHub": "Coin-Hub"
+    "coinHub": "Coin-Hub",
+    "durak": "Durak"
+  },
+  "durak": {
+    "demoNotice": "Demo-Layout — Regeln und Echtzeit-Sync folgen in späteren PRs.",
+    "localPrototype": "Lokaler Prototyp — zwei Plätze auf einem Gerät. Server-Sync später.",
+    "lobby": {
+      "subtitle": "Wähle, wie du spielen willst. Matchmaking und Einladungen sind nur UI-Vorschau.",
+      "playerCountLegend": "Anzahl der Spieler",
+      "modesLegend": "Modus",
+      "multiplayerNote": "Echte Multiplayer-Synchronisation folgt in einem späteren PR."
+    },
+    "modes": {
+      "matchmaking": {
+        "title": "Schnelles Match",
+        "body": "Gegner auf deinem Niveau finden. Hier nur eine Suchsimulation — noch keine echte Warteschlange."
+      },
+      "friend": {
+        "title": "Mit Freund spielen",
+        "body": "Raum-Link teilen. Links hier sind nur Mock — echte Server-Räume kommen später."
+      },
+      "bots": {
+        "title": "Gegen Bots",
+        "body": "Lokaler Tisch mit einfachem Chat-Platz-Bot. Roster-Größe zeigt künftige 2–6 Plätze."
+      }
+    },
+    "searching": {
+      "subtitle": "Suche nach einem Match…",
+      "title": "Suche läuft",
+      "body": "Wir simulieren die Matchmaking-Suche.",
+      "mockHint": "Noch keine echte Queue oder ELO — nur UI-Platzhalter.",
+      "cancel": "Zurück zur Lobby"
+    },
+    "friendRoom": {
+      "subtitle": "Freund einladen",
+      "title": "Mock-Einladungsraum",
+      "body": "Das ist ein Demo-Einladungslink. Bis echte Server-Räume existieren, öffnet der Link weiterhin die normale Lobby.",
+      "inviteLabel": "Einladungslink (Vorschau)",
+      "copy": "Link kopieren",
+      "copied": "Kopiert",
+      "back": "Zurück zur Lobby"
+    },
+    "table": {
+      "backToLobby": "Zurück zur Lobby",
+      "rosterLine": "Roster: {n} Spieler",
+      "localTwoSeatHint": "Regeln nutzen noch den lokalen Zwei-Sitz-Prototyp; weitere Plätze folgen mit Multiplayer-Sync."
+    },
+    "aria": {
+      "opponentRegion": "Gegner",
+      "tableRegion": "Tisch",
+      "yourHandRegion": "Deine Hand"
+    },
+    "deck": "Deck",
+    "trump": "Trumpf",
+    "emptyDefender": "Leerer Verteidigungs-Slot",
+    "roleStreamer": "Streamer",
+    "roleChat": "Twitch-Chat",
+    "cards": "{n} Karten",
+    "yourTurn": "Du bist dran",
+    "chatTurn": "Chat ist dran",
+    "turnLocal": "Du bist am Zug",
+    "turnOpponent": "Chat ist dran — „Chat spielt“ nutzen",
+    "phase": {
+      "idle": "Phase: Pause",
+      "attack": "Phase: Angriff",
+      "defend": "Phase: Verteidigung",
+      "take": "Phase: Nehmen",
+      "discard": "Phase: Abwerfen"
+    },
+    "actions": {
+      "playCard": "Karte spielen",
+      "endAttack": "Angriff beenden",
+      "beat": "Geschlagen",
+      "take": "Nehmen",
+      "newGame": "Neues Spiel",
+      "chatPlay": "Chat spielt"
+    },
+    "errors": {
+      "notAttackPhase": "Nicht in der Angriffsphase.",
+      "notAttackerTurn": "Nur der Angreifer kann jetzt angreifen.",
+      "notDefendPhase": "Nicht in der Verteidigungsphase.",
+      "notDefenderTurn": "Nur der Verteidiger kann jetzt verteidigen.",
+      "cardNotInHand": "Diese Karte ist nicht auf der Hand.",
+      "invalidAttack": "Diese Karte kann nicht angegriffen werden (Rangregel).",
+      "invalidDefend": "Diese Karte schlägt den Angriff nicht.",
+      "tableEmpty": "Der Tisch ist leer.",
+      "nothingToDefend": "Es gibt nichts zu verteidigen.",
+      "incompleteDefense": "Noch unverteidigte Angriffe.",
+      "notChatTurn": "Nicht am Zug: Chat-Platz.",
+      "chatNoLegalAttack": "Chat hat keinen legalen Angriff.",
+      "chatNoLegalDefend": "Chat hat keine legale Verteidigung — „Nehmen“ nutzen."
+    }
   },
   "betaAccess": {
     "routeTitle": "Beta access",
@@ -787,6 +878,7 @@
     "navCallTitle": "Videoanruf",
     "navCall": "Call",
     "navMafia": "Mafia",
+    "navDurak": "Durak",
     "navCoinHub": "Coin-Hub",
     "navNadle": "Nadle",
     "navNadrawShow": "Nadraw",

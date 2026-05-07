@@ -116,6 +116,7 @@ const APP_SHELL_HIDE_HEADER_COIN_ROUTE_NAMES = new Set([
   'app-streamer',
   'nadraw-show',
   'checkers',
+  'durak',
   'eat',
 ])
 const appShellHeaderHidesCoinChip = computed(
