@@ -15,6 +15,7 @@ import { parseProducerSyncPayload } from './signaling/producerSyncPayload'
 import {
   countActiveCameraPublishersAtWire,
   resolveOutgoingVideoPublishTier,
+  shouldUsePublisherSimulcast,
   type VideoPublishTier,
 } from './media/videoQualityPreset'
 import {
@@ -35,6 +36,7 @@ import { resolveParticipantDisplayName } from './utils/participantsMapper'
 import { waitForCondition } from './utils/waitForCondition'
 import { newCallTabPeerId } from './utils/callTabPeerId'
 import { pickOutboundCameraVideoTrack } from './screenShare/outboundCameraTrack'
+import { detectIsMobileRuntime } from './media/runtimeMobileDetection'
 import { useCallScreenShare } from './screenShare/useCallScreenShare'
 
 
@@ -785,22 +787,9 @@ export function useCallEngine(options?: CallEngineOptions) {
 
     const existing = lastRoomState.value?.existingProducers ?? []
     const peerCount = lastRoomState.value?.peers.length ?? 0
-    const videoSimulcast = false
     lastWirePeerCount.value = peerCount
-    lastWireVideoSimulcast.value = videoSimulcast
 
     const mode = readEngineRole(options)
-    if (import.meta.env.DEV) {
-      console.log('[call-qa:wire] wireCallMediaAfterRoomState', {
-        mode,
-        peerCount,
-        videoSimulcast,
-        branch:
-          mode === 'participant'
-            ? 'participant: create send transport, publishLocalMedia'
-            : 'viewer: recv-only, no send transport, no publish',
-      })
-    }
     const activeCam = countActiveCameraPublishersAtWire(
       existing,
       selfPeerId.value,
@@ -813,6 +802,42 @@ export function useCallEngine(options?: CallEngineOptions) {
       allowManualQuality: readAllowManualVideoQuality(options),
       activeCameraPublishersAtWire: activeCam,
     })
+
+    // Phase 1 publisher simulcast: desktop only, in large rooms only, and
+    // never when the publisher is currently screen-sharing at wire time.
+    // We resolve once here so a reconnect mid-call deterministically picks
+    // the same encodings the publisher had before the reconnect (assuming
+    // room conditions are unchanged). Mid-call simulcast on/off churn is
+    // not supported by design — that would require recreating the producer.
+    const isMobilePublisher = detectIsMobileRuntime()
+    const isScreenSharingAtWire = outboundVideoSource.value === 'screen'
+    const videoSimulcast =
+      mode === 'participant' &&
+      shouldUsePublisherSimulcast({
+        enabled: ENABLE_PUBLISHER_SIMULCAST,
+        activeCameraPublishersAtWire: activeCam,
+        isMobile: isMobilePublisher,
+        isScreenSharingAtWire,
+      })
+    lastWireVideoSimulcast.value = videoSimulcast
+
+    if (import.meta.env.DEV) {
+      console.log('[call-qa:wire] wireCallMediaAfterRoomState', {
+        mode,
+        peerCount,
+        activeCam,
+        publishTier: wirePublishTier.value,
+        videoSimulcast,
+        isMobilePublisher,
+        isScreenSharingAtWire,
+        publisherSimulcastEnabledFlag: ENABLE_PUBLISHER_SIMULCAST,
+        simulcastThreshold: SIMULCAST_ACTIVE_CAMERA_THRESHOLD,
+        branch:
+          mode === 'participant'
+            ? 'participant: create send transport, publishLocalMedia'
+            : 'viewer: recv-only, no send transport, no publish',
+      })
+    }
 
     await setupReceivePath(d, roomApi, existing, {
       enableVideoSpatialLayerSignaling: false,
