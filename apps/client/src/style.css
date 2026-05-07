@@ -1,4 +1,7 @@
 :root {
+  /* Leaderboard / chat side columns on game pages (viewports where they sit in the grid). */
+  --sa-game-sidebar-min: 240px;
+
   /* Legacy aliases — map to ui-theme / eat-first HUD tokens (single dark chrome). */
   --text: var(--sa-color-text-body);
   --text-h: var(--sa-color-text-main);

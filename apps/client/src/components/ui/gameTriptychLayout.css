@@ -1,0 +1,42 @@
+/* Wide-screen triptych: side columns absorb extra width; center stays capped.
+   Requires shell horizontal inset (e.g. .app-shell-main__viewport--chrome + --app-shell-content-x).
+   Usage: AppContainer adds class `sa-game-triptych`; main grid adds `sa-game-triptych__grid`. */
+
+:root {
+  /* Wider play column so the square board can use more of typical desktop height. */
+  --sa-game-triptych-center-max: 920px;
+  /* Comfort width for side tracks when space allows; never below --sa-game-sidebar-min (style.css). */
+  --sa-game-triptych-sidebar-min-lg: 278px;
+}
+
+@media (min-width: 1201px) {
+  /* Single high-specificity target: triptych pages merge these classes on AppContainer root. */
+  .app-container.app-container--wide.app-container--flush.nadle-page.sa-game-triptych {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .nadle-page__grid.sa-game-triptych__grid {
+    grid-template-columns:
+      minmax(max(var(--sa-game-sidebar-min), var(--sa-game-triptych-sidebar-min-lg)), 1fr)
+      minmax(0, var(--sa-game-triptych-center-max))
+      minmax(max(var(--sa-game-sidebar-min), var(--sa-game-triptych-sidebar-min-lg)), 1fr);
+    gap: 13px;
+  }
+
+  .nadle-page__grid.sa-game-triptych__grid .nadle-page__stack--leader,
+  .nadle-page__grid.sa-game-triptych__grid .nadle-page__stack--chat {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+@media (min-width: 1201px) and (max-width: 1480px) {
+  .nadle-page__grid.sa-game-triptych__grid {
+    grid-template-columns:
+      minmax(var(--sa-game-sidebar-min), 1fr)
+      minmax(0, var(--sa-game-triptych-center-max))
+      minmax(var(--sa-game-sidebar-min), 1fr);
+  }
+}

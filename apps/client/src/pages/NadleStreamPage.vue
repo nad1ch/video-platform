@@ -1058,15 +1058,15 @@ onBeforeUnmount(() => {
   }
 
   .nadle-page--len5 {
-    --nadle-cell: clamp(48px, min(7.6vmin, 8.45dvh), 74px);
+    --nadle-cell: clamp(48px, min(7.6vmin, 8.45dvh), 112px);
   }
 
   .nadle-page--len6 {
-    --nadle-cell: clamp(48px, min(7.6vmin, 8.45dvh), 74px);
+    --nadle-cell: clamp(48px, min(7.6vmin, 8.45dvh), 112px);
   }
 
   .nadle-page--len7 {
-    --nadle-cell: clamp(48px, min(7.6vmin, 8.45dvh), 74px);
+    --nadle-cell: clamp(48px, min(7.6vmin, 8.45dvh), 112px);
   }
 
   .nadle-page__grid {
@@ -1077,18 +1077,18 @@ onBeforeUnmount(() => {
     height: 100%;
     max-height: 100%;
     grid-template-columns:
-      minmax(278px, 336px)
+      minmax(max(var(--sa-game-sidebar-min), 278px), 336px)
       minmax(0, 1fr)
-      minmax(278px, 336px);
+      minmax(max(var(--sa-game-sidebar-min), 278px), 336px);
     gap: 13px;
   }
 
   @media (max-width: 1480px) {
     .nadle-page__grid {
       grid-template-columns:
-        minmax(220px, 260px)
+        minmax(var(--sa-game-sidebar-min), 260px)
         minmax(0, 1fr)
-        minmax(220px, 260px);
+        minmax(var(--sa-game-sidebar-min), 260px);
     }
   }
 
@@ -1184,7 +1184,7 @@ onBeforeUnmount(() => {
     justify-content: flex-start;
     max-width: 100%;
     overflow: visible;
-    padding: clamp(12px, 3vw, 18px) 0 clamp(12px, 3vw, 16px);
+    padding: clamp(12px, 3vw, 18px) var(--nadle-game-pad-inline, 20px) clamp(12px, 3vw, 16px);
   }
 
   .nadle-page__stack--leader > .nadle-page__leader-stack {
@@ -1268,7 +1268,7 @@ onBeforeUnmount(() => {
 
   .nadle-page__grid {
     display: grid;
-    grid-template-columns: minmax(250px, 300px) minmax(0, 1fr);
+    grid-template-columns: minmax(var(--sa-game-sidebar-min), 300px) minmax(0, 1fr);
     grid-template-rows: minmax(260px, 0.9fr) minmax(260px, 1.1fr);
     grid-template-areas:
       "leader game"
@@ -1315,7 +1315,7 @@ onBeforeUnmount(() => {
     min-height: 0;
     height: 100%;
     justify-content: stretch;
-    padding-inline: 0;
+    padding-inline: var(--nadle-game-pad-inline, 20px);
   }
 
   .nadle-page__grid :deep(.nadle-page__stack--game .nadle-page__guess-board) {
@@ -1343,8 +1343,9 @@ onBeforeUnmount(() => {
   .nadle-page--len6 .nadle-page__game,
   .nadle-page--len7 .nadle-page__game {
     --nadle-cell: min(
-      calc((100cqi - 2 * var(--nadle-game-edge) - (var(--nadle-len-css, 5) - 1) * var(--nadle-gap)) / var(--nadle-len-css, 5)),
-      calc((100cqh - var(--nadle-keyboard-reserve) - 2 * var(--nadle-game-edge) - 5 * var(--nadle-gap)) / 6)
+      calc((100cqi - (var(--nadle-len-css, 5) - 1) * var(--nadle-gap)) / var(--nadle-len-css, 5)),
+      calc((100cqh - var(--nadle-keyboard-reserve) - 5 * var(--nadle-gap)) / 6),
+      min(9rem, 20vmin)
     );
   }
 
@@ -1420,7 +1421,7 @@ onBeforeUnmount(() => {
 
   .nadle-page__game,
   .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
-    padding-inline: 0;
+    padding-inline: var(--nadle-game-pad-inline, 20px);
   }
 
 }
@@ -1475,7 +1476,12 @@ onBeforeUnmount(() => {
 .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
   min-height: 0;
   width: 100%;
-  height: 100%;
+}
+
+@media (min-width: 1024px) {
+  .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
+    height: 100%;
+  }
 }
 
 .nadle-page__grid :deep(.nadle-page__stack) {
@@ -1663,6 +1669,7 @@ onBeforeUnmount(() => {
 }
 
 .nadle-page__game {
+  --nadle-game-pad-inline: 20px;
   --nadle-keyboard-reserve: clamp(170px, 28cqh, 240px);
   display: flex;
   flex-direction: column;
@@ -1678,7 +1685,8 @@ onBeforeUnmount(() => {
   min-width: 0;
   box-sizing: border-box;
   overflow: hidden;
-  padding: 0;
+  padding-block: 0;
+  padding-inline: var(--nadle-game-pad-inline);
   container-type: size;
   container-name: nadle-game;
 }
@@ -1966,31 +1974,17 @@ onBeforeUnmount(() => {
   min-height: 0;
   max-width: 100%;
   max-height: 100%;
-  padding: 0;
+  padding-block: 0;
+  padding-inline: var(--nadle-game-pad-inline, 20px);
   overflow: visible;
   justify-content: center;
-  container-type: inline-size;
+  container-type: size;
 }
 
-@supports (width: 1cqi) {
-  .nadle-page--len5 .nadle-page__game,
-  .nadle-page--len6 .nadle-page__game,
-  .nadle-page--len7 .nadle-page__game {
-    --nadle-cell: min(
-      calc((100cqi - (var(--nadle-len-css, 5) - 1) * var(--nadle-gap)) / var(--nadle-len-css, 5)),
-      clamp(42px, 8vmin, 74px)
-    );
-  }
-}
-
-@supports not (width: 1cqi) {
-  .nadle-page--len5 .nadle-page__game,
-  .nadle-page--len6 .nadle-page__game,
-  .nadle-page--len7 .nadle-page__game {
-    --nadle-cell: min(
-      calc((100% - (var(--nadle-len-css, 5) - 1) * var(--nadle-gap)) / var(--nadle-len-css, 5)),
-      clamp(42px, 8vmin, 74px)
-    );
+@media (max-width: 1023px) {
+  .nadle-page__stack--game > .nadle-page__game,
+  .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
+    container-type: inline-size;
   }
 }
 
@@ -2002,8 +1996,9 @@ onBeforeUnmount(() => {
 
   .nadle-page__stack--game > .nadle-page__game,
   .nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
-    flex: 0 1 auto;
-    height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
     justify-content: center;
   }
 
@@ -2039,7 +2034,7 @@ onBeforeUnmount(() => {
   .nadle-page--len6 .nadle-page__game,
   .nadle-page--len7 .nadle-page__game {
     --nadle-cell: min(
-      calc((100vw - 32px - (var(--nadle-len-css, 5) - 1) * var(--nadle-gap)) / var(--nadle-len-css, 5)),
+      calc((100cqi - (var(--nadle-len-css, 5) - 1) * var(--nadle-gap)) / var(--nadle-len-css, 5)),
       52px
     );
   }

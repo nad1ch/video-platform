@@ -129,7 +129,7 @@ export const router = createRouter({
         {
           path: 'checkers/:roomId',
           name: 'checkers',
-          meta: { appTitle: 'Шашки', footerContext: 'home' },
+          meta: { appTitle: 'Шашки', footerContext: 'home', footer: false },
           component: loadCheckersPage,
         },
         {
