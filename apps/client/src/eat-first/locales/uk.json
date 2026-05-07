@@ -170,7 +170,7 @@
     "openMafia": "Відкрити Мафію",
     "openNadle": "Відкрити Nadle",
     "openNadraw": "Відкрити Nadraw",
-    "openDurak": "Відкрити Дурак",
+    "openDurak": "Перейти до Дурака",
     "openCheckers": "Відкрити Шашки",
     "openSpy": "Відкрити ролі для Шпигуна",
     "openHotSeat": "Відкрити Hot Seat",
@@ -204,6 +204,7 @@
   },
   "durak": {
     "demoNotice": "Демо-макет — правила та синхронізація з’являться в наступних PR.",
+    "localPrototype": "Локальний прототип — два місця на одному пристрої. Синхронізація з сервером пізніше.",
     "deck": "Колода",
     "trump": "Козир",
     "emptyDefender": "Порожній слот захисту",
@@ -213,13 +214,36 @@
     "yourTurn": "Ваш хід",
     "chatTurn": "Хід чату",
     "turnLocal": "Ваш хід",
-    "turnOpponent": "Очікування чату",
+    "turnOpponent": "Хід чату — натисніть «Чат ходить»",
     "phase": {
       "idle": "Фаза: пауза",
       "attack": "Фаза: атака",
       "defend": "Фаза: захист",
       "take": "Фаза: взяття",
       "discard": "Фаза: скидання"
+    },
+    "actions": {
+      "playCard": "Зіграти карту",
+      "endAttack": "Закінчити атаку",
+      "beat": "Бито",
+      "take": "Беру",
+      "newGame": "Нова гра",
+      "chatPlay": "Чат ходить"
+    },
+    "errors": {
+      "notAttackPhase": "Зараз не фаза атаки.",
+      "notAttackerTurn": "Зараз не ваш хід для атаки.",
+      "notDefendPhase": "Зараз не фаза захисту.",
+      "notDefenderTurn": "Зараз не ваш хід для захисту.",
+      "cardNotInHand": "Цієї карти немає в руці.",
+      "invalidAttack": "Цю карту не можна додати до атаки (правило рангу).",
+      "invalidDefend": "Ця карта не б’є атаку.",
+      "tableEmpty": "Стіл порожній.",
+      "nothingToDefend": "Немає що відбивати.",
+      "incompleteDefense": "Ще є непокриті атаки.",
+      "notChatTurn": "Зараз не хід чату.",
+      "chatNoLegalAttack": "У чату немає дозволеної карти для атаки.",
+      "chatNoLegalDefend": "У чату немає дозволеного захисту — натисніть «Беру»."
     }
   },
   "betaAccess": {
@@ -812,6 +836,7 @@
     "navCallTitle": "Відеодзвінок",
     "navCall": "Дзвінок",
     "navMafia": "Мафія",
+    "navDurak": "Дурак",
     "navCoinHub": "Монетний хаб",
     "navNadle": "Nadle",
     "navNadrawShow": "Nadraw",

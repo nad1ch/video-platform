@@ -170,7 +170,7 @@
     "openMafia": "Open Mafia",
     "openNadle": "Open Nadle",
     "openNadraw": "Open Nadraw",
-    "openDurak": "Open Durak",
+    "openDurak": "Go to Durak",
     "openCheckers": "Open Chesters",
     "openSpy": "Open Spy party roles",
     "openHotSeat": "Open Hot Seat",
@@ -204,6 +204,7 @@
   },
   "durak": {
     "demoNotice": "Demo layout — rules and realtime sync will ship in later PRs.",
+    "localPrototype": "Local prototype — two seats on one device. Server sync later.",
     "deck": "Deck",
     "trump": "Trump",
     "emptyDefender": "Empty defender slot",
@@ -213,13 +214,36 @@
     "yourTurn": "Your turn",
     "chatTurn": "Chat's turn",
     "turnLocal": "Your turn to act",
-    "turnOpponent": "Waiting for chat",
+    "turnOpponent": "Chat's turn — use “Chat plays” or wait",
     "phase": {
       "idle": "Phase: idle",
       "attack": "Phase: attack",
       "defend": "Phase: defend",
       "take": "Phase: take",
       "discard": "Phase: discard"
+    },
+    "actions": {
+      "playCard": "Play card",
+      "endAttack": "End attack",
+      "beat": "Beat",
+      "take": "Take",
+      "newGame": "New game",
+      "chatPlay": "Chat plays"
+    },
+    "errors": {
+      "notAttackPhase": "Not in attack phase.",
+      "notAttackerTurn": "Only the attacker can play attack cards now.",
+      "notDefendPhase": "Not in defend phase.",
+      "notDefenderTurn": "Only the defender can play defense cards now.",
+      "cardNotInHand": "That card is not in this hand.",
+      "invalidAttack": "This card cannot be added to the attack (rank rule).",
+      "invalidDefend": "This card cannot beat that attack card.",
+      "tableEmpty": "The table is empty.",
+      "nothingToDefend": "Nothing to defend right now.",
+      "incompleteDefense": "Some attack cards are still undefended.",
+      "notChatTurn": "It is not the chat seat’s turn.",
+      "chatNoLegalAttack": "Chat has no legal attack card.",
+      "chatNoLegalDefend": "Chat has no legal defense — use Take."
     }
   },
   "betaAccess": {
@@ -812,6 +836,7 @@
     "navCallTitle": "Video call",
     "navCall": "Call",
     "navMafia": "Mafia",
+    "navDurak": "Durak",
     "navCoinHub": "Coin Hub",
     "navNadle": "Nadle",
     "navNadrawShow": "Nadraw",

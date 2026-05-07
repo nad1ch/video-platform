@@ -170,7 +170,7 @@
     "openMafia": "Otwórz Mafię",
     "openNadle": "Otwórz Nadle",
     "openNadraw": "Otwórz Nadraw",
-    "openDurak": "Otwórz Durak",
+    "openDurak": "Przejdź do Duraka",
     "openCheckers": "Otwórz Chesters",
     "openSpy": "Otwórz role Szpiega",
     "openHotSeat": "Otwórz Hot Seat",
@@ -204,6 +204,7 @@
   },
   "durak": {
     "demoNotice": "Układ demo — zasady i synchronizacja w kolejnych PR.",
+    "localPrototype": "Lokalny prototyp — dwa miejsca na jednym urządzeniu. Sync z serwerem później.",
     "deck": "Talia",
     "trump": "Atut",
     "emptyDefender": "Pusty slot obrony",
@@ -213,13 +214,36 @@
     "yourTurn": "Twoja kolej",
     "chatTurn": "Kolej czatu",
     "turnLocal": "Twoja kolej",
-    "turnOpponent": "Oczekiwanie na czat",
+    "turnOpponent": "Kolej czatu — użyj „Czat gra”",
     "phase": {
       "idle": "Faza: pauza",
       "attack": "Faza: atak",
       "defend": "Faza: obrona",
       "take": "Faza: zbiór",
       "discard": "Faza: odrzut"
+    },
+    "actions": {
+      "playCard": "Zagraj kartę",
+      "endAttack": "Zakończ atak",
+      "beat": "Zbite",
+      "take": "Biorę",
+      "newGame": "Nowa gra",
+      "chatPlay": "Czat gra"
+    },
+    "errors": {
+      "notAttackPhase": "To nie faza ataku.",
+      "notAttackerTurn": "Teraz tylko atakujący może dodać karty.",
+      "notDefendPhase": "To nie faza obrony.",
+      "notDefenderTurn": "Teraz tylko obrońca może grać.",
+      "cardNotInHand": "Tej karty nie ma na ręce.",
+      "invalidAttack": "Tej karty nie można dodać do ataku (rang).",
+      "invalidDefend": "Ta karta nie bije ataku.",
+      "tableEmpty": "Stół jest pusty.",
+      "nothingToDefend": "Nie ma czego odbijać.",
+      "incompleteDefense": "Są jeszcze nieodbite ataki.",
+      "notChatTurn": "To nie kolej czatu.",
+      "chatNoLegalAttack": "Czat nie ma legalnego ataku.",
+      "chatNoLegalDefend": "Czat nie ma legalnej obrony — użyj „Biorę”."
     }
   },
   "betaAccess": {
@@ -812,6 +836,7 @@
     "navCallTitle": "Połączenie wideo",
     "navCall": "Call",
     "navMafia": "Mafia",
+    "navDurak": "Durak",
     "navCoinHub": "Coin Hub",
     "navNadle": "Nadle",
     "navNadrawShow": "Nadraw",

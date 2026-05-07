@@ -1,25 +1,52 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppContainer from '@/components/ui/AppContainer.vue'
-import { DURAK_DEMO_UI_STATE } from '../core/demoCards'
+import { useDurakLocalGame } from '../orchestrator/useDurakLocalGame'
 import DurakHand from '../components/DurakHand.vue'
 import DurakTable from '../components/DurakTable.vue'
 import DurakPlayerPanel from '../components/DurakPlayerPanel.vue'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
-/** Local-only selection; replace with orchestrator-driven selection later. */
-const selectedCardId = ref<string | null>(null)
+const {
+  snapshot,
+  selectedCardId,
+  streamerHand,
+  chatHand,
+  tableCards,
+  uiPhase,
+  displayTrumpCard,
+  deckCount,
+  isStreamerTurn,
+  isChatTurn,
+  canEndAttack,
+  canBeat,
+  canTake,
+  selectCard,
+  playSelected,
+  endAttack,
+  beatRound,
+  takeRound,
+  newGame,
+  chatPlay,
+} = useDurakLocalGame()
 
-const demo = DURAK_DEMO_UI_STATE
+const canPlaySelected = computed(() => {
+  if (!selectedCardId.value) return false
+  if (!isStreamerTurn.value) return false
+  const ph = snapshot.value.phase
+  return ph === 'attack' || ph === 'defend'
+})
 
-const localTurn = computed(() => demo.turn === 'local')
-const opponentTurn = computed(() => demo.turn === 'opponent')
+const statusError = computed(() => {
+  const key = snapshot.value.lastErrorKey
+  if (!key) return ''
+  return te(key) ? t(key) : key
+})
 
-function onSelectCard(id: string) {
-  selectedCardId.value = selectedCardId.value === id ? null : id
-}
+const turnHint = computed(() => (isStreamerTurn.value ? t('durak.turnLocal') : t('durak.turnOpponent')))
 </script>
 
 <template>
@@ -27,7 +54,7 @@ function onSelectCard(id: string) {
     <AppContainer wide flush class="durak-page__container">
       <header class="durak-page__header">
         <h1 class="durak-page__title">{{ t('routes.durak') }}</h1>
-        <p class="durak-page__subtitle">{{ t('durak.demoNotice') }}</p>
+        <p class="durak-page__subtitle">{{ t('durak.localPrototype') }}</p>
       </header>
 
       <div class="durak-page__arena">
@@ -37,15 +64,15 @@ function onSelectCard(id: string) {
           <section class="durak-page__row durak-page__row--top" aria-label="Opponent">
             <DurakPlayerPanel
               class="durak-page__panel"
-              :name="demo.opponentPlayer.name"
-              :card-count="demo.opponentPlayer.cardCount"
-              :role="demo.opponentPlayer.role"
-              :is-active="opponentTurn"
-              :is-their-turn="opponentTurn"
+              :name="t('durak.roleChat')"
+              :card-count="chatHand.length"
+              role="chat"
+              :is-active="isChatTurn"
+              :is-their-turn="isChatTurn"
             />
             <DurakHand
               class="durak-page__hand durak-page__hand--opponent"
-              :cards="demo.opponentHandPlaceholders"
+              :cards="chatHand"
               hidden
               :size="'md'"
             />
@@ -53,38 +80,57 @@ function onSelectCard(id: string) {
 
           <section class="durak-page__row durak-page__row--center" aria-label="Table">
             <DurakTable
-              :table-cards="demo.tableCards"
-              :trump-card="demo.trumpCard"
-              :deck-count="demo.deckCount"
-              :phase="demo.phase"
+              :table-cards="tableCards"
+              :trump-card="displayTrumpCard"
+              :deck-count="deckCount"
+              :phase="uiPhase"
             />
           </section>
 
           <section class="durak-page__status" role="status">
-            <p class="durak-page__status-text">{{ demo.statusText }}</p>
+            <p class="durak-page__phase-line">{{ t(`durak.phase.${uiPhase}`) }}</p>
             <p class="durak-page__turn-line">
-              <span class="durak-page__turn-dot" :class="{ 'durak-page__turn-dot--on': localTurn }" />
-              {{ localTurn ? t('durak.turnLocal') : t('durak.turnOpponent') }}
+              <span class="durak-page__turn-dot" :class="{ 'durak-page__turn-dot--on': isStreamerTurn }" />
+              {{ turnHint }}
             </p>
+            <p v-if="statusError" class="durak-page__error">{{ statusError }}</p>
+            <div class="durak-page__actions">
+              <AppButton variant="primary" :disabled="!canPlaySelected" @click="playSelected">
+                {{ t('durak.actions.playCard') }}
+              </AppButton>
+              <AppButton :disabled="!canEndAttack" @click="endAttack">
+                {{ t('durak.actions.endAttack') }}
+              </AppButton>
+              <AppButton :disabled="!canBeat" @click="beatRound">
+                {{ t('durak.actions.beat') }}
+              </AppButton>
+              <AppButton :disabled="!canTake" @click="takeRound">
+                {{ t('durak.actions.take') }}
+              </AppButton>
+              <AppButton :disabled="!isChatTurn" @click="chatPlay">
+                {{ t('durak.actions.chatPlay') }}
+              </AppButton>
+              <AppButton variant="ghost" @click="newGame">{{ t('durak.actions.newGame') }}</AppButton>
+            </div>
           </section>
 
           <section class="durak-page__row durak-page__row--bottom" aria-label="Your hand">
             <DurakHand
               class="durak-page__hand durak-page__hand--local"
-              :cards="demo.localHand"
+              :cards="streamerHand"
               :hidden="false"
               selectable
               :selected-card-id="selectedCardId"
               size="lg"
-              @select="onSelectCard"
+              @select="selectCard"
             />
             <DurakPlayerPanel
               class="durak-page__panel"
-              :name="demo.localPlayer.name"
-              :card-count="demo.localPlayer.cardCount"
-              :role="demo.localPlayer.role"
-              :is-active="localTurn"
-              :is-their-turn="localTurn"
+              :name="t('durak.roleStreamer')"
+              :card-count="streamerHand.length"
+              role="streamer"
+              :is-active="isStreamerTurn"
+              :is-their-turn="isStreamerTurn"
             />
           </section>
         </div>
@@ -204,21 +250,38 @@ function onSelectCard(id: string) {
   border: 1px solid rgba(148, 163, 184, 0.15);
 }
 
-.durak-page__status-text {
-  margin: 0 0 0.35rem;
-  font-size: 0.82rem;
-  color: rgba(226, 232, 240, 0.8);
-  line-height: 1.4;
+.durak-page__phase-line {
+  margin: 0 0 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(167, 243, 208, 0.95);
 }
 
 .durak-page__turn-line {
-  margin: 0;
+  margin: 0 0 0.5rem;
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
   font-size: 0.8rem;
   font-weight: 600;
   color: #a7f3d0;
+}
+
+.durak-page__error {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  color: #fecaca;
+  line-height: 1.35;
+}
+
+.durak-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: center;
+  align-items: center;
 }
 
 .durak-page__turn-dot {
