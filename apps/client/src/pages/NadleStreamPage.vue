@@ -1275,7 +1275,8 @@ onBeforeUnmount(() => {
       "chat game";
     align-items: stretch;
     gap: 13px;
-    min-height: calc(100dvh - 180px);
+    /* Header + page chrome only (footer hidden on Nadle shell routes). */
+    min-height: calc(100dvh - 120px);
   }
 
   .nadle-page__grid > .nadle-page__stack {

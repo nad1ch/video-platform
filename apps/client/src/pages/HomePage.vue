@@ -13,9 +13,8 @@ import nadleImage from '@/assets/landing/nadle.png'
 import nadleImageWebp from '@/assets/landing/nadle.webp'
 import nadrawImage from '@/assets/landing/nadraw-phone.png'
 import nadrawImageWebp from '@/assets/landing/nadraw-phone.webp'
-import spyImage from '@/assets/landing/spy.png'
-import spyImageWebp from '@/assets/landing/spy.webp'
-import whoTakeShitImage from '@/assets/landing/who-take-shit.png'
+import checkersMarkImage from '@/assets/landing/checkers-mark.svg'
+import durakCardImage from '@/assets/landing/durak-card.svg'
 import { useAuth } from '@/composables/useAuth'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import { loadCheckersPage, loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
@@ -112,25 +111,24 @@ const gameCards = computed<AppGameCard[]>(() => [
     tone: 'violet',
   },
   {
-    id: 'spy',
-    title: t('home.gameSpy'),
-    image: spyImage,
-    imageWebp: spyImageWebp,
-    ariaLabel: t('home.openSpy'),
+    id: 'durak',
+    title: t('home.gameDurak'),
+    image: durakCardImage,
+    ariaLabel: t('home.openDurak'),
     tone: 'slate',
     comingSoon: {
       eyebrow: t('home.comingSoonEyebrow'),
-      title: t('home.gameSpyComingSoonTitle'),
-      description: t('home.gameSpyComingSoonDesc'),
+      title: t('home.gameDurak'),
+      description: t('home.gameDurakComingSoonDesc'),
       status: t('home.comingSoonStatus'),
     },
   },
   {
     id: 'checkers',
-    title: 'Шашки',
+    title: t('home.gameCheckers'),
     to: checkersRoute,
-    image: whoTakeShitImage,
-    ariaLabel: 'Відкрити Шашки',
+    image: checkersMarkImage,
+    ariaLabel: t('home.openCheckers'),
     tone: 'amber',
     prefetch: prefetchCheckers,
   },

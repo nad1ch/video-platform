@@ -63,6 +63,10 @@ function toneClass(tone: AppGameCard['tone']) {
   return `app-game-card--${tone ?? 'violet'}`
 }
 
+function cardClasses(item: AppGameCard) {
+  return [toneClass(item.tone), `app-game-card--${item.id}`]
+}
+
 function prefetchItem(item: AppGameCard): void {
   item.prefetch?.()
 }
@@ -95,7 +99,7 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
             v-if="item.comingSoon"
             type="button"
             class="app-game-card"
-            :class="toneClass(item.tone)"
+            :class="cardClasses(item)"
             :aria-label="item.ariaLabel"
             @click="openComingSoon(item)"
           >
@@ -114,7 +118,7 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
           <RouterLink
             v-else-if="item.to"
             class="app-game-card"
-            :class="toneClass(item.tone)"
+            :class="cardClasses(item)"
             :to="item.to"
             :aria-label="item.ariaLabel"
             @mouseenter="prefetchItem(item)"
@@ -149,7 +153,10 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
 
           <section
             class="app-coming-soon__dialog"
-            :class="`app-coming-soon__dialog--${activeComingSoonItem.comingSoon.variant ?? 'game'}`"
+            :class="[
+              `app-coming-soon__dialog--${activeComingSoonItem.comingSoon.variant ?? 'game'}`,
+              `app-coming-soon__dialog--${activeComingSoonItem.id}`,
+            ]"
             role="dialog"
             aria-modal="true"
             :aria-labelledby="modalId(activeComingSoonItem, 'title')"
@@ -256,10 +263,10 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
   margin: 0 0 1rem;
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
-  font-size: 1.28rem;
+  font-size: clamp(1.12rem, 1.62vw, 1.46rem);
   font-weight: 400;
   font-variation-settings: 'YEAR' 1979;
-  line-height: 1;
+  line-height: 1.16;
   text-align: center;
   text-transform: uppercase;
   text-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
@@ -302,6 +309,7 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
   color: #fff;
   cursor: pointer;
   font: inherit;
+  text-align: start;
   text-decoration: none;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
@@ -633,6 +641,22 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
   filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.28));
 }
 
+.app-coming-soon__dialog--durak .app-coming-soon__description {
+  font-family: var(--app-home-ui, "Marmelad", var(--sa-font-main, system-ui), sans-serif);
+  font-weight: 400;
+}
+
+.app-coming-soon__dialog--durak .app-coming-soon__picture {
+  width: clamp(5rem, 8.6vw, 7.05rem);
+  height: clamp(6.55rem, 11.25vw, 9.25rem);
+}
+
+.app-coming-soon__dialog--durak .app-coming-soon__image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .app-coming-soon__economy-slot {
   --economy-modal-u: calc(min(31rem, 48vw) / 429.19);
   position: relative;
@@ -783,7 +807,7 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
 
   .app-games__title {
     margin-bottom: 0.85rem;
-    font-size: 1.05rem;
+    font-size: clamp(1.12rem, 1.62vw, 1.46rem);
   }
 
   .app-games__grid {
@@ -875,5 +899,41 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
     justify-self: start;
     margin-top: 0.75rem;
   }
+}
+
+.app-game-card--durak .app-game-card__visual {
+  justify-self: end;
+  width: clamp(2.75rem, 3.7vw, 3.4rem);
+  height: clamp(3.6rem, 4.85vw, 4.35rem);
+  margin-right: clamp(0.45rem, 0.8vw, 0.8rem);
+}
+
+.app-game-card--durak .app-game-card__picture {
+  width: 100%;
+  height: 100%;
+  transform: none;
+}
+
+.app-game-card--durak .app-game-card__image {
+  object-fit: fill;
+}
+
+.app-game-card--checkers .app-game-card__title {
+  max-width: 5.55rem;
+  line-height: 0.95;
+  white-space: pre-line;
+}
+
+.app-game-card--checkers .app-game-card__visual {
+  justify-self: end;
+  width: clamp(3.95rem, 5.2vw, 4.9rem);
+  height: clamp(3.95rem, 5.2vw, 4.9rem);
+  margin-right: clamp(0.12rem, 0.45vw, 0.35rem);
+}
+
+.app-game-card--checkers .app-game-card__picture {
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1) rotate(135deg);
 }
 </style>

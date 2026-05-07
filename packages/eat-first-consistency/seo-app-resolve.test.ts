@@ -38,7 +38,7 @@ describe('seoAppResolve', () => {
       meta: { appTitleKey: 'routes.streamAssist' },
       params: {},
     } as unknown as RouteLocationNormalizedLoaded
-    expect(resolveAppSeoTitle(route, t)).toBe('StreamAssist')
+    expect(resolveAppSeoTitle(route, t)).toBe('Stream Assist')
   })
 
   it('resolveAppSeoTitle: nadle includes streamer', () => {
