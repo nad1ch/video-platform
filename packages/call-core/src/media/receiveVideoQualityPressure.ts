@@ -136,7 +136,32 @@ export function evaluateInboundVideoStatsForPressure(
   return { verdict: 'unknown', packetsLostSum, debug: { dropRatio, lossDelta } }
 }
 
+/**
+ * Phase 1 hysteresis timing.
+ *
+ *   - Poll every `RECEIVE_PRESSURE_POLL_MS` (2.2 s).
+ *
+ *   - Downgrade fires after `pressureBadStreakToShift` consecutive bad polls.
+ *     The streak count is per-receiver-device-profile in
+ *     {@link ReceiveDeviceProfile.pressureBadStreakToShift}:
+ *       strong      → 4 polls ≈ 8.8 s
+ *       default     → 3 polls ≈ 6.6 s
+ *       constrained → 2 polls ≈ 4.4 s   (faster relief on weak desktop)
+ *       mobile      → 2 polls ≈ 4.4 s   (faster relief on phone)
+ *     This sits inside the user-spec range of "around 6–9 s sustained bad"
+ *     for desktop classes; weak/mobile classes intentionally drop faster
+ *     because the cost of holding a too-high baseline is higher there.
+ *
+ *   - Upgrade fires after `RECEIVE_PRESSURE_GOOD_STREAK_UP` consecutive good
+ *     polls AND `RECEIVE_PRESSURE_UPGRADE_COOLDOWN_MS` since the last
+ *     downgrade. With the values below, minimum upgrade time is
+ *     `7 × 2.2 s ≈ 15.4 s` (the streak is the binding constraint when it
+ *     is larger than the cooldown). This lands inside the user-spec range
+ *     of "around 15–30 s stable/good" and is intentionally slower than
+ *     downgrade so the receiver does not flap on a 5–10 s pressure dip
+ *     followed by recovery.
+ */
 export const RECEIVE_PRESSURE_POLL_MS = 2_200
 export const RECEIVE_PRESSURE_BAD_STREAK_DOWN = 3
-export const RECEIVE_PRESSURE_GOOD_STREAK_UP = 4
+export const RECEIVE_PRESSURE_GOOD_STREAK_UP = 7
 export const RECEIVE_PRESSURE_UPGRADE_COOLDOWN_MS = 4_500

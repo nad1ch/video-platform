@@ -1,4 +1,5 @@
 import { onUnmounted, ref, shallowRef } from 'vue'
+import { detectIsMobileRuntime } from './runtimeMobileDetection'
 import { applyWebcamContentHint, DEFAULT_CALL_AUDIO_CONSTRAINTS } from './defaultMediaConstraints'
 import {
   buildCallAudioDevMicSnapshot,
@@ -16,24 +17,8 @@ import {
 } from './preferredVideoInputDevice'
 import { getCallVideoConstraintsForRuntime } from './videoQualityPreset'
 
-/**
- * Cheap, runtime-only mobile sniff. Used solely to bias `getUserMedia`
- * resolution/fps constraints toward a lighter preset on phones; never used as
- * authority for any feature flag. Prefers `navigator.userAgentData.mobile` (UA
- * Client Hints) and falls back to a UA substring match for browsers that have
- * not shipped UA-CH (Safari iOS, older Firefox).
- */
-function detectMobileForLocalCapture(): boolean {
-  if (typeof navigator === 'undefined') {
-    return false
-  }
-  const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData
-  if (uaData && typeof uaData.mobile === 'boolean') {
-    return uaData.mobile
-  }
-  const ua = typeof navigator.userAgent === 'string' ? navigator.userAgent : ''
-  return /Android|iPhone|iPad|iPod|Mobile|Opera Mini|IEMobile/i.test(ua)
-}
+/** Re-export local alias to keep diff small at call sites in this file. */
+const detectMobileForLocalCapture = detectIsMobileRuntime
 
 export type UseLocalMediaOptions = {
   

@@ -13,12 +13,22 @@ import {
   countActiveCameraPublishersAtWire,
   getCallVideoConstraints,
   getCallVideoConstraintsForRuntime,
+  getDesktopSimulcastEncodingsForLargeRoom,
+  getOutgoingVideoEncodings,
   getSingleLayerEncodingsForPreset,
   getSimulcastEncodingsForPreset,
   isVideoQualityPreset,
   resolveOutgoingVideoPublishTier,
+  shouldUsePublisherSimulcast,
+  SIMULCAST_LAYER_HIGH_MAX_BITRATE_BPS,
+  SIMULCAST_LAYER_HIGH_SCALE_DOWN_BY,
+  SIMULCAST_LAYER_LOW_MAX_BITRATE_BPS,
+  SIMULCAST_LAYER_LOW_SCALE_DOWN_BY,
+  SIMULCAST_LAYER_MEDIUM_MAX_BITRATE_BPS,
+  SIMULCAST_LAYER_MEDIUM_SCALE_DOWN_BY,
   type VideoPublishTier,
 } from '../call-core/src/media/videoQualityPreset'
+import { SIMULCAST_ACTIVE_CAMERA_THRESHOLD } from '../call-core/src/media/adaptiveSimulcastFeatureFlags'
 
 describe('fixed call video quality', () => {
   it('uses one 480p layer at 20 fps and 600 kbps for the large-room compatibility API', () => {
@@ -220,5 +230,168 @@ describe('resolveOutgoingVideoPublishTier', () => {
         activeCameraPublishersAtWire: 50,
       }),
     ).toBe('auto_large_room')
+  })
+})
+
+describe('getDesktopSimulcastEncodingsForLargeRoom', () => {
+  it('emits 3 layers in q,h,f rid order at 20 fps', () => {
+    const layers = getDesktopSimulcastEncodingsForLargeRoom()
+    expect(layers).toHaveLength(3)
+    expect(layers[0].rid).toBe('q')
+    expect(layers[1].rid).toBe('h')
+    expect(layers[2].rid).toBe('f')
+    for (const l of layers) {
+      expect(l.maxFramerate).toBe(CALL_VIDEO_MAX_FRAMERATE)
+    }
+  })
+
+  it('matches the documented scaleResolutionDownBy mapping', () => {
+    const [low, medium, high] = getDesktopSimulcastEncodingsForLargeRoom()
+    expect(low.scaleResolutionDownBy).toBe(SIMULCAST_LAYER_LOW_SCALE_DOWN_BY)
+    expect(medium.scaleResolutionDownBy).toBe(SIMULCAST_LAYER_MEDIUM_SCALE_DOWN_BY)
+    expect(high.scaleResolutionDownBy).toBe(SIMULCAST_LAYER_HIGH_SCALE_DOWN_BY)
+    // High = no downscale (854×480), medium ~640×360 (854/1.3334), low ~427×240 (854/2).
+    // Using a strict equality on scaleResolutionDownBy guards against accidental
+    // changes that would fall back to libwebrtc defaults (typically 4/2/1).
+    expect(low.scaleResolutionDownBy).toBe(2)
+    expect(medium.scaleResolutionDownBy).toBeCloseTo(1.3334, 4)
+    expect(high.scaleResolutionDownBy).toBe(1)
+  })
+
+  it('keeps the high rung at the historical single-encoding bitrate so strong receivers see no regression', () => {
+    const [, , high] = getDesktopSimulcastEncodingsForLargeRoom()
+    expect(high.maxBitrate).toBe(SIMULCAST_LAYER_HIGH_MAX_BITRATE_BPS)
+    expect(high.maxBitrate).toBe(CALL_VIDEO_TARGET_BITRATE_BPS)
+  })
+
+  it('keeps low/medium bitrates inside ranges that produce visually acceptable VP8 at 20 fps', () => {
+    const [low, medium] = getDesktopSimulcastEncodingsForLargeRoom()
+    // Low rung (~240p / 20 fps): keep above 250 kbps so VP8 has bits for moving content.
+    expect(low.maxBitrate).toBe(SIMULCAST_LAYER_LOW_MAX_BITRATE_BPS)
+    expect(low.maxBitrate).toBeGreaterThanOrEqual(250_000)
+    expect(low.maxBitrate).toBeLessThanOrEqual(400_000)
+    // Medium (~360p / 20 fps): close to the legacy single-encoding feel.
+    expect(medium.maxBitrate).toBe(SIMULCAST_LAYER_MEDIUM_MAX_BITRATE_BPS)
+    expect(medium.maxBitrate).toBeGreaterThanOrEqual(450_000)
+    expect(medium.maxBitrate).toBeLessThanOrEqual(800_000)
+  })
+
+  it('returns a fresh array each call (no shared mutation)', () => {
+    const a = getDesktopSimulcastEncodingsForLargeRoom()
+    const b = getDesktopSimulcastEncodingsForLargeRoom()
+    expect(a).not.toBe(b)
+  })
+})
+
+describe('shouldUsePublisherSimulcast', () => {
+  it('disables when feature flag is off', () => {
+    expect(
+      shouldUsePublisherSimulcast({
+        enabled: false,
+        activeCameraPublishersAtWire: 12,
+        isMobile: false,
+        isScreenSharingAtWire: false,
+      }),
+    ).toBe(false)
+  })
+
+  it('disables in small rooms (≤ threshold)', () => {
+    for (let n = 0; n <= SIMULCAST_ACTIVE_CAMERA_THRESHOLD; n += 1) {
+      expect(
+        shouldUsePublisherSimulcast({
+          enabled: true,
+          activeCameraPublishersAtWire: n,
+          isMobile: false,
+          isScreenSharingAtWire: false,
+        }),
+      ).toBe(false)
+    }
+  })
+
+  it('enables for desktop publisher above threshold', () => {
+    expect(
+      shouldUsePublisherSimulcast({
+        enabled: true,
+        activeCameraPublishersAtWire: SIMULCAST_ACTIVE_CAMERA_THRESHOLD + 1,
+        isMobile: false,
+        isScreenSharingAtWire: false,
+      }),
+    ).toBe(true)
+    expect(
+      shouldUsePublisherSimulcast({
+        enabled: true,
+        activeCameraPublishersAtWire: 12,
+        isMobile: false,
+        isScreenSharingAtWire: false,
+      }),
+    ).toBe(true)
+  })
+
+  it('disables for mobile publishers in any room size', () => {
+    expect(
+      shouldUsePublisherSimulcast({
+        enabled: true,
+        activeCameraPublishersAtWire: 12,
+        isMobile: true,
+        isScreenSharingAtWire: false,
+      }),
+    ).toBe(false)
+  })
+
+  it('disables when publisher is screen-sharing at wire (preserves screen-share quality)', () => {
+    expect(
+      shouldUsePublisherSimulcast({
+        enabled: true,
+        activeCameraPublishersAtWire: 12,
+        isMobile: false,
+        isScreenSharingAtWire: true,
+      }),
+    ).toBe(false)
+  })
+
+  it('threshold is strictly greater-than (boundary lives in small-room path)', () => {
+    expect(
+      shouldUsePublisherSimulcast({
+        enabled: true,
+        activeCameraPublishersAtWire: SIMULCAST_ACTIVE_CAMERA_THRESHOLD,
+        isMobile: false,
+        isScreenSharingAtWire: false,
+      }),
+    ).toBe(false)
+    expect(
+      shouldUsePublisherSimulcast({
+        enabled: true,
+        activeCameraPublishersAtWire: SIMULCAST_ACTIVE_CAMERA_THRESHOLD + 1,
+        isMobile: false,
+        isScreenSharingAtWire: false,
+      }),
+    ).toBe(true)
+  })
+})
+
+describe('getOutgoingVideoEncodings', () => {
+  it('returns single encoding when simulcast is off (any tier)', () => {
+    const tiers: VideoPublishTier[] = ['auto_large_room', 'auto_small_room', 'economy', 'balanced', 'hd']
+    for (const t of tiers) {
+      const enc = getOutgoingVideoEncodings(t, false)
+      expect(enc).toHaveLength(1)
+      expect(enc[0].rid).toBeUndefined()
+    }
+  })
+
+  it('returns 3-layer simulcast when simulcast is on (large-room only path)', () => {
+    const enc = getOutgoingVideoEncodings('auto_large_room', true)
+    expect(enc).toHaveLength(3)
+    expect(enc.map((e) => e.rid)).toEqual(['q', 'h', 'f'])
+  })
+
+  it('uses the same simulcast set regardless of tier value when simulcast is on', () => {
+    // Phase 1 enables simulcast only in large rooms, but the encodings shape
+    // is uniform — the tier currently does not affect simulcast bitrate caps.
+    const a = getOutgoingVideoEncodings('auto_large_room', true)
+    const b = getOutgoingVideoEncodings('balanced', true)
+    expect(a.map((e) => ({ rid: e.rid, b: e.maxBitrate, s: e.scaleResolutionDownBy }))).toEqual(
+      b.map((e) => ({ rid: e.rid, b: e.maxBitrate, s: e.scaleResolutionDownBy })),
+    )
   })
 })

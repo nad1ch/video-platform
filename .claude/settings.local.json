@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(awk 'NR>=800 && NR<=900' \"apps/client/src/components/call/ParticipantTile.vue\")"
+      "Bash(awk 'NR>=800 && NR<=900' \"apps/client/src/components/call/ParticipantTile.vue\")",
+      "Bash(git status *)",
+      "Bash(git checkout *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(npx vue-tsc *)",
+      "Bash(git log *)"
     ]
   }
 }
