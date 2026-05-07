@@ -1357,12 +1357,23 @@ export function useRemoteMedia() {
         return
       }
       const { peerId, producerId, source } = data.payload
+      const prevSource = remoteVideoSourceByPeerId.value.get(peerId)
       applyPeerVideoSource(peerId, source)
       const info = producerInfoById.get(producerId)
       if (info?.kind === 'video') {
         producerInfoById.set(producerId, { ...info, videoSource: source })
       }
       bumpRemotePeerPlayRev(peerId)
+      // Phase 1 screen-share safety: camera ↔ screen transitions flip this
+      // peer's layer policy (camera = receiver baseline; screen = pinned
+      // high). Schedule a debounced re-flush so the next setPreferredLayers
+      // realigns the forwarded spatial layer with the new source. Server
+      // already PLIs on source change; this just keeps the rung correct.
+      // Skip when the source did not actually change to avoid redundant
+      // scheduler work on echoed sync messages.
+      if (prevSource !== source) {
+        schedulePreferredLayersUpdate()
+      }
     })
     unsubscribePeerOutboundPaused?.()
     unsubscribePeerOutboundPaused = room.addMessageListener((data) => {

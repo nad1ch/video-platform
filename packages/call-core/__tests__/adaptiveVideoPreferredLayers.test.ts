@@ -223,6 +223,58 @@ describe('assignAdaptivePreferredLayersByPeerId — Phase 1 baseline + screen-sh
     expect(m.get('cam-a')).toEqual({ spatialLayer: 1, temporalLayer: 2 })
   })
 
+  it('flips a peer to high on camera→screen transition and back on screen→camera (single-flush path)', () => {
+    // Models the producer-video-source-changed signaling: receiver builds a
+    // fresh `screenShareSourceByPeerId` snapshot and re-runs the assigner.
+    // The function must reflect the transition without persisting any prior
+    // state — every flush is fully derived from the inputs.
+    const ids = ['cam-a', 'switcher', 'cam-b']
+    const baseOpts = {
+      videoPeerIds: ids,
+      baselineLayer: 'low' as const,
+      activeSpeakerPeerId: null,
+      pinnedPeerId: null,
+      peerVisibility: new Map<string, boolean>(),
+    }
+
+    // T0: 'switcher' on camera → all three at low baseline.
+    const t0 = assignAdaptivePreferredLayersByPeerId({
+      ...baseOpts,
+      screenShareSourceByPeerId: new Map([
+        ['cam-a', 'camera'],
+        ['switcher', 'camera'],
+        ['cam-b', 'camera'],
+      ]),
+    })
+    expect(t0.get('switcher')).toEqual({ spatialLayer: 0, temporalLayer: 2 })
+
+    // T1: 'switcher' starts screen share → that peer pins to high; others unchanged.
+    const t1 = assignAdaptivePreferredLayersByPeerId({
+      ...baseOpts,
+      screenShareSourceByPeerId: new Map([
+        ['cam-a', 'camera'],
+        ['switcher', 'screen'],
+        ['cam-b', 'camera'],
+      ]),
+    })
+    expect(t1.get('switcher')).toEqual({ spatialLayer: 2, temporalLayer: 2 })
+    expect(t1.get('cam-a')).toEqual({ spatialLayer: 0, temporalLayer: 2 })
+    expect(t1.get('cam-b')).toEqual({ spatialLayer: 0, temporalLayer: 2 })
+
+    // T2: 'switcher' stops screen share → reverts to baseline; siblings unchanged.
+    const t2 = assignAdaptivePreferredLayersByPeerId({
+      ...baseOpts,
+      screenShareSourceByPeerId: new Map([
+        ['cam-a', 'camera'],
+        ['switcher', 'camera'],
+        ['cam-b', 'camera'],
+      ]),
+    })
+    expect(t2.get('switcher')).toEqual({ spatialLayer: 0, temporalLayer: 2 })
+    expect(t2.get('cam-a')).toEqual({ spatialLayer: 0, temporalLayer: 2 })
+    expect(t2.get('cam-b')).toEqual({ spatialLayer: 0, temporalLayer: 2 })
+  })
+
   it('does not flicker on active-speaker change (Phase 1 invariant)', () => {
     const ids = ['a', 'b', 'c']
     const opts = {
