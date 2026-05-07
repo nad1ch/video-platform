@@ -114,6 +114,18 @@ export {
   SIMULCAST_ACTIVE_CAMERA_THRESHOLD,
 } from './media/adaptiveSimulcastFeatureFlags'
 export {
+  layerAtOrBelow,
+  profileFloorCeiling,
+  resolveInitialBaselineLayer,
+  resolveReceiverBaselineLayer,
+  simulcastLayersForBaseline,
+  stepDownLayer,
+  stepUpLayer,
+  type ReceiverBaselineLayer,
+  type ReceiverRole,
+  type ResolveReceiverBaselineLayerInput,
+} from './media/receiverBaselineLayerPolicy'
+export {
   assignAdaptivePreferredLayersByPeerId,
   MAX_HIGH_STREAMS,
   MAX_MEDIUM_STREAMS,

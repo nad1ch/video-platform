@@ -312,6 +312,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     receiveDeviceProfile,
     lastPreferredLayerTargetsByPeerId,
     playbackRenderFpsPressureByPeerId,
+    receiverBaselineLayer,
   } = useRemoteMedia()
 
   const remoteListenPrefs = shallowRef(new Map<string, RemoteListenEntry>())
@@ -840,7 +841,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     }
 
     await setupReceivePath(d, roomApi, existing, {
-      enableVideoSpatialLayerSignaling: false,
+      role: mode === 'viewer' ? 'viewer' : 'participant',
     })
 
     unsubActiveSpeaker?.()
@@ -1161,6 +1162,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     receiveAllowRenderSuppression: receiveDeviceProfile.value.allowRenderSuppression,
     receiveMaxActiveRemoteVideos: receiveDeviceProfile.value.maxActiveRemoteVideos,
     receivePressureBadStreakToShift: receiveDeviceProfile.value.pressureBadStreakToShift,
+    receiverBaselineLayer: receiverBaselineLayer.value,
     receivePreferredLayersByPeerId: lastPreferredLayerTargetsByPeerId.value,
   }))
 
@@ -1582,6 +1584,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     
     serverActiveSpeakerPeerId,
     receiveDeviceProfile,
+    receiverBaselineLayer,
     playbackRenderFpsPressureByPeerId,
     refreshInboundVideoDebugStats: collectInboundVideoDebugStats,
     

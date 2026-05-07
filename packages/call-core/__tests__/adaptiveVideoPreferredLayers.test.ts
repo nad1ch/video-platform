@@ -147,3 +147,105 @@ describe('assignAdaptivePreferredLayersByPeerId', () => {
     expect(m.get(off)).toEqual({ spatialLayer: 0, temporalLayer: 0 })
   })
 })
+
+describe('assignAdaptivePreferredLayersByPeerId — Phase 1 baseline + screen-share override', () => {
+  it('returns baseline = high (sl=2, tl=2) for all webcam peers when baselineLayer is high', () => {
+    const m = assignAdaptivePreferredLayersByPeerId({
+      videoPeerIds: ['a', 'b', 'c'],
+      baselineLayer: 'high',
+      screenShareSourceByPeerId: new Map([
+        ['a', 'camera'],
+        ['b', 'camera'],
+        ['c', 'camera'],
+      ]),
+      activeSpeakerPeerId: null,
+      pinnedPeerId: null,
+      peerVisibility: new Map(),
+    })
+    expect(m.get('a')).toEqual({ spatialLayer: 2, temporalLayer: 2 })
+    expect(m.get('b')).toEqual({ spatialLayer: 2, temporalLayer: 2 })
+    expect(m.get('c')).toEqual({ spatialLayer: 2, temporalLayer: 2 })
+  })
+
+  it('returns baseline = medium (sl=1, tl=2) for all webcam peers when baselineLayer is medium', () => {
+    const m = assignAdaptivePreferredLayersByPeerId({
+      videoPeerIds: ['a', 'b'],
+      baselineLayer: 'medium',
+      screenShareSourceByPeerId: new Map(),
+      activeSpeakerPeerId: null,
+      pinnedPeerId: null,
+      peerVisibility: new Map(),
+    })
+    expect(m.get('a')).toEqual({ spatialLayer: 1, temporalLayer: 2 })
+    expect(m.get('b')).toEqual({ spatialLayer: 1, temporalLayer: 2 })
+  })
+
+  it('returns baseline = low (sl=0, tl=2) for all webcam peers when baselineLayer is low', () => {
+    const m = assignAdaptivePreferredLayersByPeerId({
+      videoPeerIds: ['a', 'b'],
+      baselineLayer: 'low',
+      screenShareSourceByPeerId: new Map(),
+      activeSpeakerPeerId: null,
+      pinnedPeerId: null,
+      peerVisibility: new Map(),
+    })
+    expect(m.get('a')).toEqual({ spatialLayer: 0, temporalLayer: 2 })
+    expect(m.get('b')).toEqual({ spatialLayer: 0, temporalLayer: 2 })
+  })
+
+  it('pins screen-share peer to high regardless of baseline', () => {
+    const m = assignAdaptivePreferredLayersByPeerId({
+      videoPeerIds: ['cam-a', 'screener', 'cam-b'],
+      baselineLayer: 'low',
+      screenShareSourceByPeerId: new Map([
+        ['cam-a', 'camera'],
+        ['screener', 'screen'],
+        ['cam-b', 'camera'],
+      ]),
+      activeSpeakerPeerId: null,
+      pinnedPeerId: null,
+      peerVisibility: new Map(),
+    })
+    expect(m.get('cam-a')).toEqual({ spatialLayer: 0, temporalLayer: 2 })
+    expect(m.get('cam-b')).toEqual({ spatialLayer: 0, temporalLayer: 2 })
+    expect(m.get('screener')).toEqual({ spatialLayer: 2, temporalLayer: 2 })
+  })
+
+  it('treats unknown source (peer not in screenShareSourceByPeerId map) as camera', () => {
+    const m = assignAdaptivePreferredLayersByPeerId({
+      videoPeerIds: ['cam-a'],
+      baselineLayer: 'medium',
+      screenShareSourceByPeerId: new Map(),
+      activeSpeakerPeerId: null,
+      pinnedPeerId: null,
+      peerVisibility: new Map(),
+    })
+    expect(m.get('cam-a')).toEqual({ spatialLayer: 1, temporalLayer: 2 })
+  })
+
+  it('does not flicker on active-speaker change (Phase 1 invariant)', () => {
+    const ids = ['a', 'b', 'c']
+    const opts = {
+      videoPeerIds: ids,
+      baselineLayer: 'medium' as const,
+      screenShareSourceByPeerId: new Map<string, 'camera' | 'screen'>([
+        ['a', 'camera'],
+        ['b', 'camera'],
+        ['c', 'camera'],
+      ]),
+      pinnedPeerId: null,
+      peerVisibility: new Map<string, boolean>([
+        ['a', true],
+        ['b', true],
+        ['c', true],
+      ]),
+    }
+    const r1 = assignAdaptivePreferredLayersByPeerId({ ...opts, activeSpeakerPeerId: 'a' })
+    const r2 = assignAdaptivePreferredLayersByPeerId({ ...opts, activeSpeakerPeerId: 'b' })
+    const r3 = assignAdaptivePreferredLayersByPeerId({ ...opts, activeSpeakerPeerId: 'c' })
+    expect(r1.get('a')).toEqual(r2.get('a'))
+    expect(r2.get('a')).toEqual(r3.get('a'))
+    expect(r1.get('b')).toEqual(r2.get('b'))
+    expect(r1.get('c')).toEqual(r2.get('c'))
+  })
+})

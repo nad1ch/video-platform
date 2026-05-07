@@ -40,6 +40,14 @@ import {
   type VideoInboundStatsRow,
 } from './receiveVideoQualityPressure'
 import {
+  resolveReceiverBaselineLayer,
+  type ReceiverBaselineLayer,
+  type ReceiverRole,
+} from './receiverBaselineLayerPolicy'
+import {
+  ENABLE_RECEIVER_ADAPTIVE_LAYERS,
+} from './adaptiveSimulcastFeatureFlags'
+import {
   advancePlaybackRenderFpsPressureByPeer,
   type FpsRenderPressure,
 } from './videoFpsPressure'
@@ -191,9 +199,18 @@ export type RemotePeerStream = { peerId: string; stream: MediaStream }
 
 export type SetupReceivePathOptions = {
   /**
-   * Back-compat option. Fixed-quality calls keep spatial-layer signaling disabled.
+   * Back-compat: when omitted, the value is taken from `ENABLE_RECEIVER_ADAPTIVE_LAYERS`
+   * (Phase 1 default). Pass an explicit boolean to force on/off (tests, force-low admin
+   * override, etc.).
    */
   enableVideoSpatialLayerSignaling?: boolean
+
+  /**
+   * Distinguishes participant from viewer (OBS/streamview). Viewers get a
+   * higher receiver-baseline floor so a transient pressure spike does not
+   * turn a broadcast into 240p footage. See receiverBaselineLayerPolicy.
+   */
+  role?: ReceiverRole
 }
 
 export type InboundVideoDebugRow = {
@@ -349,8 +366,19 @@ export function useRemoteMedia() {
   let signalingRoom: SendTransportRoomApi | null = null
   let preferredLayersDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let speakerLingerTimer: ReturnType<typeof setTimeout> | null = null
-  /** Fixed-quality calls never send spatial-layer WS traffic. */
+  /**
+   * When true, `flushPreferredLayersToServer` actually sends per-consumer
+   * `set-consumer-preferred-layers` over WS. Off-by-default and flipped on
+   * by `setupReceivePath` based on `ENABLE_RECEIVER_ADAPTIVE_LAYERS` (or an
+   * explicit override in `SetupReceivePathOptions`). Toggling this off
+   * cleanly reverts to the historical "no preferred layers signaled"
+   * behavior.
+   */
   const videoSpatialLayerSignalingEnabled = shallowRef(false)
+  /** Phase 1 receiver baseline (single layer for all normal webcam consumers). */
+  const receiverBaselineLayer = shallowRef<ReceiverBaselineLayer>('high')
+  /** `'participant'` for normal users; `'viewer'` for OBS / streamview routes. */
+  let receiverRole: ReceiverRole = 'participant'
   let unsubscribeNewProducer: (() => void) | null = null
   let unsubscribeProducerSync: (() => void) | null = null
   let unsubscribeProducerVideoSource: (() => void) | null = null
@@ -630,8 +658,24 @@ export function useRemoteMedia() {
     }
 
     const prof = receiveDeviceProfile.value
+    const videoPeerIds = getVideoPeerIds()
+
+    // Phase 1: receiver picks ONE baseline layer for all normal webcam peers
+    // based on (profile, role, room cams, sustained pressure). The baseline
+    // shifts only on sustained pressure thanks to hysteresis upstream in
+    // `tickReceiveQualityPressure` — no per-tile, no active-speaker churn.
+    const baseline = resolveReceiverBaselineLayer({
+      profile: prof.profile,
+      role: receiverRole,
+      activeCameraPublishers: videoPeerIds.length,
+      pressure: receiveQualityPressure.value,
+    })
+    receiverBaselineLayer.value = baseline
+
     const baseByPeer = assignAdaptivePreferredLayersByPeerId({
-      videoPeerIds: getVideoPeerIds(),
+      videoPeerIds,
+      baselineLayer: baseline,
+      screenShareSourceByPeerId: remoteVideoSourceByPeerId.value,
       activeSpeakerPeerId: activeSpeakerPeerId.value,
       uiActiveSpeakerPeerId: uiActiveSpeakerPeerIdForPreferredLayers.value,
       recentSpeakerPeerIds: getRecentSpeakerPeerIds(),
@@ -642,6 +686,8 @@ export function useRemoteMedia() {
         maxMediumStreams: prof.maxMediumStreams,
       },
     })
+    // Identity for Phase 1 — the baseline already accounts for pressure.
+    // Kept in the call chain for forward compat (custom tests / Phase 2).
     const byPeer = applyReceiveQualityPressureToLayers(baseByPeer, receiveQualityPressure.value, {
       activeSpeakerPeerId: activeSpeakerPeerId.value,
       uiActiveSpeakerPeerId: uiActiveSpeakerPeerIdForPreferredLayers.value,
@@ -705,6 +751,9 @@ export function useRemoteMedia() {
     if (import.meta.env.DEV) {
       console.log('[call-qa:layers] flushPreferredLayersToServer', {
         receiveDeviceProfile: prof.profile,
+        receiverRole,
+        receiverBaselineLayer: baseline,
+        roomCamerasFromVideoPeerIds: videoPeerIds.length,
         maxHighStreams: prof.maxHighStreams,
         maxMediumStreams: prof.maxMediumStreams,
         receiveQualityPressure: receiveQualityPressure.value,
@@ -1265,8 +1314,15 @@ export function useRemoteMedia() {
     existing: RemoteProducerInfo[],
     pathOptions?: SetupReceivePathOptions,
   ): Promise<void> {
-    void pathOptions
-    videoSpatialLayerSignalingEnabled.value = false
+    // Phase 1: enable preferred-layers signaling when the feature flag is on.
+    // Tests and the admin force-low override pass an explicit boolean.
+    const enableLayerSignaling =
+      typeof pathOptions?.enableVideoSpatialLayerSignaling === 'boolean'
+        ? pathOptions.enableVideoSpatialLayerSignaling
+        : ENABLE_RECEIVER_ADAPTIVE_LAYERS
+    videoSpatialLayerSignalingEnabled.value = enableLayerSignaling
+    receiverRole = pathOptions?.role === 'viewer' ? 'viewer' : 'participant'
+    receiverBaselineLayer.value = 'high'
     signalingRoom = room
     await ensureRecvTransport(device, room)
 
@@ -1638,6 +1694,8 @@ export function useRemoteMedia() {
     uiActiveSpeakerPeerIdForPreferredLayers.value = null
     recentSpeakerAtByPeerId.clear()
     lastPreferredLayerTargetsByPeerId.value = {}
+    receiverBaselineLayer.value = 'high'
+    receiverRole = 'participant'
     signalingRoom = null
     const t = recvTransport.value
     if (t && !t.closed) {
@@ -1681,5 +1739,6 @@ export function useRemoteMedia() {
     receiveDeviceProfile,
     lastPreferredLayerTargetsByPeerId,
     playbackRenderFpsPressureByPeerId,
+    receiverBaselineLayer,
   }
 }
