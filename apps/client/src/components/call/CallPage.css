@@ -444,6 +444,129 @@
   width: min(20rem, calc(100vw - 1.5rem));
 }
 
+.call-page__chat-toasts {
+  position: fixed;
+  top: calc(4.75rem + env(safe-area-inset-top, 0px));
+  right: clamp(0.65rem, 2vw, 1rem);
+  left: auto;
+  transform: none;
+  z-index: 120;
+  width: min(22rem, calc(100vw - 1.25rem));
+  pointer-events: none;
+}
+
+.call-page__chat-toasts-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: stretch;
+}
+
+.call-page__chat-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.48);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--sa-color-primary, #a78bfa) 28%, rgb(15 16 20 / 0.94));
+}
+
+.call-page__chat-toast-main {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0.55rem 0.65rem 0.55rem 0.85rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: #f9fafb;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.call-page__chat-toast-main:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+
+.call-page__chat-toast-main:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.45);
+  outline-offset: -2px;
+}
+
+.call-page__chat-toast-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.call-page__chat-toast-preview {
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.35;
+  opacity: 0.92;
+  word-break: break-word;
+}
+
+.call-page__chat-toast-dismiss {
+  flex-shrink: 0;
+  width: 2.25rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-left: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(0 0 0 / 0.15);
+  color: rgb(249 250 251 / 0.85);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.call-page__chat-toast-dismiss:hover {
+  background: rgb(0 0 0 / 0.28);
+  color: #fff;
+}
+
+.call-page__chat-toast-dismiss:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.45);
+  outline-offset: -2px;
+}
+
+.call-chat-toast-enter-active,
+.call-chat-toast-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.call-chat-toast-enter-from,
+.call-chat-toast-leave-to {
+  opacity: 0;
+  transform: translateX(10px);
+}
+
+.call-chat-toast-move {
+  transition: transform 0.18s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-chat-toast-enter-active,
+  .call-chat-toast-leave-active {
+    transition: none;
+  }
+
+  .call-chat-toast-move {
+    transition: none;
+  }
+}
+
 .call-toast-enter-active,
 .call-toast-leave-active {
   transition:
@@ -481,6 +604,17 @@
   /* Matches GRID_CONTENT_INSET_PX in getGrid (6px each side): space for drag-active ring without clipping. */
   padding: 6px;
   box-sizing: border-box;
+  /**
+   * Decouple grid-internal layout from the rest of the page (chat panel, dock,
+   * host panel drag, mafia overlays) so toggling a speaker / drag class on one
+   * tile does not force a layout pass at the parent level. We deliberately keep
+   * `paint` out of the containment list: `.tile-menu__dropdown` is `position:
+   * absolute; top: calc(100% + 8px)` and bottom-row tiles rely on the parent
+   * `.call-page__stage` (which has `overflow: hidden` + bottom padding) for
+   * the dropdown's visible strip — adding `contain: paint` here would clip
+   * those dropdowns at the grid edge.
+   */
+  contain: layout;
 }
 
 .call-page__grid--spotlight {
@@ -525,6 +659,14 @@
   position: relative;
   z-index: 0;
   isolation: isolate;
+  /**
+   * Layout-only containment is safe here: the speaking ring and drag-active outline
+   * intentionally extend past the wrap into adjacent grid cells (see “Сусідня клітина”
+   * note below), so we must NOT add `paint` containment, which would clip them.
+   * Layout containment still helps: a speaker-class toggle / hover on one wrap no
+   * longer forces the grid container to recompute layout for siblings.
+   */
+  contain: layout;
   cursor: grab;
   /* Match `.tile` in ParticipantTile (14px); stable radius avoids jitter vs --over-only radius + shadow animation. */
   border-radius: 14px;
@@ -584,10 +726,17 @@
 /**
  * Active speaker ring on the wrap (not the inner `.tile`) so `overflow: hidden` on `.call-page__grid`
  * does not clip the glow. `call-page__tile-wrap--speaking` from `isTileRowSpeaking(row)` (no `:has()`).
+ *
+ * The ring uses a 12 px gaussian blur (was 24 px). Halving the blur radius
+ * substantially shrinks the per-frame rasterisation kernel that the compositor
+ * runs while the speaker class is active and on every speaker change. The
+ * colour, opacity and "speaker is highlighted" intent are unchanged; the halo
+ * is simply tighter. Mobile keeps the existing 2 px tight ring (see media
+ * query at the bottom of this file).
  */
 .call-page__tile-wrap--speaking:not(.call-page__tile-wrap--dragging) {
   --tile-speaking-scale: 1.01;
-  box-shadow: 0 0 24px rgba(140, 90, 255, 0.6);
+  box-shadow: 0 0 12px rgba(140, 90, 255, 0.6);
   /* ENTER is snappier than LEAVE; see base rule for the LEAVE duration. */
   transition:
     box-shadow 0.2s ease,
@@ -1849,11 +1998,22 @@
 }
 
 /*
- * Mobile-only call-route GPU diet. The 24px speaking glow is the most
- * compositor-expensive element on phone grids (large blurred shadow promoted
- * over decoded video tiles); we keep a tight ring so the highlight is still
- * visually present but cheap to paint. The device popover and chat overlay
- * `backdrop-filter` blurs are also dropped to opaque/semi-opaque fills.
+ * Mobile-only call-route GPU diet. On phones every `backdrop-filter: blur(...)`
+ * promotes its element to its own compositor layer and runs a downsample → blur
+ * → upsample pass over the area BEHIND the element on each frame the element is
+ * visible; under the dock, the chat panel, and the room popover this is a
+ * continuous cost while a call is active. We drop the blur on every continuous
+ * call-route surface and replace it with the existing semi-opaque fill, which
+ * is visually similar but is a single rasterised layer with no per-frame blur.
+ *
+ * Speaking glow is also tightened (24 -> 12 px on desktop, 2 px outline on
+ * mobile here) so the highlight stays visible but cheap to paint.
+ *
+ * The transient `.call-page__device-pop` was already on this diet; chat /
+ * dock / room popover are added so the same rule covers every surface that
+ * is visible for any meaningful fraction of the call. The mafia timer +
+ * speaking-queue pill (`.call-floating-surface`) gets the same treatment in
+ * its own stylesheet. Transient menu dropdowns are intentionally left alone.
  */
 @media (max-width: 768px) {
   .call-page__tile-wrap--speaking:not(.call-page__tile-wrap--dragging) {
@@ -1864,5 +2024,11 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     background: #232428;
+  }
+  .call-page__chat,
+  .call-page__dock,
+  .call-page__room-pop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }

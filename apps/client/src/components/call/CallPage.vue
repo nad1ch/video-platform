@@ -23,6 +23,7 @@ import {
   resolvePeerDisplayNameForUi,
   useCallOrchestrator,
   VIDEO_QUALITY_PRESETS,
+  type CallChatLine,
   type InboundVideoDebugRow,
   type VideoQualityPreset,
 } from 'call-core'
@@ -1547,6 +1548,81 @@ const {
   inCall: () => session.inCall,
   roomId: () => session.roomId,
 })
+
+type CallChatInboundToast = { toastId: string; lineId: string; title: string; preview: string }
+
+const callChatInboundToasts = ref<CallChatInboundToast[]>([])
+let lastSeenCallChatLineId = ''
+const CHAT_INBOUND_TOAST_TTL_MS = 3800
+const MAX_CHAT_INBOUND_TOASTS = 4
+
+function dismissCallChatInboundToast(toastId: string): void {
+  callChatInboundToasts.value = callChatInboundToasts.value.filter((x) => x.toastId !== toastId)
+}
+
+function pushCallChatInboundToast(line: CallChatLine): void {
+  const previewRaw = line.text.trim()
+  const preview = previewRaw.length > 96 ? `${previewRaw.slice(0, 96)}…` : previewRaw
+  const title = normalizeDisplayName(line.displayName).trim() || '—'
+  const toastId = `chat-toast-${line.id}`
+  callChatInboundToasts.value = [
+    ...callChatInboundToasts.value.filter((x) => x.lineId !== line.id),
+    { toastId, lineId: line.id, title, preview },
+  ].slice(-MAX_CHAT_INBOUND_TOASTS)
+  window.setTimeout(() => dismissCallChatInboundToast(toastId), CHAT_INBOUND_TOAST_TTL_MS)
+}
+
+function openChatFromInboundToast(toastId: string): void {
+  dismissCallChatInboundToast(toastId)
+  chatOpen.value = true
+}
+
+watch(
+  () => session.inCall,
+  (inCall) => {
+    if (!inCall) {
+      lastSeenCallChatLineId = ''
+      callChatInboundToasts.value = []
+    }
+  },
+)
+
+watch(chatOpen, (open) => {
+  const msgs = callChatMessages.value
+  if (open && msgs.length > 0) {
+    lastSeenCallChatLineId = msgs[msgs.length - 1].id
+  }
+})
+
+watch(
+  callChatMessages,
+  (msgs) => {
+    if (
+      !session.inCall ||
+      joining.value ||
+      mafiaViewUi.value ||
+      eatFirstViewUi.value ||
+      msgs.length === 0
+    ) {
+      return
+    }
+    const last = msgs[msgs.length - 1]
+    if (chatOpen.value) {
+      lastSeenCallChatLineId = last.id
+      return
+    }
+    if (last.id === lastSeenCallChatLineId) {
+      return
+    }
+    lastSeenCallChatLineId = last.id
+    const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
+    if (selfId.length > 0 && last.peerId === selfId) {
+      return
+    }
+    pushCallChatInboundToast(last)
+  },
+  { deep: true },
+)
 
 const micPickerOpen = ref(false)
 const camPickerOpen = ref(false)
@@ -3213,6 +3289,45 @@ watch(joining, (j) => {
             {{ t('mafiaPage.speakingOrderFloatHint') }}
           </div>
         </Transition>
+
+        <div
+          v-if="session.inCall && !mafiaViewUi && !eatFirstViewUi && callChatInboundToasts.length > 0"
+          class="call-page__chat-toasts"
+          role="region"
+          :aria-label="t('callPage.chatInboundToastAria')"
+        >
+          <TransitionGroup
+            name="call-chat-toast"
+            tag="div"
+            class="call-page__chat-toasts-stack"
+            aria-live="polite"
+          >
+            <div
+              v-for="row in callChatInboundToasts"
+              :key="row.toastId"
+              class="call-page__chat-toast"
+              role="article"
+            >
+              <button
+                type="button"
+                class="call-page__chat-toast-main"
+                :aria-label="t('callPage.chatInboundToastOpenChat')"
+                @click="openChatFromInboundToast(row.toastId)"
+              >
+                <span class="call-page__chat-toast-title">{{ row.title }}</span>
+                <span class="call-page__chat-toast-preview">{{ row.preview }}</span>
+              </button>
+              <button
+                type="button"
+                class="call-page__chat-toast-dismiss"
+                :aria-label="t('callPage.chatInboundToastDismiss')"
+                @click.stop="dismissCallChatInboundToast(row.toastId)"
+              >
+                ×
+              </button>
+            </div>
+          </TransitionGroup>
+        </div>
 
         <div
           ref="stageRef"
