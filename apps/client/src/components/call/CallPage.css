@@ -444,6 +444,129 @@
   width: min(20rem, calc(100vw - 1.5rem));
 }
 
+.call-page__chat-toasts {
+  position: fixed;
+  top: calc(4.75rem + env(safe-area-inset-top, 0px));
+  right: clamp(0.65rem, 2vw, 1rem);
+  left: auto;
+  transform: none;
+  z-index: 120;
+  width: min(22rem, calc(100vw - 1.25rem));
+  pointer-events: none;
+}
+
+.call-page__chat-toasts-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: stretch;
+}
+
+.call-page__chat-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.48);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--sa-color-primary, #a78bfa) 28%, rgb(15 16 20 / 0.94));
+}
+
+.call-page__chat-toast-main {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0.55rem 0.65rem 0.55rem 0.85rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: #f9fafb;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.call-page__chat-toast-main:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+
+.call-page__chat-toast-main:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.45);
+  outline-offset: -2px;
+}
+
+.call-page__chat-toast-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.call-page__chat-toast-preview {
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.35;
+  opacity: 0.92;
+  word-break: break-word;
+}
+
+.call-page__chat-toast-dismiss {
+  flex-shrink: 0;
+  width: 2.25rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-left: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(0 0 0 / 0.15);
+  color: rgb(249 250 251 / 0.85);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.call-page__chat-toast-dismiss:hover {
+  background: rgb(0 0 0 / 0.28);
+  color: #fff;
+}
+
+.call-page__chat-toast-dismiss:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.45);
+  outline-offset: -2px;
+}
+
+.call-chat-toast-enter-active,
+.call-chat-toast-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.call-chat-toast-enter-from,
+.call-chat-toast-leave-to {
+  opacity: 0;
+  transform: translateX(10px);
+}
+
+.call-chat-toast-move {
+  transition: transform 0.18s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-chat-toast-enter-active,
+  .call-chat-toast-leave-active {
+    transition: none;
+  }
+
+  .call-chat-toast-move {
+    transition: none;
+  }
+}
+
 .call-toast-enter-active,
 .call-toast-leave-active {
   transition:
