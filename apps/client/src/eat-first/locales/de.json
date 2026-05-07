@@ -205,6 +205,47 @@
   "durak": {
     "demoNotice": "Demo-Layout — Regeln und Echtzeit-Sync folgen in späteren PRs.",
     "localPrototype": "Lokaler Prototyp — zwei Plätze auf einem Gerät. Server-Sync später.",
+    "lobby": {
+      "subtitle": "Wähle, wie du spielen willst. Matchmaking und Einladungen sind nur UI-Vorschau.",
+      "playerCountLegend": "Anzahl der Spieler",
+      "modesLegend": "Modus",
+      "multiplayerNote": "Echte Multiplayer-Synchronisation folgt in einem späteren PR."
+    },
+    "modes": {
+      "matchmaking": {
+        "title": "Schnelles Match",
+        "body": "Gegner auf deinem Niveau finden. Hier nur eine Suchsimulation — noch keine echte Warteschlange."
+      },
+      "friend": {
+        "title": "Mit Freund spielen",
+        "body": "Raum-Link teilen. Links hier sind nur Mock — echte Server-Räume kommen später."
+      },
+      "bots": {
+        "title": "Gegen Bots",
+        "body": "Lokaler Tisch mit einfachem Chat-Platz-Bot. Roster-Größe zeigt künftige 2–6 Plätze."
+      }
+    },
+    "searching": {
+      "subtitle": "Suche nach einem Match…",
+      "title": "Suche läuft",
+      "body": "Wir simulieren die Matchmaking-Suche.",
+      "mockHint": "Noch keine echte Queue oder ELO — nur UI-Platzhalter.",
+      "cancel": "Zurück zur Lobby"
+    },
+    "friendRoom": {
+      "subtitle": "Freund einladen",
+      "title": "Mock-Einladungsraum",
+      "body": "Link kopieren und senden. Der Server erstellt noch keinen echten Raum.",
+      "inviteLabel": "Einladungslink (Vorschau)",
+      "copy": "Link kopieren",
+      "copied": "Kopiert",
+      "back": "Zurück zur Lobby"
+    },
+    "table": {
+      "backToLobby": "Zurück zur Lobby",
+      "rosterLine": "Roster: {n} Spieler",
+      "localTwoSeatHint": "Regeln nutzen noch den lokalen Zwei-Sitz-Prototyp; weitere Plätze folgen mit Multiplayer-Sync."
+    },
     "deck": "Deck",
     "trump": "Trumpf",
     "emptyDefender": "Leerer Verteidigungs-Slot",

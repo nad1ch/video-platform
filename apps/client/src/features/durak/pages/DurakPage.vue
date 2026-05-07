@@ -1,52 +1,96 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
 import AppContainer from '@/components/ui/AppContainer.vue'
-import { useDurakLocalGame } from '../orchestrator/useDurakLocalGame'
-import DurakHand from '../components/DurakHand.vue'
-import DurakTable from '../components/DurakTable.vue'
-import DurakPlayerPanel from '../components/DurakPlayerPanel.vue'
+import type { DurakGameMode, DurakLobbyView, DurakPlayerCount } from '../core/durakModes'
+import DurakGameTableSection from '../components/DurakGameTableSection.vue'
+import DurakLobbyPanel from '../components/DurakLobbyPanel.vue'
 
-const { t, te } = useI18n()
+const { t } = useI18n()
 
-const {
-  snapshot,
-  selectedCardId,
-  streamerHand,
-  chatHand,
-  tableCards,
-  uiPhase,
-  displayTrumpCard,
-  deckCount,
-  isStreamerTurn,
-  isChatTurn,
-  canEndAttack,
-  canBeat,
-  canTake,
-  selectCard,
-  playSelected,
-  endAttack,
-  beatRound,
-  takeRound,
-  newGame,
-  chatPlay,
-} = useDurakLocalGame()
+const lobbyView = ref<DurakLobbyView>('lobby')
+const playerCount = ref<DurakPlayerCount>(2)
+const friendRoomCode = ref('')
+const tableSessionKey = ref(0)
+const inviteCopied = ref(false)
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null
 
-const canPlaySelected = computed(() => {
-  if (!selectedCardId.value) return false
-  if (!isStreamerTurn.value) return false
-  const ph = snapshot.value.phase
-  return ph === 'attack' || ph === 'defend'
+function generateRoomToken(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().replace(/-/g, '').slice(0, 10)
+  }
+  return `durak${Date.now().toString(36)}`
+}
+
+function mockInviteUrl(code: string): string {
+  const path = `/app/durak?room=${encodeURIComponent(code)}`
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}${path}`
+  }
+  return path
+}
+
+const inviteUrl = computed(() => (friendRoomCode.value ? mockInviteUrl(friendRoomCode.value) : ''))
+
+const pageSubtitle = computed(() => {
+  switch (lobbyView.value) {
+    case 'lobby':
+      return t('durak.lobby.subtitle')
+    case 'searching':
+      return t('durak.searching.subtitle')
+    case 'friend-room':
+      return t('durak.friendRoom.subtitle')
+    case 'demo-table':
+    default:
+      return t('durak.localPrototype')
+  }
 })
 
-const statusError = computed(() => {
-  const key = snapshot.value.lastErrorKey
-  if (!key) return ''
-  return te(key) ? t(key) : key
-})
+function onPickMode(mode: DurakGameMode) {
+  if (mode === 'matchmaking') {
+    lobbyView.value = 'searching'
+    return
+  }
+  if (mode === 'friend') {
+    friendRoomCode.value = generateRoomToken()
+    lobbyView.value = 'friend-room'
+    return
+  }
+  tableSessionKey.value += 1
+  lobbyView.value = 'demo-table'
+}
 
-const turnHint = computed(() => (isStreamerTurn.value ? t('durak.turnLocal') : t('durak.turnOpponent')))
+function backToLobby() {
+  lobbyView.value = 'lobby'
+  friendRoomCode.value = ''
+  inviteCopied.value = false
+  if (copyResetTimer) {
+    clearTimeout(copyResetTimer)
+    copyResetTimer = null
+  }
+}
+
+async function copyInvite() {
+  const text = inviteUrl.value
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    inviteCopied.value = true
+    if (copyResetTimer) clearTimeout(copyResetTimer)
+    copyResetTimer = setTimeout(() => {
+      inviteCopied.value = false
+      copyResetTimer = null
+    }, 2000)
+  } catch {
+    inviteCopied.value = false
+  }
+}
+
+onUnmounted(() => {
+  if (copyResetTimer) clearTimeout(copyResetTimer)
+})
 </script>
 
 <template>
@@ -54,87 +98,50 @@ const turnHint = computed(() => (isStreamerTurn.value ? t('durak.turnLocal') : t
     <AppContainer wide flush class="durak-page__container">
       <header class="durak-page__header">
         <h1 class="durak-page__title">{{ t('routes.durak') }}</h1>
-        <p class="durak-page__subtitle">{{ t('durak.localPrototype') }}</p>
+        <p class="durak-page__subtitle">{{ pageSubtitle }}</p>
       </header>
 
-      <div class="durak-page__arena">
-        <div class="durak-page__felt">
-          <div class="durak-page__felt-glow" aria-hidden="true" />
+      <DurakLobbyPanel
+        v-if="lobbyView === 'lobby'"
+        v-model="playerCount"
+        class="durak-page__lobby"
+        @pick-mode="onPickMode"
+      />
 
-          <section class="durak-page__row durak-page__row--top" aria-label="Opponent">
-            <DurakPlayerPanel
-              class="durak-page__panel"
-              :name="t('durak.roleChat')"
-              :card-count="chatHand.length"
-              role="chat"
-              :is-active="isChatTurn"
-              :is-their-turn="isChatTurn"
-            />
-            <DurakHand
-              class="durak-page__hand durak-page__hand--opponent"
-              :cards="chatHand"
-              hidden
-              :size="'md'"
-            />
-          </section>
-
-          <section class="durak-page__row durak-page__row--center" aria-label="Table">
-            <DurakTable
-              :table-cards="tableCards"
-              :trump-card="displayTrumpCard"
-              :deck-count="deckCount"
-              :phase="uiPhase"
-            />
-          </section>
-
-          <section class="durak-page__status" role="status">
-            <p class="durak-page__phase-line">{{ t(`durak.phase.${uiPhase}`) }}</p>
-            <p class="durak-page__turn-line">
-              <span class="durak-page__turn-dot" :class="{ 'durak-page__turn-dot--on': isStreamerTurn }" />
-              {{ turnHint }}
-            </p>
-            <p v-if="statusError" class="durak-page__error">{{ statusError }}</p>
-            <div class="durak-page__actions">
-              <AppButton variant="primary" :disabled="!canPlaySelected" @click="playSelected">
-                {{ t('durak.actions.playCard') }}
-              </AppButton>
-              <AppButton :disabled="!canEndAttack" @click="endAttack">
-                {{ t('durak.actions.endAttack') }}
-              </AppButton>
-              <AppButton :disabled="!canBeat" @click="beatRound">
-                {{ t('durak.actions.beat') }}
-              </AppButton>
-              <AppButton :disabled="!canTake" @click="takeRound">
-                {{ t('durak.actions.take') }}
-              </AppButton>
-              <AppButton :disabled="!isChatTurn" @click="chatPlay">
-                {{ t('durak.actions.chatPlay') }}
-              </AppButton>
-              <AppButton variant="ghost" @click="newGame">{{ t('durak.actions.newGame') }}</AppButton>
-            </div>
-          </section>
-
-          <section class="durak-page__row durak-page__row--bottom" aria-label="Your hand">
-            <DurakHand
-              class="durak-page__hand durak-page__hand--local"
-              :cards="streamerHand"
-              :hidden="false"
-              selectable
-              :selected-card-id="selectedCardId"
-              size="lg"
-              @select="selectCard"
-            />
-            <DurakPlayerPanel
-              class="durak-page__panel"
-              :name="t('durak.roleStreamer')"
-              :card-count="streamerHand.length"
-              role="streamer"
-              :is-active="isStreamerTurn"
-              :is-their-turn="isStreamerTurn"
-            />
-          </section>
-        </div>
+      <div v-else-if="lobbyView === 'searching'" class="durak-page__subview">
+        <AppCard class="durak-page__subcard">
+          <h2 class="durak-page__subheading">{{ t('durak.searching.title') }}</h2>
+          <p class="durak-page__subtext">{{ t('durak.searching.body') }}</p>
+          <p class="durak-page__subhint">{{ t('durak.searching.mockHint') }}</p>
+          <AppButton variant="ghost" class="durak-page__subcta" @click="backToLobby">
+            {{ t('durak.searching.cancel') }}
+          </AppButton>
+        </AppCard>
       </div>
+
+      <div v-else-if="lobbyView === 'friend-room'" class="durak-page__subview">
+        <AppCard class="durak-page__subcard">
+          <h2 class="durak-page__subheading">{{ t('durak.friendRoom.title') }}</h2>
+          <p class="durak-page__subtext">{{ t('durak.friendRoom.body') }}</p>
+          <p class="durak-page__invite-label">{{ t('durak.friendRoom.inviteLabel') }}</p>
+          <code class="durak-page__invite-url">{{ inviteUrl }}</code>
+          <div class="durak-page__invite-actions">
+            <AppButton variant="primary" @click="copyInvite">{{ t('durak.friendRoom.copy') }}</AppButton>
+            <span v-if="inviteCopied" class="durak-page__copied" role="status">{{ t('durak.friendRoom.copied') }}</span>
+          </div>
+          <AppButton variant="ghost" class="durak-page__subcta" @click="backToLobby">
+            {{ t('durak.friendRoom.back') }}
+          </AppButton>
+        </AppCard>
+      </div>
+
+      <DurakGameTableSection
+        v-else-if="lobbyView === 'demo-table'"
+        :key="tableSessionKey"
+        class="durak-page__table"
+        :roster-player-count="playerCount"
+        @back="backToLobby"
+      />
     </AppContainer>
   </div>
 </template>
@@ -178,158 +185,86 @@ const turnHint = computed(() => (isStreamerTurn.value ? t('durak.turnLocal') : t
   color: rgba(226, 232, 240, 0.65);
 }
 
-.durak-page__arena {
-  border-radius: var(--sa-radius-lg, 14px);
-  padding: 3px;
-  background: linear-gradient(135deg, rgba(52, 211, 153, 0.45), rgba(99, 102, 241, 0.35), rgba(52, 211, 153, 0.25));
-  box-shadow: 0 0 40px rgba(16, 185, 129, 0.12);
-}
-
-.durak-page__felt {
-  position: relative;
-  border-radius: calc(var(--sa-radius-lg, 14px) - 3px);
-  background: radial-gradient(100% 100% at 50% 20%, #134e4a 0%, #042f2e 38%, #022c22 100%);
-  border: 1px solid rgba(45, 212, 191, 0.25);
-  padding: var(--sa-space-4, 1rem);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sa-space-4, 1rem);
-  overflow: hidden;
-}
-
-.durak-page__felt-glow {
-  pointer-events: none;
-  position: absolute;
-  inset: -20%;
-  background: radial-gradient(circle at 50% 40%, rgba(45, 212, 191, 0.08), transparent 55%);
-}
-
-.durak-page__row {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sa-space-3, 0.75rem);
-}
-
-.durak-page__row--top .durak-page__panel {
-  order: -1;
-}
-
-.durak-page__row--bottom {
-  flex-direction: column-reverse;
-}
-
-.durak-page__row--bottom .durak-page__panel {
-  margin-top: var(--sa-space-2, 0.5rem);
-}
-
-.durak-page__hand {
+.durak-page__lobby {
+  max-width: 40rem;
+  margin: 0 auto;
   width: 100%;
 }
 
-.durak-page__hand--opponent {
-  padding-top: var(--sa-space-2, 0.5rem);
+.durak-page__subview {
+  max-width: 32rem;
+  margin: 0 auto;
+  width: 100%;
+  min-width: 0;
 }
 
-.durak-page__hand--local {
-  padding-bottom: var(--sa-space-2, 0.5rem);
+.durak-page__subcard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sa-space-3, 0.75rem);
+  align-items: flex-start;
 }
 
-.durak-page__row--center {
-  flex: 1;
-  min-height: 0;
+.durak-page__subheading {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--sa-color-text-main, #f1f5f9);
 }
 
-.durak-page__status {
-  text-align: center;
-  padding: var(--sa-space-2, 0.5rem) var(--sa-space-3, 0.75rem);
-  border-radius: var(--sa-radius-md, 10px);
-  background: color-mix(in srgb, #0f172a 72%, transparent);
-  border: 1px solid rgba(148, 163, 184, 0.15);
+.durak-page__subtext {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.78);
 }
 
-.durak-page__phase-line {
-  margin: 0 0 0.25rem;
+.durak-page__subhint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: rgba(251, 191, 36, 0.85);
+}
+
+.durak-page__invite-label {
+  margin: 0.25rem 0 0;
   font-size: 0.78rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: rgba(167, 243, 208, 0.95);
+  letter-spacing: 0.05em;
+  color: rgba(167, 243, 208, 0.9);
 }
 
-.durak-page__turn-line {
-  margin: 0 0 0.5rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #a7f3d0;
+.durak-page__invite-url {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--sa-radius-md, 10px);
+  background: color-mix(in srgb, #0f172a 88%, transparent);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  font-size: 0.72rem;
+  word-break: break-all;
+  color: #e2e8f0;
 }
 
-.durak-page__error {
-  margin: 0 0 0.5rem;
-  font-size: 0.78rem;
-  color: #fecaca;
-  line-height: 1.35;
-}
-
-.durak-page__actions {
+.durak-page__invite-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  justify-content: center;
   align-items: center;
+  gap: 0.65rem;
 }
 
-.durak-page__turn-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 999px;
-  background: rgba(52, 211, 153, 0.35);
-  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4);
-  transition: background 0.2s ease;
+.durak-page__copied {
+  font-size: 0.8rem;
+  color: #6ee7b7;
 }
 
-.durak-page__turn-dot--on {
-  background: #34d399;
-  box-shadow: 0 0 12px rgba(52, 211, 153, 0.65);
+.durak-page__subcta {
+  margin-top: 0.25rem;
 }
 
-.durak-page__panel {
-  width: 100%;
-  max-width: 22rem;
-}
-
-@media (min-width: 900px) {
-  .durak-page__row--top,
-  .durak-page__row--bottom {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: flex-end;
-  }
-
-  .durak-page__row--top .durak-page__panel {
-    order: 0;
-    align-self: flex-start;
-    max-width: 14rem;
-  }
-
-  .durak-page__row--bottom {
-    flex-direction: row;
-    align-items: flex-end;
-  }
-
-  .durak-page__row--bottom .durak-page__panel {
-    margin-top: 0;
-    max-width: 14rem;
-  }
-
-  .durak-page__hand {
-    flex: 1;
-    min-width: 0;
-  }
+.durak-page__table {
+  min-width: 0;
 }
 </style>

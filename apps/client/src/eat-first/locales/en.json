@@ -205,6 +205,47 @@
   "durak": {
     "demoNotice": "Demo layout — rules and realtime sync will ship in later PRs.",
     "localPrototype": "Local prototype — two seats on one device. Server sync later.",
+    "lobby": {
+      "subtitle": "Choose how you want to play. Matchmaking and invites are UI previews only.",
+      "playerCountLegend": "Number of players",
+      "modesLegend": "Mode",
+      "multiplayerNote": "Real multiplayer sync will be added in a later PR."
+    },
+    "modes": {
+      "matchmaking": {
+        "title": "Quick match",
+        "body": "Find opponents at your skill level. This screen simulates searching — no queue yet."
+      },
+      "friend": {
+        "title": "Play with a friend",
+        "body": "Share a room link so a friend can join. Invite links here are mock-only until server rooms ship."
+      },
+      "bots": {
+        "title": "Play vs bots",
+        "body": "Practice on the local table with a simple chat-seat bot. Roster size is shown for future 2–6 seats."
+      }
+    },
+    "searching": {
+      "subtitle": "Looking for a match…",
+      "title": "Searching",
+      "body": "We are pretending to search the matchmaking pool.",
+      "mockHint": "No real queue or ELO yet — this is a UI placeholder.",
+      "cancel": "Back to lobby"
+    },
+    "friendRoom": {
+      "subtitle": "Invite friend",
+      "title": "Mock invite room",
+      "body": "Copy the link and send it to a friend. The server does not create a real room yet.",
+      "inviteLabel": "Invite link (preview)",
+      "copy": "Copy link",
+      "copied": "Copied",
+      "back": "Back to lobby"
+    },
+    "table": {
+      "backToLobby": "Back to lobby",
+      "rosterLine": "Roster: {n} players",
+      "localTwoSeatHint": "Table rules still use the local two-seat prototype; extra seats will activate when multiplayer sync lands."
+    },
     "deck": "Deck",
     "trump": "Trump",
     "emptyDefender": "Empty defender slot",

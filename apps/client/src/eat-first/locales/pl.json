@@ -205,6 +205,47 @@
   "durak": {
     "demoNotice": "Układ demo — zasady i synchronizacja w kolejnych PR.",
     "localPrototype": "Lokalny prototyp — dwa miejsca na jednym urządzeniu. Sync z serwerem później.",
+    "lobby": {
+      "subtitle": "Wybierz sposób gry. Matchmaking i zaproszenia to na razie tylko UI.",
+      "playerCountLegend": "Liczba graczy",
+      "modesLegend": "Tryb",
+      "multiplayerNote": "Prawdziwa synchronizacja multiplayer pojawi się w kolejnym PR."
+    },
+    "modes": {
+      "matchmaking": {
+        "title": "Szybki mecz",
+        "body": "Szukanie przeciwników na podobnym poziomie. Tu tylko symulacja — brak prawdziwej kolejki."
+      },
+      "friend": {
+        "title": "Graj ze znajomym",
+        "body": "Udostępnij link do pokoju. Linki są mockiem do czasu pokoi serwerowych."
+      },
+      "bots": {
+        "title": "Przeciwko botom",
+        "body": "Trening na lokalnym stole z prostym botem na miejscu czatu. Rozmiar rosteru — pod przyszłe 2–6 miejsc."
+      }
+    },
+    "searching": {
+      "subtitle": "Szukamy meczu…",
+      "title": "Szukanie",
+      "body": "Symulujemy wyszukiwanie w puli matchmakingu.",
+      "mockHint": "Brak prawdziwej kolejki i ELO — to placeholder UI.",
+      "cancel": "Wróć do lobby"
+    },
+    "friendRoom": {
+      "subtitle": "Zaproszenie znajomego",
+      "title": "Mock pokoju",
+      "body": "Skopiuj link i wyślij znajomemu. Serwer jeszcze nie tworzy prawdziwego pokoju.",
+      "inviteLabel": "Link zaproszenia (podgląd)",
+      "copy": "Kopiuj link",
+      "copied": "Skopiowano",
+      "back": "Wróć do lobby"
+    },
+    "table": {
+      "backToLobby": "Wróć do lobby",
+      "rosterLine": "Skład: {n} graczy",
+      "localTwoSeatHint": "Zasady nadal na lokalnym prototypie dwóch miejsc; dodatkowe miejsca włączą się z sync multiplayer."
+    },
     "deck": "Talia",
     "trump": "Atut",
     "emptyDefender": "Pusty slot obrony",
