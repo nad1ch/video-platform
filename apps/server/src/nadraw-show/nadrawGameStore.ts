@@ -17,7 +17,7 @@ const ROUND_DURATION_DEFAULT_SEC = 180
 const ROUND_DURATION_MIN_SEC = 10
 const ROUND_DURATION_MAX_SEC = 600
 const ROUNDS_PLANNED_MIN = 1
-const ROUNDS_PLANNED_MAX = 50
+const ROUNDS_PLANNED_MAX = 100
 
 const FALLBACK_WORDS = ['star', 'house', 'music', 'bridge', 'painter', 'canvas', 'chat', 'twitch', 'game']
 

@@ -6,7 +6,7 @@ import NadrawToolbar from './NadrawToolbar.vue'
 import { floodFillImageData, hexToRgb } from './nadrawCanvasOps'
 import { NADRAW_BRUSH_SIZES, NADRAW_TOOLBAR_COLORS, type NadrawCanvasTool } from './nadrawToolbarConstants'
 
-const BOARD_FILL = '#f5f2eb'
+const BOARD_FILL = '#ffffff'
 
 const props = defineProps<{
   canDraw: boolean
@@ -20,6 +20,7 @@ const emit = defineEmits<{
   drawStart: [strokeId: string, nx: number, ny: number, meta: NadrawDrawToolMeta]
   drawMove: [strokeId: string, nx: number, ny: number, meta: NadrawDrawToolMeta]
   drawEnd: [strokeId: string, nx: number, ny: number, meta: NadrawDrawToolMeta]
+  resetGame: []
 }>()
 
 const wrapRef = ref<HTMLElement | null>(null)
@@ -32,6 +33,10 @@ const remoteLast = new Map<string, { x: number; y: number }>()
 const brushColor = ref<string>(NADRAW_TOOLBAR_COLORS[0])
 const brushSize = ref<number>(NADRAW_BRUSH_SIZES[3])
 const canvasTool = ref<NadrawCanvasTool>('pencil')
+const HISTORY_LIMIT = 80
+const historyPast: ImageData[] = []
+const historyFuture: ImageData[] = []
+const localStrokeIds = new Set<string>()
 
 let shapeSnapshot: ImageData | null = null
 let shapeStartNorm: { nx: number; ny: number } | null = null
@@ -69,7 +74,7 @@ function rgbaCssFromBytes(r: number, g: number, b: number, a: number): string {
 
 function boardFillRgbaCss(): string {
   const rgb = hexToRgb(BOARD_FILL)
-  return rgb ? rgbaCssFromBytes(rgb.r, rgb.g, rgb.b, rgb.a) : 'rgba(245,242,235,1)'
+  return rgb ? rgbaCssFromBytes(rgb.r, rgb.g, rgb.b, rgb.a) : 'rgba(255,255,255,1)'
 }
 
 
@@ -162,6 +167,8 @@ function resizeCanvas(): void {
   shapeSnapshot = null
   shapeStartNorm = null
   shapeKind = null
+  resetHistory()
+  pushHistorySnapshot()
 }
 
 function clamp01(v: number): number {
@@ -209,6 +216,66 @@ function clearShapeGesture(): void {
   shapeSnapshot = null
   shapeStartNorm = null
   shapeKind = null
+}
+
+function canvasImageData(): ImageData | null {
+  const canvas = canvasRef.value
+  if (!canvas || !ctx) {
+    return null
+  }
+  return ctx.getImageData(0, 0, canvas.width, canvas.height)
+}
+
+function restoreImageData(frame: ImageData): void {
+  if (!ctx) {
+    return
+  }
+  ctx.putImageData(frame, 0, 0)
+}
+
+function resetHistory(): void {
+  historyPast.length = 0
+  historyFuture.length = 0
+}
+
+function pushHistorySnapshot(): void {
+  const frame = canvasImageData()
+  if (!frame) {
+    return
+  }
+  historyPast.push(frame)
+  if (historyPast.length > HISTORY_LIMIT) {
+    historyPast.shift()
+  }
+  historyFuture.length = 0
+}
+
+function undoLast(): void {
+  if (historyPast.length < 2) {
+    return
+  }
+  const current = historyPast.pop()
+  if (!current) {
+    return
+  }
+  historyFuture.push(current)
+  const prev = historyPast[historyPast.length - 1]
+  if (!prev) {
+    return
+  }
+  restoreImageData(prev)
+}
+
+function redoLast(): void {
+  const next = historyFuture.pop()
+  if (!next) {
+    return
+  }
+  restoreImageData(next)
+  historyPast.push(next)
+  if (historyPast.length > HISTORY_LIMIT) {
+    historyPast.shift()
+  }
 }
 
 
@@ -334,7 +401,10 @@ function onPointerDown(ev: PointerEvent): void {
   if (canvasTool.value === 'fill') {
     canvas.setPointerCapture(ev.pointerId)
     floodFillAtNormalized(n.nx, n.ny, brushColor.value)
-    emit('drawEnd', randomStrokeId(), n.nx, n.ny, toolMeta({ op: 'fill' }))
+    pushHistorySnapshot()
+    const strokeId = randomStrokeId()
+    localStrokeIds.add(strokeId)
+    emit('drawEnd', strokeId, n.nx, n.ny, toolMeta({ op: 'fill' }))
     try {
       canvas.releasePointerCapture(ev.pointerId)
     } catch {
@@ -349,11 +419,13 @@ function onPointerDown(ev: PointerEvent): void {
     shapeStartNorm = { nx: n.nx, ny: n.ny }
     shapeKind = canvasTool.value
     activeStrokeId = randomStrokeId()
+    localStrokeIds.add(activeStrokeId)
     return
   }
 
   canvas.setPointerCapture(ev.pointerId)
   activeStrokeId = randomStrokeId()
+  localStrokeIds.add(activeStrokeId)
   const meta = toolMeta()
   if (meta.erase) {
     localEraseStrokeStyle = sampleStrokeStyleAtCss(n.nx * size.w, n.ny * size.h)
@@ -425,6 +497,7 @@ function onPointerUp(ev: PointerEvent): void {
     const kind = shapeKind
     const sid = activeStrokeId
     strokeShapeFinal(kind, shapeStartNorm, n)
+    pushHistorySnapshot()
     emit('drawEnd', sid, startNx, startNy, toolMeta({ op: kind, x2: n.nx, y2: n.ny }))
     shapeStartNorm = null
     shapeKind = null
@@ -450,6 +523,7 @@ function onPointerUp(ev: PointerEvent): void {
   ctx.moveTo(localLast.x, localLast.y)
   ctx.lineTo(x, y)
   ctx.stroke()
+  pushHistorySnapshot()
   emit('drawEnd', activeStrokeId, n.nx, n.ny, meta)
   activeStrokeId = null
   localLast = null
@@ -478,6 +552,13 @@ function prepRemoteStroke(col: string, lw: number, erase: boolean, eraseStrokeSt
 }
 
 function applyRemote(p: RemoteDrawPayload): void {
+  if (localStrokeIds.has(p.strokeId)) {
+    if (p.phase === 'end') {
+      localStrokeIds.delete(p.strokeId)
+    }
+    return
+  }
+
   const canvas = canvasRef.value
   if (!canvas || !ctx) {
     return
@@ -493,6 +574,7 @@ function applyRemote(p: RemoteDrawPayload): void {
   if (op === 'fill' && p.phase === 'end' && !p.erase) {
     const col = typeof p.color === 'string' ? p.color : '#000000'
     floodFillAtNormalized(p.x, p.y, col)
+    pushHistorySnapshot()
     resetComposite()
     return
   }
@@ -529,6 +611,7 @@ function applyRemote(p: RemoteDrawPayload): void {
       ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
       ctx.stroke()
     }
+    pushHistorySnapshot()
     resetComposite()
     return
   }
@@ -562,6 +645,7 @@ function applyRemote(p: RemoteDrawPayload): void {
   if (p.phase === 'end') {
     remoteLast.delete(p.strokeId)
     remoteEraseStrokeStyleById.delete(p.strokeId)
+    pushHistorySnapshot()
   }
   resetComposite()
 }
@@ -569,6 +653,35 @@ function applyRemote(p: RemoteDrawPayload): void {
 defineExpose({ clearBoard, applyRemote })
 
 let ro: ResizeObserver | null = null
+
+function onHistoryHotkeys(ev: KeyboardEvent): void {
+  const target = ev.target
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  ) {
+    return
+  }
+  const ctrlOrMeta = ev.ctrlKey || ev.metaKey
+  if (!ctrlOrMeta) {
+    return
+  }
+  if (ev.code === 'KeyZ' && !ev.shiftKey) {
+    ev.preventDefault()
+    undoLast()
+    return
+  }
+  if (ev.code === 'KeyY') {
+    ev.preventDefault()
+    redoLast()
+    return
+  }
+  if (ev.code === 'KeyZ' && ev.shiftKey) {
+    ev.preventDefault()
+    redoLast()
+  }
+}
 
 onMounted(() => {
   resizeCanvas()
@@ -579,12 +692,14 @@ onMounted(() => {
     ro.observe(wrapRef.value)
   }
   window.addEventListener('resize', resizeCanvas)
+  window.addEventListener('keydown', onHistoryHotkeys)
 })
 
 onUnmounted(() => {
   ro?.disconnect()
   ro = null
   window.removeEventListener('resize', resizeCanvas)
+  window.removeEventListener('keydown', onHistoryHotkeys)
 })
 
 watch(
@@ -604,30 +719,32 @@ watch(
 <template>
   <div
     ref="wrapRef"
-    class="nadraw-board-wrap absolute inset-0 flex h-full min-h-0 w-full flex-col overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-[#f5f2eb] via-[#efe8dd] to-[#e5ddd0] shadow-lg shadow-black/25 ring-1 ring-black/5 dark:border-white/10 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900 dark:shadow-black/50 dark:ring-white/5"
+    class="nadraw-board-wrap"
     :class="boardCursor"
   >
     <NadrawToolbar
-      v-if="showToolbar && canDraw"
-      class="relative z-30 mx-2 mt-1.5 shrink-0 sm:mx-3 sm:mt-2"
+      v-if="showToolbar"
+      class="nadraw-board-toolbar"
       :visible="true"
       :color="brushColor"
       :brush-size="brushSize"
       :tool="canvasTool"
       @update:color="brushColor = $event"
-      @update:brush-size="brushSize = $event"
+      @update:brushSize="brushSize = $event"
       @update:tool="canvasTool = $event"
+      @undo="undoLast"
+      @redo="redoLast"
+      @reset-game="emit('resetGame')"
     />
     <div
       v-if="$slots.hud"
-      class="relative z-20 mx-2 mt-0.5 flex shrink-0 flex-col items-stretch gap-0 sm:mx-3 sm:mt-1"
+      class="nadraw-board-hud"
     >
       <slot name="hud" />
     </div>
     <canvas
       ref="canvasRef"
-      class="z-0 min-h-0 w-full flex-1 touch-none"
-      :class="showToolbar && canDraw ? 'mt-0.5 sm:mt-1' : $slots.hud ? 'mt-0.5' : ''"
+      class="nadraw-board-canvas"
       :aria-label="t('nadrawShow.canvasTitle')"
       @pointerdown.prevent="onPointerDown"
       @pointermove.prevent="onPointerMove"
@@ -638,6 +755,50 @@ watch(
 </template>
 
 <style scoped>
+.nadraw-board-wrap {
+  position: absolute;
+  inset: 0;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+  border: 6px solid rgba(102, 56, 143, 0.33);
+  border-radius: 25px;
+  background: #ffffff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.nadraw-board-toolbar {
+  position: absolute;
+  z-index: 30;
+  top: -44px;
+  left: 0;
+}
+
+.nadraw-board-hud {
+  position: absolute;
+  z-index: 24;
+  top: 10px;
+  left: 11px;
+  max-width: calc(100% - 20px);
+  pointer-events: none;
+}
+
+.nadraw-board-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 18px;
+  touch-action: none;
+}
+
 .nadraw-board-wrap::before {
   content: '';
   position: absolute;
@@ -645,7 +806,7 @@ watch(
   z-index: 0;
   border-radius: inherit;
   pointer-events: none;
-  opacity: 0.045;
+  opacity: 0;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 </style>
