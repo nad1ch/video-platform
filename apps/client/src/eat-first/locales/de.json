@@ -199,7 +199,28 @@
     "nadle": "Nadle",
     "admin": "Admin",
     "nadrawShow": "Nadraw",
-    "coinHub": "Coin-Hub"
+    "coinHub": "Coin-Hub",
+    "durak": "Durak"
+  },
+  "durak": {
+    "demoNotice": "Demo-Layout — Regeln und Echtzeit-Sync folgen in späteren PRs.",
+    "deck": "Deck",
+    "trump": "Trumpf",
+    "emptyDefender": "Leerer Verteidigungs-Slot",
+    "roleStreamer": "Streamer",
+    "roleChat": "Twitch-Chat",
+    "cards": "{n} Karten",
+    "yourTurn": "Du bist dran",
+    "chatTurn": "Chat ist dran",
+    "turnLocal": "Du bist am Zug",
+    "turnOpponent": "Warte auf den Chat",
+    "phase": {
+      "idle": "Phase: Pause",
+      "attack": "Phase: Angriff",
+      "defend": "Phase: Verteidigung",
+      "take": "Phase: Nehmen",
+      "discard": "Phase: Abwerfen"
+    }
   },
   "betaAccess": {
     "routeTitle": "Beta access",

@@ -10,7 +10,7 @@ import { useAuth, type AppUser } from '@/composables/useAuth'
 import { registerEatFirstRouterGuards } from '@/eat-first/router.js'
 import { installRouteNavLoadingGuards, releaseRouteNavLoading } from '@/routeNavLoading'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
-import { loadCheckersPage, loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
+import { loadCheckersPage, loadDurakPage, loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
 
 
 const DEFAULT_NADLE_STREAMER =
@@ -133,6 +133,12 @@ export const router = createRouter({
           component: loadCheckersPage,
         },
         {
+          path: 'durak',
+          name: 'durak',
+          meta: { appTitleKey: 'routes.durak', footerContext: 'home', footer: false },
+          component: loadDurakPage,
+        },
+        {
           path: 'eat',
           name: 'eat',
           meta: { footerContext: 'eat' },
@@ -193,7 +199,7 @@ export const router = createRouter({
         },
         /**
          * Short URL: `/app/:streamer` (legacy). Static segments above take precedence:
-         * `call`, `mafia`, `nadle`, `nadle/:streamer`, `nadraw-show/:streamer`, `checkers/:roomId`, `eat`, `coin-hub`, `billing`, `admin` are reserved — a streamer slug matching
+         * `call`, `mafia`, `nadle`, `nadle/:streamer`, `nadraw-show/:streamer`, `checkers/:roomId`, `durak`, `eat`, `coin-hub`, `billing`, `admin` are reserved — a streamer slug matching
          * those first segments cannot use this short path (e.g. `/app/call` is the Call page, not nadle for "call").
          */
         {

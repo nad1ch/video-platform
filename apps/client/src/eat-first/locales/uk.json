@@ -199,7 +199,28 @@
     "nadle": "Nadle",
     "admin": "Адмін",
     "nadrawShow": "Nadraw",
-    "coinHub": "Монетний хаб"
+    "coinHub": "Монетний хаб",
+    "durak": "Дурак"
+  },
+  "durak": {
+    "demoNotice": "Демо-макет — правила та синхронізація з’являться в наступних PR.",
+    "deck": "Колода",
+    "trump": "Козир",
+    "emptyDefender": "Порожній слот захисту",
+    "roleStreamer": "Стрімер",
+    "roleChat": "Чат Twitch",
+    "cards": "{n} карт",
+    "yourTurn": "Ваш хід",
+    "chatTurn": "Хід чату",
+    "turnLocal": "Ваш хід",
+    "turnOpponent": "Очікування чату",
+    "phase": {
+      "idle": "Фаза: пауза",
+      "attack": "Фаза: атака",
+      "defend": "Фаза: захист",
+      "take": "Фаза: взяття",
+      "discard": "Фаза: скидання"
+    }
   },
   "betaAccess": {
     "routeTitle": "Бета-доступ",

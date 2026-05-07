@@ -199,7 +199,28 @@
     "nadle": "Nadle",
     "admin": "Admin",
     "nadrawShow": "Nadraw",
-    "coinHub": "Coin Hub"
+    "coinHub": "Coin Hub",
+    "durak": "Durak"
+  },
+  "durak": {
+    "demoNotice": "Układ demo — zasady i synchronizacja w kolejnych PR.",
+    "deck": "Talia",
+    "trump": "Atut",
+    "emptyDefender": "Pusty slot obrony",
+    "roleStreamer": "Streamer",
+    "roleChat": "Czat Twitch",
+    "cards": "{n} kart",
+    "yourTurn": "Twoja kolej",
+    "chatTurn": "Kolej czatu",
+    "turnLocal": "Twoja kolej",
+    "turnOpponent": "Oczekiwanie na czat",
+    "phase": {
+      "idle": "Faza: pauza",
+      "attack": "Faza: atak",
+      "defend": "Faza: obrona",
+      "take": "Faza: zbiór",
+      "discard": "Faza: odrzut"
+    }
   },
   "betaAccess": {
     "routeTitle": "Beta access",
