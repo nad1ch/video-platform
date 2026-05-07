@@ -11,13 +11,21 @@ import {
   type RemoteDrawPayload,
 } from '@/features/nadraw-show/orchestrator/useNadrawShowOrchestrator'
 import NadrawCanvasBoard from '@/features/nadraw-show/components/NadrawCanvasBoard.vue'
-import NadrawHostSettingsPanel from '@/features/nadraw-show/components/NadrawHostSettingsPanel.vue'
 import NadrawRoundSetupPanel from '@/features/nadraw-show/components/NadrawRoundSetupPanel.vue'
 import type { NadrawRoundSetupWordSource } from '@/features/nadraw-show/core/nadrawTypes'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
+import cloudWideSrc from '@/assets/landing/clouds/cloud-wide-volumetric.webp'
+import hudRoundBodySrc from '@/assets/nadraw-show/hud-round-body.svg'
+import hudTimerSrc from '@/assets/nadraw-show/hud-timer.svg'
 
 
 const NADRAW_HTML_CLASS = 'sa-nadraw-route'
+const NADRAW_STAGE_WIDTH = 1440
+const NADRAW_STAGE_EDGE_TOTAL = 15
+const NADRAW_STAGE_CONTENT_WIDTH = 1425
+const NADRAW_STAGE_HEIGHT = 784
+const NADRAW_COMPACT_BREAKPOINT = 936
+const NADRAW_FLUID_BREAKPOINT = 1440
 
 const { t } = useI18n()
 const route = useRoute()
@@ -26,8 +34,8 @@ const auth = useAuth()
 const manualWord = ref('')
 const nextRoundWordEdit = ref('')
 const wordSourceUi = ref<NadrawRoundSetupWordSource>('global')
-const roundDurationSec = ref(180)
-const roundsPlanned = ref(10)
+const roundDurationSec = ref(30)
+const roundsPlanned = ref(5)
 
 const effectiveSlug = computed(() => {
   const p = route.params.streamer
@@ -55,7 +63,7 @@ const {
   nowTick,
   showHostChrome,
   startRound,
-  clearCanvasOnly,
+  clearRound,
   ackNextRound,
   sendDrawStart,
   sendDrawMove,
@@ -65,7 +73,39 @@ const {
 } = orch
 
 const boardRef = useTemplateRef<{ clearBoard: () => void; applyRemote: (p: RemoteDrawPayload) => void }>('boardRef')
+const pageRef = useTemplateRef<HTMLElement>('pageRef')
 const chatPanelRef = ref<InstanceType<typeof TwitchRelayChatPanel> | null>(null)
+const nadrawStageScale = ref(1)
+const nadrawStageLayoutHeight = ref(NADRAW_STAGE_HEIGHT)
+const nadrawCompact = ref(false)
+const nadrawFluid = ref(false)
+
+const nadrawStageStyle = computed<Record<string, string>>(() => ({
+  '--nadraw-stage-scale': nadrawStageScale.value.toFixed(4),
+  '--nadraw-stage-layout-height': `${nadrawStageLayoutHeight.value}px`,
+  '--nadraw-stage-visual-height': `${Math.ceil(nadrawStageLayoutHeight.value * nadrawStageScale.value)}px`,
+}))
+
+let nadrawStageResizeObserver: ResizeObserver | null = null
+
+function syncNadrawStageScale(): void {
+  const width = pageRef.value?.clientWidth || window.innerWidth || NADRAW_STAGE_WIDTH
+  const height = window.innerHeight || NADRAW_STAGE_HEIGHT
+  nadrawCompact.value = width < NADRAW_COMPACT_BREAKPOINT
+  nadrawStageLayoutHeight.value = nadrawCompact.value ? NADRAW_STAGE_HEIGHT : Math.max(NADRAW_STAGE_HEIGHT, height - 116)
+  nadrawFluid.value = !nadrawCompact.value && width >= NADRAW_FLUID_BREAKPOINT
+  if (nadrawCompact.value) {
+    nadrawStageScale.value = 1
+    return
+  }
+  if (nadrawFluid.value) {
+    nadrawStageScale.value = 1
+    return
+  }
+  const availableContentWidth = Math.max(1, width - NADRAW_STAGE_EDGE_TOTAL)
+  const next = Math.min(1, availableContentWidth / NADRAW_STAGE_CONTENT_WIDTH)
+  nadrawStageScale.value = next
+}
 
 onCanvasClear(() => {
   boardRef.value?.clearBoard()
@@ -83,16 +123,6 @@ const roundSecondsLeft = computed(() => {
   const ms = st.endsAt - (nowTick.value ?? Date.now())
   return Math.max(0, Math.ceil(ms / 1000))
 })
-
-const roundsPlanHud = computed(() => {
-  const st = nadrawState.value
-  if (!st || !st.roundsPlanned || st.roundsPlanned < 1) {
-    return ''
-  }
-  const current = st.roundNumber ?? 1
-  return t('nadrawShow.roundProgressHud', { current, total: st.roundsPlanned })
-})
-
 
 const showRoundSetupOverlay = computed(() => {
   if (!showHostChrome.value) {
@@ -135,11 +165,38 @@ const wordStripModel = computed({
   },
 })
 
-const wordStripLabel = computed(() => {
-  if (nadrawState.value?.phase === 'between_rounds') {
-    return t('nadrawShow.nextRoundWordLabel')
+const hostCurrentWord = computed(() => canvasHostWordToDrawInCamera.value?.word ?? '')
+
+const showWordChoicePanel = computed(() => {
+  if (!showHostChrome.value) {
+    return false
   }
-  return t('nadrawShow.sectionWord')
+  return showWordStripInCamera.value || hostCurrentWord.value.length > 0
+})
+
+const wordChoiceModel = computed({
+  get(): string {
+    if (showWordStripInCamera.value) {
+      return wordStripModel.value
+    }
+    return hostCurrentWord.value || manualWord.value
+  },
+  set(v: string) {
+    if (showWordStripInCamera.value || showRoundSetupOverlay.value) {
+      wordStripModel.value = v
+    } else {
+      manualWord.value = v
+    }
+  },
+})
+
+const wordChoiceReadonly = computed(() => hostCurrentWord.value.length > 0 && !showWordStripInCamera.value)
+
+const wordChoiceSubmitDisabled = computed(() => {
+  if (wordChoiceReadonly.value) {
+    return false
+  }
+  return wordChoiceModel.value.trim().length === 0
 })
 
 const showBetweenRoundOverlay = computed(() => nadrawState.value?.phase === 'between_rounds')
@@ -176,25 +233,10 @@ const breakAckDisabled = computed(() => {
     return false
   }
   if (st.sessionWordSource === 'manual') {
-    return nextRoundWordEdit.value.trim().length === 0
+    return nextRoundWordEdit.value.trim().length === 0 && String(st.nextWordDraft ?? '').trim().length === 0
   }
   return false
 })
-
-const gameFeelLine = computed(() => {
-  const st = nadrawState.value
-  if (!st || st.phase === 'idle') {
-    return `🟡 ${t('nadrawShow.gameFeelWaiting')}`
-  }
-  if (st.phase === 'between_rounds') {
-    return `🟠 ${t('nadrawShow.gameFeelBetween')}`
-  }
-  if (st.phase === 'revealed') {
-    return `🔴 ${t('nadrawShow.gameFeelEnd')}`
-  }
-  return `🟢 ${t('nadrawShow.gameFeelRound')}`
-})
-
 
 const viewerIdleVeil = computed(() => {
   if (showHostChrome.value) {
@@ -259,10 +301,40 @@ const canvasHostWordWasForHost = computed((): { word: string } | null => {
 
 const maskedWordDisplay = computed(() => {
   const m = nadrawState.value?.maskedWord?.trim()
-  if (!m || m === '—') {
-    return '—'
+  if (m && m !== '—') {
+    return m.replace(/\s+/g, ' ')
   }
-  return m
+  const w = nadrawState.value?.currentWord?.trim()
+  if (w) {
+    return Array.from(w)
+      .map((ch) => (ch.trim() ? '_' : ' '))
+      .join(' ')
+  }
+  return ''
+})
+
+const showMaskedWordHud = computed(() => maskedWordDisplay.value.trim().length > 0)
+
+function formatClockSeconds(total: number): string {
+  const safe = Math.max(0, Math.floor(total))
+  const mm = Math.floor(safe / 60)
+  const ss = String(safe % 60).padStart(2, '0')
+  return `${mm}:${ss}`
+}
+
+const roundClockLabel = computed(() => {
+  const sec = roundSecondsLeft.value ?? nadrawState.value?.roundDurationSec ?? roundDurationSec.value
+  return formatClockSeconds(sec)
+})
+
+const roundProgressLabel = computed(() => {
+  const st = nadrawState.value
+  const total = st?.roundsPlanned && st.roundsPlanned > 0 ? st.roundsPlanned : roundsPlanned.value
+  const current =
+    st && st.phase !== 'idle'
+      ? Math.max(0, Math.min(total, (st.roundNumber ?? 1) - (st.phase === 'between_rounds' ? 0 : 1)))
+      : 0
+  return `${current}/${total}`
 })
 
 function nadrawLineCid(id: string, index: number): number {
@@ -301,19 +373,6 @@ const nadrawChatWsPillStatus = computed((): TwitchRelayChatWsStatus => {
   return 'idle'
 })
 
-const nadrawChatWsLabel = computed(() => {
-  if (lastWsError.value) {
-    return lastWsError.value
-  }
-  if (wsStatus.value === 'open') {
-    return t('nadrawShow.wsDotConnected')
-  }
-  if (wsStatus.value === 'reconnecting') {
-    return t('nadrawShow.wsDotReconnecting')
-  }
-  return t('nadrawShow.wsDotOffline')
-})
-
 const twitchWatchUrl = computed(
   () => `https://www.twitch.tv/${encodeURIComponent(effectiveTwitchChannel.value)}`,
 )
@@ -332,8 +391,8 @@ function onStart(): void {
   if (roundSetupStartDisabled.value) {
     return
   }
-  const rp = Math.min(50, Math.max(1, Math.floor(Number(roundsPlanned.value) || 1)))
-  const rd = Math.min(600, Math.max(10, Math.floor(Number(roundDurationSec.value) || 180)))
+  const rp = Math.min(100, Math.max(1, Math.floor(Number(roundsPlanned.value) || 1)))
+  const rd = Math.min(600, Math.max(10, Math.floor(Number(roundDurationSec.value) || 30)))
   roundsPlanned.value = rp
   roundDurationSec.value = rd
   const src = backendWordSource(wordSourceUi.value)
@@ -344,9 +403,14 @@ function onStart(): void {
   }
 }
 
-function onClearCanvas(): void {
+function onResetGame(): void {
+  if (!showHostChrome.value) {
+    return
+  }
+  clearRound()
   boardRef.value?.clearBoard()
-  clearCanvasOnly()
+  manualWord.value = ''
+  nextRoundWordEdit.value = ''
 }
 
 function onAckBetweenRound(): void {
@@ -359,23 +423,44 @@ function onAckBetweenRound(): void {
     return
   }
   const w = nextRoundWordEdit.value.trim()
+  const draft = String(st.nextWordDraft ?? '').trim()
+  const nextWord = w.length > 0 ? w : (draft.length > 0 ? draft : undefined)
   if (st.sessionWordSource === 'manual') {
-    if (!w) {
-      return
-    }
-    ackNextRound(w)
+    ackNextRound(nextWord)
     return
   }
-  ackNextRound(w.length > 0 ? w : undefined)
+  ackNextRound(nextWord)
+}
+
+function onWordPanelSubmit(): void {
+  if (wordChoiceSubmitDisabled.value) {
+    return
+  }
+  if (showRoundSetupOverlay.value) {
+    onStart()
+    return
+  }
+  if (nadrawState.value?.phase === 'between_rounds') {
+    onAckBetweenRound()
+  }
 }
 
 onMounted(() => {
   document.documentElement.classList.add(NADRAW_HTML_CLASS)
   void loadStreamerCard()
+  void nextTick(syncNadrawStageScale)
+  if (pageRef.value) {
+    nadrawStageResizeObserver = new ResizeObserver(syncNadrawStageScale)
+    nadrawStageResizeObserver.observe(pageRef.value)
+  }
+  window.addEventListener('resize', syncNadrawStageScale, { passive: true })
 })
 
 onUnmounted(() => {
   document.documentElement.classList.remove(NADRAW_HTML_CLASS)
+  nadrawStageResizeObserver?.disconnect()
+  nadrawStageResizeObserver = null
+  window.removeEventListener('resize', syncNadrawStageScale)
 })
 
 watch(effectiveSlug, () => {
@@ -404,91 +489,56 @@ watch(
 
 <template>
   <div
-    class="relative flex h-full min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-slate-100"
+    ref="pageRef"
+    class="nadraw-page"
+    :class="{ 'nadraw-page--compact': nadrawCompact, 'nadraw-page--fluid': nadrawFluid }"
+    :style="nadrawStageStyle"
   >
     <h1 class="sr-only">{{ t('nadrawShow.title') }}</h1>
 
-    <div
-      v-if="streamerLoadError"
-      class="pointer-events-none fixed right-3 top-3 z-[100] flex flex-col items-end gap-1"
-      role="status"
-      aria-live="polite"
-    >
-      <p
-        class="pointer-events-auto max-w-[min(16rem,calc(100vw-1.5rem))] rounded-lg border border-red-800/60 bg-red-950/90 px-2 py-1 text-[0.65rem] text-red-200"
-      >
-        {{ streamerLoadError }}
-      </p>
-    </div>
+    <p v-if="streamerLoadError" class="nadraw-page__error" role="status" aria-live="polite">
+      {{ streamerLoadError }}
+    </p>
 
-    <div class="flex min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden md:flex-row md:gap-3 md:px-4 md:pb-4 md:pt-4">
-      <aside
-        class="flex w-full max-w-none shrink-0 flex-col gap-3 overflow-hidden px-3 pt-3 max-md:max-h-[min(58vh,100%)] md:h-full md:w-[320px] md:min-w-[280px] md:max-w-[320px] md:min-h-0 md:px-0 md:pt-0"
-      >
-        
-        <div
-          class="flex shrink-0 flex-col overflow-hidden rounded-xl border border-slate-700/80 bg-slate-900/90 shadow-md"
-        >
-          <div class="relative aspect-video w-full shrink-0 overflow-hidden bg-black">
-            <div
-              class="flex h-full w-full items-center justify-center px-2 text-center text-[0.65rem] leading-snug text-slate-500"
-            >
-              {{ t('nadrawShow.cameraPlaceholder') }}
-            </div>
-            <div
-              v-if="canvasHostWordToDrawInCamera || showWordStripInCamera"
-              class="pointer-events-none absolute inset-x-0 bottom-0 z-[12] flex max-h-[52%] flex-col justify-end gap-1.5 border-t border-violet-500/20 bg-gradient-to-t from-black via-black/94 to-transparent px-2 pb-1.5 pt-2.5 backdrop-blur-[8px]"
-            >
-              <div
-                v-if="canvasHostWordToDrawInCamera"
-                class="pointer-events-none shrink-0 text-center"
-              >
-                <p class="text-[0.48rem] font-semibold uppercase tracking-wide text-slate-500">
-                  {{ t(canvasHostWordToDrawInCamera.label) }}
-                </p>
-                <p
-                  class="mt-0.5 font-mono text-[0.78rem] font-extrabold leading-tight tracking-wide text-violet-100 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]"
-                  :aria-label="t('nadrawShow.secretStreamerAria')"
-                >
-                  {{ canvasHostWordToDrawInCamera.word }}
-                </p>
-              </div>
-              <div v-if="showWordStripInCamera" class="pointer-events-auto shrink-0 space-y-1">
-                <label class="sa-panel-eat__label !mb-0 !text-[0.48rem]" for="nadraw-word-strip-cam">{{
-                  wordStripLabel
-                }}</label>
-                <input
-                  id="nadraw-word-strip-cam"
-                  v-model="wordStripModel"
-                  class="w-full rounded-[var(--ui-radius-lg,10px)] border-2 border-[color:var(--border-input,rgba(255,255,255,0.14))] bg-[color:var(--bg-muted,rgba(15,23,42,0.88))] px-2.5 py-1.5 text-left text-[0.78rem] font-semibold text-[color:var(--text-body,#f8fafc)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] placeholder:text-[color:var(--text-muted,rgba(196,181,253,0.5))] focus:border-[color:var(--border-strong,rgba(167,139,250,0.7))] focus:outline-none focus:ring-2 focus:ring-[color:var(--border-cyan-strong,rgba(56,189,248,0.35))]"
-                  type="text"
-                  maxlength="80"
-                  autocomplete="off"
-                  :placeholder="t('nadrawShow.manualWordInputPlaceholder')"
-                />
-              </div>
-            </div>
-          </div>
-          <NadrawHostSettingsPanel
-            v-if="showHostChrome && !showRoundSetupOverlay"
-            @clear-canvas="onClearCanvas"
+    <div class="nadraw-stage">
+      <img class="nadraw-page__cloud nadraw-page__cloud--left" :src="cloudWideSrc" alt="" aria-hidden="true" />
+      <img class="nadraw-page__cloud nadraw-page__cloud--right" :src="cloudWideSrc" alt="" aria-hidden="true" />
+
+      <div class="nadraw-layout">
+      <aside class="nadraw-left">
+        <form v-if="showWordChoicePanel" class="nadraw-card nadraw-word-card sa-glass-panel" @submit.prevent="onWordPanelSubmit">
+          <h2 class="nadraw-word-card__title">Choose a word</h2>
+          <input
+            id="nadraw-word-panel-input"
+            v-model="wordChoiceModel"
+            class="nadraw-word-card__input"
+            type="text"
+            maxlength="80"
+            autocomplete="off"
+            :readonly="wordChoiceReadonly"
+            placeholder="write here..."
+            :aria-label="t('nadrawShow.manualWord')"
           />
-        </div>
+        </form>
 
-        <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <section v-else class="nadraw-card nadraw-camera-card sa-glass-panel" :aria-label="t('nadrawShow.sectionCamera')">
+          <p>{{ t('nadrawShow.cameraPlaceholder') }}</p>
+        </section>
+
+        <section class="nadraw-card nadraw-chat-card sa-glass-panel" :aria-label="t('nadrawShow.chatTitle')">
           <TwitchRelayChatPanel
             ref="chatPanelRef"
-            class="h-full min-h-0 flex-1 overflow-hidden"
+            class="nadraw-chat"
             flex-rail
-            :show-ws-pill="false"
+            :show-ws-pill="true"
             :show-guess-hints="false"
             :ws-status="nadrawChatWsPillStatus"
-            :ws-status-label="nadrawChatWsLabel"
-            :chat-title="t('nadrawShow.chatTitle')"
+            :ws-status-label="'live'"
+            chat-title="Stream chat;"
             guess-len-hint=""
             :channel-display="effectiveTwitchChannel"
             :twitch-watch-url="twitchWatchUrl"
-            :open-twitch-label="t('nadleUi.chatOpenTwitch')"
+            open-twitch-label="open twitch"
             irc-relay-banner=""
             :relay-aria-label="t('nadleUi.chatRelayAria')"
             :chat-empty-text="t('nadleUi.chatEmpty', { channel: effectiveTwitchChannel })"
@@ -498,261 +548,938 @@ watch(
             :format-cooldown-hint="formatNadrawCooldownHint"
             :feedback-to-emojis="nadrawFeedbackToEmojis"
           />
-        </div>
+        </section>
       </aside>
 
-      <main class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible">
-        <div
-          class="relative flex min-h-0 flex-1 flex-col overflow-visible max-md:mx-3 max-md:my-3 md:mx-0 md:my-0"
-        >
-          <div
-            class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/40 shadow-lg shadow-black/40"
-          >
-            <h2 class="sr-only shrink-0">{{ t('nadrawShow.canvasTitle') }}</h2>
-            <div class="relative min-h-0 flex-1">
-              <NadrawCanvasBoard
-                ref="boardRef"
-                class="absolute inset-0 min-h-0 w-full"
-                :show-toolbar="
-                  showHostChrome && (nadrawState?.phase === 'drawing_locked' || nadrawState?.phase === 'drawing_active')
-                "
-                :can-draw="showHostChrome && (nadrawState?.phase === 'drawing_locked' || nadrawState?.phase === 'drawing_active')"
-                @draw-start="(id, nx, ny, m) => sendDrawStart(id, nx, ny, m)"
-                @draw-move="(id, nx, ny, m) => sendDrawMove(id, nx, ny, m)"
-                @draw-end="(id, nx, ny, m) => sendDrawEnd(id, nx, ny, m)"
-              >
-                <template v-if="showCanvasStatsHud" #hud>
-                  <div
-                    class="w-full max-w-full px-0.5"
-                    role="status"
-                    aria-live="polite"
-                  >
-                    <div
-                      class="flex w-full min-w-0 flex-col gap-y-1 rounded-lg border border-white/10 bg-slate-950/75 px-2 py-0.5 text-[0.65rem] shadow-md backdrop-blur-md sm:px-2.5 sm:py-1 sm:text-[0.7rem] md:text-xs"
-                    >
-                      <div
-                        class="flex w-full min-w-0 flex-wrap items-center justify-center gap-x-2 gap-y-0.5 sm:gap-x-2.5"
-                      >
-                        <span
-                          class="min-w-0 max-w-[min(12rem,38vw)] truncate text-center font-mono text-[0.95em] font-extrabold tracking-[0.12em] text-slate-50 sm:max-w-[min(16rem,44vw)] md:tracking-[0.16em]"
-                        >
-                          {{ maskedWordDisplay }}
-                        </span>
-                        <span
-                          v-if="roundSecondsLeft !== null"
-                          class="shrink-0 whitespace-nowrap font-mono font-bold tabular-nums text-amber-200"
-                        >
-                          ⏱&nbsp;{{ roundSecondsLeft }}s
-                        </span>
-                        <span
-                          class="max-w-[min(28rem,92vw)] shrink-0 text-center font-semibold leading-tight text-slate-300"
-                        >
-                          {{ gameFeelLine }}
-                        </span>
-                        <span
-                          v-if="roundsPlanHud"
-                          class="shrink-0 text-[0.9em] font-bold text-violet-300/95"
-                        >
-                          {{ roundsPlanHud }}
-                        </span>
-                      </div>
-                      <div
-                        v-if="canvasHostWordWasForHost"
-                        class="flex w-full min-w-0 flex-wrap items-center justify-center gap-x-2 gap-y-0 border-t border-white/10 pt-1 text-[0.62rem] leading-tight text-slate-400 sm:text-[0.65rem]"
-                      >
-                        <span class="shrink-0 font-semibold uppercase tracking-wide text-slate-500">
-                          {{ t('nadrawShow.canvasWordWas') }}
-                        </span>
-                        <span
-                          class="min-w-0 truncate font-mono text-[0.85rem] font-bold text-violet-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)] sm:text-[0.9rem]"
-                          :aria-label="t('nadrawShow.secretStreamerAria')"
-                        >
-                          {{ canvasHostWordWasForHost.word }}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </template>
-              </NadrawCanvasBoard>
-            </div>
-          </div>
-
-          <div
-            v-if="showCanvasInitVeil"
-            class="pointer-events-none absolute inset-0 z-30 rounded-2xl bg-slate-950/90"
-            aria-hidden="true"
-          />
-          <div
-            v-else-if="showRoundSetupOverlay"
-            class="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-2xl bg-slate-950/85 px-3 py-4 backdrop-blur-sm"
-          >
-            <NadrawRoundSetupPanel
-              v-model:word-source="wordSourceUi"
-              v-model:round-duration-sec="roundDurationSec"
-              v-model:round-count="roundsPlanned"
-              class="pointer-events-auto max-h-[min(92vh,42rem)] w-full max-w-md overflow-y-auto shadow-2xl shadow-black/50"
-              :start-disabled="roundSetupStartDisabled"
-              @start="onStart"
-            />
-          </div>
-          <div
-            v-else-if="showBetweenRoundOverlay"
-            class="pointer-events-none absolute inset-0 z-[28] flex items-center justify-center rounded-2xl bg-[rgba(2,6,23,0.88)] px-3 py-6 backdrop-blur-[10px]"
-            role="status"
-            aria-live="polite"
-          >
-            <div
-              class="pointer-events-auto relative w-full max-w-md overflow-hidden rounded-2xl border-2 border-violet-500/55 bg-[#0c0a12] px-5 py-6 text-center shadow-[0_0_0_1px_rgba(0,0,0,0.85),0_0_40px_rgba(0,0,0,0.65),0_0_80px_rgba(139,92,246,0.22)] md:px-7 md:py-8"
+      <main class="nadraw-main" :class="{ 'nadraw-main--toolbar': showHostChrome }">
+        <div class="nadraw-board-shell sa-glass-panel">
+          <div class="nadraw-board-inner">
+            <NadrawCanvasBoard
+              ref="boardRef"
+              class="nadraw-canvas-board"
+              :show-toolbar="showHostChrome"
+              :can-draw="showHostChrome && (nadrawState?.phase === 'drawing_locked' || nadrawState?.phase === 'drawing_active')"
+              @draw-start="(id, nx, ny, m) => sendDrawStart(id, nx, ny, m)"
+              @draw-move="(id, nx, ny, m) => sendDrawMove(id, nx, ny, m)"
+              @draw-end="(id, nx, ny, m) => sendDrawEnd(id, nx, ny, m)"
+              @reset-game="onResetGame"
             >
-              <div
-                class="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-violet-600/30 blur-2xl"
-                aria-hidden="true"
+              <template v-if="showCanvasStatsHud" #hud>
+                <div class="nadraw-hud" role="status" aria-live="polite">
+                  <span class="nadraw-hud__pill nadraw-hud__pill--timer">
+                    <img class="nadraw-hud__icon nadraw-hud__icon--timer" :src="hudTimerSrc" alt="" aria-hidden="true" />
+                    <span>{{ roundClockLabel }}</span>
+                  </span>
+                  <span class="nadraw-hud__pill nadraw-hud__pill--rounds">
+                    <img class="nadraw-hud__icon nadraw-hud__icon--rounds" :src="hudRoundBodySrc" alt="" aria-hidden="true" />
+                    <span>{{ roundProgressLabel }}</span>
+                  </span>
+                  <span v-if="showMaskedWordHud" class="nadraw-hud__pill nadraw-hud__pill--word">
+                    {{ maskedWordDisplay }}
+                  </span>
+                </div>
+              </template>
+            </NadrawCanvasBoard>
+
+            <template v-if="showRoundSetupOverlay">
+              <img class="nadraw-board-cloud nadraw-board-cloud--setup-left" :src="cloudWideSrc" alt="" aria-hidden="true" />
+              <img class="nadraw-board-cloud nadraw-board-cloud--setup-right" :src="cloudWideSrc" alt="" aria-hidden="true" />
+              <NadrawRoundSetupPanel
+                v-model:word-source="wordSourceUi"
+                v-model:round-duration-sec="roundDurationSec"
+                v-model:round-count="roundsPlanned"
+                class="nadraw-setup-over-canvas"
+                :start-disabled="roundSetupStartDisabled"
+                @start="onStart"
               />
-              <div
-                class="pointer-events-none absolute -bottom-12 -left-10 h-32 w-32 rounded-full bg-indigo-900/40 blur-2xl"
-                aria-hidden="true"
-              />
-              <p
-                class="relative text-[0.65rem] font-extrabold uppercase leading-tight tracking-[0.16em] text-violet-300 md:text-[0.72rem]"
-              >
-                {{ t('nadrawShow.breakOverlayKicker') }}
-              </p>
-              <p
-                class="relative mt-3 text-lg font-extrabold leading-snug text-white [text-shadow:0_1px_0_rgb(0_0_0),0_2px_12px_rgb(0_0_0)] md:text-xl"
-              >
-                {{ breakOverlayHeadline }}
-              </p>
-              <div
-                v-if="showHostChrome && canvasHostWordWasForHost"
-                class="relative mt-3 flex flex-col items-center gap-0.5"
-              >
-                <span
-                  class="text-[0.6rem] font-semibold uppercase tracking-wide text-slate-500 md:text-[0.65rem]"
-                >
-                  {{ t('nadrawShow.canvasWordWas') }}
-                </span>
-                <span
-                  class="font-mono text-base font-extrabold tracking-wide text-violet-100 [text-shadow:0_1px_3px_rgba(0,0,0,0.9)] md:text-lg"
-                  :aria-label="t('nadrawShow.secretStreamerAria')"
-                >
-                  {{ canvasHostWordWasForHost.word }}
-                </span>
-              </div>
-              <p
-                v-if="roundsPlanHud"
-                class="relative mt-3 text-sm font-bold tabular-nums text-slate-100 md:text-base"
-              >
-                {{ roundsPlanHud }}
+            </template>
+
+            <div v-if="showCanvasInitVeil" class="nadraw-loading-veil" aria-hidden="true" />
+
+            <div v-else-if="showBetweenRoundOverlay" class="nadraw-between" role="status" aria-live="polite">
+              <p class="nadraw-between__kicker">{{ t('nadrawShow.breakOverlayKicker') }}</p>
+              <p class="nadraw-between__title">{{ breakOverlayHeadline }}</p>
+              <p v-if="canvasHostWordWasForHost" class="nadraw-between__word">
+                {{ canvasHostWordWasForHost.word }}
               </p>
               <button
                 v-if="showHostChrome"
+                class="nadraw-between__button"
                 type="button"
-                class="sa-cta-accent relative mt-6 w-full max-w-xs !min-h-11 !text-[0.88rem]"
                 :disabled="breakAckDisabled"
                 @click="onAckBetweenRound"
               >
                 {{ breakAckButtonLabel }}
               </button>
-              <p v-else class="relative mt-5 text-sm font-semibold text-slate-200">
-                {{ t('nadrawShow.breakViewerWait') }}
-              </p>
+              <p v-else class="nadraw-between__wait">{{ t('nadrawShow.breakViewerWait') }}</p>
             </div>
-          </div>
-          <div
-            v-else-if="viewerIdleVeil"
-            class="nadraw-idle-veil pointer-events-none absolute inset-0 z-30 flex items-center justify-center overflow-hidden rounded-2xl px-4"
-            role="status"
-            aria-live="polite"
-          >
-            <div
-              class="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-950/92 via-slate-950/88 to-indigo-950/92"
-              aria-hidden="true"
-            />
-            <div
-              class="pointer-events-none absolute inset-0 opacity-[0.14] [background-image:radial-gradient(circle_at_center,rgba(255,255,255,0.9)_1px,transparent_1.5px)] [background-size:14px_14px]"
-              aria-hidden="true"
-            />
-            <div
-              class="nadraw-idle-veil__blob nadraw-idle-veil__blob--a pointer-events-none absolute -left-[12%] top-[18%] h-[min(42vw,14rem)] w-[min(42vw,14rem)] rounded-full bg-violet-500/35 blur-3xl"
-              aria-hidden="true"
-            />
-            <div
-              class="nadraw-idle-veil__blob nadraw-idle-veil__blob--b pointer-events-none absolute -right-[8%] bottom-[12%] h-[min(48vw,16rem)] w-[min(48vw,16rem)] rounded-full bg-indigo-500/30 blur-3xl"
-              aria-hidden="true"
-            />
-            <div
-              class="nadraw-idle-veil__blob nadraw-idle-veil__blob--c pointer-events-none absolute left-[22%] bottom-[28%] h-[min(28vw,9rem)] w-[min(28vw,9rem)] rounded-full bg-fuchsia-500/20 blur-3xl"
-              aria-hidden="true"
-            />
-            <div
-              class="relative z-10 w-full max-w-md rounded-2xl border border-violet-400/25 bg-slate-950/55 px-6 py-8 shadow-[0_0_0_1px_rgba(139,92,246,0.12),0_24px_48px_rgba(0,0,0,0.45)] backdrop-blur-md md:px-8 md:py-9"
-            >
-              <p
-                class="text-center text-[0.65rem] font-extrabold uppercase tracking-[0.2em] text-violet-300/95 md:text-[0.7rem]"
-              >
-                {{ t('nadrawShow.canvasIdleOverlayKicker') }}
-              </p>
-              <p class="mt-5 text-center text-4xl drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]" aria-hidden="true">
-                🎨
-              </p>
-              <p
-                class="mt-4 text-center text-base font-bold leading-snug text-white [text-shadow:0_1px_0_rgb(0_0_0),0_2px_14px_rgb(0_0_0)] md:text-lg"
-              >
-                {{ canvasIdleOverlayLine }}
-              </p>
-              <p class="mt-2 text-center text-sm font-medium leading-relaxed text-violet-100/85 md:text-[0.95rem]">
-                {{ t('nadrawShow.canvasEmptySubtitleViewer') }}
-              </p>
+
+            <div v-else-if="viewerIdleVeil" class="nadraw-viewer-veil" role="status" aria-live="polite">
+              <p>{{ canvasIdleOverlayLine }}</p>
+              <span>{{ t('nadrawShow.canvasEmptySubtitleViewer') }}</span>
             </div>
           </div>
         </div>
       </main>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-@keyframes nadraw-idle-float-a {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
+.nadraw-page {
+  --nadraw-purple: #66388f;
+  --nadraw-panel-purple: rgba(81, 48, 116, 0.78);
+  position: relative;
+  flex: 0 0 var(--nadraw-stage-visual-height, 784px) !important;
+  width: 100%;
+  height: var(--nadraw-stage-visual-height, 784px) !important;
+  min-height: var(--nadraw-stage-visual-height, 784px) !important;
+  overflow: hidden;
+  color: #ffffff;
+  background: transparent;
+  font-family: "Marmelad", var(--sa-font-main, system-ui, sans-serif);
+}
+
+:global(.app-shell-main__viewport--nadraw),
+:global(.sa-nadraw-route .app-shell-main__viewport--chrome) {
+  padding-inline: 0;
+  background: transparent;
+}
+
+:global(.app-shell-main--nadraw),
+:global(.app-shell-main__viewport--nadraw),
+:global(.app-shell-main__viewport--nadraw .app-shell-route-stack),
+:global(.sa-nadraw-route .app-shell-main),
+:global(.sa-nadraw-route .app-shell-main__viewport),
+:global(.sa-nadraw-route .app-shell-route-stack) {
+  flex: 0 0 auto !important;
+  min-height: 784px !important;
+  background: transparent;
+}
+
+:global(.app-shell-main__viewport--nadraw .app-shell-route-stack > .nadraw-page),
+:global(.sa-nadraw-route .app-shell-route-stack > .nadraw-page) {
+  flex: 0 0 var(--nadraw-stage-visual-height, 784px) !important;
+  min-height: var(--nadraw-stage-visual-height, 784px) !important;
+}
+
+.nadraw-stage {
+  position: relative;
+  z-index: 1;
+  width: 1440px;
+  height: var(--nadraw-stage-layout-height, 784px);
+  transform: scale(var(--nadraw-stage-scale, 1));
+  transform-origin: 8px 0;
+}
+
+.nadraw-page__cloud {
+  position: absolute;
+  z-index: 0;
+  width: 832px;
+  height: 416px;
+  object-fit: cover;
+  object-position: bottom;
+  opacity: 0.26;
+  pointer-events: none;
+  user-select: none;
+}
+
+.nadraw-page__cloud--left {
+  left: 170px;
+  bottom: -126px;
+  transform: rotate(2.35deg);
+}
+
+.nadraw-page__cloud--right {
+  top: -238px;
+  right: -220px;
+  transform: scaleY(-1) rotate(173.31deg);
+}
+
+.nadraw-page__error {
+  position: fixed;
+  right: 12px;
+  top: 12px;
+  z-index: 100;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.86);
+  color: #fee2e2;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.nadraw-layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 343px minmax(0, 1071px);
+  gap: 11px;
+  width: min(1425px, calc(100% - 15px));
+  height: var(--nadraw-stage-layout-height, 784px);
+  min-height: 0;
+  margin: 0 7px 0 8px;
+  padding: 0 0 8px;
+  box-sizing: border-box;
+  align-content: start;
+}
+
+.nadraw-left {
+  display: grid;
+  grid-template-rows: 213px minmax(560px, 1fr);
+  gap: 11px;
+  width: 343px;
+  height: calc(var(--nadraw-stage-layout-height, 784px) - 8px);
+  min-height: 0;
+  padding-top: 8px;
+  box-sizing: border-box;
+}
+
+.nadraw-card {
+  position: relative;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 29.143px;
+  border: 1px solid rgba(255, 255, 255, 0.035);
+  background-color: rgba(47, 25, 83, 0.2);
+  background-image: linear-gradient(132.75deg, rgba(124, 77, 219, 0.119) 0%, rgba(102, 56, 143, 0.103) 73.206%);
+  backdrop-filter: blur(18px) saturate(142%);
+  -webkit-backdrop-filter: blur(18px) saturate(142%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -22px 42px rgba(4, 0, 18, 0.1),
+    0 16px 32px rgba(54, 24, 105, 0.08);
+}
+
+.nadraw-left > .nadraw-card {
+  width: 341px;
+  margin-left: 0;
+  background-color: transparent;
+  background-image: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -22px 42px rgba(4, 0, 18, 0.08);
+}
+
+.nadraw-card::before,
+.nadraw-board-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 7.4px 6.4px, rgba(255, 255, 255, 0.32) 0 1.06px, transparent 1.12px),
+    radial-gradient(circle at 145.7px 13.2px, rgba(255, 255, 255, 0.18) 0 1.06px, transparent 1.12px),
+    radial-gradient(circle at 207.2px 6.9px, rgba(255, 255, 255, 0.16) 0 0.8px, transparent 0.86px);
+}
+
+.nadraw-card::after,
+.nadraw-board-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(141deg, rgba(255, 255, 255, 0.095) 0%, rgba(255, 255, 255, 0.018) 31%, transparent 56%),
+    radial-gradient(circle at 84% 12%, rgba(255, 255, 255, 0.055), transparent 26%);
+  mix-blend-mode: screen;
+}
+
+.nadraw-camera-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 213px;
+  padding: 0 24px;
+  text-align: center;
+}
+
+.nadraw-camera-card p {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  color: #ffffff;
+  font-size: 11.5px;
+  line-height: 1.2;
+}
+
+.nadraw-word-card {
+  height: 213px;
+  padding: 17px 10px 14px;
+  background-image: linear-gradient(132.75deg, rgba(124, 77, 219, 0.119) 0%, rgba(102, 56, 143, 0.103) 73.206%);
+}
+
+.nadraw-word-card__title {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 19px;
+  height: 26px;
+  color: #ffffff;
+  font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
+  font-size: 20px;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
+  line-height: 30px;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.nadraw-word-card__input {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 321px;
+  height: 51px;
+  margin-left: 0;
+  border: 0;
+  border-radius: 29.143px;
+  color: #ffffff;
+  font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
+  font-variation-settings: 'YEAR' 1979;
+  letter-spacing: 0;
+}
+
+.nadraw-word-card__input {
+  display: block;
+  padding: 0 20px;
+  background-image: linear-gradient(164.61deg, rgba(124, 77, 219, 0.173) 0%, rgba(60, 36, 99, 0.169) 73.206%);
+  backdrop-filter: blur(14px) saturate(145%);
+  -webkit-backdrop-filter: blur(14px) saturate(145%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -12px 22px rgba(14, 2, 30, 0.1);
+  font-size: 16px;
+  line-height: 30px;
+  text-align: center;
+  outline: none;
+}
+
+.nadraw-word-card__input::placeholder {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+  text-align: left;
+}
+
+.nadraw-word-card__input:focus {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+
+.nadraw-chat-card {
+  height: 100%;
+  background-image: linear-gradient(109.37deg, rgba(124, 77, 219, 0.173) 0%, rgba(60, 36, 99, 0.169) 73.206%);
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__shell) {
+  position: relative;
+  z-index: 1;
+  gap: 0;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__head) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  width: 100%;
+  height: 82px;
+  border-radius: 29.143px;
+  background-image: linear-gradient(157.39deg, rgba(124, 77, 219, 0.173) 0%, rgba(60, 36, 99, 0.169) 73.206%);
+  backdrop-filter: blur(16px) saturate(142%);
+  -webkit-backdrop-filter: blur(16px) saturate(142%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -16px 28px rgba(6, 0, 20, 0.08);
+  overflow: visible;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__head::before) {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 46.3% 13.4%, rgba(255, 255, 255, 0.24) 0 0.85px, transparent 0.92px),
+    radial-gradient(circle at 65.8% 4.9%, rgba(255, 255, 255, 0.16) 0 0.7px, transparent 0.76px);
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__head-row) {
+  position: relative;
+  display: block;
+  height: 46px;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__title) {
+  position: absolute;
+  left: 21px;
+  top: 0;
+  width: 201px;
+  height: 51px;
+  overflow: visible;
+  font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
+  font-size: 16px;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
+  line-height: 50.526px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__ws-pill) {
+  position: absolute;
+  right: 16.756px;
+  top: 18px;
+  min-width: 42px;
+  width: 42px;
+  height: 23px;
+  padding: 0;
+  border-radius: 11.362px;
+  background: rgba(255, 59, 48, 0.44);
+  font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
+  font-size: 9px;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
+  line-height: 1;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__toolbar) {
+  position: absolute;
+  left: 11px;
+  right: 17.143px;
+  top: 46px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0;
+  width: auto;
+  height: 20px;
+  margin: 0;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__channel-pill) {
+  margin-left: 14px;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 15px;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__external) {
+  margin-left: auto;
+  min-width: 92px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 11.362px;
+  background: rgba(102, 56, 143, 0.33);
+  font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
+  font-size: 9px;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__feed) {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 63px;
+  bottom: 10px;
+  z-index: 1;
+  flex: none;
+  width: auto;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  overflow: hidden auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__lines) {
+  gap: 5px;
+  padding: 0 0 2px;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__line) {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__line:hover) {
+  background: transparent;
+  box-shadow: none;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__avatar),
+.nadraw-chat-card :deep(.twitch-relay-chat__badge) {
+  display: none;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__line-body) {
+  display: inline;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__line-body::before) {
+  content: '1:38:55 ';
+  color: #898989;
+  font-size: 16px;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__line-meta) {
+  display: inline;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__name) {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: #ff0000;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__line:nth-child(3n + 1) .twitch-relay-chat__name) {
+  color: #00bbff;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__line:nth-child(3n + 2) .twitch-relay-chat__name) {
+  color: #15ff00;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__line:nth-child(4n) .twitch-relay-chat__name) {
+  color: #ff00b2;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__name::after) {
+  content: ': ';
+  color: #ffffff;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__text) {
+  display: inline;
+  margin: 0;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.nadraw-chat-card :deep(.twitch-relay-chat__empty) {
+  padding: 32px 10px;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 14px;
+}
+
+.nadraw-main {
+  min-width: 0;
+  padding-top: 52px;
+}
+
+.nadraw-board-shell {
+  position: relative;
+  box-sizing: border-box;
+  width: 1071px;
+  max-width: 100%;
+  height: calc(var(--nadraw-stage-layout-height, 784px) - 52px);
+  min-height: 0;
+  padding: 18px 21px 19px 18px;
+  overflow: visible;
+  border-radius: 29.143px;
+  border: 1px solid rgba(255, 255, 255, 0.035);
+  background-image: linear-gradient(129.88deg, rgba(124, 77, 219, 0.173) 0%, rgba(60, 36, 99, 0.169) 73.206%);
+  backdrop-filter: blur(18px) saturate(142%);
+  -webkit-backdrop-filter: blur(18px) saturate(142%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 -24px 42px rgba(4, 0, 18, 0.09);
+}
+
+.nadraw-board-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.nadraw-board-inner :deep(.nadraw-board-toolbar) {
+  top: -69px;
+  left: -18px;
+  width: calc(100% + 32px);
+}
+
+.nadraw-board-cloud {
+  position: absolute;
+  z-index: 10;
+  width: clamp(832px, 62vw, 1280px);
+  height: auto;
+  aspect-ratio: 2 / 1;
+  object-fit: cover;
+  object-position: bottom;
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+.nadraw-board-cloud--setup-left {
+  left: -38%;
+  top: -19%;
+  transform: scaleY(-1) rotate(173.31deg);
+}
+
+.nadraw-board-cloud--setup-right {
+  right: -34%;
+  bottom: -36%;
+  transform: scaleY(-1) rotate(173.31deg);
+}
+
+.nadraw-setup-over-canvas {
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  top: calc(50% - 24px);
+  transform: translate(-50%, -50%);
+}
+
+.nadraw-hud {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255, 255, 255, 0.94);
+  font-family: "Coda Caption", var(--sa-font-display, system-ui, sans-serif);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 32px;
+  letter-spacing: 0;
+}
+
+.nadraw-hud__pill {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  height: 39px;
+  border-radius: 25.268px;
+  background: rgba(80, 57, 119, 0.54);
+  overflow: hidden;
+}
+
+.nadraw-hud__icon {
+  display: block;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+
+.nadraw-hud__icon--timer {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+}
+
+.nadraw-hud__icon--rounds {
+  width: 26px;
+  height: 26.929px;
+  flex: 0 0 26px;
+}
+
+.nadraw-hud__pill--timer {
+  width: 98px;
+  padding: 0 8px 0 11px;
+  gap: 6px;
+}
+
+.nadraw-hud__pill--rounds {
+  width: 108px;
+  padding: 0 8px 0 12px;
+  gap: 6px;
+}
+
+.nadraw-hud__pill--word {
+  min-width: 114px;
+  max-width: 260px;
+  padding: 0 22px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.nadraw-loading-veil {
+  position: absolute;
+  inset: 6px;
+  z-index: 18;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.02);
+  pointer-events: none;
+}
+
+.nadraw-between,
+.nadraw-viewer-veil {
+  position: absolute;
+  z-index: 26;
+  left: 50%;
+  top: 50%;
+  box-sizing: border-box;
+  width: min(420px, calc(100% - 32px));
+  padding: 22px 24px;
+  border-radius: 25px;
+  border: 1px solid rgba(106, 74, 150, 1);
+  background: #9b86bf;
+  color: #ffffff;
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+.nadraw-between__kicker,
+.nadraw-between__title,
+.nadraw-viewer-veil p {
+  margin: 0;
+  font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
+  letter-spacing: 0;
+}
+
+.nadraw-between__kicker {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.nadraw-between__title,
+.nadraw-viewer-veil p {
+  margin-top: 8px;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.nadraw-between__word,
+.nadraw-viewer-veil span {
+  display: block;
+  margin: 10px 0 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 15px;
+}
+
+.nadraw-between__button {
+  width: 100%;
+  height: 51px;
+  margin-top: 18px;
+  border: 1px solid rgba(115, 84, 161, 1);
+  border-radius: 25.645px;
+  background: #7d5aa9;
+  color: #fff;
+  font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
+  font-size: 16px;
+  font-variation-settings: 'YEAR' 1979;
+  cursor: pointer;
+}
+
+.nadraw-between__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.nadraw-page--fluid {
+  --nadraw-fluid-stage-height: var(--nadraw-stage-layout-height, 784px);
+  flex: 0 0 var(--nadraw-fluid-stage-height) !important;
+  height: var(--nadraw-fluid-stage-height) !important;
+  min-height: var(--nadraw-fluid-stage-height) !important;
+}
+
+:global(.app-shell-main__viewport--nadraw .app-shell-route-stack > .nadraw-page.nadraw-page--fluid),
+:global(.sa-nadraw-route .app-shell-route-stack > .nadraw-page.nadraw-page--fluid) {
+  flex: 0 0 var(--nadraw-fluid-stage-height) !important;
+  min-height: var(--nadraw-fluid-stage-height) !important;
+}
+
+.nadraw-page--fluid .nadraw-stage {
+  width: 100%;
+  height: var(--nadraw-fluid-stage-height);
+  transform: none;
+}
+
+.nadraw-page--fluid .nadraw-layout {
+  grid-template-columns: 343px minmax(0, 1fr);
+  width: calc(100% - 15px);
+  height: var(--nadraw-fluid-stage-height);
+}
+
+.nadraw-page--fluid .nadraw-left {
+  grid-template-rows: 213px minmax(560px, 1fr);
+  height: calc(var(--nadraw-fluid-stage-height) - 8px);
+}
+
+.nadraw-page--fluid .nadraw-chat-card {
+  height: 100%;
+}
+
+.nadraw-page--fluid .nadraw-board-shell {
+  width: 100%;
+  height: calc(var(--nadraw-fluid-stage-height) - 52px);
+  min-height: 732px;
+}
+
+.nadraw-page--compact {
+  flex: 1 1 auto !important;
+  height: auto !important;
+  min-height: 100dvh !important;
+  overflow: visible;
+  padding: 0 0 16px;
+}
+
+.nadraw-page--compact .nadraw-stage {
+  width: 100%;
+  height: auto;
+  transform: none;
+}
+
+.nadraw-page--compact .nadraw-page__cloud {
+  opacity: 0.16;
+}
+
+.nadraw-page--compact .nadraw-page__cloud--left {
+  left: -210px;
+  bottom: -130px;
+}
+
+.nadraw-page--compact .nadraw-page__cloud--right {
+  top: -230px;
+  right: -430px;
+}
+
+.nadraw-page--compact .nadraw-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 0 7px 16px 8px;
+}
+
+.nadraw-page--compact .nadraw-main {
+  order: 1;
+  padding-top: 11px;
+}
+
+.nadraw-page--compact .nadraw-main--toolbar {
+  padding-top: 88px;
+}
+
+.nadraw-page--compact .nadraw-left {
+  order: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 11px;
+  width: 100%;
+  height: auto;
+  padding-top: 0;
+}
+
+.nadraw-page--compact .nadraw-left > .nadraw-card {
+  width: 100%;
+  margin-left: 0;
+}
+
+.nadraw-page--compact .nadraw-camera-card,
+.nadraw-page--compact .nadraw-word-card {
+  height: 213px;
+}
+
+.nadraw-page--compact .nadraw-word-card__input {
+  width: 100%;
+}
+
+.nadraw-page--compact .nadraw-chat-card {
+  height: min(560px, 52dvh);
+  min-height: 320px;
+}
+
+.nadraw-page--compact .nadraw-board-shell {
+  width: 100%;
+  height: clamp(420px, calc(100dvh - 120px), 640px);
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+.nadraw-page--compact .nadraw-board-inner :deep(.nadraw-board-toolbar) {
+  top: -106px;
+  left: 0;
+  width: 100%;
+}
+
+.nadraw-page--compact .nadraw-setup-over-canvas,
+.nadraw-page--compact :deep(.nadraw-setup-over-canvas) {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+}
+
+@media (max-width: 680px) {
+  .nadraw-page--compact .nadraw-left {
+    grid-template-columns: 1fr;
   }
-  50% {
-    transform: translate3d(4%, -3%, 0) scale(1.06);
+
+  .nadraw-page--compact .nadraw-chat-card {
+    height: min(560px, 58dvh);
+  }
+
+  .nadraw-page--compact .nadraw-board-shell {
+    height: clamp(420px, calc(100dvh - 120px), 640px);
+    padding: 12px;
+  }
+
+  .nadraw-page--compact .nadraw-board-inner :deep(.nadraw-board-toolbar) {
+    left: 0;
+    width: 100%;
   }
 }
 
-@keyframes nadraw-idle-float-b {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
+@media (max-width: 560px) {
+  .nadraw-page--compact .nadraw-main--toolbar {
+    padding-top: 133px;
   }
-  50% {
-    transform: translate3d(-5%, 4%, 0) scale(1.05);
+
+  .nadraw-page--compact .nadraw-board-inner :deep(.nadraw-board-toolbar) {
+    top: -151px;
+  }
+
+  .nadraw-page--compact .nadraw-board-shell {
+    height: clamp(420px, calc(100dvh - 120px), 640px);
   }
 }
 
-@keyframes nadraw-idle-float-c {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.85;
-  }
-  50% {
-    transform: translate3d(3%, 5%, 0) scale(1.08);
-    opacity: 1;
+@media (max-width: 680px) {
+  .nadraw-page--compact .nadraw-setup-over-canvas,
+  .nadraw-page--compact :deep(.nadraw-setup-over-canvas) {
+    transform: translate(-50%, -50%) scale(0.9);
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .nadraw-idle-veil__blob--a {
-    animation: nadraw-idle-float-a 14s ease-in-out infinite;
+@media (max-width: 560px) {
+  .nadraw-page--compact .nadraw-setup-over-canvas,
+  .nadraw-page--compact :deep(.nadraw-setup-over-canvas) {
+    transform: translate(-50%, -50%) scale(0.78);
   }
-  .nadraw-idle-veil__blob--b {
-    animation: nadraw-idle-float-b 18s ease-in-out infinite;
-  }
-  .nadraw-idle-veil__blob--c {
-    animation: nadraw-idle-float-c 12s ease-in-out infinite;
+}
+
+@media (max-width: 420px) {
+  .nadraw-page--compact .nadraw-setup-over-canvas,
+  .nadraw-page--compact :deep(.nadraw-setup-over-canvas) {
+    transform: translate(-50%, -50%) scale(0.74);
   }
 }
 </style>

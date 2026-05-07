@@ -107,6 +107,7 @@ const isBetaAccessRoute = computed(() => route.name === 'beta-access')
 const isAdminRoute = computed(() => String(route.name ?? '').startsWith('admin-'))
 const isHeavyVisualRoute = computed(() => isHomeRoute.value)
 const shellShowsCoinBalance = computed(() => showChrome.value)
+const appLandingHeaderShowCoin = computed(() => !isNadrawRoute.value)
 
 
 const isNadleStreamRoute = computed(
@@ -818,7 +819,7 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
         :mafia-mode="isMafiaRoute || isEatFirstCallGameView"
         :profile-to="appLandingProfileTo"
         :show-help-button="isEatRoute && Boolean(onboardingForRoute)"
-        :show-coin="true"
+        :show-coin="appLandingHeaderShowCoin"
         :title="headerTitle"
         :user-prefix="
           (isMafiaRoute && isCurrentMafiaHost) ||
@@ -1030,12 +1031,19 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
         </template>
       </AppLandingHeader>
 
-      <main class="app-shell-main" :class="{ 'app-shell-main--full': !showChrome }">
+      <main
+        class="app-shell-main"
+        :class="{
+          'app-shell-main--full': !showChrome,
+          'app-shell-main--nadraw': isNadrawRoute,
+        }"
+      >
         <div
           class="app-shell-main__viewport"
           :class="{
             'app-shell-main__viewport--chrome': showChrome,
             'app-shell-main__viewport--nadle': isNadleStreamRoute,
+            'app-shell-main__viewport--nadraw': isNadrawRoute,
           }"
         >
           <div class="app-shell-route-stack">
