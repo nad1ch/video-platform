@@ -235,7 +235,7 @@
     "friendRoom": {
       "subtitle": "Freund einladen",
       "title": "Mock-Einladungsraum",
-      "body": "Link kopieren und senden. Der Server erstellt noch keinen echten Raum.",
+      "body": "Das ist ein Demo-Einladungslink. Bis echte Server-Räume existieren, öffnet der Link weiterhin die normale Lobby.",
       "inviteLabel": "Einladungslink (Vorschau)",
       "copy": "Link kopieren",
       "copied": "Kopiert",
@@ -245,6 +245,11 @@
       "backToLobby": "Zurück zur Lobby",
       "rosterLine": "Roster: {n} Spieler",
       "localTwoSeatHint": "Regeln nutzen noch den lokalen Zwei-Sitz-Prototyp; weitere Plätze folgen mit Multiplayer-Sync."
+    },
+    "aria": {
+      "opponentRegion": "Gegner",
+      "tableRegion": "Tisch",
+      "yourHandRegion": "Deine Hand"
     },
     "deck": "Deck",
     "trump": "Trumpf",

@@ -235,7 +235,7 @@
     "friendRoom": {
       "subtitle": "Invite friend",
       "title": "Mock invite room",
-      "body": "Copy the link and send it to a friend. The server does not create a real room yet.",
+      "body": "This is a demo invite link. Until server rooms are added, opening it still shows the normal lobby.",
       "inviteLabel": "Invite link (preview)",
       "copy": "Copy link",
       "copied": "Copied",
@@ -245,6 +245,11 @@
       "backToLobby": "Back to lobby",
       "rosterLine": "Roster: {n} players",
       "localTwoSeatHint": "Table rules still use the local two-seat prototype; extra seats will activate when multiplayer sync lands."
+    },
+    "aria": {
+      "opponentRegion": "Opponent",
+      "tableRegion": "Table",
+      "yourHandRegion": "Your hand"
     },
     "deck": "Deck",
     "trump": "Trump",

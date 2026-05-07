@@ -75,7 +75,10 @@ const rosterLine = computed(() =>
       <div class="durak-table-section__felt">
         <div class="durak-table-section__felt-glow" aria-hidden="true" />
 
-        <section class="durak-table-section__row durak-table-section__row--top" aria-label="Opponent">
+        <section
+          class="durak-table-section__row durak-table-section__row--top"
+          :aria-label="t('durak.aria.opponentRegion')"
+        >
           <DurakPlayerPanel
             class="durak-table-section__panel"
             :name="t('durak.roleChat')"
@@ -92,7 +95,10 @@ const rosterLine = computed(() =>
           />
         </section>
 
-        <section class="durak-table-section__row durak-table-section__row--center" aria-label="Table">
+        <section
+          class="durak-table-section__row durak-table-section__row--center"
+          :aria-label="t('durak.aria.tableRegion')"
+        >
           <DurakTable
             :table-cards="tableCards"
             :trump-card="displayTrumpCard"
@@ -128,7 +134,10 @@ const rosterLine = computed(() =>
           </div>
         </section>
 
-        <section class="durak-table-section__row durak-table-section__row--bottom" aria-label="Your hand">
+        <section
+          class="durak-table-section__row durak-table-section__row--bottom"
+          :aria-label="t('durak.aria.yourHandRegion')"
+        >
           <DurakHand
             class="durak-table-section__hand durak-table-section__hand--local"
             :cards="streamerHand"

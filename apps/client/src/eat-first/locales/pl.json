@@ -235,7 +235,7 @@
     "friendRoom": {
       "subtitle": "Zaproszenie znajomego",
       "title": "Mock pokoju",
-      "body": "Skopiuj link i wyślij znajomemu. Serwer jeszcze nie tworzy prawdziwego pokoju.",
+      "body": "To demonstracyjny link zaproszenia. Dopóki nie pojawią się pokoje na serwerze, otwarcie linku nadal pokazuje zwykłe lobby.",
       "inviteLabel": "Link zaproszenia (podgląd)",
       "copy": "Kopiuj link",
       "copied": "Skopiowano",
@@ -245,6 +245,11 @@
       "backToLobby": "Wróć do lobby",
       "rosterLine": "Skład: {n} graczy",
       "localTwoSeatHint": "Zasady nadal na lokalnym prototypie dwóch miejsc; dodatkowe miejsca włączą się z sync multiplayer."
+    },
+    "aria": {
+      "opponentRegion": "Przeciwnik",
+      "tableRegion": "Stół",
+      "yourHandRegion": "Twoja ręka"
     },
     "deck": "Talia",
     "trump": "Atut",
