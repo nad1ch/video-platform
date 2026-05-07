@@ -107,8 +107,21 @@ const isBetaAccessRoute = computed(() => route.name === 'beta-access')
 const isAdminRoute = computed(() => String(route.name ?? '').startsWith('admin-'))
 const isHeavyVisualRoute = computed(() => isHomeRoute.value)
 const shellShowsCoinBalance = computed(() => showChrome.value)
-const appLandingHeaderShowCoin = computed(() => !isNadrawRoute.value)
 
+/** Hide header coin chip on interactive game routes (Coin Hub page keeps its own balance UI). */
+const APP_SHELL_HIDE_HEADER_COIN_ROUTE_NAMES = new Set([
+  'call',
+  'mafia',
+  'nadle-streamer',
+  'app-streamer',
+  'nadraw-show',
+  'checkers',
+  'eat',
+])
+const appShellHeaderHidesCoinChip = computed(
+  () => typeof route.name === 'string' && APP_SHELL_HIDE_HEADER_COIN_ROUTE_NAMES.has(route.name),
+)
+const appLandingHeaderShowCoin = computed(() => !appShellHeaderHidesCoinChip.value)
 
 const isNadleStreamRoute = computed(
   () =>
@@ -117,13 +130,21 @@ const isNadleStreamRoute = computed(
     route.name === 'nadraw-show',
 )
 
+const isNadleGameRoute = computed(
+  () => route.name === 'nadle-streamer' || route.name === 'app-streamer',
+)
+
 const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route) : 'call'))
 
 const isEatFirstCallGameView = computed(() => route.name === 'eat' && currentEatView.value === 'call')
 
 const showChrome = computed(() => !isEatRoute.value || currentEatView.value !== 'overlay')
 const showFooter = computed(
-  () => showChrome.value && route.meta.footer !== false && !isEatFirstCallGameView.value,
+  () =>
+    showChrome.value &&
+    route.meta.footer !== false &&
+    !isEatFirstCallGameView.value &&
+    !isNadleGameRoute.value,
 )
 
 const shellPageBackgroundChoices = computed(() =>

@@ -83,7 +83,7 @@ const { t } = useI18n()
 
   .app-economy__title {
     margin-bottom: 0.75rem;
-    font-size: 1.05rem;
+    font-size: clamp(1.12rem, 1.62vw, 1.46rem);
   }
 }
 

@@ -2,7 +2,7 @@
 export const STREAMER_TWITCH_URL = 'https://www.twitch.tv/nad1ch'
 export const STREAMER_NICK = 'nad1ch'
 
-export const STREAM_APP_BRAND_NAME = 'StreamAssist'
+export const STREAM_APP_BRAND_NAME = 'Stream Assist'
 
 
 export const BRAND_LOGO_DARK_SVG = '/brand/logo-dark.svg'
