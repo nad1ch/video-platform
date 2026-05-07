@@ -3,12 +3,6 @@
  *
  * Rollback: flip both `ENABLE_*` to false → call stack reverts to the historical
  * single-encoding / no-preferred-layers behavior end-to-end.
- *
- * Threshold rationale: at 6 active camera publishers a desktop receiver still
- * decodes inside its CPU envelope (~5 × 854×480/20 fps VP8). At 7+ phones and
- * weak laptops start to thermal-throttle, so that's where simulcast pays for
- * the extra publisher cost. Tunable via this constant; do not scatter the
- * threshold across files.
  */
 export const ENABLE_PUBLISHER_SIMULCAST = true
 
@@ -20,8 +14,24 @@ export const ENABLE_PUBLISHER_SIMULCAST = true
 export const ENABLE_RECEIVER_ADAPTIVE_LAYERS = true
 
 /**
- * Strictly greater-than threshold: rooms with `> SIMULCAST_ACTIVE_CAMERA_THRESHOLD`
- * active camera publishers turn on publisher simulcast (desktop only). 1–6 stays
- * on today's single-encoding path so small rooms see zero behavior change.
+ * Publisher simulcast threshold (strictly greater-than). With value `1`:
+ *   - 1 active camera in the room → desktop publishers emit ONE 480p encoding
+ *     (today's behavior; no simulcast supply, no policy work).
+ *   - 2+ active cameras            → desktop publishers emit 3 simulcast
+ *                                    encodings (q/h/f). Receivers can then
+ *                                    pick a baseline layer from the supply.
+ *   - mobile / tablet publishers   → always single encoding (gated by `isMobile`
+ *                                    inside `shouldUsePublisherSimulcast`).
+ *   - publisher screen-sharing at wire → always single encoding (gated by
+ *                                       `isScreenSharingAtWire`).
+ *
+ * Why threshold=1: the moment a second camera joins, at least one receiver in
+ * the room is decoding two streams; simulcast supply lets weak receivers and
+ * OBS viewers pick a lower rung based on their profile / runtime pressure
+ * without affecting strong receivers. Cost on desktop publishers is ~3 libvpx
+ * encoders running in parallel; libwebrtc's `CpuOveruseDetector` adapts FPS /
+ * resolution per-rid automatically if a publisher CPU is overloaded.
+ *
+ * Tunable via this constant; do not scatter the threshold across files.
  */
-export const SIMULCAST_ACTIVE_CAMERA_THRESHOLD = 6
+export const SIMULCAST_ACTIVE_CAMERA_THRESHOLD = 1

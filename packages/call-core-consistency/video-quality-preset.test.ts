@@ -283,6 +283,14 @@ describe('getDesktopSimulcastEncodingsForLargeRoom', () => {
   })
 })
 
+describe('SIMULCAST_ACTIVE_CAMERA_THRESHOLD source-of-truth value', () => {
+  it('is exactly 1 (publisher simulcast starts from the second active camera)', () => {
+    // Pinned defensively. Changing this value alters the publisher behavior for
+    // every room size — flag the change in PR review when it moves.
+    expect(SIMULCAST_ACTIVE_CAMERA_THRESHOLD).toBe(1)
+  })
+})
+
 describe('shouldUsePublisherSimulcast', () => {
   it('disables when feature flag is off', () => {
     expect(
@@ -295,7 +303,7 @@ describe('shouldUsePublisherSimulcast', () => {
     ).toBe(false)
   })
 
-  it('disables in small rooms (≤ threshold)', () => {
+  it('disables for the single-camera case (1 active camera → 1 encoding)', () => {
     for (let n = 0; n <= SIMULCAST_ACTIVE_CAMERA_THRESHOLD; n += 1) {
       expect(
         shouldUsePublisherSimulcast({
@@ -308,7 +316,8 @@ describe('shouldUsePublisherSimulcast', () => {
     }
   })
 
-  it('enables for desktop publisher above threshold', () => {
+  it('enables for desktop publisher from the second active camera onward', () => {
+    // Threshold is strictly greater-than, so 2+ desktop publishers simulcast.
     expect(
       shouldUsePublisherSimulcast({
         enabled: true,
@@ -317,25 +326,29 @@ describe('shouldUsePublisherSimulcast', () => {
         isScreenSharingAtWire: false,
       }),
     ).toBe(true)
-    expect(
-      shouldUsePublisherSimulcast({
-        enabled: true,
-        activeCameraPublishersAtWire: 12,
-        isMobile: false,
-        isScreenSharingAtWire: false,
-      }),
-    ).toBe(true)
+    for (const n of [2, 3, 4, 6, 8, 12]) {
+      expect(
+        shouldUsePublisherSimulcast({
+          enabled: true,
+          activeCameraPublishersAtWire: n,
+          isMobile: false,
+          isScreenSharingAtWire: false,
+        }),
+      ).toBe(true)
+    }
   })
 
-  it('disables for mobile publishers in any room size', () => {
-    expect(
-      shouldUsePublisherSimulcast({
-        enabled: true,
-        activeCameraPublishersAtWire: 12,
-        isMobile: true,
-        isScreenSharingAtWire: false,
-      }),
-    ).toBe(false)
+  it('disables for mobile publishers in any room size (mobile/tablet remain single)', () => {
+    for (const n of [2, 4, 8, 12]) {
+      expect(
+        shouldUsePublisherSimulcast({
+          enabled: true,
+          activeCameraPublishersAtWire: n,
+          isMobile: true,
+          isScreenSharingAtWire: false,
+        }),
+      ).toBe(false)
+    }
   })
 
   it('disables when publisher is screen-sharing at wire (preserves screen-share quality)', () => {
@@ -349,11 +362,11 @@ describe('shouldUsePublisherSimulcast', () => {
     ).toBe(false)
   })
 
-  it('threshold is strictly greater-than (boundary lives in small-room path)', () => {
+  it('boundary: exactly 1 active camera → false; exactly 2 → true', () => {
     expect(
       shouldUsePublisherSimulcast({
         enabled: true,
-        activeCameraPublishersAtWire: SIMULCAST_ACTIVE_CAMERA_THRESHOLD,
+        activeCameraPublishersAtWire: 1,
         isMobile: false,
         isScreenSharingAtWire: false,
       }),
@@ -361,7 +374,7 @@ describe('shouldUsePublisherSimulcast', () => {
     expect(
       shouldUsePublisherSimulcast({
         enabled: true,
-        activeCameraPublishersAtWire: SIMULCAST_ACTIVE_CAMERA_THRESHOLD + 1,
+        activeCameraPublishersAtWire: 2,
         isMobile: false,
         isScreenSharingAtWire: false,
       }),

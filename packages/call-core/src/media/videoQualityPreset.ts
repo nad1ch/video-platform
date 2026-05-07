@@ -294,7 +294,8 @@ export type DesktopSimulcastEncodings = readonly [
 ]
 
 /**
- * Three-layer VP8/H.264 simulcast for desktop publishers in large rooms.
+ * Three-layer VP8/H.264 simulcast for desktop publishers above the simulcast
+ * threshold (currently 2+ active cameras; see `SIMULCAST_ACTIVE_CAMERA_THRESHOLD`).
  *
  * RID order is `q,h,f` (low → high). mediasoup-client preserves this order
  * and forwards to mediasoup, which uses the rid as the spatial-layer index
@@ -306,8 +307,11 @@ export type DesktopSimulcastEncodings = readonly [
  * Browser caveat: Safari does not support H.264 simulcast — it will silently
  * fall back to a single encoding. Chrome / Edge / Firefox handle VP8
  * simulcast natively. Receivers handle the single-encoding fallback the same
- * as the no-simulcast small-room path: `setPreferredLayers` is a harmless
- * no-op on a single-encoding source.
+ * as the no-supply path: `setPreferredLayers` is a harmless no-op on a
+ * single-encoding source.
+ *
+ * (Function name retained for diff stability — historically this was only
+ * used in "large rooms" with the old 6-camera threshold.)
  */
 export function getDesktopSimulcastEncodingsForLargeRoom(): DesktopSimulcastEncodings {
   return [

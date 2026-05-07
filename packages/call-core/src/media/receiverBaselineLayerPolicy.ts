@@ -155,12 +155,18 @@ export function resolveInitialBaselineLayer(
   activeCameraPublishers: number,
 ): ReceiverBaselineLayer {
   const { floor, ceiling } = profileFloorCeiling(profile, role)
-  // Small rooms (≤ publisher simulcast threshold): publishers emit a single
-  // encoding, so `setPreferredLayers({spatialLayer: 2})` is a harmless no-op.
-  // Returning 'high' uniformly here matches the user-facing contract that
-  // small rooms are unchanged from today and avoids any cross-profile drift.
-  // (Profile floor/ceiling still applies in large rooms, where publishers
-  // emit multiple encodings and the choice actually matters.)
+  // Receiver-side small-room rule (independent of the publisher simulcast
+  // threshold): with ≤6 active cameras, every receiver picks 'high' as the
+  // initial baseline. Reasoning is decode-load tolerance, not supply: ≤6 ×
+  // 854×480/20 fps is comfortable on every modern device, so there is no
+  // need to bias weaker profiles toward medium/low at this room size. From
+  // 7 cameras up the per-profile mapping below kicks in.
+  //
+  // With the publisher threshold currently at 1, publishers in 2-6 cam
+  // rooms DO emit multi-rung supply — a receiver under runtime pressure
+  // can still step down through `resolveReceiverBaselineLayer` and the
+  // SFU has the lower rungs ready to forward. So the 'high' default in
+  // small rooms is the head-room ceiling, not a constraint.
   if (activeCameraPublishers <= 6) {
     return 'high'
   }
