@@ -292,6 +292,15 @@ function eatViewNeedsStreamAuth(query: Record<string, unknown>): boolean {
   return s === 'admin' || s === 'control'
 }
 
+function isMafiaObsViewRoute(to: RouteLocationGeneric): boolean {
+  if (to.name !== 'mafia') {
+    return false
+  }
+  const mode = (to.query as Record<string, unknown>).mode
+  const value = Array.isArray(mode) ? mode[0] : mode
+  return value === 'view'
+}
+
 const BETA_GATED_ROUTE_NAMES = new Set(['call', 'mafia', 'eat'])
 const BETA_ACCESS_MODAL_BY_ROUTE_NAME = {
   call: 'video-call',
@@ -373,9 +382,10 @@ router.beforeEach(async (to) => {
     }
   }
 
-  const needMeta = Boolean(to.meta.requiresAuth)
+  const mafiaObsView = isMafiaObsViewRoute(to)
+  const needMeta = Boolean(to.meta.requiresAuth) && !mafiaObsView
   const needEatStaff = to.name === 'eat' && eatViewNeedsStreamAuth(to.query as Record<string, unknown>)
-  const needBetaAccess = routeNeedsBetaAccess(to)
+  const needBetaAccess = routeNeedsBetaAccess(to) && !mafiaObsView
   if (!needMeta && !needEatStaff && !needBetaAccess) {
     return true
   }

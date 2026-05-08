@@ -209,7 +209,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
           z.object({
             peerId: z.string().min(1),
             seat: z.number().int().min(1).max(12),
-            role: mafiaRoleSchema,
+            role: z.union([mafiaRoleSchema, z.null()]),
           }),
         )
         .min(1)

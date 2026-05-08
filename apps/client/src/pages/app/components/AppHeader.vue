@@ -23,6 +23,7 @@ const props = withDefaults(
     mafiaMode?: boolean
     roomCenterMode?: boolean
     showCoin?: boolean
+    showAuth?: boolean
     /**
      * Show the gold "PRO" pill linking to billing. Driven by
      * `useProSubscription().isProActive` from the layout. Hidden when
@@ -46,6 +47,7 @@ const props = withDefaults(
     mafiaMode: false,
     roomCenterMode: false,
     showCoin: true,
+    showAuth: true,
     isProActive: false,
     proLinkTo: undefined,
     proLabel: '',
@@ -261,6 +263,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
           </button>
 
           <div
+            v-if="showAuth"
             class="app-landing-header__auth sa-glass-button"
             :class="{ 'app-landing-header__auth--profile': isAuthenticated }"
             :aria-busy="authLoading"

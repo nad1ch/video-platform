@@ -854,6 +854,13 @@
 .call-page__tile-wrap--eat-first-host-speaking-seat {
   z-index: 2;
   border-radius: 14px;
+}
+
+.call-page__tile-wrap--mafia-host-speaking-queued {
+  box-shadow: 0 0 0 2px color-mix(in srgb, #ef4444 82%, var(--sa-color-primary, #a78bfa) 8%);
+}
+
+.call-page__tile-wrap--eat-first-host-speaking-seat {
   box-shadow: 0 0 0 2px color-mix(in srgb, #22d3ee 80%, var(--sa-color-primary, #a78bfa) 10%);
 }
 
@@ -1000,6 +1007,44 @@
 .call-page__bottom-cluster__center--speak-dock .call-page__dock {
   flex: 0 0 auto;
   min-width: 0;
+}
+
+.call-page__mafia-view-bottom {
+  position: fixed;
+  left: 50%;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 40;
+  width: min(100vw - 16px, 451px);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.call-page__mafia-view-bottom :deep(.mafia-vote-hud) {
+  pointer-events: auto;
+  height: 64px;
+  padding: 8px 10px;
+  border-radius: 38px;
+  width: min(100%, 520px);
+  max-width: min(520px, calc(100vw - 16px));
+}
+
+.call-page__mafia-view-bottom :deep(.mafia-vote-hud__chips) {
+  grid-auto-columns: 28px;
+  height: 48px;
+  gap: 8px;
+}
+
+.call-page__mafia-view-bottom :deep(.mafia-vote-hud__chip) {
+  width: 28px;
+  height: 48px;
+  font-size: 13px;
+  padding: 5px 0 4px;
+}
+
+.call-page__mafia-view-bottom :deep(.mafia-vote-hud__chip-arrow) {
+  font-size: 9px;
 }
 
 .call-page__bottom-cluster__right {

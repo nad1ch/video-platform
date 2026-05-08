@@ -75,6 +75,7 @@ export const MAFIA_TIMER_PRESET_MS = [30_000, 60_000, 90_000] as const
 
 const MAFIA_TIMER_MIN_MS = 30_000
 const MAFIA_TIMER_MAX_MS = 7_200_000
+const MAFIA_RESHUFFLE_MIN_INTERVAL_MS = 700
 
 const TIMER_STOP_SENTINEL: MafiaTimerStopPayload = Object.freeze({})
 
@@ -155,6 +156,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
   
   const reshuffleBroadcastPayload = ref<MafiaReshufflePayload | null>(null)
+  const lastReshuffleStartedAtMs = ref(0)
 
   
   const hostSeatSwapSelectionPeerId = ref<string | null>(null)
@@ -1443,6 +1445,12 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       mafiaGameLog.info('reshuffle ignored: not mafia host')
       return { ok: false, error: 'message', messageKey: 'mafiaPage.reshuffleNotHost' }
     }
+    const now = Date.now()
+    if (now - lastReshuffleStartedAtMs.value < MAFIA_RESHUFFLE_MIN_INTERVAL_MS) {
+      mafiaGameLog.info('reshuffle ignored: throttled duplicate click')
+      return { ok: false, error: 'message' }
+    }
+    lastReshuffleStartedAtMs.value = now
     const mafia = useMafiaPlayersStore()
     const ids = mafia.joinOrder
     if (ids.length < 2) {

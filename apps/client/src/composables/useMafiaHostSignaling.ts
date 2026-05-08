@@ -112,6 +112,14 @@ function parseMafiaReshuffle(data: unknown): MafiaReshufflePayload | null {
     if (typeof r.seat !== 'number' || !Number.isInteger(r.seat) || r.seat !== i + 1) {
       return null
     }
+    const isLastSeat = i === players.length - 1
+    if (r.role == null) {
+      if (!isLastSeat) {
+        return null
+      }
+      out.push({ peerId: r.peerId, seat: r.seat, role: null })
+      continue
+    }
     if (typeof r.role !== 'string' || !MAFIA_ROLES.has(r.role)) {
       return null
     }
@@ -523,21 +531,13 @@ export function useMafiaHostSignaling(
   )
 
   watch(
-    reshuffleBroadcastPayload,
-    (p) => {
+    [reshuffleBroadcastPayload, inCall, wsStatus, isMafiaHost],
+    ([p, inCallNow, wsNow, isHostNow]) => {
       if (p == null) {
         return
       }
-      if (!inCall.value) {
-        mafia.clearReshuffleBroadcastPayload()
-        return
-      }
-      if (wsStatus.value !== 'open') {
-        mafia.clearReshuffleBroadcastPayload()
-        return
-      }
-      if (!isMafiaHost.value) {
-        mafia.clearReshuffleBroadcastPayload()
+      if (!inCallNow || wsNow !== 'open' || !isHostNow) {
+        // Keep pending payload: send after reconnect/focus resync when socket reopens.
         return
       }
       sendSignalingMessage({ type: MafiaWs.reshuffle, payload: p })
@@ -547,21 +547,13 @@ export function useMafiaHostSignaling(
   )
 
   watch(
-    playersUpdateBroadcastPayload,
-    (p) => {
+    [playersUpdateBroadcastPayload, inCall, wsStatus, isMafiaHost],
+    ([p, inCallNow, wsNow, isHostNow]) => {
       if (p == null) {
         return
       }
-      if (!inCall.value) {
-        mafia.clearPlayersUpdateBroadcastPayload()
-        return
-      }
-      if (wsStatus.value !== 'open') {
-        mafia.clearPlayersUpdateBroadcastPayload()
-        return
-      }
-      if (!isMafiaHost.value) {
-        mafia.clearPlayersUpdateBroadcastPayload()
+      if (!inCallNow || wsNow !== 'open' || !isHostNow) {
+        // Keep pending payload: send after reconnect/focus resync when socket reopens.
         return
       }
       sendSignalingMessage({ type: MafiaWs.playersUpdate, payload: p })

@@ -3366,7 +3366,6 @@ watch(joining, (j) => {
                   isMafiaHostNightActionSeat(mafiaNumberByPeer.get(row.tile.peerId)),
                 'call-page__tile-wrap--mafia-host-speaking-queued':
                   isMafiaRoute &&
-                  !mafiaViewUi &&
                   isMafiaHostSpeakingNominationUiSeat(mafiaNumberByPeer.get(row.tile.peerId)),
                 'call-page__tile-wrap--eat-first-host-speaking-seat':
                   isEatFirstRoute &&
@@ -3552,6 +3551,12 @@ watch(joining, (j) => {
             <MafiaSpeakingQueueBar v-if="isMafiaRoute" :show-tools="mafiaGameStore.isMafiaHost" />
             <EatFirstSpeakingQueueBar v-if="isEatFirstRoute" :show-tools="eatFirstShell.isEatFirstRoomHost" />
           </div>
+        </div>
+        <div
+          v-if="(session.inCall || joining) && mafiaViewUi && isMafiaRoute"
+          class="call-page__mafia-view-bottom"
+        >
+          <MafiaSpeakingQueueBar :show-tools="false" />
         </div>
 
         <CallChatPanel

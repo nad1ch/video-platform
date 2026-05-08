@@ -9,7 +9,7 @@ export type MafiaRole = 'mafia' | 'don' | 'sheriff' | 'doctor' | 'civilian'
 export type MafiaReshuffleSnapshotPlayer = {
   peerId: string
   seat: number
-  role: MafiaRole
+  role: MafiaRole | null
 }
 export type MafiaReshuffleSnapshot = {
   players: MafiaReshuffleSnapshotPlayer[]
@@ -439,29 +439,41 @@ export class Room {
     const snap = this.mafiaPlayersUpdateSnapshot
     if (snap == null) return null
     const live = new Set(this.getPeers().map((p) => p.id))
-    if (snap.order.length !== live.size) return null
     const snapIds = new Set(snap.order)
     const missingFromLive = snap.order.filter((id) => !live.has(id))
-    const extraInLive = [...live].filter((id) => !snapIds.has(id))
-    if (!(missingFromLive.length === 0 && extraInLive.length === 0)) {
-      // Single-peer reconnect with a new peerId: preserve seat by replacing
-      // the vanished id with the only new live id in the same order slot.
-      if (missingFromLive.length !== 1 || extraInLive.length !== 1) {
-        return null
-      }
-      const staleId = missingFromLive[0]!
-      const replacementId = extraInLive[0]!
-      const remappedOrder = snap.order.map((id) => (id === staleId ? replacementId : id))
+    /**
+     * Audit: viewer-role peers (e.g. OBS view) join the same room but never
+     * appear in the host-curated `order`. "Extra in live" is therefore the
+     * normal case and must not invalidate the snapshot — only missing snap
+     * peerIds matter (those slots can no longer be rendered).
+     */
+    if (missingFromLive.length === 0) {
       return {
-        order: remappedOrder,
+        order: [...snap.order],
         speakingQueue: [...snap.speakingQueue],
         ...(snap.clearRoles === true ? { clearRoles: true } : {}),
         ...(typeof snap.oldMafiaMode === 'boolean' ? { oldMafiaMode: snap.oldMafiaMode } : {}),
         ...(snap.nightActions && typeof snap.nightActions === 'object' ? { nightActions: { ...snap.nightActions } } : {}),
       }
     }
+    /**
+     * Single-peer reconnect: one snapshot id vanished and exactly one new
+     * non-snapshot peer is live. Remap to preserve the seat. Any larger drift
+     * (multiple players left, or a viewer joined alongside a reconnect) skips
+     * the replay so we never fabricate a seat assignment.
+     */
+    if (missingFromLive.length !== 1) {
+      return null
+    }
+    const extraInLive = [...live].filter((id) => !snapIds.has(id))
+    if (extraInLive.length !== 1) {
+      return null
+    }
+    const staleId = missingFromLive[0]!
+    const replacementId = extraInLive[0]!
+    const remappedOrder = snap.order.map((id) => (id === staleId ? replacementId : id))
     return {
-      order: [...snap.order],
+      order: remappedOrder,
       speakingQueue: [...snap.speakingQueue],
       ...(snap.clearRoles === true ? { clearRoles: true } : {}),
       ...(typeof snap.oldMafiaMode === 'boolean' ? { oldMafiaMode: snap.oldMafiaMode } : {}),
@@ -492,37 +504,37 @@ export class Room {
   }
 
   /**
-   * Returns the stored reshuffle snapshot only when it still maps 1:1 onto
-   * the current peer set: every snapshot peerId is alive and the live count
-   * matches the snapshot length. Returns `null` otherwise so the join path
-   * never replays a stale payload that would leave gaps in the seat map.
+   * Returns the stored reshuffle snapshot when every snapshot peerId is still
+   * live. Extra live peers are tolerated (viewer-role / OBS view never enter
+   * the host's seat list); a single missing peer can be remapped if exactly
+   * one new non-snapshot peer is online (single-peer reconnect path).
    */
   getMafiaReshuffleSnapshotIfFresh(): MafiaReshuffleSnapshot | null {
     const snap = this.mafiaReshuffleSnapshot
     if (snap == null) return null
     const live = new Set(this.getPeers().map((p) => p.id))
-    if (snap.players.length !== live.size) return null
     const snapIds = new Set(snap.players.map((p) => p.peerId))
     const missingFromLive = snap.players.filter((entry) => !live.has(entry.peerId)).map((entry) => entry.peerId)
-    const extraInLive = [...live].filter((id) => !snapIds.has(id))
-    if (!(missingFromLive.length === 0 && extraInLive.length === 0)) {
-      // Same recovery rule as players-update: one stale id can be replaced by
-      // one new live id while preserving seat index and role assignment.
-      if (missingFromLive.length !== 1 || extraInLive.length !== 1) {
-        return null
-      }
-      const staleId = missingFromLive[0]!
-      const replacementId = extraInLive[0]!
+    if (missingFromLive.length === 0) {
       return {
-        players: snap.players.map((p) => ({
-          peerId: p.peerId === staleId ? replacementId : p.peerId,
-          seat: p.seat,
-          role: p.role,
-        })),
+        players: snap.players.map((p) => ({ peerId: p.peerId, seat: p.seat, role: p.role })),
       }
     }
+    if (missingFromLive.length !== 1) {
+      return null
+    }
+    const extraInLive = [...live].filter((id) => !snapIds.has(id))
+    if (extraInLive.length !== 1) {
+      return null
+    }
+    const staleId = missingFromLive[0]!
+    const replacementId = extraInLive[0]!
     return {
-      players: snap.players.map((p) => ({ peerId: p.peerId, seat: p.seat, role: p.role })),
+      players: snap.players.map((p) => ({
+        peerId: p.peerId === staleId ? replacementId : p.peerId,
+        seat: p.seat,
+        role: p.role,
+      })),
     }
   }
 
