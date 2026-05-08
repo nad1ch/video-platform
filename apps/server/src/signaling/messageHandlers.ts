@@ -191,7 +191,7 @@ export type ServerMessage =
         players: Array<{
           peerId: string
           seat: number
-          role: 'mafia' | 'don' | 'sheriff' | 'doctor' | 'civilian'
+          role: 'mafia' | 'don' | 'sheriff' | 'doctor' | 'civilian' | null
         }>
       }
     }
@@ -619,7 +619,7 @@ function broadcastMafiaReshuffle(
     players: Array<{
       peerId: string
       seat: number
-      role: 'mafia' | 'don' | 'sheriff' | 'doctor' | 'civilian'
+      role: 'mafia' | 'don' | 'sheriff' | 'doctor' | 'civilian' | null
     }>
   },
 ): void {
@@ -1184,7 +1184,7 @@ export function handleMafiaReshuffle(
     players: Array<{
       peerId: string
       seat: number
-      role: 'mafia' | 'don' | 'sheriff' | 'doctor' | 'civilian'
+      role: 'mafia' | 'don' | 'sheriff' | 'doctor' | 'civilian' | null
     }>
   },
   deps: SignalingDeps,
@@ -1203,7 +1203,13 @@ export function handleMafiaReshuffle(
   }
   const roomIds = new Set(peers.map((p) => p.id))
   const { players: list } = payload
-  if (list.length !== peers.length || list.length !== roomIds.size) {
+  /**
+   * Audit: list may be a subset of room peers — viewer-role peers (e.g. OBS view)
+   * never appear in the host's tile list and therefore never enter the order.
+   * Strict equality used to silently drop the broadcast whenever any viewer was
+   * present, leaving host optimistic-stale and players/OBS unsynced.
+   */
+  if (list.length < 1 || list.length > roomIds.size) {
     return
   }
   const used = new Set<string>()
@@ -1215,10 +1221,11 @@ export function handleMafiaReshuffle(
     if (!roomIds.has(pl.peerId) || used.has(pl.peerId)) {
       return
     }
+    const isLastSeat = i === list.length - 1
+    if (pl.role == null && !isLastSeat) {
+      return
+    }
     used.add(pl.peerId)
-  }
-  if (used.size !== roomIds.size) {
-    return
   }
   room.clearMafiaPlayerLifeStates()
   /**
@@ -2128,7 +2135,13 @@ export function handleMafiaPlayersUpdate(
   }
   const roomIds = new Set(peers.map((p) => p.id))
   const { order: list, speakingQueue: q } = payload
-  if (list.length !== peers.length || list.length !== roomIds.size) {
+  /**
+   * Audit: list may be a subset of room peers — viewer-role peers (e.g. OBS view)
+   * never enter the host's tile list. Strict equality previously dropped the
+   * broadcast whenever any viewer joined the room, so host saw the change but
+   * players/OBS did not.
+   */
+  if (list.length < 1 || list.length > roomIds.size) {
     return
   }
   const used = new Set<string>()
@@ -2137,9 +2150,6 @@ export function handleMafiaPlayersUpdate(
       return
     }
     used.add(id)
-  }
-  if (used.size !== roomIds.size) {
-    return
   }
   const n = list.length
   for (const x of q) {

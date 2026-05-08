@@ -374,6 +374,8 @@ const shellShowsHeaderSettingsGear = computed(() => showChrome.value)
 const mafiaHeaderObsCopyLabel = computed(() => 'copy')
 const mafiaHeaderRoomLabel = computed(() => 'room')
 const mafiaSettingsOpen = ref(false)
+const obsGuideOpen = ref(false)
+const obsGuideUrl = ref('')
 const mafiaSettingsButtonRef = ref<HTMLElement | null>(null)
 const mafiaSettingsPopoverRef = ref<HTMLElement | null>(null)
 const mafiaSettingsPopoverStyle = ref<Record<string, string>>({})
@@ -386,6 +388,10 @@ function toggleMafiaMode(): void {
 
 function closeMafiaSettings(): void {
   mafiaSettingsOpen.value = false
+}
+
+function closeObsGuide(): void {
+  obsGuideOpen.value = false
 }
 
 function onShellSettingsLocaleChange(code: string): void {
@@ -785,6 +791,8 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   }
   const next = { ...mafiaQueryAsStringRecord(route.query), mode: 'view' as const }
   const viewUrl = `${window.location.origin}/app/mafia?${new URLSearchParams(next).toString()}`
+  obsGuideUrl.value = viewUrl
+  obsGuideOpen.value = true
   try {
     await navigator.clipboard.writeText(viewUrl)
   } catch {
@@ -803,6 +811,8 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
     return
   }
   const viewUrl = `${window.location.origin}/app/eat?${new URLSearchParams({ game: gameId, mode: 'view' }).toString()}`
+  obsGuideUrl.value = viewUrl
+  obsGuideOpen.value = true
   try {
     await navigator.clipboard.writeText(viewUrl)
   } catch {
@@ -1113,6 +1123,51 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
           @close="closeEconomyComingSoon"
         />
       </Teleport>
+      <Teleport to="body">
+        <div
+          v-if="obsGuideOpen"
+          class="app-shell-obs-guide"
+          role="presentation"
+          @keydown.esc.prevent="closeObsGuide"
+        >
+          <button
+            type="button"
+            class="app-shell-obs-guide__backdrop"
+            aria-label="Close OBS guide"
+            @click="closeObsGuide"
+          />
+          <div
+            class="app-shell-obs-guide__panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="OBS setup guide"
+            @click.stop
+          >
+            <h3 class="app-shell-obs-guide__title">OBS setup guide</h3>
+            <p class="app-shell-obs-guide__text">
+              Додайте в OBS джерело <strong>Browser Source</strong>, а потім вставте посилання в поле
+              <strong>URL</strong>.
+            </p>
+            <p class="app-shell-obs-guide__label">Overlay URL</p>
+            <p class="app-shell-obs-guide__code">{{ obsGuideUrl }}</p>
+            <p class="app-shell-obs-guide__label">Recommended Browser Source size</p>
+            <div class="app-shell-obs-guide__sizes">
+              <p class="app-shell-obs-guide__size-line">
+                <span>Full HD (1K):</span> <code>Width: 1920</code> <code>Height: 1080</code>
+              </p>
+              <p class="app-shell-obs-guide__size-line">
+                <span>2K:</span> <code>Width: 2560</code> <code>Height: 1440</code>
+              </p>
+              <p class="app-shell-obs-guide__size-line">
+                <span>4K:</span> <code>Width: 3840</code> <code>Height: 2160</code>
+              </p>
+            </div>
+            <div class="app-shell-obs-guide__actions">
+              <button type="button" class="app-shell-obs-guide__close" @click="closeObsGuide">Close</button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -1197,6 +1252,114 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
   font-family: var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);
   font-size: 0.9rem;
   line-height: 1.35;
+}
+
+.app-shell-obs-guide {
+  position: fixed;
+  inset: 0;
+  z-index: 12100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.app-shell-obs-guide__backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: rgb(0 0 0 / 65%);
+}
+
+.app-shell-obs-guide__panel {
+  position: relative;
+  z-index: 1;
+  width: min(640px, calc(100vw - 24px));
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  background: rgb(18 8 34 / 96%);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 45%);
+}
+
+.app-shell-obs-guide__title {
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.app-shell-obs-guide__text {
+  margin: 0 0 10px;
+  color: rgb(255 255 255 / 88%);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.app-shell-obs-guide__label {
+  margin: 10px 0 6px;
+  color: rgb(255 255 255 / 72%);
+  font-size: 12px;
+}
+
+.app-shell-obs-guide__code {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  background: rgb(255 255 255 / 6%);
+  color: #fff;
+  font-family: var(--sa-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.app-shell-obs-guide__sizes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-shell-obs-guide__size-line {
+  margin: 0;
+  color: rgb(255 255 255 / 90%);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.app-shell-obs-guide__size-line span {
+  display: inline-block;
+  min-width: 110px;
+}
+
+.app-shell-obs-guide__size-line code {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 10%);
+  color: #fff;
+  font-family: var(--sa-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12px;
+}
+
+.app-shell-obs-guide__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.app-shell-obs-guide__close {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  background: rgb(255 255 255 / 9%);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
 }
 
 .app-shell-route-stack {
