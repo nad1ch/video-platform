@@ -323,6 +323,7 @@ onBeforeUnmount(() => {
 
 
 const isMafiaViewMode = computed(() => mafiaViewQueryIsView(route.query.mode))
+const hideMafiaObsHeaderControls = computed(() => isMafiaRoute.value && isMafiaViewMode.value)
 
 function mafiaQueryAsStringRecord(
   q: (typeof route)['query'],
@@ -843,6 +844,7 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
         :profile-to="appLandingProfileTo"
         :show-help-button="isEatRoute && !isEatFirstCallGameView && Boolean(onboardingForRoute)"
         :show-coin="appLandingHeaderShowCoin"
+        :show-auth="!hideMafiaObsHeaderControls"
         :title="headerTitle"
         :user-avatar="appLandingHeaderUserAvatar"
         :user-name="appLandingHeaderUserName"
@@ -851,7 +853,7 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
         @login="openAppLandingAuth('login')"
         @logout="logoutAppLanding"
       >
-        <template v-if="shellShowsHeaderSettingsGear" #brand-extra>
+        <template v-if="shellShowsHeaderSettingsGear && !hideMafiaObsHeaderControls" #brand-extra>
           <div class="app-shell-mafia-settings-wrap">
             <button
               ref="mafiaSettingsButtonRef"
@@ -993,7 +995,7 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
             </Teleport>
           </div>
         </template>
-        <template v-if="isCallRoute || isMafiaRoute || isEatFirstCallGameView" #center>
+        <template v-if="(isCallRoute || isMafiaRoute || isEatFirstCallGameView) && !hideMafiaObsHeaderControls" #center>
           <div
             :id="CALL_ROOM_DROPDOWN_HOST_ID"
             class="app-shell-call-room-anchor"
