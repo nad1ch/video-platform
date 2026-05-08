@@ -188,12 +188,12 @@ function onToggleTimer(): void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 277px;
+  width: 297px;
   max-width: calc(100vw - 16px);
-  min-height: 39px;
+  min-height: 42px;
   padding: 0;
   border: 0;
-  border-radius: 25.268px;
+  border-radius: 27px;
   background: rgb(60 36 99 / 0.68);
   box-shadow: none;
   backdrop-filter: none;
@@ -202,24 +202,24 @@ function onToggleTimer(): void {
 }
 
 .mafia-overlay__header--compact {
-  width: 102px;
+  width: 112px;
 }
 
 .mafia-overlay__header-main {
   display: grid;
-  grid-template-columns: 22px 50px minmax(0, 1fr);
+  grid-template-columns: 24px 54px minmax(0, 1fr);
   align-items: center;
-  column-gap: 7px;
+  column-gap: 8px;
   width: 100%;
-  height: 39px;
-  padding: 0 11px;
+  height: 42px;
+  padding: 0 12px;
   box-sizing: border-box;
   min-width: 0;
 }
 
 .mafia-overlay__header-main--compact {
-  grid-template-columns: 22px 50px;
-  column-gap: 7px;
+  grid-template-columns: 24px 54px;
+  column-gap: 8px;
 }
 
 .mafia-overlay__timer-ctrls {
@@ -240,22 +240,22 @@ function onToggleTimer(): void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 35px;
-  min-width: 35px;
-  min-height: 23.896px;
-  height: 23.896px;
+  width: 38px;
+  min-width: 38px;
+  min-height: 26px;
+  height: 26px;
   padding: 0;
   border: 0;
-  border-radius: 19.234px;
+  border-radius: 21px;
   background: rgb(102 56 143 / 0.34);
   color: rgb(255 255 255 / 0.94);
-  font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
-  font-size: 11.345px;
-  font-weight: 800;
+  font-family: var(--app-timer-digits);
+  font-size: 12px;
+  font-weight: 400;
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: 'lnum' 1, 'tnum' 1;
   line-height: 1;
-  letter-spacing: -0.6807px;
+  letter-spacing: -0.5px;
   text-align: center;
 }
 
@@ -267,28 +267,28 @@ function onToggleTimer(): void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 49px;
-  min-width: 49px;
-  min-height: 24px;
-  height: 24px;
+  width: 53px;
+  min-width: 53px;
+  min-height: 26px;
+  height: 26px;
   padding: 0;
   border: 0;
-  border-radius: 19.234px;
+  border-radius: 21px;
   background: rgb(102 56 143 / 0.34);
   color: rgb(255 255 255 / 0.94);
-  font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
-  font-size: 11.345px;
-  font-weight: 800;
+  font-family: var(--app-timer-digits);
+  font-size: 12px;
+  font-weight: 400;
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: 'lnum' 1, 'tnum' 1;
   line-height: 1;
-  letter-spacing: -0.6807px;
+  letter-spacing: -0.5px;
   text-align: center;
 }
 
 .mafia-overlay__timer-stopwatch {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   display: block;
   object-fit: contain;
@@ -297,9 +297,9 @@ function onToggleTimer(): void {
 
 
 .mafia-overlay__timer-text {
-  font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
-  font-size: 20px;
-  font-weight: 800;
+  font-family: var(--app-timer-digits);
+  font-size: 22px;
+  font-weight: 400;
   line-height: 1;
   color: rgb(255 255 255 / 0.94);
   transform: translateY(-1px);

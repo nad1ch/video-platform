@@ -1,4 +1,9 @@
 :root {
+  /*
+   * Mafia / Eat First speaking timer only. Titan One has more even digit cap heights than
+   * Coda Caption; Coda stays the app counter elsewhere via --app-home-counter (e.g. HomePage).
+   */
+  --app-timer-digits: 'Titan One', 'Coda Caption', var(--sa-font-display, system-ui), sans-serif;
   /* Leaderboard / chat side columns on game pages (viewports where they sit in the grid). */
   --sa-game-sidebar-min: 240px;
 

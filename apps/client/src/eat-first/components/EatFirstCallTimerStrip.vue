@@ -60,12 +60,13 @@ const useCompactTimer = computed(() => !props.isEatFirstHost || props.viewMode)
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: min(336px, calc(100vw - 16px));
+  /* Mafia overlay host bar ~297px (3 presets); Eat First +120s needs extra chip width. */
+  width: min(338px, calc(100vw - 16px));
   max-width: calc(100vw - 16px);
-  min-height: 39px;
+  min-height: 42px;
   padding: 0;
   border: 0;
-  border-radius: 25.268px;
+  border-radius: 27px;
   background: rgb(60 36 99 / 0.68);
   box-shadow: none;
   backdrop-filter: none;
@@ -74,6 +75,6 @@ const useCompactTimer = computed(() => !props.isEatFirstHost || props.viewMode)
 }
 
 .eat-first-call-timer__header--compact {
-  width: 102px;
+  width: 112px;
 }
 </style>

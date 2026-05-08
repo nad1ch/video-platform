@@ -34,6 +34,7 @@ import {
 } from '@/eat-first/constants/brand.js'
 import '@/eat-first/styles/host-chrome.css'
 import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
+import EconomyComingSoonModal from '@/pages/app/components/EconomyComingSoonModal.vue'
 import AppLandingFooterActions from '@/pages/app/components/AppLandingFooterActions.vue'
 import '@/eat-first/styles/motion.css'
 import { useCoinHubStore } from '@/stores/coinHub'
@@ -370,6 +371,7 @@ const showEatFirstOrMafiaDeadBackgroundSettings = computed(
 /** Gear next to logo whenever the `/app` shell header is visible (including `/app` home). */
 const shellShowsHeaderSettingsGear = computed(() => showChrome.value)
 const mafiaHeaderObsCopyLabel = computed(() => 'copy')
+const mafiaHeaderRoomLabel = computed(() => 'room')
 const mafiaSettingsOpen = ref(false)
 const mafiaSettingsButtonRef = ref<HTMLElement | null>(null)
 const mafiaSettingsPopoverRef = ref<HTMLElement | null>(null)
@@ -839,15 +841,9 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
         :logo-src="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderLogo : BRAND_LOGO_LIGHT_SVG"
         :mafia-mode="isMafiaRoute || isEatFirstCallGameView"
         :profile-to="appLandingProfileTo"
-        :show-help-button="isEatRoute && Boolean(onboardingForRoute)"
+        :show-help-button="isEatRoute && !isEatFirstCallGameView && Boolean(onboardingForRoute)"
         :show-coin="appLandingHeaderShowCoin"
         :title="headerTitle"
-        :user-prefix="
-          (isMafiaRoute && isCurrentMafiaHost) ||
-          (isEatFirstCallGameView && eatFirstShell.isEatFirstRoomHost && !eatFirstHeaderStreamView)
-            ? 'host'
-            : ''
-        "
         :user-avatar="appLandingHeaderUserAvatar"
         :user-name="appLandingHeaderUserName"
         @open-help="openOnboardingForCurrentRoute"
@@ -998,21 +994,28 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
           </div>
         </template>
         <template v-if="isCallRoute || isMafiaRoute || isEatFirstCallGameView" #center>
-          <div :id="CALL_ROOM_DROPDOWN_HOST_ID" class="app-shell-call-room-anchor">
+          <div
+            :id="CALL_ROOM_DROPDOWN_HOST_ID"
+            class="app-shell-call-room-anchor"
+            :class="{ 'app-shell-call-room-anchor--mafia': isMafiaRoute || isEatFirstCallGameView }"
+          >
             <button
               type="button"
               class="app-shell-call-join-room"
+              :class="{ 'app-shell-call-join-room--mafia': isMafiaRoute || isEatFirstCallGameView }"
               :aria-expanded="callRoomHeaderJoin.roomPopoverOpen"
               aria-haspopup="dialog"
               :aria-controls="CALL_ROOM_POPOVER_PANEL_ID"
+              :title="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : t('callPage.headerJoinRoom')"
+              :aria-label="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : t('callPage.headerJoinRoom')"
               @click.stop="callRoomHeaderJoin.toggleRoomPopover()"
             >
-              {{ t('callPage.headerJoinRoom') }}
+              {{ isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : t('callPage.headerJoinRoom') }}
             </button>
           </div>
         </template>
         <template v-if="mafiaHeaderShowHostControls || eatFirstHeaderShowHostControls" #actions-start>
-          <template v-if="mafiaHeaderShowHostControls">
+          <div v-if="mafiaHeaderShowHostControls" class="app-shell-mafia-host-controls">
             <button
               type="button"
               class="app-shell-mafia-toggle"
@@ -1036,7 +1039,7 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
               <img class="app-shell-mafia-copy__icon" :src="mafiaHeaderCopyIcon" alt="" aria-hidden="true" />
               <span>{{ mafiaHeaderObsCopyLabel }}</span>
             </button>
-          </template>
+          </div>
           <button
             v-if="eatFirstHeaderShowHostControls && eatFirstHeaderHasGame"
             type="button"
@@ -1099,29 +1102,14 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
       </p>
 
       <Teleport to="body">
-        <div
-          v-if="economyComingSoonOpen"
-          class="app-shell-economy-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="app-shell-economy-modal-title"
-          @click.self="closeEconomyComingSoon"
-        >
-          <div class="app-shell-economy-modal__card">
-            <button
-              type="button"
-              class="app-shell-economy-modal__close"
-              aria-label="Close"
-              title="Close"
-              @click="closeEconomyComingSoon"
-            >
-              ×
-            </button>
-            <p class="app-shell-economy-modal__eyebrow">Economy</p>
-            <h2 id="app-shell-economy-modal-title">Coming soon</h2>
-            <p>Coin economy is being prepared. Your balance is visible for now, and actions will open soon.</p>
-          </div>
-        </div>
+        <EconomyComingSoonModal
+          :open="economyComingSoonOpen"
+          :eyebrow="t('home.comingSoonEyebrow')"
+          :title="t('home.economyComingSoonTitle')"
+          :description="t('home.economyComingSoonDesc')"
+          :close-label="t('home.comingSoonClose')"
+          @close="closeEconomyComingSoon"
+        />
       </Teleport>
     </div>
   </div>
@@ -1208,77 +1196,6 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
   font-size: 0.9rem;
   line-height: 1.35;
 }
-
-.app-shell-economy-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 13000;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgb(3 7 18 / 0.56);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-}
-
-.app-shell-economy-modal__card {
-  position: relative;
-  box-sizing: border-box;
-  width: min(420px, 100%);
-  padding: 1.35rem;
-  border: 1px solid color-mix(in srgb, #f59e0b 42%, rgb(255 255 255 / 0.16));
-  border-radius: 20px;
-  background:
-    radial-gradient(circle at 80% 0%, rgb(245 158 11 / 0.18), transparent 42%),
-    rgb(18 8 34 / 0.96);
-  color: #f8fafc;
-  box-shadow: 0 24px 60px rgb(0 0 0 / 0.42);
-  text-align: center;
-}
-
-.app-shell-economy-modal__card h2 {
-  margin: 0;
-  color: #ffda44;
-  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
-  font-size: clamp(1.8rem, 6vw, 2.6rem);
-  font-weight: 400;
-  font-variation-settings: 'YEAR' 1979;
-  text-transform: uppercase;
-}
-
-.app-shell-economy-modal__card p {
-  margin: 0.65rem 0 0;
-  color: rgb(248 250 252 / 0.78);
-  line-height: 1.45;
-}
-
-.app-shell-economy-modal__eyebrow {
-  color: #ffda44 !important;
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.app-shell-economy-modal__close {
-  position: absolute;
-  top: 0.7rem;
-  right: 0.7rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.08);
-  color: rgb(255 255 255 / 0.9);
-  cursor: pointer;
-  font-size: 1.35rem;
-  line-height: 1;
-}
-
 
 .app-shell-route-stack {
   position: relative;
@@ -1379,6 +1296,10 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
   max-width: 100%;
 }
 
+.app-shell-call-room-anchor--mafia {
+  flex-shrink: 0;
+}
+
 .app-shell-call-join-room {
   flex-shrink: 0;
   margin: 0;
@@ -1403,6 +1324,35 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
 .app-shell-call-join-room:disabled {
   opacity: 0.42;
   cursor: not-allowed;
+}
+
+.app-shell-call-join-room--mafia {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 5.85rem;
+  height: 2.35rem;
+  padding: 0 0.61rem;
+  border: 0;
+  border-radius: 33px;
+  background: rgb(139 92 246 / 0.14);
+  color: #fff;
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+  font-size: 0.76rem;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: lowercase;
+  transition:
+    filter 0.16s ease,
+    transform 0.16s ease;
+}
+
+.app-shell-call-join-room--mafia:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.8);
+  outline-offset: 2px;
 }
 
 @keyframes app-shell-mafia-settings-spin {
@@ -1664,10 +1614,18 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
   pointer-events: none;
 }
 
+.app-shell-mafia-host-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .app-shell-mafia-toggle {
   position: relative;
-  width: 67px;
-  height: 31px;
+  flex: 0 0 auto;
+  width: 5.85rem;
+  height: 2.35rem;
+  border-radius: 999px;
   overflow: hidden;
   background: rgb(139 92 246 / 0.14);
   transform: scale(1);
@@ -1688,11 +1646,11 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
 .app-shell-mafia-toggle::before {
   content: '';
   position: absolute;
-  left: 2px;
-  top: 2px;
-  width: 63px;
-  height: 27px;
-  border-radius: 15.535px;
+  left: 0.15rem;
+  top: 0.15rem;
+  width: calc(100% - 0.3rem);
+  height: calc(100% - 0.3rem);
+  border-radius: 999px;
   background: rgb(221 35 35 / 0.09);
   transition: background 0.28s ease;
 }
@@ -1700,11 +1658,11 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
 .app-shell-mafia-toggle::after {
   content: '';
   position: absolute;
-  left: 2px;
-  top: 2px;
-  width: 27px;
-  height: 27px;
-  border-radius: 15.535px;
+  left: 0.15rem;
+  top: 0.15rem;
+  width: calc(2.35rem - 0.3rem);
+  height: calc(2.35rem - 0.3rem);
+  border-radius: 999px;
   background: rgb(255 13 13 / 0.22);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.08),
@@ -1721,39 +1679,51 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
 
 .app-shell-mafia-toggle--new::after {
   background: rgb(100 246 92 / 0.22);
-  transform: translateX(36px);
+  transform: translateX(calc(5.85rem - 2.35rem));
 }
 
 .app-shell-mafia-toggle span {
-  position: relative;
+  position: absolute;
+  left: 2.72rem;
+  top: 50%;
   z-index: 1;
-  transform: translateX(12px);
+  font-size: 0.76rem;
+  transform: translateY(-50%);
   transition:
     color 0.24s ease,
-    transform 0.34s cubic-bezier(0.22, 1.28, 0.36, 1);
+    left 0.34s cubic-bezier(0.22, 1.28, 0.36, 1);
 }
 
 .app-shell-mafia-toggle--new span {
-  transform: translateX(-12px);
+  left: 0.86rem;
 }
 
 .app-shell-mafia-copy {
   position: relative;
-  width: 76px;
-  height: 31px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 5.85rem;
+  height: 2.35rem;
   justify-content: flex-start;
-  padding-left: 8px;
+  padding-left: 0.61rem;
   background: rgb(139 92 246 / 0.14);
+  font-size: 0.76rem;
+}
+
+.app-shell-mafia-copy span {
+  position: relative;
+  z-index: 1;
 }
 
 .app-shell-mafia-copy__icon {
   position: absolute;
-  right: 6px;
-  top: 5px;
+  right: 0.45rem;
+  top: 50%;
   display: block;
-  width: 21px;
-  height: 21px;
+  width: 1.59rem;
+  height: 1.59rem;
   object-fit: contain;
+  transform: translateY(-50%);
 }
 
 

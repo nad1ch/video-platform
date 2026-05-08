@@ -23,6 +23,7 @@
     "hostPanelMetaSeats": "Host #{hostSeat} · {players}/{maxPlayers} players",
     "timerCountdownAria": "Eat First timer {time}",
     "timerControlsAria": "Eat First timer controls",
+    "timerDurationsAria": "Round length",
     "timerPresetSecTitle": "{n} s",
     "timerStartDisabledHint": "Timer control is not connected yet",
     "timerStartLabel": "Start",
@@ -190,7 +191,7 @@
     "gameMicComingSoonTitle": "Who Took a Shi*t",
     "gameMicComingSoonDesc": "Players vote on who gets “eaten” first. Convince, manipulate, or just survive — the chat helps shape the decision.",
     "economyComingSoonTitle": "Interaction Economy",
-    "economyComingSoonDesc": "The platform features its own point system that rewards you for being active during streams. The more you watch, chat, and participate — the more points you earn.\nYou can spend these points to interact with the streamer: influence gameplay, trigger events, get attention, or unlock extra features.\nIt’s not just watching — it’s participation, where every action matters.",
+    "economyComingSoonDesc": "The platform features its own point system that rewards you\nfor being active during streams. The more you watch, chat,\nand participate - the more points you earn.\nYou can spend these points to interact with the streamer: influence gameplay, trigger events, get attention, or unlock extra features.\nIt's not just watching - it's participation, where every action matters.",
     "openEconomyComingSoon": "Open Interaction Economy preview"
   },
   "routes": {

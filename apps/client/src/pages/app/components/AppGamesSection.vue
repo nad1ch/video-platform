@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { RouterLink, type RouteLocationRaw } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import EconomyComingSoonModal from '@/pages/app/components/EconomyComingSoonModal.vue'
 
 type AppGameCard = {
   id: string
@@ -142,7 +143,16 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
     </div>
 
     <Teleport to="body">
-      <Transition name="app-coming-soon-modal">
+      <EconomyComingSoonModal
+        v-if="activeComingSoonItem?.comingSoon.variant === 'economy'"
+        :open="true"
+        :eyebrow="activeComingSoonItem.comingSoon.eyebrow"
+        :title="activeComingSoonItem.comingSoon.title ?? activeComingSoonItem.title"
+        :description="activeComingSoonItem.comingSoon.description"
+        :close-label="t('home.comingSoonClose')"
+        @close="closeComingSoon"
+      />
+      <Transition v-else name="app-coming-soon-modal">
         <div v-if="activeComingSoonItem" class="app-coming-soon" role="presentation" @keydown.esc="closeComingSoon">
           <button
             type="button"
@@ -617,7 +627,8 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
 
 .app-coming-soon__dialog--economy .app-coming-soon__description {
   max-width: 34rem;
-  font-size: clamp(0.74rem, 1.15vw, 0.96rem);
+  font-family: "Marmelad", var(--app-home-ui, var(--sa-font-main, system-ui), sans-serif);
+  font-size: clamp(calc(0.74rem - 2px), calc(1.15vw - 2px), calc(0.96rem - 2px));
   line-height: 1.22;
 }
 
