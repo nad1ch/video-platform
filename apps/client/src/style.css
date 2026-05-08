@@ -4,6 +4,8 @@
    * Coda Caption; Coda stays the app counter elsewhere via --app-home-counter (e.g. HomePage).
    */
   --app-timer-digits: 'Titan One', 'Coda Caption', var(--sa-font-display, system-ui), sans-serif;
+  /* Leaderboard / chat side columns on game pages (viewports where they sit in the grid). */
+  --sa-game-sidebar-min: 240px;
 
   /* Legacy aliases — map to ui-theme / eat-first HUD tokens (single dark chrome). */
   --text: var(--sa-color-text-body);

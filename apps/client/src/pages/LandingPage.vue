@@ -46,14 +46,13 @@ import nadrawPhoneIconWebp from '@/assets/landing/nadraw-phone.webp'
 import instagramIcon from '@/assets/landing/instagram.png'
 import mafiaIcon from '@/assets/landing/mafia.png'
 import mafiaIconWebp from '@/assets/landing/mafia.webp'
-import spyIcon from '@/assets/landing/spy.png'
-import spyIconWebp from '@/assets/landing/spy.webp'
+import checkersMarkImage from '@/assets/landing/checkers-mark.svg'
+import durakCardImage from '@/assets/landing/durak-card.svg'
 import telegramIcon from '@/assets/landing/telegram.png'
 import tiktokIcon from '@/assets/landing/tiktok.png'
 import twitchIcon from '@/assets/landing/twitch.png'
 import nadleGameIcon from '@/assets/landing/nadle.png'
 import nadleGameIconWebp from '@/assets/landing/nadle.webp'
-import whoTakeShitIcon from '@/assets/landing/who-take-shit.png'
 import { persistLocale } from '@/eat-first/i18n/index.js'
 import {
   BRAND_LOGO_LIGHT_SVG,
@@ -62,6 +61,8 @@ import {
 } from '@/eat-first/constants/brand.js'
 import { getLandingScrollTopForHash } from '@/utils/landingAnchorScroll'
 import { landingDesignPx as px } from '@/utils/landingDesignPx'
+import { loadCheckersPage } from '@/routerRouteLoaders'
+import { prefetchRoute } from '@/utils/routePrefetch'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -92,11 +93,20 @@ type CallBannerCardLayer = {
 type LandingGameCard = {
   id: string
   title: string
-  to: RouteLocationRaw
+  subtitle?: string
+  to?: RouteLocationRaw
   image: string
   imageWebp?: string
   ariaLabel: string
   tone?: 'violet' | 'amber' | 'green' | 'slate'
+  prefetch?: () => void
+  comingSoon?: {
+    eyebrow: string
+    title?: string
+    description: string
+    status: string
+    variant?: 'game' | 'economy'
+  }
 }
 
 type LandingDecorIcon = {
@@ -110,6 +120,7 @@ const callRoute = { name: 'call' } as const
 const economyComingSoonRoute = { name: 'home', query: { comingSoon: 'economy' } } satisfies RouteLocationRaw
 const mafiaRoute = { name: 'mafia' } satisfies RouteLocationRaw
 const checkersRoute = { name: 'checkers', params: { roomId: 'lobby' }, query: { defaultMode: 'rated' } } satisfies RouteLocationRaw
+const prefetchCheckers = () => prefetchRoute(loadCheckersPage)
 const landingFeedbackHref = 'https://docs.google.com/forms/d/e/1FAIpQLSdlLcJTCl7VIufeRmeZHsMD2h08kwwCkHZVMmQBNuN2Z3930Q/viewform?usp=header'
 const landingPageLoading = ref(true)
 const landingCanvasElement = ref<HTMLElement | null>(null)
@@ -159,7 +170,8 @@ const landingCriticalImageSources = Object.freeze([
   avatarCap,
   eatFirstIcon,
   mafiaIcon,
-  spyIcon,
+  checkersMarkImage,
+  durakCardImage,
   nadleGameIcon,
   nadrawPhoneIcon,
   landingCameraIcon,
@@ -329,21 +341,26 @@ const landingGameCards = computed<LandingGameCard[]>(() => [
     tone: 'violet',
   },
   {
-    id: 'spy',
-    title: t('home.gameSpy'),
-    to: { name: 'home', query: { comingSoon: 'spy' } },
-    image: spyIcon,
-    imageWebp: spyIconWebp,
-    ariaLabel: t('home.openSpy'),
+    id: 'durak',
+    title: t('home.gameDurak'),
+    image: durakCardImage,
+    ariaLabel: t('home.openDurak'),
     tone: 'slate',
+    comingSoon: {
+      eyebrow: t('home.comingSoonEyebrow'),
+      title: t('home.gameDurak'),
+      description: t('home.gameDurakComingSoonDesc'),
+      status: t('home.comingSoonStatus'),
+    },
   },
   {
     id: 'checkers',
-    title: 'Шашки',
+    title: t('home.gameCheckers'),
     to: checkersRoute,
-    image: whoTakeShitIcon,
-    ariaLabel: 'Відкрити Шашки',
+    image: checkersMarkImage,
+    ariaLabel: t('home.openCheckers'),
     tone: 'amber',
+    prefetch: prefetchCheckers,
   },
 ])
 

@@ -530,6 +530,16 @@ function emitCellClick(pos: CheckersPosition): void {
  * `container-type: size` block height then becomes cyclic with content; `100cqh` collapses (~0).
  * Driving `--checkers-board-size` off that corrupts nested grid tracks → tiny board/overlap siblings.
  */
+@media (min-width: 1201px) {
+  .checkers-board-frame {
+    --checkers-frame-padding-inline: clamp(8px, 1.75cqmin, 14px);
+    --checkers-board-glow-outer-safe: clamp(6px, 1.2cqmin, 12px);
+    --checkers-board-glow-bleed: clamp(9px, 2cqmin, 16px);
+    --checkers-coordinate-strip: clamp(1rem, 3.5cqmin, 1.45rem);
+    --checkers-board-vertical-fudge: clamp(2px, 0.85cqmin, 8px);
+  }
+}
+
 @media (max-width: 1200px) {
   .checkers-board-frame {
     height: auto;

@@ -151,6 +151,13 @@ defineProps<{
   box-sizing: border-box;
 }
 
+@media (max-width: 1023px) {
+  .nadle-page__global-lb {
+    height: auto;
+    flex: 0 1 auto;
+  }
+}
+
 .nadle-page__global-lb :deep(.nadle-page__glb-scroll) {
   border-radius: 15.535px;
   border: 1px solid rgba(255, 255, 255, 0.18);

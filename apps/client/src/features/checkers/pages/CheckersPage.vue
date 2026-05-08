@@ -24,6 +24,7 @@ import StreamAudio from '@/components/StreamAudio.vue'
 import TwitchRelayChatPanel from '@/components/twitch/TwitchRelayChatPanel.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import AppContainer from '@/components/ui/AppContainer.vue'
+import '@/components/ui/gameTriptychLayout.css'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import { useNadleStatusBanners } from '@/composables/useNadleStatusBanners'
 import { useNadleStreamerRoom } from '@/composables/useNadleStreamerRoom'
@@ -1525,8 +1526,8 @@ function handleCellClick(pos: CheckersPosition): void {
     }"
   >
     <div class="page-route__body">
-    <AppContainer wide flush class="nadle-page nadle-page--len5 nadle-page--checkers">
-      <div class="nadle-page__grid h-full min-h-0">
+    <AppContainer wide flush class="nadle-page nadle-page--len5 nadle-page--checkers sa-game-triptych">
+      <div class="nadle-page__grid sa-game-triptych__grid h-full min-h-0">
         <AppCard class="nadle-page__stack nadle-page__stack--side nadle-page__stack--leader">
           <div class="nadle-page__leader-stack">
             <section class="checkers-room-meta" aria-label="Checkers room status">
@@ -3109,8 +3110,6 @@ function handleCellClick(pos: CheckersPosition): void {
 
   .nadle-page {
     padding-block: 18px 18px;
-    padding-inline: clamp(2px, 0.45vw, 8px);
-    max-width: min(1577px, 100%);
     flex: 1 1 auto;
     min-height: 0;
     height: 100%;
@@ -3125,18 +3124,6 @@ function handleCellClick(pos: CheckersPosition): void {
     min-height: 0;
     height: 100%;
     max-height: 100%;
-    grid-template-columns:
-      minmax(278px, 336px)
-      minmax(0, 845px)
-      minmax(278px, 336px);
-    gap: 13px;
-  }
-
-  .nadle-page__grid :deep(.nadle-page__stack--leader),
-  .nadle-page__grid :deep(.nadle-page__stack--chat) {
-    flex: 0 0 auto;
-    width: 100%;
-    max-width: 336px;
   }
 
   .nadle-page__grid :deep(.nadle-page__stack) {
@@ -3156,6 +3143,10 @@ function handleCellClick(pos: CheckersPosition): void {
     height: 100%;
     justify-content: center;
     padding: clamp(8px, 1vw, 14px);
+  }
+
+  .checkers-board-shell {
+    padding-inline: clamp(8px, 1.65cqmin, 16px);
   }
 
   .nadle-page__grid :deep(.nadle-page__stack--chat) {

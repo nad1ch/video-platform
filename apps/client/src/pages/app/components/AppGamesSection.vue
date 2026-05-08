@@ -841,6 +841,14 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
   .app-game-card__visual {
     height: 3rem;
   }
+
+  .app-game-card--checkers.app-game-card {
+    grid-template-columns: minmax(0, 1fr) 3.35rem;
+  }
+
+  .app-game-card--checkers .app-game-card__visual {
+    height: 3.35rem;
+  }
 }
 
 @media (max-width: 900px) {
@@ -867,6 +875,14 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
 
   .app-game-card__visual {
     height: 4rem;
+  }
+
+  .app-game-card--checkers.app-game-card {
+    grid-template-columns: minmax(0, 1fr) 4.45rem;
+  }
+
+  .app-game-card--checkers .app-game-card__visual {
+    height: 4.45rem;
   }
 }
 
@@ -912,39 +928,17 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
   }
 }
 
-.app-game-card--durak .app-game-card__visual {
-  justify-self: end;
-  width: clamp(2.75rem, 3.7vw, 3.4rem);
-  height: clamp(3.6rem, 4.85vw, 4.35rem);
-  margin-right: clamp(0.45rem, 0.8vw, 0.8rem);
+.app-game-card--checkers.app-game-card {
+  grid-template-columns: minmax(0, 1fr) clamp(3.55rem, 5vw, 4.75rem);
 }
 
-.app-game-card--durak .app-game-card__picture {
-  width: 100%;
-  height: 100%;
-  transform: none;
-}
-
-.app-game-card--durak .app-game-card__image {
-  object-fit: fill;
+.app-game-card--checkers .app-game-card__visual {
+  height: clamp(3.55rem, 5vw, 4.75rem);
 }
 
 .app-game-card--checkers .app-game-card__title {
   max-width: 5.55rem;
   line-height: 0.95;
   white-space: pre-line;
-}
-
-.app-game-card--checkers .app-game-card__visual {
-  justify-self: end;
-  width: clamp(3.95rem, 5.2vw, 4.9rem);
-  height: clamp(3.95rem, 5.2vw, 4.9rem);
-  margin-right: clamp(0.12rem, 0.45vw, 0.35rem);
-}
-
-.app-game-card--checkers .app-game-card__picture {
-  width: 100%;
-  height: 100%;
-  transform: scaleX(-1) rotate(135deg);
 }
 </style>
