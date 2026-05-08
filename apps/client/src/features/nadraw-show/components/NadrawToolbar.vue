@@ -584,7 +584,11 @@ function onSizeInput(ev: Event): void {
   .nadraw-toolbar__colors {
     grid-column: 1 / -1;
     grid-row: 2;
+    box-sizing: border-box;
     width: 100%;
+    max-width: 100%;
+    gap: 5px;
+    padding-inline: 4px;
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: thin;
@@ -594,6 +598,32 @@ function onSizeInput(ev: Event): void {
     grid-column: 3;
   }
 
+  .nadraw-toolbar__swatch {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    padding: 3px;
+    border-radius: 18px;
+    box-shadow: inset 0 0 0 3px rgba(81, 48, 116, 0.78);
+  }
+
+  .nadraw-toolbar__swatch--on {
+    transform: scale(1.02);
+    box-shadow:
+      inset 0 0 0 3px rgba(81, 48, 116, 0.96),
+      0 0 0 1px rgba(255, 255, 255, 0.62);
+  }
+
+  .nadraw-toolbar__swatch:hover {
+    transform: scale(1.04);
+  }
+
+  .nadraw-toolbar__custom-wrap {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+  }
+
   .nadraw-toolbar__colors::-webkit-scrollbar {
     height: 4px;
   }
@@ -601,6 +631,39 @@ function onSizeInput(ev: Event): void {
   .nadraw-toolbar__colors::-webkit-scrollbar-thumb {
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.28);
+  }
+}
+
+@media (max-width: 720px) {
+  .nadraw-toolbar__colors {
+    gap: 4px;
+    padding-inline: 2px;
+  }
+
+  .nadraw-toolbar__swatch {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    padding: 2px;
+    border-radius: 15px;
+    box-shadow: inset 0 0 0 2px rgba(81, 48, 116, 0.78);
+  }
+
+  .nadraw-toolbar__swatch--on {
+    transform: scale(1.02);
+    box-shadow:
+      inset 0 0 0 2px rgba(81, 48, 116, 0.96),
+      0 0 0 1px rgba(255, 255, 255, 0.62);
+  }
+
+  .nadraw-toolbar__swatch:hover {
+    transform: scale(1.03);
+  }
+
+  .nadraw-toolbar__custom-wrap {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
   }
 }
 

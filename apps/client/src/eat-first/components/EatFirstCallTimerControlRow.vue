@@ -2,6 +2,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import mafiaTimerClock from '@/assets/mafia/ui/timer-clock.svg'
+import { EAT_FIRST_CALL_TIMER_PRESET_MS, type EatFirstCallTimerPresetMs } from '@/eat-first/constants/eatFirstCallTimerPresets'
 import { createLogger } from '@/utils/logger'
 
 const EAT_FIRST_TIMER_ACTION_EVENT = 'streamassist:eat-first:timer-action'
@@ -34,12 +35,11 @@ const props = withDefaults(
 const { t } = useI18n()
 const log = createLogger('eat-first:call-timer-controls')
 
-const TIMER_PRESET_SEC = [30, 60, 90, 120] as const
-
 const nowMs = ref(Date.now())
 let nowTick: ReturnType<typeof setInterval> | undefined
 
-const selectedPresetSec = ref<(typeof TIMER_PRESET_SEC)[number]>(TIMER_PRESET_SEC[1]!)
+/** Default 90 s, matching Mafia overlay (`MAFIA_TIMER_PRESET_MS[2]`). */
+const selectedPresetMs = ref<EatFirstCallTimerPresetMs>(EAT_FIRST_CALL_TIMER_PRESET_MS[2]!)
 
 function formatMinSec(totalSec: number): string {
   const s = Math.max(0, Math.floor(totalSec))
@@ -94,17 +94,14 @@ const timerDisplay = computed(() => {
   return null
 })
 
-const idleDisplay = computed(() => {
-  const base = Math.max(1, Math.floor(Number(props.speakingTotalSec) || selectedPresetSec.value))
-  return formatMinSec(base)
-})
+const idleDisplay = computed(() => formatMinSec(Math.floor(selectedPresetMs.value / 1000)))
 
 const timerText = computed(() => timerDisplay.value ?? idleDisplay.value)
 
 const showHostControls = computed(() => props.isEatFirstHost && !props.viewMode && !props.compact)
 
-function onSelectPreset(sec: (typeof TIMER_PRESET_SEC)[number]): void {
-  selectedPresetSec.value = sec
+function onSelectPreset(ms: EatFirstCallTimerPresetMs): void {
+  selectedPresetMs.value = ms
 }
 
 const timerActionPending = ref(false)
@@ -136,7 +133,7 @@ function onTimerActionClick(): void {
     if (isRunning.value || props.timerPaused) {
       dispatchEatFirstTimerAction({ action: 'timer-stop' })
     } else {
-      const sec = Math.max(5, Math.floor(Number(selectedPresetSec.value) || 30))
+      const sec = Math.max(5, Math.floor(selectedPresetMs.value / 1000))
       dispatchEatFirstTimerAction({ action: 'timer-start', durationSec: sec })
     }
   } catch (e) {
@@ -170,23 +167,28 @@ const rootClass = computed(() => ({
       role="group"
       :aria-label="t('eatFirstCall.timerControlsAria')"
     >
-      <div class="ef-timer-ctrl__presets" role="group">
+      <div
+        class="ef-timer-ctrl__presets"
+        role="group"
+        :aria-label="t('eatFirstCall.timerDurationsAria')"
+      >
         <button
-          v-for="sec in TIMER_PRESET_SEC"
-          :key="sec"
+          v-for="ms in EAT_FIRST_CALL_TIMER_PRESET_MS"
+          :key="ms"
           type="button"
           class="sa-chip-btn ef-timer-ctrl__preset"
-          :class="{ 'ef-timer-ctrl__preset--active': selectedPresetSec === sec }"
-          :title="t('eatFirstCall.timerPresetSecTitle', { n: sec })"
-          :aria-label="t('eatFirstCall.timerPresetSecTitle', { n: sec })"
-          @click="onSelectPreset(sec)"
+          :class="{ 'ef-timer-ctrl__preset--active': selectedPresetMs === ms }"
+          :title="t('eatFirstCall.timerPresetSecTitle', { n: ms / 1000 })"
+          :aria-label="t('eatFirstCall.timerPresetSecTitle', { n: ms / 1000 })"
+          :aria-pressed="selectedPresetMs === ms"
+          @click="onSelectPreset(ms)"
         >
-          {{ sec }}
+          {{ ms / 1000 }}
         </button>
       </div>
       <button
         type="button"
-        class="sa-chip-btn ef-timer-ctrl__action"
+        class="sa-chip-btn ef-timer-ctrl__action ef-timer-ctrl__action--start"
         :title="timerActionTitle"
         :aria-label="timerActionTitle"
         :disabled="timerActionDisabled"
@@ -202,34 +204,34 @@ const rootClass = computed(() => ({
 .ef-timer-ctrl {
   display: grid;
   align-items: center;
-  column-gap: 7px;
+  column-gap: 8px;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
 }
 
 .ef-timer-ctrl--floating {
-  grid-template-columns: 22px 50px minmax(0, 1fr);
-  height: 39px;
-  padding: 0 11px;
+  grid-template-columns: 24px 54px minmax(0, 1fr);
+  height: 42px;
+  padding: 0 12px;
 }
 
 .ef-timer-ctrl--floating.ef-timer-ctrl--compact {
-  grid-template-columns: 22px 50px;
-  column-gap: 7px;
+  grid-template-columns: 24px 54px;
+  column-gap: 8px;
 }
 
 .ef-timer-ctrl--embedded {
-  grid-template-columns: 20px 48px minmax(0, 1fr);
-  min-height: 36px;
-  padding: 6px 8px;
+  grid-template-columns: 22px 52px minmax(0, 1fr);
+  min-height: 39px;
+  padding: 7px 9px;
   border-radius: 8px;
   background: rgb(74 50 116 / 0.55);
   border: 1px solid rgb(255 255 255 / 0.08);
 }
 
 .ef-timer-ctrl--embedded.ef-timer-ctrl--compact {
-  grid-template-columns: 20px 48px;
+  grid-template-columns: 22px 52px;
 }
 
 .ef-timer-ctrl__ctrls {
@@ -238,7 +240,6 @@ const rootClass = computed(() => ({
   gap: 5px;
   min-width: 0;
   margin-left: 4px;
-  flex-wrap: wrap;
 }
 
 .ef-timer-ctrl--embedded .ef-timer-ctrl__ctrls {
@@ -256,31 +257,31 @@ const rootClass = computed(() => ({
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 35px;
-  min-width: 35px;
-  min-height: 23.896px;
-  height: 23.896px;
+  width: 38px;
+  min-width: 38px;
+  min-height: 26px;
+  height: 26px;
   padding: 0;
   border: 0;
-  border-radius: 19.234px;
+  border-radius: 21px;
   background: rgb(102 56 143 / 0.34);
   color: rgb(255 255 255 / 0.94);
-  font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
-  font-size: 11.345px;
-  font-weight: 800;
+  font-family: var(--app-timer-digits);
+  font-size: 12px;
+  font-weight: 400;
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: 'lnum' 1, 'tnum' 1;
   line-height: 1;
-  letter-spacing: -0.6807px;
+  letter-spacing: -0.5px;
   text-align: center;
 }
 
 .ef-timer-ctrl--embedded .ef-timer-ctrl__preset {
-  width: 32px;
-  min-width: 32px;
-  min-height: 22px;
-  height: 22px;
-  font-size: 10.5px;
+  width: 35px;
+  min-width: 35px;
+  min-height: 24px;
+  height: 24px;
+  font-size: 11px;
 }
 
 .ef-timer-ctrl__preset--active {
@@ -291,30 +292,30 @@ const rootClass = computed(() => ({
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 49px;
-  min-width: 49px;
-  min-height: 24px;
-  height: 24px;
+  width: 53px;
+  min-width: 53px;
+  min-height: 26px;
+  height: 26px;
   padding: 0;
   border: 0;
-  border-radius: 19.234px;
+  border-radius: 21px;
   background: rgb(102 56 143 / 0.34);
   color: rgb(255 255 255 / 0.94);
-  font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
-  font-size: 11.345px;
-  font-weight: 800;
+  font-family: var(--app-timer-digits);
+  font-size: 12px;
+  font-weight: 400;
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: 'lnum' 1, 'tnum' 1;
   line-height: 1;
-  letter-spacing: -0.6807px;
+  letter-spacing: -0.5px;
   text-align: center;
   flex-shrink: 0;
   white-space: nowrap;
 }
 
 .ef-timer-ctrl__ico {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   display: block;
   object-fit: contain;
@@ -322,21 +323,21 @@ const rootClass = computed(() => ({
 }
 
 .ef-timer-ctrl--embedded .ef-timer-ctrl__ico {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
 }
 
 .ef-timer-ctrl__text {
-  font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
-  font-size: 20px;
-  font-weight: 800;
+  font-family: var(--app-timer-digits);
+  font-size: 22px;
+  font-weight: 400;
   line-height: 1;
   color: rgb(255 255 255 / 0.94);
   transform: translateY(-1px);
 }
 
 .ef-timer-ctrl--embedded .ef-timer-ctrl__text {
-  font-size: 17px;
+  font-size: 19px;
 }
 
 .ef-timer-ctrl__text--mono {

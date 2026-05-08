@@ -21,7 +21,6 @@ import hudTimerSrc from '@/assets/nadraw-show/hud-timer.svg'
 
 const NADRAW_HTML_CLASS = 'sa-nadraw-route'
 const NADRAW_STAGE_WIDTH = 1440
-const NADRAW_STAGE_EDGE_TOTAL = 15
 const NADRAW_STAGE_CONTENT_WIDTH = 1425
 const NADRAW_STAGE_HEIGHT = 784
 const NADRAW_COMPACT_BREAKPOINT = 936
@@ -102,7 +101,7 @@ function syncNadrawStageScale(): void {
     nadrawStageScale.value = 1
     return
   }
-  const availableContentWidth = Math.max(1, width - NADRAW_STAGE_EDGE_TOTAL)
+  const availableContentWidth = Math.max(1, width)
   const next = Math.min(1, availableContentWidth / NADRAW_STAGE_CONTENT_WIDTH)
   nadrawStageScale.value = next
 }
@@ -489,7 +488,6 @@ watch(
 
 <template>
   <div
-    ref="pageRef"
     class="nadraw-page"
     :class="{ 'nadraw-page--compact': nadrawCompact, 'nadraw-page--fluid': nadrawFluid }"
     :style="nadrawStageStyle"
@@ -500,6 +498,7 @@ watch(
       {{ streamerLoadError }}
     </p>
 
+    <div ref="pageRef" class="nadraw-page__inner">
     <div class="nadraw-stage">
       <img class="nadraw-page__cloud nadraw-page__cloud--left" :src="cloudWideSrc" alt="" aria-hidden="true" />
       <img class="nadraw-page__cloud nadraw-page__cloud--right" :src="cloudWideSrc" alt="" aria-hidden="true" />
@@ -623,6 +622,7 @@ watch(
       </main>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -631,14 +631,24 @@ watch(
   --nadraw-purple: #66388f;
   --nadraw-panel-purple: rgba(81, 48, 116, 0.78);
   position: relative;
+  box-sizing: border-box;
   flex: 0 0 var(--nadraw-stage-visual-height, 784px) !important;
   width: 100%;
   height: var(--nadraw-stage-visual-height, 784px) !important;
   min-height: var(--nadraw-stage-visual-height, 784px) !important;
   overflow: hidden;
+  padding-left: var(--app-shell-content-x);
+  padding-right: calc(var(--app-shell-content-x) + 4px);
   color: #ffffff;
   background: transparent;
   font-family: "Marmelad", var(--sa-font-main, system-ui, sans-serif);
+}
+
+.nadraw-page__inner {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 :global(.app-shell-main__viewport--nadraw),
@@ -670,7 +680,7 @@ watch(
   width: 1440px;
   height: var(--nadraw-stage-layout-height, 784px);
   transform: scale(var(--nadraw-stage-scale, 1));
-  transform-origin: 8px 0;
+  transform-origin: 0 0;
 }
 
 .nadraw-page__cloud {
@@ -717,10 +727,10 @@ watch(
   display: grid;
   grid-template-columns: 343px minmax(0, 1071px);
   gap: 11px;
-  width: min(1425px, calc(100% - 15px));
+  width: min(1425px, 100%);
   height: var(--nadraw-stage-layout-height, 784px);
   min-height: 0;
-  margin: 0 7px 0 8px;
+  margin: 0;
   padding: 0 0 8px;
   box-sizing: border-box;
   align-content: start;
@@ -1312,7 +1322,7 @@ watch(
 
 .nadraw-page--fluid .nadraw-layout {
   grid-template-columns: 343px minmax(0, 1fr);
-  width: calc(100% - 15px);
+  width: 100%;
   height: var(--nadraw-fluid-stage-height);
 }
 
@@ -1336,7 +1346,7 @@ watch(
   height: auto !important;
   min-height: 100dvh !important;
   overflow: visible;
-  padding: 0 0 16px;
+  padding-bottom: 16px;
 }
 
 .nadraw-page--compact .nadraw-stage {
@@ -1366,7 +1376,7 @@ watch(
   width: 100%;
   height: auto;
   margin: 0;
-  padding: 0 7px 16px 8px;
+  padding: 0 0 16px;
 }
 
 .nadraw-page--compact .nadraw-main {

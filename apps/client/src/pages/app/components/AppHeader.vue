@@ -22,7 +22,6 @@ const props = withDefaults(
     compact?: boolean
     mafiaMode?: boolean
     showCoin?: boolean
-    userPrefix?: string
     /**
      * Show the gold "PRO" pill linking to billing. Driven by
      * `useProSubscription().isProActive` from the layout. Hidden when
@@ -45,7 +44,6 @@ const props = withDefaults(
     compact: false,
     mafiaMode: false,
     showCoin: true,
-    userPrefix: '',
     isProActive: false,
     proLinkTo: undefined,
     proLabel: '',
@@ -246,9 +244,8 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
           <button
             v-if="showCoin"
             type="button"
-            class="app-landing-header__coin app-landing-header__coin--disabled"
+            class="app-landing-header__coin"
             :aria-label="t('app.openCoinHub')"
-            aria-disabled="true"
             @click="$emit('coinClick')"
           >
             <span class="app-landing-header__coin-label">{{ coinBalanceLabel }}</span>
@@ -259,10 +256,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 
           <div
             class="app-landing-header__auth sa-glass-button"
-            :class="{
-              'app-landing-header__auth--profile': isAuthenticated,
-              'app-landing-header__auth--mafia-host': mafiaMode && userPrefix.trim().length > 0,
-            }"
+            :class="{ 'app-landing-header__auth--profile': isAuthenticated }"
             :aria-busy="authLoading"
           >
             <span v-if="authLoading" class="app-landing-header__auth-loading">{{ t('app.loading') }}</span>
@@ -277,7 +271,6 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
                 :title="displayName || undefined"
                 @click.stop="toggleProfileMenu"
               >
-                <span v-if="userPrefix.trim()" class="app-landing-header__user-prefix">{{ userPrefix.trim() }}</span>
                 <span class="app-landing-header__avatar" aria-hidden="true">
                   <img
                     v-if="hasUserAvatar"
@@ -438,6 +431,11 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   justify-content: start;
   margin-left: 3rem;
   pointer-events: auto;
+}
+
+/* Games (mafia / eat-first call): tuck gear closer to the logo only here. */
+.app-landing-header--mafia .app-landing-header__brand-extra {
+  margin-left: calc(3rem - 10px);
 }
 
 .app-landing-header__logo {
@@ -701,10 +699,6 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   cursor: pointer;
 }
 
-.app-landing-header__coin--disabled {
-  opacity: 0.92;
-}
-
 .app-landing-header__coin-icon {
   position: relative;
   display: inline-flex;
@@ -911,111 +905,39 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   white-space: nowrap;
 }
 
-.app-landing-header__user-prefix {
-  display: none;
-}
-
-.app-landing-header--mafia .app-landing-header__brand-extra {
-  margin-left: 3.25rem;
+/*
+ * Center the title text on the bar while keeping the room pill to its right:
+ * the cluster is positioned by half-width, so nudge right by (room + gap) / 2.
+ * Room pill width matches `.app-shell-mafia-copy` / `.app-shell-call-join-room--mafia`.
+ */
+.app-landing-header--mafia .app-landing-header__center:has(:deep(.app-shell-call-room-anchor--mafia)) {
+  gap: 8px;
+  transform: translate(calc(-50% + (5.85rem + 8px) / 2), -50%);
 }
 
 .app-landing-header--mafia .app-landing-header__actions {
   gap: 8px;
-  margin-right: 0;
+  /*
+   * Pull the whole right cluster left inside the bar only (same inset idea as
+   * `.app-landing-header__inner` padding-top). Does not change bar border-box size.
+   */
+  margin-right: 0.6rem;
 }
 
-.app-landing-header--mafia .app-landing-header__auth {
-  width: auto;
-  min-width: 0;
-  min-height: 31px;
-  border: 0;
-  border-radius: 33px;
-  background: rgb(32 20 51 / 0.29);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+/* Mafia toggle+copy or Eat First copy: nudge host controls row 2px right (slot lives in AppShellLayout). */
+.app-landing-header--mafia .app-landing-header__actions :deep(.app-shell-mafia-host-controls:first-child),
+.app-landing-header--mafia .app-landing-header__actions :deep(.app-shell-mafia-copy:first-child) {
+  margin-left: 2px;
 }
 
-.app-landing-header--mafia .app-landing-header__auth--mafia-host {
-  background: rgb(73 143 56 / 0.65);
-}
-
-.app-landing-header--mafia .app-landing-header__auth--profile:not(.app-landing-header__auth--mafia-host) {
-  background: transparent;
-}
-
-.app-landing-header--mafia .app-landing-header__user {
-  width: auto;
-  max-width: min(13rem, 28vw);
-  min-height: 31px;
-  padding: 0 4px 0 10px;
-  gap: 0;
-}
-
-.app-landing-header--mafia .app-landing-header__user-prefix {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  height: 31px;
-  color: #fff;
-  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
-  font-size: 10px;
-  font-weight: 400;
-  font-variation-settings: 'YEAR' 1979;
-  line-height: 1;
-  text-transform: lowercase;
-}
-
-.app-landing-header--mafia .app-landing-header__avatar {
-  display: inline-flex;
-  width: 23px;
-  height: 23px;
-  order: 1;
-  position: relative;
-  z-index: 2;
-  margin-left: 15px;
-  background: transparent;
-  font-size: 0.62rem;
-}
-
-.app-landing-header--mafia
-  .app-landing-header__auth--profile:not(.app-landing-header__auth--mafia-host)
-  .app-landing-header__avatar {
-  margin-left: 0;
-}
-
-.app-landing-header--mafia .app-landing-header__user-name {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  height: 27px;
-  max-width: 8.5rem;
-  flex: 0 1 auto;
-  order: 2;
-  position: relative;
-  z-index: 1;
-  padding: 0 12px 0 10px;
-  border-radius: 33px;
-  background: rgb(102 56 143 / 0.68);
-  color: #fff;
-  font-family: var(--app-home-ui, 'Marmelad', var(--sa-font-main, system-ui, sans-serif));
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.app-landing-header--mafia .app-landing-header__avatar + .app-landing-header__user-name {
-  padding-left: 35px;
-  margin-left: -30px;
+.app-landing-header--mafia .app-landing-header__auth--profile .app-landing-header__user {
+  box-sizing: border-box;
+  padding-left: 0.6rem;
+  padding-right: 0.6rem;
 }
 
 .app-landing-header--mafia .app-landing-header__auth-buttons {
-  min-height: 31px;
+  min-height: 2.35rem;
 }
 
 .sr-only {
@@ -1036,6 +958,10 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
     padding-bottom: 0;
     padding-left: clamp(0.8rem, 2vw, 1.25rem);
     padding-right: calc(clamp(0.8rem, 2vw, 1.25rem) + 4px);
+  }
+
+  .app-landing-header--mafia .app-landing-header__actions {
+    margin-right: 0.45rem;
   }
 
   .app-landing-header__bar {
@@ -1059,6 +985,10 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   .app-landing-header__logo {
     width: 2.55rem;
     height: 2.55rem;
+  }
+
+  .app-landing-header--mafia .app-landing-header__brand-extra {
+    margin-left: calc(3.2rem - 10px);
   }
 
   .app-landing-header__title {
@@ -1105,6 +1035,16 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
     justify-self: start;
     max-width: 100%;
     transform: none;
+  }
+
+  .app-landing-header--mafia .app-landing-header__center:has(:deep(.app-shell-call-room-anchor--mafia)) {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    justify-self: unset;
+    max-width: min(42rem, calc(100vw - 8rem));
+    gap: 8px;
+    transform: translate(calc(-50% + (5.85rem + 8px) / 2), -50%);
   }
 
   .app-landing-header__title {
@@ -1227,6 +1167,15 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   .app-landing-header__user-name {
     max-width: 100%;
     font-size: 0.76rem;
+  }
+
+  .app-landing-header--mafia .app-landing-header__actions {
+    margin-right: 0.45rem;
+  }
+
+  .app-landing-header--mafia .app-landing-header__auth--profile .app-landing-header__user {
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
   }
 }
 

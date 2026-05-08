@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { EAT_FIRST_CALL_TIMER_PRESET_MS } from '../../../constants/eatFirstCallTimerPresets'
 import { hostControlChromeStore as store } from '../../../composables/hostControlChrome.js'
 import { useHostChromeAct } from '../../../composables/useHostChromeAct.js'
 import { millisFromFirestore } from '../../../utils/firestoreTime.js'
@@ -95,14 +96,14 @@ const timerStatusLine = computed(() => {
     </p>
     <div class="hcc-timer-dur">
       <button
-        v-for="sec in [30, 60, 90]"
-        :key="'d-' + sec"
+        v-for="ms in EAT_FIRST_CALL_TIMER_PRESET_MS"
+        :key="'d-' + ms"
         type="button"
         class="hcc-chip-xl"
-        :class="{ on: Number(store.speakingDuration) === sec }"
-        @click="act('setSpeakingDuration', sec)"
+        :class="{ on: Number(store.speakingDuration) === ms / 1000 }"
+        @click="act('setSpeakingDuration', ms / 1000)"
       >
-        {{ sec }}s
+        {{ ms / 1000 }}s
       </button>
     </div>
     <div class="hcc-timer-big">
