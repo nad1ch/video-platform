@@ -841,6 +841,7 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
         :logo-src="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderLogo : BRAND_LOGO_LIGHT_SVG"
         :mafia-mode="isMafiaRoute || isEatFirstCallGameView"
         :profile-to="appLandingProfileTo"
+        :room-center-mode="isCallRoute || isMafiaRoute || isEatFirstCallGameView"
         :show-help-button="isEatRoute && !isEatFirstCallGameView && Boolean(onboardingForRoute)"
         :show-coin="appLandingHeaderShowCoin"
         :title="headerTitle"
@@ -1006,11 +1007,11 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
               :aria-expanded="callRoomHeaderJoin.roomPopoverOpen"
               aria-haspopup="dialog"
               :aria-controls="CALL_ROOM_POPOVER_PANEL_ID"
-              :title="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : t('callPage.headerJoinRoom')"
-              :aria-label="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : t('callPage.headerJoinRoom')"
+              :title="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : 'room'"
+              :aria-label="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : 'room'"
               @click.stop="callRoomHeaderJoin.toggleRoomPopover()"
             >
-              {{ isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : t('callPage.headerJoinRoom') }}
+              {{ isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : 'room' }}
             </button>
           </div>
         </template>
@@ -1301,20 +1302,30 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
 }
 
 .app-shell-call-join-room {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  width: 5.85rem;
+  height: 2.35rem;
   margin: 0;
-  padding: 0.32rem 0.72rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--sa-color-primary, #a78bfa) 55%, var(--sa-color-border, #334155));
-  background: color-mix(in srgb, var(--sa-color-primary, #a78bfa) 38%, rgb(15 16 20 / 0.5));
-  color: var(--sa-color-text-on-primary, #f8fafc);
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  padding: 0 0.61rem;
+  border: 0;
+  border-radius: 33px;
+  background: rgb(139 92 246 / 0.14);
+  color: #fff;
   cursor: pointer;
-  line-height: 1.2;
-  font-family: inherit;
+  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
+  font-size: 0.76rem;
+  font-weight: 400;
+  font-variation-settings: 'YEAR' 1979;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: lowercase;
+  transition:
+    filter 0.16s ease,
+    transform 0.16s ease;
 }
 
 .app-shell-call-join-room:hover:not(:disabled) {
@@ -1327,27 +1338,7 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
 }
 
 .app-shell-call-join-room--mafia {
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 5.85rem;
-  height: 2.35rem;
-  padding: 0 0.61rem;
-  border: 0;
-  border-radius: 33px;
-  background: rgb(139 92 246 / 0.14);
-  color: #fff;
-  font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
-  font-size: 0.76rem;
-  font-weight: 400;
-  font-variation-settings: 'YEAR' 1979;
-  letter-spacing: 0;
-  line-height: 1;
-  text-transform: lowercase;
-  transition:
-    filter 0.16s ease,
-    transform 0.16s ease;
+  /* Keep class for template parity; styles are now shared in base. */
 }
 
 .app-shell-call-join-room--mafia:focus-visible {

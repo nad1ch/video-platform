@@ -21,6 +21,7 @@ const props = withDefaults(
     helpLabel?: string
     compact?: boolean
     mafiaMode?: boolean
+    roomCenterMode?: boolean
     showCoin?: boolean
     /**
      * Show the gold "PRO" pill linking to billing. Driven by
@@ -43,6 +44,7 @@ const props = withDefaults(
     helpLabel: '',
     compact: false,
     mafiaMode: false,
+    roomCenterMode: false,
     showCoin: true,
     isProActive: false,
     proLinkTo: undefined,
@@ -184,7 +186,11 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
   <header
     ref="headerWrapper"
     class="app-landing-header"
-    :class="{ 'app-landing-header--compact': compact, 'app-landing-header--mafia': mafiaMode }"
+    :class="{
+      'app-landing-header--compact': compact,
+      'app-landing-header--mafia': mafiaMode,
+      'app-landing-header--room-center': roomCenterMode,
+    }"
     :aria-label="t('app.headerAria')"
   >
     <div ref="headerInner" class="app-landing-header__inner">
@@ -908,9 +914,9 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 /*
  * Center the title text on the bar while keeping the room pill to its right:
  * the cluster is positioned by half-width, so nudge right by (room + gap) / 2.
- * Room pill width matches `.app-shell-mafia-copy` / `.app-shell-call-join-room--mafia`.
+ * Room pill width matches `.app-shell-call-join-room`.
  */
-.app-landing-header--mafia .app-landing-header__center:has(:deep(.app-shell-call-room-anchor--mafia)) {
+.app-landing-header--room-center .app-landing-header__center {
   gap: 8px;
   transform: translate(calc(-50% + (5.85rem + 8px) / 2), -50%);
 }
@@ -1037,7 +1043,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
     transform: none;
   }
 
-  .app-landing-header--mafia .app-landing-header__center:has(:deep(.app-shell-call-room-anchor--mafia)) {
+  .app-landing-header--room-center .app-landing-header__center {
     position: absolute;
     left: 50%;
     top: 50%;

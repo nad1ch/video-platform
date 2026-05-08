@@ -1887,7 +1887,7 @@ watch(
   font-family: 'Climate Crisis', var(--sa-font-display);
   font-size: calc(var(--u) * 36);
   font-variation-settings: 'YEAR' 1979;
-  font-weight: 400;
+  
   letter-spacing: 0;
   line-height: calc(var(--u) * 58.5);
   text-align: left;

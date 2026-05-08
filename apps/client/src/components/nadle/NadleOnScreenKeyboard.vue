@@ -223,7 +223,7 @@ const emit = defineEmits<{
   line-height: 1;
   font-family: "Climate Crisis", var(--sa-font-display);
   font-size: 12px;
-  font-weight: 400;
+  
   text-transform: none;
   border-color: rgba(255, 255, 255, 0.13);
   border-radius: 8px;
@@ -344,7 +344,7 @@ const emit = defineEmits<{
   padding: 0 0.35rem;
   font-family: "Climate Crisis", var(--sa-font-display);
   font-size: 10px;
-  font-weight: 400;
+  
   text-transform: lowercase;
   letter-spacing: 0;
   line-height: 1.1;

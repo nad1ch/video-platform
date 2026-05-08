@@ -173,7 +173,7 @@ defineProps<{
   font-family: "Climate Crisis", var(--sa-font-display);
   font-size: 16px;
   line-height: 18px;
-  font-weight: 400;
+  
   color: #ffffff;
   letter-spacing: 0;
 }
@@ -245,7 +245,7 @@ defineProps<{
   color: #ffffff;
   font-family: "Climate Crisis", var(--sa-font-display);
   font-size: 10px;
-  font-weight: 400;
+  
   line-height: 1.15;
 }
 

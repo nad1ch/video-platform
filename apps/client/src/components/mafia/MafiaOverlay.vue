@@ -251,11 +251,11 @@ function onToggleTimer(): void {
   color: rgb(255 255 255 / 0.94);
   font-family: var(--app-timer-digits);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 800;
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: 'lnum' 1, 'tnum' 1;
   line-height: 1;
-  letter-spacing: -0.5px;
+  letter-spacing: 0.01em;
   text-align: center;
 }
 
@@ -278,11 +278,11 @@ function onToggleTimer(): void {
   color: rgb(255 255 255 / 0.94);
   font-family: var(--app-timer-digits);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 800;
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: 'lnum' 1, 'tnum' 1;
   line-height: 1;
-  letter-spacing: -0.5px;
+  letter-spacing: 0.01em;
   text-align: center;
 }
 
@@ -298,8 +298,8 @@ function onToggleTimer(): void {
 
 .mafia-overlay__timer-text {
   font-family: var(--app-timer-digits);
-  font-size: 22px;
-  font-weight: 400;
+  font-size: 21px;
+  font-weight: 800;
   line-height: 1;
   color: rgb(255 255 255 / 0.94);
   transform: translateY(-1px);
@@ -308,7 +308,7 @@ function onToggleTimer(): void {
 .mafia-overlay__timer-text--mono {
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.01em;
 }
 
 .mafia-overlay__round-tools {

@@ -5,6 +5,7 @@ import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import AppEconomySection from '@/pages/app/components/AppEconomySection.vue'
 import AppGamesSection from '@/pages/app/components/AppGamesSection.vue'
 import AppVideoCallSection from '@/pages/app/components/AppVideoCallSection.vue'
+import BetaAccessModal from '@/pages/app/components/BetaAccessModal.vue'
 import eatFirstImage from '@/assets/landing/eat-first.png'
 import eatFirstImageWebp from '@/assets/landing/eat-first.webp'
 import mafiaImage from '@/assets/landing/mafia.png'
@@ -39,6 +40,8 @@ type AppGameCard = {
     variant?: 'game' | 'economy'
   }
 }
+
+type BetaAccessModalKind = 'video-call' | 'mafia' | 'eat-first'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -163,10 +166,26 @@ const comingSoonGameId = computed(() => {
   return typeof value === 'string' ? value : null
 })
 
+const betaAccessModalKind = computed<BetaAccessModalKind | null>(() => {
+  const rawValue = route.query.betaAccess
+  const value = Array.isArray(rawValue) ? rawValue[0] : rawValue
+  if (value === 'video-call' || value === 'call') return 'video-call'
+  if (value === 'mafia') return 'mafia'
+  if (value === 'eat-first' || value === 'eat') return 'eat-first'
+  return null
+})
+
 function clearComingSoonGame(): void {
   if (!('comingSoon' in route.query)) return
   const query = { ...route.query }
   delete query.comingSoon
+  void router.replace({ name: 'home', query })
+}
+
+function closeBetaAccessModal(): void {
+  if (!('betaAccess' in route.query)) return
+  const query = { ...route.query }
+  delete query.betaAccess
   void router.replace({ name: 'home', query })
 }
 
@@ -225,6 +244,13 @@ watch(
         </div>
       </main>
     </div>
+
+    <BetaAccessModal
+      v-if="betaAccessModalKind"
+      :open="true"
+      :kind="betaAccessModalKind"
+      @close="closeBetaAccessModal"
+    />
   </div>
 </template>
 

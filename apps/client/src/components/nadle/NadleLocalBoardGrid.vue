@@ -100,7 +100,7 @@ const emit = defineEmits<{
     calc(var(--nadle-cell) * 0.54)
   );
   font-family: "Climate Crisis", var(--sa-font-display);
-  font-weight: 400;
+  
   letter-spacing: 0;
   border-radius: 15.535px;
   border: 1px solid rgba(255, 255, 255, 0.16);

@@ -209,7 +209,7 @@ defineExpose({ scrollToBottom })
   margin: 0;
   font-family: "Climate Crisis", var(--sa-font-display);
   font-size: 16px;
-  font-weight: 400;
+  
   line-height: 1.12;
   letter-spacing: 0;
   color: #ffffff;

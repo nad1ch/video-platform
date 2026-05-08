@@ -833,7 +833,7 @@ watch(
   color: #ffffff;
   font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
   font-size: 20px;
-  font-weight: 400;
+  
   font-variation-settings: 'YEAR' 1979;
   line-height: 30px;
   letter-spacing: 0;
@@ -938,7 +938,7 @@ watch(
   overflow: visible;
   font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
   font-size: 16px;
-  font-weight: 400;
+  
   font-variation-settings: 'YEAR' 1979;
   line-height: 50.526px;
   letter-spacing: 0;
@@ -957,7 +957,7 @@ watch(
   background: rgba(255, 59, 48, 0.44);
   font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
   font-size: 9px;
-  font-weight: 400;
+  
   font-variation-settings: 'YEAR' 1979;
   line-height: 1;
 }
@@ -993,7 +993,7 @@ watch(
   background: rgba(102, 56, 143, 0.33);
   font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
   font-size: 9px;
-  font-weight: 400;
+  
   font-variation-settings: 'YEAR' 1979;
 }
 
@@ -1257,7 +1257,7 @@ watch(
 .nadraw-viewer-veil p {
   margin: 0;
   font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
-  font-weight: 400;
+  
   font-variation-settings: 'YEAR' 1979;
   letter-spacing: 0;
 }

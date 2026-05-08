@@ -50,7 +50,7 @@ const { t } = useI18n()
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: clamp(1.12rem, 1.62vw, 1.46rem);
-  font-weight: 400;
+  font-weight: 390;
   font-variation-settings: 'YEAR' 1979;
   line-height: 1.16;
   text-align: center;

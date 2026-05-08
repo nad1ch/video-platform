@@ -293,9 +293,21 @@ function eatViewNeedsStreamAuth(query: Record<string, unknown>): boolean {
 }
 
 const BETA_GATED_ROUTE_NAMES = new Set(['call', 'mafia', 'eat'])
+const BETA_ACCESS_MODAL_BY_ROUTE_NAME = {
+  call: 'video-call',
+  mafia: 'mafia',
+  eat: 'eat-first',
+} as const
 
 function routeNeedsBetaAccess(to: RouteLocationGeneric): boolean {
   return typeof to.name === 'string' && BETA_GATED_ROUTE_NAMES.has(to.name)
+}
+
+function betaAccessModalQueryValue(to: RouteLocationGeneric): string {
+  const name = typeof to.name === 'string' ? to.name : ''
+  return name in BETA_ACCESS_MODAL_BY_ROUTE_NAME
+    ? BETA_ACCESS_MODAL_BY_ROUTE_NAME[name as keyof typeof BETA_ACCESS_MODAL_BY_ROUTE_NAME]
+    : 'video-call'
 }
 
 function userHasBetaAccess(user: AppUser | null): boolean {
@@ -383,7 +395,7 @@ router.beforeEach(async (to) => {
 
   if (needBetaAccess && !userHasBetaAccess(user.value)) {
     releaseRouteNavLoading()
-    return { name: 'beta-access' }
+    return { name: 'home', query: { betaAccess: betaAccessModalQueryValue(to) } }
   }
 
   return true

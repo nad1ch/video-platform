@@ -115,7 +115,7 @@ const slotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const)
   font-family: 'Climate Crisis', var(--sa-font-display);
   font-size: var(--economy-slot-title-font-size, calc(var(--economy-slot-u) * var(--economy-slot-title-scale, 36)));
   font-variation-settings: 'YEAR' 1979;
-  font-weight: 400;
+  
   letter-spacing: 0;
   line-height: calc(var(--economy-slot-u) * 58.5);
   text-align: left;

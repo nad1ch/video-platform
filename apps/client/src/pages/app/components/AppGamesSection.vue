@@ -274,7 +274,7 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: clamp(1.12rem, 1.62vw, 1.46rem);
-  font-weight: 400;
+  font-weight: 390;
   font-variation-settings: 'YEAR' 1979;
   line-height: 1.16;
   text-align: center;
@@ -387,7 +387,7 @@ const economySlotLetters = Object.freeze(['T', 'W', 'I', 'T', 'C', 'H'] as const
   color: #fff;
   font-family: var(--app-home-display, var(--sa-font-display, system-ui, sans-serif));
   font-size: clamp(0.82rem, 1.08vw, 1.02rem);
-  font-weight: 400;
+  font-weight: 390;
   font-variation-settings: 'YEAR' 1979;
   line-height: 1.08;
   overflow-wrap: normal;

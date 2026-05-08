@@ -321,7 +321,7 @@ const roundCountChoices = [5, 10, 20, 30, 50, 100] as const
   color: #ffffff;
   font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
   font-size: 32px;
-  font-weight: 400;
+  
   font-variation-settings: 'YEAR' 1979;
   line-height: 54.904px;
   letter-spacing: 0;
