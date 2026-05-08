@@ -856,6 +856,7 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
         :show-help-button="isEatRoute && !isEatFirstCallGameView && Boolean(onboardingForRoute)"
         :show-coin="appLandingHeaderShowCoin"
         :show-auth="!hideMafiaObsHeaderControls"
+        :mafia-obs-minimal-chrome="hideMafiaObsHeaderControls"
         :title="headerTitle"
         :user-avatar="appLandingHeaderUserAvatar"
         :user-name="appLandingHeaderUserName"
