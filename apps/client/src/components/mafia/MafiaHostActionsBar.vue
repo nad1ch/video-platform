@@ -16,7 +16,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const mafia = useMafiaGameStore()
 const mafiaPlayers = useMafiaPlayersStore()
-const { isMafiaHost, oldMafiaMode } = storeToRefs(mafia)
+const { isMafiaHost, oldMafiaMode, hostInteractionMode } = storeToRefs(mafia)
 const muteAllActive = ref(false)
 
 const canReshuffle = computed(() => {
@@ -28,6 +28,8 @@ const canReshuffle = computed(() => {
 })
 
 const muteAllIcon = computed(() => (muteAllActive.value ? mafiaHostMuteAllActive : mafiaHostMuteAll))
+
+const swapModeActive = computed(() => hostInteractionMode.value === 'swap')
 
 function onMuteAll(): void {
   if (!isMafiaHost.value) {
@@ -51,6 +53,13 @@ function onReshuffleConfirmed(): void {
     return
   }
   mafia.reshuffleGame()
+}
+
+function onSwapModeToggle(): void {
+  if (!isMafiaHost.value) {
+    return
+  }
+  mafia.setHostInteractionMode(swapModeActive.value ? 'night' : 'swap')
 }
 
 </script>
@@ -83,6 +92,33 @@ function onReshuffleConfirmed(): void {
     >
       <img class="mafia-host-actions__roles-art" :src="mafiaHostRoles" alt="" aria-hidden="true" />
     </button>
+    <button
+      type="button"
+      class="mafia-host-actions__btn mafia-host-actions__btn--swap"
+      :class="{ 'mafia-host-actions__btn--swap-active': swapModeActive }"
+      :title="t('mafiaPage.swapModeHint')"
+      :aria-label="t('mafiaPage.modeSwap')"
+      :aria-pressed="swapModeActive"
+      @click="onSwapModeToggle"
+    >
+      <svg
+        class="mafia-host-actions__swap-art"
+        viewBox="0 0 24 24"
+        width="22"
+        height="22"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          d="M5 8h12m0 0-3-3m3 3-3 3M19 16H7m0 0 3-3m-3 3 3 3"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </button>
     <ConfirmDialog
       v-model:open="reshuffleConfirmOpen"
       :title="t('mafiaPage.reshuffleConfirmTitle')"
@@ -100,7 +136,7 @@ function onReshuffleConfirmed(): void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 104px;
+  width: 153px;
   height: 55px;
   padding: 7px;
   gap: 8px;
@@ -174,6 +210,36 @@ function onReshuffleConfirmed(): void {
 
 .mafia-host-actions__btn--roles {
   background: rgb(102 56 143 / 0.47);
+}
+
+.mafia-host-actions__btn--swap {
+  background: rgb(74 50 116 / 0.62);
+  color: rgb(255 255 255 / 0.92);
+  transition:
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.16s ease,
+    box-shadow 0.16s ease,
+    color 0.16s ease,
+    opacity 0.16s ease;
+}
+
+.mafia-host-actions__btn--swap:hover:not(:disabled) {
+  background: rgb(84 57 132 / 0.78);
+}
+
+.mafia-host-actions__btn--swap-active {
+  background: rgb(102 56 143 / 0.78);
+  color: #ffd455;
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, #facc15 70%, transparent),
+    0 0 0 1px rgb(250 204 21 / 0.28);
+}
+
+.mafia-host-actions__swap-art {
+  display: block;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
 }
 
 .mafia-host-actions__roles-art {
