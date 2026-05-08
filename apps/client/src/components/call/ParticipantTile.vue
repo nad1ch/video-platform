@@ -2358,7 +2358,7 @@ if (import.meta.env.DEV) {
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem 0.65rem 0.55rem;
-  background: linear-gradient(to top, rgb(0 0 0 / 0.82), rgb(0 0 0 / 0.05));
+  background: transparent;
   pointer-events: none;
   border-bottom-left-radius: 14px;
   border-bottom-right-radius: 14px;
