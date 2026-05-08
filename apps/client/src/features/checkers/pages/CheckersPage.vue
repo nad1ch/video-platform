@@ -3086,7 +3086,15 @@ function handleCellClick(pos: CheckersPosition): void {
   transform: scale(0.98);
 }
 
-@media (min-width: 1201px) {
+@media (min-width: 1200px) {
+  .nadle-page__grid.sa-game-triptych__grid {
+    grid-template-columns:
+      minmax(max(var(--sa-game-sidebar-min), var(--sa-game-triptych-sidebar-min-lg)), 1fr)
+      minmax(0, var(--sa-game-triptych-center-max))
+      minmax(max(var(--sa-game-sidebar-min), var(--sa-game-triptych-sidebar-min-lg)), 1fr);
+    gap: 13px;
+  }
+
   .nadle-page--checkers.nadle-page {
     overflow-x: visible;
     overflow-y: hidden;
@@ -3155,7 +3163,16 @@ function handleCellClick(pos: CheckersPosition): void {
   }
 }
 
-@media (max-width: 1200px) {
+@media (min-width: 1200px) and (max-width: 1480px) {
+  .nadle-page__grid.sa-game-triptych__grid {
+    grid-template-columns:
+      minmax(var(--sa-game-sidebar-min), 1fr)
+      minmax(0, var(--sa-game-triptych-center-max))
+      minmax(var(--sa-game-sidebar-min), 1fr);
+  }
+}
+
+@media (max-width: 1199px) {
   .page-route,
   .page-route__body {
     overflow-x: clip;

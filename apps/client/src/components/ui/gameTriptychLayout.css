@@ -9,7 +9,7 @@
   --sa-game-triptych-sidebar-min-lg: 278px;
 }
 
-@media (min-width: 1201px) {
+@media (min-width: 1200px) {
   /* Single high-specificity target: triptych pages merge these classes on AppContainer root. */
   .app-container.app-container--wide.app-container--flush.nadle-page.sa-game-triptych {
     box-sizing: border-box;
@@ -32,7 +32,7 @@
   }
 }
 
-@media (min-width: 1201px) and (max-width: 1480px) {
+@media (min-width: 1200px) and (max-width: 1480px) {
   .nadle-page__grid.sa-game-triptych__grid {
     grid-template-columns:
       minmax(var(--sa-game-sidebar-min), 1fr)
