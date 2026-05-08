@@ -292,6 +292,17 @@ function eatViewNeedsStreamAuth(query: Record<string, unknown>): boolean {
   return s === 'admin' || s === 'control'
 }
 
+const BETA_GATED_ROUTE_NAMES = new Set(['call', 'mafia', 'eat'])
+
+function routeNeedsBetaAccess(to: RouteLocationGeneric): boolean {
+  return typeof to.name === 'string' && BETA_GATED_ROUTE_NAMES.has(to.name)
+}
+
+function userHasBetaAccess(user: AppUser | null): boolean {
+  if (!user) return false
+  return user.role === 'admin' || user.roles?.includes('STREAMER') === true
+}
+
 function userNeedsEmailVerification(user: AppUser | null): boolean {
   return (
     typeof user?.email === 'string' &&
@@ -352,22 +363,28 @@ router.beforeEach(async (to) => {
 
   const needMeta = Boolean(to.meta.requiresAuth)
   const needEatStaff = to.name === 'eat' && eatViewNeedsStreamAuth(to.query as Record<string, unknown>)
-  if (!needMeta && !needEatStaff) {
+  const needBetaAccess = routeNeedsBetaAccess(to)
+  if (!needMeta && !needEatStaff && !needBetaAccess) {
     return true
   }
 
-  const { ensureAuthLoaded, isAuthenticated } = useAuth()
+  const { ensureAuthLoaded, isAuthenticated, user } = useAuth()
   await ensureAuthLoaded()
-  if (isAuthenticated.value) {
-    return true
+  if (!isAuthenticated.value) {
+    releaseRouteNavLoading()
+    return {
+      path: '/auth',
+      query: {
+        redirect: to.fullPath,
+        mode: 'login',
+      },
+    }
   }
 
-  releaseRouteNavLoading()
-  return {
-    path: '/auth',
-    query: {
-      redirect: to.fullPath,
-      mode: 'login',
-    },
+  if (needBetaAccess && !userHasBetaAccess(user.value)) {
+    releaseRouteNavLoading()
+    return { name: 'beta-access' }
   }
+
+  return true
 })

@@ -18,6 +18,11 @@ const copyFeedbackId = ref<string | null>(null)
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 const rolePatchingId = ref<string | null>(null)
 const rolePatchError = ref<string | null>(null)
+const streamerOptions = ref<AdminStreamerOption[]>([])
+const streamerOptionsLoading = ref(false)
+const streamerOptionsLoaded = ref(false)
+const streamerPickerUserId = ref<string | null>(null)
+const streamerPickerSelection = ref('')
 const detailUserId = ref<string | null>(null)
 const detailActivity = ref<AdminUserActivityPayload | null>(null)
 const detailActivityLoading = ref(false)
@@ -57,6 +62,13 @@ type AdminUserActivityPayload = {
   }
   recentEvents: AdminUserActivityEvent[]
   recentErrors: AdminUserErrorEvent[]
+}
+
+type AdminStreamerOption = {
+  id: string
+  name: string
+  username: string
+  ownerId: string | null
 }
 
 const detailUser = computed(() => {
@@ -291,6 +303,96 @@ function roleToggleDisabled(u: AdminUserRow, role: EditableRole): boolean {
   return false
 }
 
+function canAssignStreamerViaPicker(u: AdminUserRow): boolean {
+  return !hasSystemRole(u, 'STREAMER') && !u.streamerId && !u.twitchId
+}
+
+function closeStreamerRolePicker(): void {
+  streamerPickerUserId.value = null
+  streamerPickerSelection.value = ''
+}
+
+function streamerOptionLabel(option: AdminStreamerOption): string {
+  const base = option.name.trim().length > 0 ? option.name : option.username
+  return option.ownerId ? `${base} (${t('adminPanel.streamersOwnerShort')} ${option.ownerId.slice(0, 8)}…)` : base
+}
+
+async function ensureStreamerOptionsLoaded(): Promise<boolean> {
+  if (streamerOptionsLoaded.value) {
+    return true
+  }
+  streamerOptionsLoading.value = true
+  try {
+    const r = await apiFetch('/api/admin/streamers')
+    if (!r.ok) {
+      rolePatchError.value = t('adminPanel.usersStreamerOptionsLoadError')
+      return false
+    }
+    const payload = (await r.json()) as {
+      streamers?: Array<{
+        id: string
+        name: string
+        username: string
+        isActive: boolean
+        ownerId: string | null
+      }>
+    }
+    streamerOptions.value = (payload.streamers ?? [])
+      .filter((streamer) => streamer.isActive)
+      .map((streamer) => ({
+        id: streamer.id,
+        name: streamer.name,
+        username: streamer.username,
+        ownerId: streamer.ownerId,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    streamerOptionsLoaded.value = true
+    return true
+  } catch {
+    rolePatchError.value = t('adminPanel.usersStreamerOptionsLoadError')
+    return false
+  } finally {
+    streamerOptionsLoading.value = false
+  }
+}
+
+async function patchUserRoles(
+  u: AdminUserRow,
+  nextRoles: Set<DisplayRole>,
+  streamerIdOverride?: string,
+): Promise<boolean> {
+  rolePatchError.value = null
+  rolePatchingId.value = u.id
+  try {
+    const roles = [...nextRoles].filter((role): role is 'USER' | 'ADMIN' | 'STREAMER' =>
+      role === 'USER' || role === 'ADMIN' || role === 'STREAMER',
+    )
+    const permissions = [...nextRoles].filter(
+      (role): role is 'EAT_FIRST_OPERATOR' => role === 'EAT_FIRST_OPERATOR',
+    )
+    const streamerId =
+      typeof streamerIdOverride === 'string' && streamerIdOverride.length > 0
+        ? streamerIdOverride
+        : u.streamerId
+    const r = await apiFetch(`/api/admin/users/${encodeURIComponent(u.id)}/role`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roles, permissions, ...(streamerId ? { streamerId } : {}) }),
+    })
+    if (!r.ok) {
+      rolePatchError.value = t('adminPanel.usersRolePatchError')
+      return false
+    }
+    await load()
+    return true
+  } catch {
+    rolePatchError.value = t('adminPanel.usersRolePatchError')
+    return false
+  } finally {
+    rolePatchingId.value = null
+  }
+}
+
 async function onRoleToggle(u: AdminUserRow, role: EditableRole, ev: Event) {
   const input = ev.target as HTMLInputElement
   if (roleToggleDisabled(u, role)) {
@@ -320,31 +422,42 @@ async function onRoleToggle(u: AdminUserRow, role: EditableRole, ev: Event) {
   if (nextRoles.has('ADMIN')) {
     nextRoles.delete('EAT_FIRST_OPERATOR')
   }
-  rolePatchError.value = null
-  rolePatchingId.value = u.id
-  try {
-    const roles = [...nextRoles].filter((role): role is 'USER' | 'ADMIN' | 'STREAMER' =>
-      role === 'USER' || role === 'ADMIN' || role === 'STREAMER',
-    )
-    const permissions = [...nextRoles].filter(
-      (role): role is 'EAT_FIRST_OPERATOR' => role === 'EAT_FIRST_OPERATOR',
-    )
-    const r = await apiFetch(`/api/admin/users/${encodeURIComponent(u.id)}/role`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roles, permissions, ...(u.streamerId ? { streamerId: u.streamerId } : {}) }),
-    })
-    if (!r.ok) {
-      rolePatchError.value = t('adminPanel.usersRolePatchError')
-      input.checked = hasSystemRole(u, role)
-      return
-    }
-    await load()
-  } catch {
-    rolePatchError.value = t('adminPanel.usersRolePatchError')
+  const ok = await patchUserRoles(u, nextRoles)
+  if (!ok) {
     input.checked = hasSystemRole(u, role)
-  } finally {
-    rolePatchingId.value = null
+  }
+}
+
+async function openStreamerRolePicker(u: AdminUserRow): Promise<void> {
+  if (streamerPickerUserId.value === u.id) {
+    closeStreamerRolePicker()
+    return
+  }
+  rolePatchError.value = null
+  const loaded = await ensureStreamerOptionsLoaded()
+  if (!loaded) {
+    return
+  }
+  streamerPickerUserId.value = u.id
+  const firstFree = streamerOptions.value.find((streamer) => streamer.ownerId == null)
+  streamerPickerSelection.value = firstFree?.id ?? streamerOptions.value[0]?.id ?? ''
+}
+
+async function assignStreamerRoleFromPicker(u: AdminUserRow): Promise<void> {
+  const streamerId = streamerPickerSelection.value
+  if (!streamerId) {
+    rolePatchError.value = t('adminPanel.usersStreamerPickerRequired')
+    return
+  }
+  const nextRoles = normalizedRoles(u)
+  nextRoles.add('STREAMER')
+  nextRoles.add('USER')
+  if (nextRoles.has('ADMIN')) {
+    nextRoles.delete('EAT_FIRST_OPERATOR')
+  }
+  const ok = await patchUserRoles(u, nextRoles, streamerId)
+  if (ok) {
+    closeStreamerRolePicker()
   }
 }
 
@@ -545,6 +658,53 @@ onUnmounted(() => {
                     />
                     <span>{{ roleLabel(role) }}</span>
                   </label>
+                </span>
+                <button
+                  v-if="canAssignStreamerViaPicker(u)"
+                  type="button"
+                  class="rounded border border-violet-600/70 bg-violet-900/50 px-1.5 py-0.5 text-[10px] font-medium text-violet-100 transition hover:bg-violet-800/70"
+                  @click.stop="openStreamerRolePicker(u)"
+                >
+                  {{ t('adminPanel.usersAddStreamerRole') }}
+                </button>
+                <span
+                  v-if="streamerPickerUserId === u.id"
+                  class="mt-1 inline-flex flex-wrap items-center gap-1 rounded border border-slate-700/70 bg-slate-950/80 px-2 py-1"
+                  @click.stop
+                >
+                  <span class="text-[10px] text-slate-400">{{ t('adminPanel.usersStreamerPickerLabel') }}</span>
+                  <span v-if="streamerOptionsLoading" class="text-[10px] text-slate-400">
+                    {{ t('adminPanel.usersStreamerPickerLoading') }}
+                  </span>
+                  <template v-else>
+                    <select
+                      v-model="streamerPickerSelection"
+                      class="min-w-[10rem] rounded border border-slate-700/80 bg-slate-950/80 px-1.5 py-1 text-[10px] text-slate-100 focus:border-cyan-600/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
+                    >
+                      <option disabled value="">{{ t('adminPanel.usersStreamerPickerPlaceholder') }}</option>
+                      <option v-for="streamer in streamerOptions" :key="streamer.id" :value="streamer.id">
+                        {{ streamerOptionLabel(streamer) }}
+                      </option>
+                    </select>
+                    <button
+                      type="button"
+                      class="rounded border border-cyan-700/70 bg-cyan-900/50 px-1.5 py-1 text-[10px] font-medium text-cyan-100 transition hover:bg-cyan-800/70 disabled:opacity-50"
+                      :disabled="rolePatchingId === u.id || streamerOptions.length === 0"
+                      @click.stop="assignStreamerRoleFromPicker(u)"
+                    >
+                      {{ t('adminPanel.usersStreamerPickerApply') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-slate-700/80 bg-slate-900/70 px-1.5 py-1 text-[10px] font-medium text-slate-200 transition hover:bg-slate-800/70"
+                      @click.stop="closeStreamerRolePicker"
+                    >
+                      {{ t('adminPanel.usersStreamerPickerCancel') }}
+                    </button>
+                    <span v-if="streamerOptions.length === 0" class="text-[10px] text-amber-300/90">
+                      {{ t('adminPanel.usersStreamerPickerEmpty') }}
+                    </span>
+                  </template>
                 </span>
               </p>
             </div>
