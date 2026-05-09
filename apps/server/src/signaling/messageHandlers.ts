@@ -26,6 +26,10 @@ import type {
   Room,
 } from '../rooms/Room'
 import type { RoomManager } from '../rooms/RoomManager'
+import {
+  getMafiaRoomOwnerUserId,
+  setMafiaRoomOwnerUserId,
+} from './mafiaRoomOwnerStore'
 import { MafiaWs } from './mafiaWsProtocol'
 import {
   EAT_FIRST_ROOM_PREFIX,
@@ -674,6 +678,14 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
   
   // queue so UIs do not render a seat that no longer has a player.
   if (isMafiaRoomId(room.id)) {
+    // Genuine peer-left: drop per-peer Mafia kill enforcement and life-state
+    // for the leaver so OBS / late joiners do not see ghost dead overlays
+    // or paused-producer flags for peerIds that no longer exist. Tab-reload
+    // of the same peerId goes through `replaceDuplicatePeerId` and skips
+    // this branch (Room.removePeer is called there but the cleanup helpers
+    // intentionally live in this signaling layer, not in Room.removePeer).
+    room.clearMafiaForceStateForPeer(peer.id)
+    room.clearMafiaPlayerLifeStateForPeer(peer.id)
     const changed = room.pruneMafiaSpeakingQueueToMaxSeat(room.getPeers().length)
     if (changed) {
       broadcastServerMessageToRoom(room, {
@@ -836,13 +848,34 @@ export async function handleJoinRoom(
     const hostPeerId = room.getMafiaHostPeerId()
     const hostPeerOnline = hostPeerId != null && room.getPeer(hostPeerId) != null
     if (hostUserId == null) {
-      room.setMafiaHostUserId(userId)
-      room.setMafiaHostPeerId(peer.id)
-      mafiaHostAssignedOnJoin = true
+      // Owner-lock (P0 Bug 3): never auto-promote a fresh joiner to host
+      // unless the recorded owner matches. If no owner is recorded yet
+      // (brand-new room), defer assignment to `mafia:claim-host` so that
+      // a non-host (e.g. early viewer participant) cannot accidentally
+      // become host just by joining first.
+      const ownerUserId = getMafiaRoomOwnerUserId(room.id)
+      if (ownerUserId != null && ownerUserId === userId) {
+        room.setMafiaHostUserId(userId)
+        room.setMafiaHostPeerId(peer.id)
+        // Refresh owner TTL on rejoin.
+        setMafiaRoomOwnerUserId(room.id, userId)
+        mafiaHostAssignedOnJoin = true
+      }
     } else if (hostUserId === userId && !hostPeerOnline) {
       // Host page reload / transient reconnect: keep one host owner and rebind
       // host peer id immediately so clients keep "host is last" ordering.
+      // Clear stale session id so the next claim-host with the new tab's
+      // sessionId is accepted (avoids trapping ownership on a dead session).
       room.setMafiaHostPeerId(peer.id)
+      const sessionPeerId = room.getMafiaHostSessionId()
+      if (sessionPeerId != null) {
+        const samePeerStillThere = room.getPeers().some((p) => p.mafiaSessionId === sessionPeerId)
+        if (!samePeerStillThere) {
+          room.setMafiaHostSessionId(null)
+        }
+      }
+      // Refresh owner TTL on rejoin.
+      setMafiaRoomOwnerUserId(room.id, userId)
       mafiaHostAssignedOnJoin = true
     }
   }
@@ -967,6 +1000,29 @@ export async function handleJoinRoom(
       type: MafiaWs.playerLifeState,
       payload: { states: room.getMafiaPlayerLifeStateSnapshot() },
     })
+    // Replay room-wide force-mute state to this socket only so OBS/view and
+    // late joiners can derive the host's "mute all" button state and tile
+    // mute badges from server state instead of a local-only host ref.
+    sendServerMessage(socket, {
+      type: MafiaWs.forceMuteAll,
+      payload: { muted: room.isMafiaForceMuteAllActive() },
+    })
+    // `room-state.peers[].audioMuted` only carries user-self-mute. Force-mute
+    // (per-peer kick or `mafia:force-mute-all`) lives in `Peer.forcedAudioMuted`
+    // and is not encoded there. On host reload during an active mute-all this
+    // would leave the host's effective-mute map empty for force-only-muted peers
+    // and the "mute all" button would render as inactive. Replay per-peer
+    // effective state so the host UI derives the correct button state and tile
+    // badges from the server snapshot. OBS/view and late joiners benefit too.
+    for (const other of room.getPeers()) {
+      if (other.id === peer.id) continue
+      const effectiveMuted = other.audioMuted || other.forcedAudioMuted
+      if (!effectiveMuted) continue
+      sendServerMessage(socket, {
+        type: 'peer-audio-muted',
+        payload: { peerId: other.id, muted: true },
+      })
+    }
     const mt = room.getMafiaTimer()
     if (mt != null) {
       const rem = mt.duration - (Date.now() - mt.startedAt)
@@ -1122,10 +1178,14 @@ export function handleMafiaClaimHost(
     const currentPeerOnline = currentPeerId != null && room.getPeer(currentPeerId) != null
     if (currentSession == null || currentPeerId == null || !currentPeerOnline || currentPeerId === peer.id) {
       if (currentSession != null && currentSession !== sessionId) {
+        // Same userId, different active session, original peer still online: reject
+        // so two tabs of the same host do not race for the host peer slot.
         return
       }
       room.setMafiaHostSessionId(sessionId)
       room.setMafiaHostPeerId(peer.id)
+      // Refresh owner TTL: this user is actively asserting ownership now.
+      setMafiaRoomOwnerUserId(room.id, peer.userId)
       broadcastMafiaHostUpdated(room)
     }
     return
@@ -1133,9 +1193,20 @@ export function handleMafiaClaimHost(
   if (current != null) {
     return
   }
+  // Owner-lock: the room currently has no in-memory host. Consult the
+  // process-wide ownerStore (P0 Bug 3). If a prior owner is recorded
+  // and does not match this peer's userId, reject the claim — the
+  // original owner keeps host ownership across `Room` finalization.
+  const ownerUserId = getMafiaRoomOwnerUserId(room.id)
+  if (ownerUserId != null && ownerUserId !== peer.userId) {
+    return
+  }
   room.setMafiaHostUserId(peer.userId)
   room.setMafiaHostSessionId(sessionId)
   room.setMafiaHostPeerId(peer.id)
+  // Record (or refresh) the owner. First-time claim of a brand-new
+  // room locks ownership to this userId for the TTL window.
+  setMafiaRoomOwnerUserId(room.id, peer.userId)
   broadcastMafiaHostUpdated(room)
 }
 
@@ -1156,10 +1227,21 @@ export function handleMafiaTransferHost(
   if (nextUserId.length < 1) {
     return
   }
+  // Owner-lock guard (P0 Bug 3): only transfer host to a userId that is
+  // actually present in the room. Rejects transfers to OBS/view tabs that
+  // are not currently in-room as participants, and to stale identities.
+  const candidatePresent = room
+    .getPeers()
+    .some((p) => p.userId === nextUserId)
+  if (!candidatePresent) {
+    return
+  }
   room.setMafiaHostUserId(nextUserId)
   const nextSessionId = room.getFirstMafiaSessionIdForUser(nextUserId)
   room.setMafiaHostSessionId(nextSessionId)
   room.setMafiaHostPeerId(room.getFirstMafiaPeerIdForUserSession(nextUserId, nextSessionId))
+  // Persist the new owner identity so it survives `Room` finalization.
+  setMafiaRoomOwnerUserId(room.id, nextUserId)
   broadcastMafiaHostUpdated(room)
 }
 

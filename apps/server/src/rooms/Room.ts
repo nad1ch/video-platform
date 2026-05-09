@@ -280,23 +280,31 @@ export class Room {
     this.peers.set(peer.id, peer)
   }
 
+  /**
+   * Low-level peer removal: drop from the peers map and reset the active-speaker
+   * latch when the leaver was the latched speaker.
+   *
+   * Note on Mafia per-peer state cleanup: this method intentionally does NOT
+   * prune the room's `mafiaForcedCameraOffPeerIds` / `mafiaForcedMicMutedPeerIds`
+   * /`mafiaPlayerLifeStateByPeerId` entries. Reload of the same peerId
+   * (handled by `replaceDuplicatePeerId` in signaling) calls this method
+   * for the old socket and we want the per-peer Mafia state to survive so
+   * `handleJoinRoom` re-applies the flags onto the new `Peer` object.
+   *
+   * Genuine peer-left cleanup (the leaver is not coming back) is performed
+   * by `removePeerFromNetwork` (signaling layer) which calls
+   * {@link clearMafiaForceStateForPeer} and {@link clearMafiaPlayerLifeStateForPeer}
+   * after the broadcasts.
+   */
   removePeer(peerId: string): Peer | undefined {
     const peer = this.peers.get(peerId)
     if (!peer) {
       return undefined
     }
     this.peers.delete(peerId)
-    
-    
-    
-    
-    
     if (this.lastBroadcastSpeakerPeerId === peerId) {
       this.emitActiveSpeakerIfChanged(null)
     }
-    
-    
-    this.clearMafiaForceStateForPeer(peerId)
     return peer
   }
 
@@ -431,6 +439,17 @@ export class Room {
 
   clearMafiaPlayerLifeStates(): void {
     this.mafiaPlayerLifeStateByPeerId.clear()
+  }
+
+  /**
+   * Drop the life-state entry for one peerId. Called from
+   * `removePeerFromNetwork` on a genuine leave so OBS / late joiners do
+   * not see "dead" overlays for peerIds that no longer exist in the room.
+   * Same-peerId reload (`replaceDuplicatePeerId`) intentionally does NOT
+   * call this — the killed peer should remain killed across reload.
+   */
+  clearMafiaPlayerLifeStateForPeer(peerId: string): void {
+    this.mafiaPlayerLifeStateByPeerId.delete(peerId)
   }
 
   /**

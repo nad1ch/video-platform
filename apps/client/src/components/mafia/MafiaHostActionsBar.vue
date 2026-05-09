@@ -16,8 +16,27 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const mafia = useMafiaGameStore()
 const mafiaPlayers = useMafiaPlayersStore()
-const { isMafiaHost, oldMafiaMode, hostInteractionMode } = storeToRefs(mafia)
-const muteAllActive = ref(false)
+const {
+  isMafiaHost,
+  oldMafiaMode,
+  hostInteractionMode,
+  mafiaForceMuteAllActive,
+  everyNonHostEffectivelyMuted,
+} = storeToRefs(mafia)
+
+/**
+ * Visual "active" state (P1 Bug 1 + Bug 2):
+ * - host has clicked "mute all" (server-authoritative `mafiaForceMuteAllActive`),
+ *   AND
+ * - every non-host peer is currently effectively muted.
+ *
+ * If the second clause becomes false (e.g. the previous host is now a
+ * non-host peer with their own mic on after a transfer), the button drops
+ * back to the "mute all" affordance so one click re-mutes the room.
+ */
+const muteAllActive = computed(
+  () => mafiaForceMuteAllActive.value && everyNonHostEffectivelyMuted.value,
+)
 
 const canReshuffle = computed(() => {
   const n = mafiaPlayers.joinOrder.length
@@ -35,8 +54,10 @@ function onMuteAll(): void {
   if (!isMafiaHost.value) {
     return
   }
-  muteAllActive.value = !muteAllActive.value
-  emit('force-mute-all', muteAllActive.value)
+  // Click derives the next action from the *visual* state, not the bare
+  // server flag. If anyone is unmuted while the flag is conceptually
+  // active, clicking re-asserts mute-all (sends `muted: true`).
+  emit('force-mute-all', !muteAllActive.value)
 }
 
 const reshuffleConfirmOpen = ref(false)

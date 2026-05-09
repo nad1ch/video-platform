@@ -200,6 +200,111 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   const reviveBroadcastPayload = ref<MafiaPlayerRevivePayload | null>(null)
 
   /**
+   * Server-authoritative room-wide "host clicked mute all" flag (P1 Bug 1).
+   *
+   * The host UI button state is NOT this flag alone — it is the AND of
+   * (this flag) AND (every non-host peer is currently effectively muted),
+   * via {@link everyNonHostEffectivelyMuted}. That way, if any non-host
+   * peer becomes audible (e.g. host transfer leaves the previous host
+   * unmuted, or future server changes lift forced-mute for someone), the
+   * host can press "mute all" again with one click.
+   *
+   * Server replays this on `handleJoinRoom` (Mafia replay block) so reload
+   * of the host tab AND OBS reload both derive button state from server,
+   * not a stale local ref.
+   */
+  const mafiaForceMuteAllActive = ref(false)
+
+  /**
+   * Per-peer effective audio-muted state, populated from the call signaling
+   * messages `room-state.peers[].audioMuted` (initial snapshot) and
+   * `peer-audio-muted` (live updates). Server's `peer-audio-muted` already
+   * encodes effective mute (`audioMuted || forcedAudioMuted`), so this
+   * map carries the final UI-visible state.
+   *
+   * Used by {@link everyNonHostEffectivelyMuted}.
+   */
+  const peerEffectiveMutedByPeerId = shallowRef<Record<string, boolean>>({})
+
+  function setMafiaForceMuteAllActiveFromSignaling(active: boolean): void {
+    mafiaForceMuteAllActive.value = active === true
+  }
+
+  /** Snapshot replace from `room-state.peers[].audioMuted`. */
+  function replacePeerEffectiveMutedSnapshot(snapshot: Record<string, boolean>): void {
+    const next: Record<string, boolean> = {}
+    for (const [peerId, muted] of Object.entries(snapshot)) {
+      if (typeof peerId === 'string' && peerId.length > 0 && muted === true) {
+        next[peerId] = true
+      }
+    }
+    peerEffectiveMutedByPeerId.value = next
+  }
+
+  /** Single-peer update from `peer-audio-muted`. */
+  function setPeerEffectiveMuted(peerId: string, muted: boolean): void {
+    if (typeof peerId !== 'string' || peerId.length === 0) return
+    const current = peerEffectiveMutedByPeerId.value
+    const has = current[peerId] === true
+    if (muted === has) {
+      return
+    }
+    const next = { ...current }
+    if (muted === true) {
+      next[peerId] = true
+    } else {
+      delete next[peerId]
+    }
+    peerEffectiveMutedByPeerId.value = next
+  }
+
+  function clearPeerEffectiveMuted(peerId: string): void {
+    if (typeof peerId !== 'string' || peerId.length === 0) return
+    if (peerEffectiveMutedByPeerId.value[peerId] !== true) return
+    const next = { ...peerEffectiveMutedByPeerId.value }
+    delete next[peerId]
+    peerEffectiveMutedByPeerId.value = next
+  }
+
+  /**
+   * Computed: does every non-host peer currently appear effectively muted?
+   *
+   * Inputs are the CallPage-maintained `peerEffectiveMutedByPeerId` (from
+   * `peer-audio-muted` + `room-state` snapshot) and the engine's join order
+   * (passed to {@link setNonHostPeerIds}). Empty room → `true` by convention
+   * (no one to be unmuted) so the toggle stays in "active" visual state
+   * after host reload of an empty room.
+   */
+  const nonHostPeerIds = ref<string[]>([])
+
+  function setNonHostPeerIds(ids: string[]): void {
+    if (!Array.isArray(ids)) {
+      nonHostPeerIds.value = []
+      return
+    }
+    const hostId = mafiaHostPeerId.value
+    const next: string[] = []
+    const seen = new Set<string>()
+    for (const id of ids) {
+      if (typeof id !== 'string' || id.length === 0) continue
+      if (id === hostId) continue
+      if (seen.has(id)) continue
+      seen.add(id)
+      next.push(id)
+    }
+    nonHostPeerIds.value = next
+  }
+
+  const everyNonHostEffectivelyMuted = computed(() => {
+    if (nonHostPeerIds.value.length === 0) return true
+    const map = peerEffectiveMutedByPeerId.value
+    for (const id of nonHostPeerIds.value) {
+      if (map[id] !== true) return false
+    }
+    return true
+  })
+
+  /**
    * Eat First call (`/app/eat` + CallPage): host may eliminate/revive via the same
    * `mafia:player-kick` / `mafia:player-revive` messages; `isMafiaHost` stays false.
    */
@@ -1921,5 +2026,14 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     hostToggleMafiaPlayerLife,
     isMafiaPeerEliminated,
     lifeStateForPeer,
+    mafiaForceMuteAllActive,
+    setMafiaForceMuteAllActiveFromSignaling,
+    peerEffectiveMutedByPeerId,
+    replacePeerEffectiveMutedSnapshot,
+    setPeerEffectiveMuted,
+    clearPeerEffectiveMuted,
+    nonHostPeerIds,
+    setNonHostPeerIds,
+    everyNonHostEffectivelyMuted,
   }
 })

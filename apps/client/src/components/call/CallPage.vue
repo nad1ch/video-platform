@@ -432,6 +432,61 @@ const offMafiaForceControls = subscribeSignalingMessage((data) => {
 onBeforeUnmount(offMafiaForceControls)
 
 /**
+ * Mafia P1 Bug 1+2: per-peer effective audio-muted tracking for the host's
+ * "mute all" button visual state. Server's `peer-audio-muted` already
+ * encodes effective mute (`audioMuted || forcedAudioMuted`); the room-state
+ * snapshot at join carries the same data per peer. Both flow into the
+ * store's `peerEffectiveMutedByPeerId`, which `MafiaHostActionsBar`
+ * reduces against `nonHostPeerIds` for the visual.
+ *
+ * Gated on `isMafiaRoute` so non-Mafia rooms never write to the Mafia store.
+ */
+const offMafiaPeerAudioMuted = subscribeSignalingMessage((data) => {
+  if (!isMafiaRoute.value) {
+    return
+  }
+  if (data == null || typeof data !== 'object') {
+    return
+  }
+  const rec = data as { type?: unknown; payload?: unknown }
+  if (rec.type === 'room-state') {
+    const peers = (rec.payload as { peers?: unknown } | undefined)?.peers
+    if (!Array.isArray(peers)) {
+      return
+    }
+    const snapshot: Record<string, boolean> = {}
+    for (const p of peers) {
+      if (p == null || typeof p !== 'object') continue
+      const pid = (p as { peerId?: unknown }).peerId
+      const muted = (p as { audioMuted?: unknown }).audioMuted
+      if (typeof pid === 'string' && pid.length > 0 && muted === true) {
+        snapshot[pid] = true
+      }
+    }
+    mafiaGameStore.replacePeerEffectiveMutedSnapshot(snapshot)
+    return
+  }
+  if (rec.type === 'peer-audio-muted') {
+    const p = rec.payload
+    if (p == null || typeof p !== 'object') return
+    const pid = (p as { peerId?: unknown }).peerId
+    const muted = (p as { muted?: unknown }).muted
+    if (typeof pid !== 'string' || pid.length === 0) return
+    mafiaGameStore.setPeerEffectiveMuted(pid, muted === true)
+    return
+  }
+  if (rec.type === 'peer-left') {
+    const p = rec.payload
+    if (p == null || typeof p !== 'object') return
+    const pid = (p as { peerId?: unknown }).peerId
+    if (typeof pid !== 'string' || pid.length === 0) return
+    mafiaGameStore.clearPeerEffectiveMuted(pid)
+  }
+})
+
+onBeforeUnmount(offMafiaPeerAudioMuted)
+
+/**
  * Toggling Mafia `?mode=view` (header / router) flips `callEngineRole` only after a new wire; re-join
  * so OBS drops any existing send transport from a prior participant session in the same tab.
  */
@@ -2097,6 +2152,29 @@ watch(
     }
   },
   { flush: 'pre' },
+)
+
+/**
+ * Push the current non-host participant peerIds to the Mafia store so it
+ * can compute "every non-host effectively muted" for the host UI button
+ * (P1 Bug 1+2). The store filters out the host peerId internally.
+ */
+watch(
+  () => [
+    isMafiaRoute.value,
+    mafiaGameStore.mafiaHostPeerId,
+    tiles.value.map((t) => t.peerId).join('|'),
+  ],
+  () => {
+    if (!isMafiaRoute.value) {
+      mafiaGameStore.setNonHostPeerIds([])
+      return
+    }
+    // Pass every tile peerId; the store filters the host peer internally.
+    // This keeps the membership stable when host changes via transfer.
+    mafiaGameStore.setNonHostPeerIds(tiles.value.map((t) => t.peerId))
+  },
+  { immediate: true, flush: 'post' },
 )
 
 

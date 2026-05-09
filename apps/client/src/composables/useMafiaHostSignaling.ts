@@ -3,6 +3,7 @@ import { onBeforeUnmount, nextTick, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { useCallSessionStore, type WsStatus } from 'call-core'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
+import { useMafiaViewMode } from '@/composables/mafiaStreamViewRoute'
 import type {
   MafiaPlayerKickPayload,
   MafiaPlayerLifeState,
@@ -360,6 +361,22 @@ function parseMafiaPlayerRevive(data: unknown): MafiaPlayerRevivePayload | null 
   return { peerId: id }
 }
 
+function parseMafiaForceMuteAll(data: unknown): { muted: boolean } | null {
+  if (!data || typeof data !== 'object') {
+    return null
+  }
+  const o = data as { type?: unknown; payload?: unknown }
+  if (o.type !== MafiaWs.forceMuteAll) {
+    return null
+  }
+  const p = o.payload
+  if (!p || typeof p !== 'object') {
+    return null
+  }
+  const m = (p as { muted?: unknown }).muted
+  return { muted: m !== false }
+}
+
 function parseMafiaPlayerLifeStateSnapshot(data: unknown): MafiaPlayerLifeStateSnapshotPayload | null {
   if (!data || typeof data !== 'object') {
     return null
@@ -424,6 +441,11 @@ export function useMafiaHostSignaling(
   /** While true, do not re-send `mafia:queue-update` (remote / echo apply). */
   const applyingQueueFromSignaling = ref(false)
 
+  // OBS / `?mode=view` page must be display-only and never claim host
+  // (P0 Bug 2). The gate is read inside the watcher below; reading the
+  // route here keeps it reactive across same-component view-mode toggles.
+  const { isViewMode } = useMafiaViewMode()
+
   const off = subscribeSignalingMessage((data) => {
     const hostParsed = parseMafiaHostUpdated(data)
     if (hostParsed) {
@@ -480,6 +502,10 @@ export function useMafiaHostSignaling(
     if (lifeStateParsed) {
       mafia.applyMafiaPlayerLifeStateSnapshotFromSignaling(lifeStateParsed)
     }
+    const forceMuteAllParsed = parseMafiaForceMuteAll(data)
+    if (forceMuteAllParsed) {
+      mafia.setMafiaForceMuteAllActiveFromSignaling(forceMuteAllParsed.muted)
+    }
   })
   onBeforeUnmount(off)
 
@@ -491,6 +517,13 @@ export function useMafiaHostSignaling(
         return
       }
       if (wsStatus.value !== 'open') {
+        return
+      }
+      // Hard gate: OBS / `?mode=view` is display-only. Even if the same user
+      // is opening the OBS tab, the claim must come from the participant tab,
+      // not the view tab — otherwise the participant peer loses host on
+      // session-id rebind to the view tab's session.
+      if (isViewMode.value) {
         return
       }
       const sid = selfPeerId.value
