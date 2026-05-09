@@ -1654,28 +1654,29 @@ export async function handleMafiaPlayerRevive(
   }
   room.setMafiaPeerForcedCameraOff(targetId, false)
 
-  // Clear per-peer forced mic ONLY when the room-wide mute toggle is
-  // not active — otherwise the eliminated peer would become the only
-  // audible voice in a room that the host explicitly silenced.
-  if (room.isMafiaForceMuteAllActive()) {
-    // Room-wide enforcement still applies; keep target.forcedAudioMuted = true.
-    // Drop the per-peer flag so a future room-wide release naturally lifts
-    // for this peer alongside everyone else.
-    room.setMafiaPeerForcedMicMuted(targetId, false)
-  } else {
-    if (target.forcedAudioMuted) {
-      target.forcedAudioMuted = false
-    }
-    room.setMafiaPeerForcedMicMuted(targetId, false)
-    // Effective state may have changed (forced flag dropped). Broadcast so
-    // remotes/OBS update their per-peer mute badge.
-    broadcastPeerEffectiveAudioMuted(room, target)
-    // Notify clients (notably the target peer) that the per-peer mic
-    // force is lifted. The target's local mic stays off — see CallPage
-    // listener: only `muted: true` flips local mic UI; `muted: false`
-    // is a UI hint clear, not an auto-unmute.
-    broadcastMafiaForcePeerMic(room, { peerId: targetId, muted: false })
+  // Clear per-peer forced mic. Mafia `force-mute-all` is implemented as a
+  // soft mute (writes `audioMuted` only, leaves `forcedAudioMuted` alone),
+  // so dropping the per-peer hard flag here will not let the revived peer
+  // bypass an active room-wide silence: their producer stays paused via
+  // `audioMuted`, and `handleSetAudioMuted` will resume it only when the
+  // player explicitly self-unmutes after revive (mirrors the camera path
+  // above, which is also always cleared regardless of mute-all). Without
+  // this, kill→revive while mute-all was active left `forcedAudioMuted`
+  // stuck on, so the player's mic UI flipped on but `handleSetAudioMuted`
+  // refused to resume the producer (`!peer.forcedAudioMuted` gate) and
+  // remote peers heard nothing.
+  if (target.forcedAudioMuted) {
+    target.forcedAudioMuted = false
   }
+  room.setMafiaPeerForcedMicMuted(targetId, false)
+  // Effective state may have changed (forced flag dropped). Broadcast so
+  // remotes/OBS update their per-peer mute badge.
+  broadcastPeerEffectiveAudioMuted(room, target)
+  // Notify clients (notably the target peer) that the per-peer mic
+  // force is lifted. The target's local mic stays off — see CallPage
+  // listener: only `muted: true` flips local mic UI; `muted: false`
+  // is a UI hint clear, not an auto-unmute.
+  broadcastMafiaForcePeerMic(room, { peerId: targetId, muted: false })
 }
 
 export async function handleMafiaForceCameraOff(
