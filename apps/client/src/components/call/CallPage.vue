@@ -81,6 +81,7 @@ import { mafiaEliminationAvatarKindForPeerId } from '@/utils/mafiaEliminationAva
 import { EAT_FIRST_OBS_URL_TOAST_EVENT } from '@/composables/eatFirstCallStreamView'
 import { MAFIA_OBS_URL_TOAST_EVENT, MAFIA_SETTINGS_TOAST_EVENT } from '@/composables/mafiaStreamViewRoute'
 import { MafiaWs } from '@/composables/mafiaWsProtocol'
+import { useMafiaAudioMixSignaling } from '@/composables/useMafiaAudioMixSignaling'
 import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
 import type { MafiaEliminationBackground } from '@/utils/mafiaGameTypes'
 import { decodeSpeakingNominationFlat, nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
@@ -572,11 +573,40 @@ function peerAvatarFallbackName(peerId: string): string {
 const remoteListenVolumeByPeer = new Map<string, (v: number) => void>()
 const remoteListenMutedByPeer = new Map<string, (v: boolean) => void>()
 
+/**
+ * Deferred slot: assigned by `useMafiaAudioMixSignaling` further down the
+ * setup script (it depends on `mafiaGameStore` which is initialized later).
+ * Handlers below reference the slot lazily so the host's slider/mute toggle
+ * also fans out a `mafia:audio-mix-update` to the room (OBS view applies it).
+ * No-op for non-host or non-Mafia routes.
+ */
+const mafiaAudioMixBroadcasterSlot: { broadcast: ((delta: { peerId: string; volume: number; muted: boolean }) => void) | null } = {
+  broadcast: null,
+}
+
+function broadcastMafiaAudioMixDeltaForTile(peerId: string, volume: number, muted: boolean): void {
+  mafiaAudioMixBroadcasterSlot.broadcast?.({ peerId, volume, muted })
+}
+
+function readTileMutedForPeer(peerId: string): boolean {
+  const t = tiles.value.find((row) => !row.isLocal && row.peerId === peerId)
+  return Boolean(t?.remoteListenMuted)
+}
+
+function readTileVolumeForPeer(peerId: string): number {
+  const t = tiles.value.find((row) => !row.isLocal && row.peerId === peerId)
+  const raw = Number(t?.remoteListenVolume ?? 1)
+  return Number.isFinite(raw) ? Math.min(2, Math.max(0, raw)) : 1
+}
+
 function remoteListenVolumeHandler(peerId: string) {
   let h = remoteListenVolumeByPeer.get(peerId)
   if (!h) {
     h = (v: number) => {
       setRemoteListenVolume(peerId, v)
+      // Read companion (muted) AFTER apply so the broadcast carries the
+      // engine-resolved entry — `setRemoteListenVolume` does not change muted.
+      broadcastMafiaAudioMixDeltaForTile(peerId, readTileVolumeForPeer(peerId), readTileMutedForPeer(peerId))
     }
     remoteListenVolumeByPeer.set(peerId, h)
   }
@@ -588,6 +618,9 @@ function remoteListenMutedHandler(peerId: string) {
   if (!h) {
     h = (v: boolean) => {
       setRemoteListenMuted(peerId, v)
+      // Engine may bump volume from 0 → nz on unmute; reading after apply
+      // mirrors what the host's UI now shows so OBS sees the same state.
+      broadcastMafiaAudioMixDeltaForTile(peerId, readTileVolumeForPeer(peerId), readTileMutedForPeer(peerId))
     }
     remoteListenMutedByPeer.set(peerId, h)
   }
@@ -1699,6 +1732,20 @@ watch(
   },
   { immediate: true },
 )
+
+const { mafiaHostPeerId: mafiaHostPeerIdRef, isMafiaHost: isMafiaHostRef } = storeToRefs(mafiaGameStore)
+const { broadcastMafiaAudioMixDelta } = useMafiaAudioMixSignaling({
+  sendSignalingMessage,
+  subscribeSignalingMessage,
+  wsStatus,
+  isMafiaRoute,
+  isViewMode: mafiaViewUi,
+  isMafiaHost: isMafiaHostRef,
+  hostPeerId: mafiaHostPeerIdRef,
+  setRemoteListenVolume,
+  setRemoteListenMuted,
+})
+mafiaAudioMixBroadcasterSlot.broadcast = broadcastMafiaAudioMixDelta
 
 
 function displayCallOrMafiaRoomCode(): string {

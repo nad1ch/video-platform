@@ -39,6 +39,20 @@ export type MafiaPageBackgroundItem = {
   type: 'default' | 'preset' | 'custom'
 }
 
+/**
+ * Host-controlled per-participant audio mix entry. Identity is normally the
+ * stable `userId` (auth session); peerId is kept as a hint for clients that
+ * apply via `setRemoteListenVolume`/`setRemoteListenMuted` keyed by peerId.
+ * The server rebinds `peerId` to the current connection on join via
+ * {@link Room.rebindMafiaAudioMixEntryPeerId} so reload preserves the entry.
+ */
+export type MafiaAudioMixEntry = {
+  peerId: string
+  userId: string | null
+  volume: number
+  muted: boolean
+}
+
 const MAFIA_PRESET_BACKGROUND_ITEMS: MafiaBackgroundItem[] = ['dark', 'red', 'violet', 'gray'].map((background) => ({
   id: `preset-${background}`,
   url: `preset:${background}`,
@@ -112,6 +126,15 @@ export class Room {
    */
   private mafiaForceMuteAllActive = false
   private mafiaForcedCameraOffPeerIds = new Set<string>()
+  /**
+   * Host-controlled audio mix (volume + mute per remote tile). Two indexes:
+   * `byUserId` is the stable identity used across reloads; `byPeerId` is the
+   * fallback for unauthenticated peers. Update flow keeps them disjoint
+   * (a peer with userId is only stored under `byUserId`). Snapshot is built
+   * by walking both maps so the OBS view receives the latest state on join.
+   */
+  private mafiaAudioMixByUserId = new Map<string, MafiaAudioMixEntry>()
+  private mafiaAudioMixByPeerId = new Map<string, MafiaAudioMixEntry>()
 
   private constructor(id: string, router: Router, pooledWorker: PooledWorker) {
     this.id = id
@@ -586,5 +609,62 @@ export class Room {
 
   clearMafiaForceStateForPeer(peerId: string): void {
     this.mafiaForcedCameraOffPeerIds.delete(peerId)
+  }
+
+  /**
+   * Apply incoming host-validated audio-mix deltas. Returns the resolved entries
+   * (with normalized peerId/userId/volume/muted) so the caller can rebroadcast
+   * the same shape the client will apply.
+   */
+  applyMafiaAudioMixEntries(
+    entries: ReadonlyArray<{ peerId: string; userId?: string | null; volume: number; muted: boolean }>,
+  ): MafiaAudioMixEntry[] {
+    const out: MafiaAudioMixEntry[] = []
+    for (const raw of entries) {
+      const peerId = typeof raw.peerId === 'string' ? raw.peerId.trim() : ''
+      if (!peerId) continue
+      const userIdRaw = typeof raw.userId === 'string' ? raw.userId.trim() : ''
+      const userId = userIdRaw.length > 0 ? userIdRaw : null
+      const volumeRaw = typeof raw.volume === 'number' && Number.isFinite(raw.volume) ? raw.volume : 1
+      const volume = Math.min(2, Math.max(0, volumeRaw))
+      const muted = raw.muted === true
+      const entry: MafiaAudioMixEntry = { peerId, userId, volume, muted }
+      if (userId != null) {
+        this.mafiaAudioMixByUserId.set(userId, entry)
+        this.mafiaAudioMixByPeerId.delete(peerId)
+      } else {
+        this.mafiaAudioMixByPeerId.set(peerId, entry)
+      }
+      out.push(entry)
+    }
+    return out
+  }
+
+  /**
+   * On peer-joined, rebind any userId-keyed entry to the new peerId so the
+   * client can apply by current peerId without a fresh host action. No-op when
+   * the peer has no userId or no entry exists.
+   */
+  rebindMafiaAudioMixEntryPeerId(peerId: string, userId: string): MafiaAudioMixEntry | null {
+    const trimmedPeer = peerId.trim()
+    const trimmedUser = userId.trim()
+    if (!trimmedPeer || !trimmedUser) return null
+    const prev = this.mafiaAudioMixByUserId.get(trimmedUser)
+    if (!prev) return null
+    if (prev.peerId === trimmedPeer) return prev
+    const next: MafiaAudioMixEntry = { ...prev, peerId: trimmedPeer }
+    this.mafiaAudioMixByUserId.set(trimmedUser, next)
+    return next
+  }
+
+  getMafiaAudioMixSnapshot(): MafiaAudioMixEntry[] {
+    const out: MafiaAudioMixEntry[] = []
+    for (const e of this.mafiaAudioMixByUserId.values()) {
+      out.push({ ...e })
+    }
+    for (const e of this.mafiaAudioMixByPeerId.values()) {
+      out.push({ ...e })
+    }
+    return out
   }
 }

@@ -278,6 +278,22 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     }),
   }),
   z.object({
+    type: z.literal(MafiaWs.audioMixUpdate),
+    payload: z.object({
+      entries: z
+        .array(
+          z.object({
+            peerId: z.string().min(1).max(128),
+            userId: z.string().min(1).max(128).nullable().optional(),
+            volume: z.number().min(0).max(2),
+            muted: z.boolean(),
+          }).strict(),
+        )
+        .min(1)
+        .max(32),
+    }).strict(),
+  }),
+  z.object({
     type: z.literal(MafiaWs.timerStart),
     payload: z.object({
       startedAt: z.number().int(),

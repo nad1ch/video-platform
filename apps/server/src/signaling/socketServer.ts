@@ -24,6 +24,7 @@ import {
   handleMafiaModeUpdate,
   handleMafiaSettingsUpdate,
   handleMafiaPageBackgroundSettings,
+  handleMafiaAudioMixUpdate,
   handleMafiaTimerStart,
   handleMafiaTimerStop,
   handleMafiaPlayerKick,
@@ -295,6 +296,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'mafia:page-background-settings': {
               handleMafiaPageBackgroundSettings(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:audio-mix-update': {
+              handleMafiaAudioMixUpdate(socket, parsed.data.payload, deps)
               break
             }
             case 'mafia:timer-start': {

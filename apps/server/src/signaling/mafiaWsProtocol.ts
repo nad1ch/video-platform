@@ -41,6 +41,15 @@ export const MafiaWs = {
   settingsUpdate: 'mafia:settings-update',
   
   pageBackgroundSettings: 'mafia:page-background-settings',
+  /**
+   * Host-only per-participant audio mix (volume + mute). Server validates host
+   * authority via `isMafiaHostPeer`, stores the latest snapshot keyed by stable
+   * `userId` when present (peerId fallback), and replays it to late joiners
+   * (notably `?mode=view` OBS clients). Listening only — does not touch
+   * mediasoup producer/consumer lifecycle; clients map this to the existing
+   * `setRemoteListenVolume` / `setRemoteListenMuted` (call-core).
+   */
+  audioMixUpdate: 'mafia:audio-mix-update',
   
   timerStart: 'mafia:timer-start',
   

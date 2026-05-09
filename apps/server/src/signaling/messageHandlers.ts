@@ -18,7 +18,13 @@ import {
 } from '../config/clientIceServers'
 import { createWebRtcTransport } from '../mediasoup/createWebRtcTransport'
 import { Peer } from '../peers/Peer'
-import type { MafiaBackgroundItem, MafiaPageBackgroundItem, MafiaPlayerLifeState, Room } from '../rooms/Room'
+import type {
+  MafiaAudioMixEntry,
+  MafiaBackgroundItem,
+  MafiaPageBackgroundItem,
+  MafiaPlayerLifeState,
+  Room,
+} from '../rooms/Room'
 import type { RoomManager } from '../rooms/RoomManager'
 import { MafiaWs } from './mafiaWsProtocol'
 import {
@@ -211,6 +217,7 @@ export type ServerMessage =
       }
     }
   | { type: 'mafia:player-nickname-update'; payload: { peerId: string; displayName: string } }
+  | { type: 'mafia:audio-mix-update'; payload: { entries: MafiaAudioMixEntry[] } }
   | { type: 'mafia:timer-start'; payload: { startedAt: number; duration: number; isRunning: boolean } }
   | { type: 'mafia:timer-stop'; payload: Record<string, never> }
   | { type: 'mafia:player-kick'; payload: { peerId: string } }
@@ -884,6 +891,19 @@ export async function handleJoinRoom(
   if (mafiaHostAssignedOnJoin) {
     broadcastMafiaHostUpdated(room)
   }
+  // Rebind any prior audio-mix entry keyed by this user's stable userId to
+  // the new peerId so a host page reload / participant reload keeps its mix
+  // visible to OBS without the host re-clicking the slider. The rebound entry
+  // is fanned out to the whole room so live OBS clients reapply by new peerId.
+  if (isMafiaRoom && userId.length > 0) {
+    const rebound = room.rebindMafiaAudioMixEntryPeerId(peerId, userId)
+    if (rebound) {
+      broadcastServerMessageToRoom(room, {
+        type: MafiaWs.audioMixUpdate,
+        payload: { entries: [{ ...rebound }] },
+      })
+    }
+  }
   if (isEatFirstRoomId(room.id)) {
     await hydrateEatFirstOwnerUserIdFromDb(room.id)
     await hydrateEatFirstTableStateFromDb(room.id)
@@ -966,6 +986,18 @@ export async function handleJoinRoom(
     const nicks = room.getMafiaNicknamesSnapshot()
     for (const [peerId, displayName] of Object.entries(nicks)) {
       sendServerMessage(socket, { type: MafiaWs.playerNicknameUpdate, payload: { peerId, displayName } })
+    }
+    // Replay host-controlled per-participant audio mix to this socket only.
+    // The OBS `?mode=view` viewer applies it via existing
+    // `setRemoteListenVolume` / `setRemoteListenMuted` keyed by peerId; entries
+    // for users who reloaded since the host last set them have already been
+    // rebound to the current peerId by `rebindMafiaAudioMixEntryPeerId` above.
+    const audioMixSnap = room.getMafiaAudioMixSnapshot()
+    if (audioMixSnap.length > 0) {
+      sendServerMessage(socket, {
+        type: MafiaWs.audioMixUpdate,
+        payload: { entries: audioMixSnap },
+      })
     }
   }
 }
@@ -2273,6 +2305,39 @@ export function handleMafiaPageBackgroundSettings(
     return
   }
   broadcastMafiaPageBackgroundSettings(room, payload)
+}
+
+/**
+ * Host-only audio mix delta. Validates Mafia host authority, normalizes the
+ * entries via the room store (clamps volume, prefers stable userId key), then
+ * fans the resolved entries out to every peer in the room. OBS `?mode=view`
+ * clients apply via existing `setRemoteListenVolume`/`setRemoteListenMuted`;
+ * other participants ignore inbound updates so their personal listening prefs
+ * stay untouched (filtered client-side in `useMafiaAudioMixSignaling`).
+ */
+export function handleMafiaAudioMixUpdate(
+  socket: WsSocket,
+  payload: {
+    entries: Array<{ peerId: string; userId?: string | null; volume: number; muted: boolean }>
+  },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) {
+    return
+  }
+  const { peer, room } = rp
+  if (!isMafiaHostPeer(room, peer)) {
+    return
+  }
+  const resolved = room.applyMafiaAudioMixEntries(payload.entries)
+  if (resolved.length === 0) {
+    return
+  }
+  broadcastServerMessageToRoom(room, {
+    type: MafiaWs.audioMixUpdate,
+    payload: { entries: resolved },
+  })
 }
 
 function broadcastMafiaTimerStart(

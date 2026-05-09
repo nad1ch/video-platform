@@ -22,6 +22,7 @@ export const MafiaWs = {
   modeUpdate: 'mafia:mode-update',
   settingsUpdate: 'mafia:settings-update',
   pageBackgroundSettings: 'mafia:page-background-settings',
+  audioMixUpdate: 'mafia:audio-mix-update',
   timerStart: 'mafia:timer-start',
   timerStop: 'mafia:timer-stop',
   playerKick: 'mafia:player-kick',
