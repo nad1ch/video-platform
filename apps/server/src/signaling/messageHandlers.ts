@@ -1775,7 +1775,16 @@ export async function handleMafiaForceMuteAll(
     if (target.id === hostPeer.id) {
       continue
     }
-    target.forcedAudioMuted = muted
+    // Soft mute (vs. kick's hard `forcedAudioMuted`): write `audioMuted` so a
+    // player can self-unmute via the normal `set-audio-muted: false` flow
+    // without the server hard-blocking the producer resume. Without this,
+    // the player's local mic UI showed "on" after click but other peers
+    // never heard them, because `handleSetAudioMuted` gates resume on
+    // `!peer.forcedAudioMuted`. Host's "mute all" button derivation
+    // (`mafiaForceMuteAllActive && everyNonHostEffectivelyMuted`) flips
+    // back to "available" via the per-peer `peer-audio-muted: false`
+    // broadcast and one click re-asserts mute-all for the room.
+    target.audioMuted = muted
     for (const p of target.getProducers()) {
       if (p.kind !== 'audio' || p.closed) {
         continue
