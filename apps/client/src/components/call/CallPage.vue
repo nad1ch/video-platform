@@ -409,6 +409,24 @@ const offMafiaForceControls = subscribeSignalingMessage((data) => {
   if (typeof peerId === 'string' && peerId === selfPeerId.value && camEnabled.value) {
     void toggleCam()
   }
+  // Per-peer Mafia mic-force (server-emitted side effect of kick/revive).
+  // `muted: true` flips the local mic UI off via the existing call-core
+  // `toggleMic` action so the killed peer stops trying to talk into a
+  // server-paused producer. `muted: false` is a UI hint clear only — we
+  // do NOT auto-unmute the user; they unmute manually after revive.
+  const forcePeerMicPayload = mafiaSignalPayload(data, MafiaWs.forcePeerMic)
+  if (forcePeerMicPayload != null) {
+    const targetPeerId = forcePeerMicPayload.peerId
+    const muted = forcePeerMicPayload.muted === true
+    if (
+      typeof targetPeerId === 'string'
+      && targetPeerId === selfPeerId.value
+      && muted
+      && micEnabled.value
+    ) {
+      void toggleMic()
+    }
+  }
 })
 
 onBeforeUnmount(offMafiaForceControls)

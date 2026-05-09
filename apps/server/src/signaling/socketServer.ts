@@ -275,7 +275,7 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'mafia:reshuffle': {
-              handleMafiaReshuffle(socket, parsed.data.payload, deps)
+              await handleMafiaReshuffle(socket, parsed.data.payload, deps)
               break
             }
             case 'mafia:players-update': {
@@ -311,11 +311,11 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'mafia:player-kick': {
-              handleMafiaPlayerKick(socket, parsed.data.payload, deps)
+              await handleMafiaPlayerKick(socket, parsed.data.payload, deps)
               break
             }
             case 'mafia:player-revive': {
-              handleMafiaPlayerRevive(socket, parsed.data.payload, deps)
+              await handleMafiaPlayerRevive(socket, parsed.data.payload, deps)
               break
             }
             case 'mafia:force-camera-off': {

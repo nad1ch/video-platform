@@ -30,4 +30,6 @@ export const MafiaWs = {
   playerLifeState: 'mafia:player-life-state',
   forceCameraOff: 'mafia:force-camera-off',
   forceMuteAll: 'mafia:force-mute-all',
+  /** Server → client: per-peer mic-force side-effect of Mafia kill/revive. */
+  forcePeerMic: 'mafia:force-peer-mic',
 } as const

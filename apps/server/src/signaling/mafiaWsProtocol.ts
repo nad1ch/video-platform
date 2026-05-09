@@ -64,4 +64,12 @@ export const MafiaWs = {
   forceCameraOff: 'mafia:force-camera-off',
   
   forceMuteAll: 'mafia:force-mute-all',
+  /**
+   * Per-peer Mafia mic-force signal. Server-emitted only (no client→server
+   * variant) as a side effect of `mafia:player-kick` / `mafia:player-revive`.
+   * The target peer flips its local mic UI off when `muted: true` arrives;
+   * `muted: false` clears any local "forced" hint but does NOT auto-unmute
+   * the user's mic — the player must unmute manually after revive.
+   */
+  forcePeerMic: 'mafia:force-peer-mic',
 } as const

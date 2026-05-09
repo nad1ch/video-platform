@@ -225,6 +225,7 @@ export type ServerMessage =
   | { type: 'mafia:player-life-state'; payload: { states: Record<string, MafiaPlayerLifeState> } }
   | { type: 'mafia:force-camera-off'; payload: { peerId: string; paused?: boolean } }
   | { type: 'mafia:force-mute-all'; payload: { muted?: boolean } }
+  | { type: 'mafia:force-peer-mic'; payload: { peerId: string; muted: boolean } }
   | { type: 'eat:host-updated'; payload: { hostPeerId: string | null } }
   | { type: 'eat:speaking-queue-update'; payload: { speakingQueue: number[] } }
   | { type: 'eat:force-mute-all'; payload: { muted?: boolean } }
@@ -810,8 +811,15 @@ export async function handleJoinRoom(
     if (room.isMafiaForceMuteAllActive()) {
       peer.forcedAudioMuted = true
     }
+    // Per-peer Mafia kill enforcement persists across reload: a reloaded
+    // killed player (new Peer object, same peerId) gets the flag re-applied
+    // before `handleProduce` runs, so the new audio/video producers stay
+    // paused until the host explicitly revives.
     if (room.isMafiaPeerForcedCameraOff(peerId)) {
       peer.forcedCameraOff = true
+    }
+    if (room.isMafiaPeerForcedMicMuted(peerId)) {
+      peer.forcedAudioMuted = true
     }
   }
   room.addPeer(peer)
@@ -1210,7 +1218,7 @@ export function handleEatFirstSpeakingQueueUpdate(
 
 
 
-export function handleMafiaReshuffle(
+export async function handleMafiaReshuffle(
   socket: WsSocket,
   payload: {
     players: Array<{
@@ -1220,7 +1228,7 @@ export function handleMafiaReshuffle(
     }>
   },
   deps: SignalingDeps,
-): void {
+): Promise<void> {
   const rp = resolveMafiaPeerAndRoom(socket, deps)
   if (!rp) {
     return
@@ -1260,6 +1268,55 @@ export function handleMafiaReshuffle(
     used.add(pl.peerId)
   }
   room.clearMafiaPlayerLifeStates()
+
+  // New game starts: drop every per-peer Mafia kill enforcement so
+  // previously-eliminated players *can* publish camera/mic again.
+  //
+  // We intentionally do NOT auto-resume their media producers:
+  //
+  //   * Video: `Peer` has no "user-paused camera" server field —
+  //     `producer.paused` is the only signal. A player who manually
+  //     turned camera off before being killed had `producer.paused = true`
+  //     already. Auto-resuming on reshuffle would silently turn their
+  //     camera back on against their intent. Same risk for screen share.
+  //
+  //   * Audio: `audioMuted` is set to true on kick, so the user-self-mute
+  //     state persists across reshuffle. The player was forcibly muted;
+  //     they must unmute manually after the new game starts.
+  //
+  // Once `forcedCameraOff` / `forcedAudioMuted` flip to false, the
+  // player's next camera/mic toggle (`set-outbound-video-paused: false`,
+  // `set-audio-muted: false`) is accepted by the existing per-action
+  // handlers, which resume the producer and broadcast the updated state.
+  // Producer state is unchanged here, so we also skip
+  // `peer-outbound-video-paused` / `peer-audio-muted` broadcasts —
+  // broadcasting `paused: false` while producers stay paused would be
+  // misleading, and broadcasting the unchanged `paused: true` is a no-op.
+  const previouslyForcedCameraOff = room.getMafiaForcedCameraOffPeerIds()
+  const previouslyForcedMicMuted = room.getMafiaForcedMicMutedPeerIds()
+  room.clearAllMafiaPerPeerForceFlags()
+
+  for (const peerId of previouslyForcedCameraOff) {
+    const target = room.getPeer(peerId)
+    if (!target) continue
+    target.forcedCameraOff = false
+  }
+  for (const peerId of previouslyForcedMicMuted) {
+    const target = room.getPeer(peerId)
+    if (!target) continue
+    target.forcedAudioMuted = false
+  }
+
+  // Room-wide `mafia:force-mute-all` is independent of per-peer flags:
+  // if it is still active, every non-host must remain forced-muted so
+  // reshuffle does not bypass the host's room-wide silence.
+  if (room.isMafiaForceMuteAllActive()) {
+    const hostPeerId = room.getMafiaHostPeerId()
+    for (const target of room.getPeers()) {
+      if (target.id === hostPeerId) continue
+      target.forcedAudioMuted = true
+    }
+  }
   /**
    * Persist the validated assignment so a peer joining after this broadcast
    * still sees roles via the join catch-up. Snapshot is in-memory only; cleared
@@ -1287,14 +1344,87 @@ function broadcastMafiaForceMuteAll(room: Room, payload: { muted?: boolean }): v
   broadcastServerMessageToRoom(room, { type: MafiaWs.forceMuteAll, payload })
 }
 
+function broadcastMafiaForcePeerMic(room: Room, payload: { peerId: string; muted: boolean }): void {
+  broadcastServerMessageToRoom(room, { type: MafiaWs.forcePeerMic, payload })
+}
+
+/**
+ * Pause every video producer of `target` (matches the existing
+ * `mafia:force-camera-off` behavior — does not skip screen-share, eliminated
+ * peers should not be sharing screen anyway). Idempotent: skips already
+ * paused / closed producers.
+ */
+async function pauseAllPeerVideoProducers(target: Peer, contextLabel: string): Promise<void> {
+  for (const p of target.getProducers()) {
+    if (p.kind !== 'video' || p.closed) {
+      continue
+    }
+    if (p.paused) {
+      continue
+    }
+    try {
+      await p.pause()
+    } catch (e) {
+      console.warn(`[signaling] ${contextLabel} video pause failed`, {
+        peerId: target.id,
+        producerId: p.id,
+      }, e)
+    }
+  }
+}
+
+/**
+ * Pause every audio producer of `target`. Idempotent. Mirrors the audio
+ * loop in `handleMafiaForceMuteAll` but scoped to one peer.
+ */
+async function pauseAllPeerAudioProducers(target: Peer, contextLabel: string): Promise<void> {
+  for (const p of target.getProducers()) {
+    if (p.kind !== 'audio' || p.closed) {
+      continue
+    }
+    if (p.paused) {
+      continue
+    }
+    try {
+      await p.pause()
+    } catch (e) {
+      console.warn(`[signaling] ${contextLabel} audio pause failed`, {
+        peerId: target.id,
+        producerId: p.id,
+      }, e)
+    }
+  }
+}
+
+function broadcastPeerOutboundVideoPaused(room: Room, peerId: string, paused: boolean): void {
+  const msg: ServerMessage = {
+    type: 'peer-outbound-video-paused',
+    payload: { peerId, paused },
+  }
+  for (const observer of room.getPeers()) {
+    observer.sendJson(msg)
+  }
+}
+
+function broadcastPeerEffectiveAudioMuted(room: Room, target: Peer): void {
+  const effectiveMuted = target.audioMuted || target.forcedAudioMuted
+  const msg: ServerMessage = {
+    type: 'peer-audio-muted',
+    payload: { peerId: target.id, muted: effectiveMuted },
+  }
+  for (const observer of room.getPeers()) {
+    observer.sendJson(msg)
+  }
+}
 
 
 
-export function handleMafiaPlayerKick(
+
+export async function handleMafiaPlayerKick(
   socket: WsSocket,
   payload: { peerId: string },
   deps: SignalingDeps,
-): void {
+): Promise<void> {
   const rp = resolveMafiaOrEatFirstPeerAndRoom(socket, deps)
   if (!rp) {
     return
@@ -1315,18 +1445,88 @@ export function handleMafiaPlayerKick(
   if (!roomIds.has(targetId)) {
     return
   }
+
+  // Idempotency: ignore kick on already-dead peer to avoid duplicate
+  // pause/broadcast side effects (rapid clicks, host UI echoes).
+  const lifeStates = room.getMafiaPlayerLifeStateSnapshot()
+  if (lifeStates[targetId] === 'dead') {
+    return
+  }
+
   room.setMafiaPlayerLifeState(targetId, 'dead')
   broadcastMafiaPlayerKick(room, { peerId: targetId })
+
+  // Mafia-only: kill must also disable the eliminated peer's outbound
+  // camera + mic for everyone else. Eat First shares this handler but
+  // its life-state UX does not flip media — guard the media side effects.
+  if (!isMafiaRoomId(room.id)) {
+    return
+  }
+  const target = room.getPeer(targetId)
+  if (!target) {
+    return
+  }
+
+  // Forced camera off (mirrors `handleMafiaForceCameraOff`). Persisted in
+  // `mafiaForcedCameraOffPeerIds` so a target reload re-applies the flag
+  // before the new producer goes live (see `handleProduce`).
+  if (!target.forcedCameraOff) {
+    target.forcedCameraOff = true
+    room.setMafiaPeerForcedCameraOff(targetId, true)
+    await pauseAllPeerVideoProducers(target, 'mafia:player-kick')
+    broadcastPeerOutboundVideoPaused(room, target.id, true)
+  } else if (!room.isMafiaPeerForcedCameraOff(targetId)) {
+    // Flag re-sync without a broadcast — keeps `peer.forcedCameraOff` and
+    // the room set agreeing on per-peer enforcement state.
+    room.setMafiaPeerForcedCameraOff(targetId, true)
+  }
+
+  // Per-peer forced mic mute. Independent from room-wide
+  // `mafiaForceMuteAllActive` so a single revive can lift it without
+  // touching the room-wide toggle.
+  //
+  // Also force `target.audioMuted = true` synchronously so the
+  // user-self-mute state persists across the kick→revive boundary. The
+  // client's `mafia:force-peer-mic muted:true` → `toggleMic()` → `set-audio-muted:true`
+  // round-trip is async — without this, a revive that races ahead of
+  // the client echo would land with `audioMuted=false` server-side and
+  // broadcast a spurious `peer-audio-muted: false` to OBS/remotes
+  // (no audio leak — producer is still paused — but a misleading UI
+  // flicker). Setting it here makes the post-revive effective state
+  // unambiguously `muted: true`; the user must explicitly unmute after
+  // revive to be heard again.
+  target.audioMuted = true
+  if (!target.forcedAudioMuted) {
+    target.forcedAudioMuted = true
+    room.setMafiaPeerForcedMicMuted(targetId, true)
+    await pauseAllPeerAudioProducers(target, 'mafia:player-kick')
+    broadcastPeerEffectiveAudioMuted(room, target)
+  } else if (!room.isMafiaPeerForcedMicMuted(targetId)) {
+    room.setMafiaPeerForcedMicMuted(targetId, true)
+  }
+
+  // Tell the target's own client to flip its local mic UI off via the
+  // existing `toggleMic` action (CallPage listener). The camera UI is
+  // already flipped by the existing `mafia:force-camera-off` listener
+  // path — but `mafia:player-kick` itself does not trigger that. Emit a
+  // dedicated camera signal too so the killed peer's local cam UI flips
+  // off (otherwise local preview keeps running and the user may try to
+  // talk into a paused mic / show a paused camera).
+  broadcastMafiaForcePeerMic(room, { peerId: targetId, muted: true })
+  broadcastServerMessageToRoom(room, {
+    type: MafiaWs.forceCameraOff,
+    payload: { peerId: targetId },
+  })
 }
 
 
 
 
-export function handleMafiaPlayerRevive(
+export async function handleMafiaPlayerRevive(
   socket: WsSocket,
   payload: { peerId: string },
   deps: SignalingDeps,
-): void {
+): Promise<void> {
   const rp = resolveMafiaOrEatFirstPeerAndRoom(socket, deps)
   if (!rp) {
     return
@@ -1343,8 +1543,57 @@ export function handleMafiaPlayerRevive(
   if (!roomIds.has(targetId)) {
     return
   }
+
+  // Idempotency: only "dead" peers can be revived. Acts as the single
+  // gate for "kill→revive" media-flag transitions so a re-revive on an
+  // already-ghost / already-alive peer is a no-op.
+  const lifeStates = room.getMafiaPlayerLifeStateSnapshot()
+  if (lifeStates[targetId] !== 'dead') {
+    return
+  }
+
   room.setMafiaPlayerLifeState(targetId, 'ghost')
   broadcastMafiaPlayerRevive(room, { peerId: targetId })
+
+  if (!isMafiaRoomId(room.id)) {
+    return
+  }
+  const target = room.getPeer(targetId)
+  if (!target) {
+    return
+  }
+
+  // Clear forced camera off. Do NOT auto-resume video producers — let
+  // the player toggle camera through normal controls. Once the flag is
+  // false, `handleSetOutboundVideoPaused` will accept the player's next
+  // `set-outbound-video-paused: false`.
+  if (target.forcedCameraOff) {
+    target.forcedCameraOff = false
+  }
+  room.setMafiaPeerForcedCameraOff(targetId, false)
+
+  // Clear per-peer forced mic ONLY when the room-wide mute toggle is
+  // not active — otherwise the eliminated peer would become the only
+  // audible voice in a room that the host explicitly silenced.
+  if (room.isMafiaForceMuteAllActive()) {
+    // Room-wide enforcement still applies; keep target.forcedAudioMuted = true.
+    // Drop the per-peer flag so a future room-wide release naturally lifts
+    // for this peer alongside everyone else.
+    room.setMafiaPeerForcedMicMuted(targetId, false)
+  } else {
+    if (target.forcedAudioMuted) {
+      target.forcedAudioMuted = false
+    }
+    room.setMafiaPeerForcedMicMuted(targetId, false)
+    // Effective state may have changed (forced flag dropped). Broadcast so
+    // remotes/OBS update their per-peer mute badge.
+    broadcastPeerEffectiveAudioMuted(room, target)
+    // Notify clients (notably the target peer) that the per-peer mic
+    // force is lifted. The target's local mic stays off — see CallPage
+    // listener: only `muted: true` flips local mic UI; `muted: false`
+    // is a UI hint clear, not an auto-unmute.
+    broadcastMafiaForcePeerMic(room, { peerId: targetId, muted: false })
+  }
 }
 
 export async function handleMafiaForceCameraOff(

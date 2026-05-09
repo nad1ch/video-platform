@@ -123,9 +123,15 @@ export class Room {
    * `Peer.forcedCameraOff` reset on rejoin (new Peer object), so the room
    * remembers active force-state and re-applies on `handleJoinRoom`. Cleared
    * automatically on `peer-left`.
+   *
+   * `mafiaForceMuteAllActive` is room-wide (host's "mute all" toggle). The
+   * two peerId sets persist per-peer enforcement applied as a side effect of
+   * Mafia kill (kick) so a revive can lift the per-peer flag without
+   * touching the room-wide toggle.
    */
   private mafiaForceMuteAllActive = false
   private mafiaForcedCameraOffPeerIds = new Set<string>()
+  private mafiaForcedMicMutedPeerIds = new Set<string>()
   /**
    * Host-controlled audio mix (volume + mute per remote tile). Two indexes:
    * `byUserId` is the stable identity used across reloads; `byPeerId` is the
@@ -607,8 +613,36 @@ export class Room {
     }
   }
 
+  isMafiaPeerForcedMicMuted(peerId: string): boolean {
+    return this.mafiaForcedMicMutedPeerIds.has(peerId)
+  }
+
+  setMafiaPeerForcedMicMuted(peerId: string, forced: boolean): void {
+    if (forced) {
+      this.mafiaForcedMicMutedPeerIds.add(peerId)
+    } else {
+      this.mafiaForcedMicMutedPeerIds.delete(peerId)
+    }
+  }
+
+  /** Snapshot copies — callers iterate without mutating the live sets. */
+  getMafiaForcedCameraOffPeerIds(): string[] {
+    return [...this.mafiaForcedCameraOffPeerIds]
+  }
+
+  getMafiaForcedMicMutedPeerIds(): string[] {
+    return [...this.mafiaForcedMicMutedPeerIds]
+  }
+
+  /** Reshuffle / new game: drop every per-peer Mafia kill enforcement flag. */
+  clearAllMafiaPerPeerForceFlags(): void {
+    this.mafiaForcedCameraOffPeerIds.clear()
+    this.mafiaForcedMicMutedPeerIds.clear()
+  }
+
   clearMafiaForceStateForPeer(peerId: string): void {
     this.mafiaForcedCameraOffPeerIds.delete(peerId)
+    this.mafiaForcedMicMutedPeerIds.delete(peerId)
   }
 
   /**
