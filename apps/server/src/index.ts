@@ -25,6 +25,7 @@ import { attachCheckersSocketServer } from './checkers/checkersSocket'
 import { mountCheckersMatchmakingRoutes } from './checkers/checkersMatchmaking'
 import { mountBillingRoutes } from './billing/billingRouter'
 import { mountBillingAdminRoutes } from './billing/billingAdminRouter'
+import { LOCAL_DEV_API_PORT } from './config/localDevApiPort'
 
 async function bootstrap(): Promise<void> {
   let shuttingDown = false
@@ -266,7 +267,7 @@ async function bootstrap(): Promise<void> {
   process.once('SIGTERM', shutdown)
 
   const host = process.env.HOST || '0.0.0.0'
-  const port = Number(process.env.PORT) || 3000
+  const port = Number(process.env.PORT) || LOCAL_DEV_API_PORT
 
   server.listen(port, host, () => {
     console.log(`Server listening on http://${host}:${port}`)

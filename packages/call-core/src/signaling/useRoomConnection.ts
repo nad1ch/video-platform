@@ -88,7 +88,8 @@ function resolveWsUrl(explicit?: string): string {
       if (inferred) {
         url = inferred
       } else if (import.meta.env.DEV) {
-        url = 'ws://127.0.0.1:3000'
+        // Host `npm run dev` API default port — sync `apps/server/src/config/localDevApiPort.ts`.
+        url = 'ws://127.0.0.1:3333'
       } else {
         throw new Error(
           'VITE_SIGNALING_URL is not defined. Set it in Vercel or .env.production to your API origin (wss://...) so session cookies match, or set VITE_API_URL to an absolute https:// API origin for a safe default.',
