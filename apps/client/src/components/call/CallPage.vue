@@ -227,48 +227,52 @@ function onRemotePlaybackStall(payload: { peerId: string; stalling: boolean }): 
 }
 
 /**
- * Frame-decode stall recovery: a `<StreamVideo>` tile reports its
- * `<video>.currentTime` did not advance for ~6s while the track was live.
+ * Media stall recovery (shared by video and audio): a tile reports that
+ * inbound media has been stuck for the per-kind threshold (`<video>.currentTime`
+ * for video, `track.muted` while server says peer is sending for audio).
  *
- * Two-tier escalation:
+ * Two-tier escalation, SHARED across video + audio so a peer flapping in
+ * one kind does not let the other kind escape the global debounce:
  *
- * 1. Soft tier (per-minute): re-apply the server's producer list. Same path
- *    the visibility/focus policy uses; no transport teardown, no media gap.
- *    Covers most "missed event" recovery cases.
+ * 1. Soft tier (per-minute global): re-apply the server's producer list.
+ *    Same path the visibility/focus policy uses; no transport teardown, no
+ *    media gap. Covers most "missed event" recovery cases.
  *
- * 2. Hard tier (per-five-minutes, gated on persistence): tear down ALL
- *    recv consumers and re-consume from a fresh sync. This produces a brief
- *    media gap on every tile, so it is reserved for confirmed persistent
- *    stalls that the soft tier did not fix. Trigger requires:
+ * 2. Hard tier (per-five-minutes global, gated on persistence): tear down
+ *    ALL recv consumers and re-consume from a fresh sync. Brief media gap
+ *    on every tile, so reserved for confirmed persistent stalls that the
+ *    soft tier did not fix. Trigger requires:
  *      a) at least one soft resync was already issued, AND
  *      b) a NEW stall arrives ≥ HARD_GRACE_MS after the last soft resync, AND
  *      c) the global hard-debounce window has expired.
  *
- * We never auto-escalate within the same stall event — only when a fresh
- * stall recurs after the soft tier had time to do its job.
+ * Audio + video share the same timestamps deliberately: a single bad peer
+ * with both audio and video failing should not produce two hard resyncs in
+ * 30s, and the cure (re-consume from server) helps both kinds at once.
  */
-const VIDEO_STALL_RESYNC_DEBOUNCE_MS = 60_000
-const VIDEO_STALL_HARD_DEBOUNCE_MS = 5 * 60_000
-const VIDEO_STALL_HARD_GRACE_MS = 30_000
-let lastVideoStallResyncAt = 0
-let lastVideoStallHardResyncAt = 0
-function onTileVideoStall(payload: { peerId: string }): void {
-  const id = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
+const MEDIA_STALL_RESYNC_DEBOUNCE_MS = 60_000
+const MEDIA_STALL_HARD_DEBOUNCE_MS = 5 * 60_000
+const MEDIA_STALL_HARD_GRACE_MS = 30_000
+let lastMediaStallResyncAt = 0
+let lastMediaStallHardResyncAt = 0
+
+function triggerMediaStallRecovery(kind: 'audio' | 'video', peerId: string): void {
+  const id = peerId.trim()
   if (!id) return
   const now =
     typeof performance !== 'undefined' ? performance.now() : Date.now()
   // Hard escalation: a soft resync was issued ≥ HARD_GRACE_MS ago and a
   // tile is STILL stalling. Soft did not help. Tear down + re-consume.
-  const softFiredRecently = lastVideoStallResyncAt > 0
-  const softHadGrace = now - lastVideoStallResyncAt >= VIDEO_STALL_HARD_GRACE_MS
-  const hardCooledDown = now - lastVideoStallHardResyncAt >= VIDEO_STALL_HARD_DEBOUNCE_MS
+  const softFiredRecently = lastMediaStallResyncAt > 0
+  const softHadGrace = now - lastMediaStallResyncAt >= MEDIA_STALL_HARD_GRACE_MS
+  const hardCooledDown = now - lastMediaStallHardResyncAt >= MEDIA_STALL_HARD_DEBOUNCE_MS
   if (softFiredRecently && softHadGrace && hardCooledDown) {
-    lastVideoStallHardResyncAt = now
+    lastMediaStallHardResyncAt = now
     // Reset the soft timestamp so any further stall in the next 60 s also
     // triggers soft (we just consumed our hard window for the next 5 min).
-    lastVideoStallResyncAt = now
+    lastMediaStallResyncAt = now
     if (import.meta.env.DEV) {
-      console.warn('[stall] video stall persists — escalating to hard producer resync', {
+      console.warn(`[stall] ${kind} stall persists — escalating to hard producer resync`, {
         peerId: id,
       })
     }
@@ -279,21 +283,29 @@ function onTileVideoStall(payload: { peerId: string }): void {
     }
     return
   }
-  if (now - lastVideoStallResyncAt < VIDEO_STALL_RESYNC_DEBOUNCE_MS) {
+  if (now - lastMediaStallResyncAt < MEDIA_STALL_RESYNC_DEBOUNCE_MS) {
     if (import.meta.env.DEV) {
-      console.log('[stall] video stall ignored (debounced)', { peerId: id })
+      console.log(`[stall] ${kind} stall ignored (debounced)`, { peerId: id })
     }
     return
   }
-  lastVideoStallResyncAt = now
+  lastMediaStallResyncAt = now
   if (import.meta.env.DEV) {
-    console.warn('[stall] video stall — requesting soft producer resync', { peerId: id })
+    console.warn(`[stall] ${kind} stall — requesting soft producer resync`, { peerId: id })
   }
   try {
     requestForcedProducerResync()
   } catch (err) {
     console.warn('[stall] requestForcedProducerResync failed', err)
   }
+}
+
+function onTileVideoStall(payload: { peerId: string }): void {
+  triggerMediaStallRecovery('video', typeof payload.peerId === 'string' ? payload.peerId : '')
+}
+
+function onTileAudioStall(payload: { peerId: string }): void {
+  triggerMediaStallRecovery('audio', typeof payload.peerId === 'string' ? payload.peerId : '')
 }
 
 watch(
@@ -3725,6 +3737,7 @@ watch(joining, (j) => {
                 @mafia-viewport-layers="(v) => onCallTileViewportForLayers(row.tile.peerId, v)"
                 @remote-playback-stall="onRemotePlaybackStall"
                 @video-stall="onTileVideoStall"
+                @audio-stall="onTileAudioStall"
                 @eat-first-reveal-trait="onEatFirstRevealTrait"
                 @eat-first-generate-trait="onEatFirstGenerateTrait"
                 @eat-first-reroll-action-card="onEatFirstRerollActionCard"

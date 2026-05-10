@@ -24,6 +24,21 @@ export type MediaDebugAudioSnapshot = {
   usingWebAudio: boolean
   audioCtxState: AudioContextState | 'unknown'
   gainValue: number | null
+  /**
+   * "Server says this peer should be sending audio right now" — derived from
+   * call-core's `tile.audioEnabled` (live track + no `peer-audio-muted` from
+   * server). When true AND `trackMuted === true`, the audio stall watchdog
+   * is actively measuring duration toward a 30s emit threshold.
+   */
+  audioEnabled: boolean
+  /**
+   * How long (ms) the watchdog has continuously observed the
+   * `audioEnabled && trackMuted && !listenMuted` anomaly. 0 when not in
+   * anomaly. Resets on track id change, listenMuted = true, or track unmute.
+   */
+  audioMutedDurationMs: number
+  /** True when the watchdog has emitted `audioStall` for the current anomaly cycle. */
+  audioStalled: boolean
 }
 
 export type MediaDebugVideoSnapshot = {

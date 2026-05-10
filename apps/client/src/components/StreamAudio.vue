@@ -37,6 +37,26 @@ const props = withDefaults(
      * unset the diagnostics row is skipped. Has no effect on playback.
      */
     peerId?: string | null
+    /**
+     * "Server says this peer should be sending audio right now."
+     *
+     * Sourced from call-core's `tile.audioEnabled` which is computed as
+     * `track.readyState === 'live' && !remoteAudioMutedByPeerId[peerId]`.
+     * The map is populated from server `peer-audio-muted` deltas — so this
+     * is FALSE for: user self-mute, host force-mute, force-mute-all, Mafia
+     * kill, no track, ended track. It is TRUE only when the server expects
+     * audio to be flowing to us right now.
+     *
+     * The audio-stall watchdog uses this as the authoritative gate: it ONLY
+     * fires when `audioEnabled === true` AND the local `track.muted === true`
+     * AND `listenMuted === false` for >=30s, which is the "server says this
+     * peer is sending but my track is silent" anomaly that maps to the
+     * "one listener stops hearing one specific speaker" production symptom.
+     *
+     * When the prop is unset or false, the watchdog is dormant — protecting
+     * legitimate mute scenarios from spurious recovery.
+     */
+    audioEnabled?: boolean
   }>(),
   {
     playRev: 0,
@@ -46,8 +66,22 @@ const props = withDefaults(
     voiceDucked: false,
     audioProcessing: false,
     peerId: null,
+    audioEnabled: false,
   },
 )
+
+const emit = defineEmits<{
+  /**
+   * Emitted at most once per anomaly cycle when this listener's inbound
+   * audio for `peerId` has been stuck `track.muted = true` while the server
+   * said the peer should be sending (`audioEnabled = true`) and we're not
+   * listen-muting them. Routed by CallPage through the same soft → hard
+   * producer-resync ladder as `videoStall` (≤ 1 soft per 60s, hard requires
+   * grace + 5min cooldown). Resets on track id change, listenMuted = true,
+   * audioEnabled = false, track.muted clearing, or unmount.
+   */
+  audioStall: [payload: { peerId: string }]
+}>()
 
 const el = ref<HTMLAudioElement | null>(null)
 
@@ -516,9 +550,147 @@ function tickAudioCtxHeartbeat(): void {
   })
 }
 
+/**
+ * Audio-stall watchdog (remote audio, conservative).
+ *
+ * Triggers `audioStall` ONLY when ALL of the following hold continuously
+ * for {@link AUDIO_STALL_THRESHOLD_MS}:
+ *   - `props.audioEnabled === true` (server says the peer is sending)
+ *   - `props.listenMuted === false`  (this listener is not muting them)
+ *   - the current peerId is known
+ *   - `<audio>.srcObject` exists with a live audio track
+ *   - `track.muted === true`         (the browser reports no RTP arriving)
+ *
+ * The check piggy-backs on the existing 5s heartbeat — no new timers, no
+ * per-second loops. The threshold is sampled in coarse steps (≥ 30s after
+ * the first sample to register the anomaly), which is acceptable for a
+ * recovery action whose user-visible cost is "30-35s of audio loss before
+ * the soft resync attempt fires."
+ *
+ * State invalidates immediately on:
+ *   - track id change                  (different track, sample fresh)
+ *   - `listenMuted` true               (we expect silence)
+ *   - `audioEnabled` false             (server expects silence)
+ *   - track unmute                     (anomaly cleared organically)
+ *   - srcObject removed / no track     (no signal source)
+ *   - component unmount
+ */
+const AUDIO_STALL_THRESHOLD_MS = 30_000
+const AUDIO_STALL_FIRE_COOLDOWN_MS = 60_000
+let audioStallSampleStartAt = 0
+let audioStallSampleTrackId: string | null = null
+let audioStallCurrentlyDetected = false
+let audioStallLastFiredAt = 0
+
+function shouldRunAudioStallWatchdog(): boolean {
+  if (!props.audioEnabled) return false
+  if (props.listenMuted) return false
+  const peerId = typeof props.peerId === 'string' ? props.peerId.trim() : ''
+  if (peerId.length === 0) return false
+  const a = el.value
+  if (!a || !a.srcObject) return false
+  return true
+}
+
+function resetAudioStallWatchdog(): void {
+  if (audioStallSampleStartAt !== 0) {
+    audioStallSampleStartAt = 0
+  }
+  if (audioStallSampleTrackId !== null) {
+    audioStallSampleTrackId = null
+  }
+  if (audioStallCurrentlyDetected) {
+    audioStallCurrentlyDetected = false
+  }
+}
+
+function tickAudioStallWatchdog(): void {
+  if (!shouldRunAudioStallWatchdog()) {
+    resetAudioStallWatchdog()
+    return
+  }
+  const a = el.value
+  if (!a || !a.srcObject) {
+    resetAudioStallWatchdog()
+    return
+  }
+  const track = (a.srcObject as MediaStream).getAudioTracks()[0] ?? null
+  if (!track || track.readyState !== 'live') {
+    resetAudioStallWatchdog()
+    return
+  }
+  const trackId = track.id
+  if (trackId !== audioStallSampleTrackId) {
+    audioStallSampleTrackId = trackId
+    audioStallSampleStartAt = 0
+    audioStallCurrentlyDetected = false
+  }
+  if (!track.muted) {
+    if (audioStallSampleStartAt !== 0) {
+      audioStallSampleStartAt = 0
+    }
+    if (audioStallCurrentlyDetected) {
+      audioStallCurrentlyDetected = false
+    }
+    return
+  }
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  if (audioStallSampleStartAt === 0) {
+    audioStallSampleStartAt = now
+    return
+  }
+  if (audioStallCurrentlyDetected) {
+    return
+  }
+  if (now - audioStallSampleStartAt < AUDIO_STALL_THRESHOLD_MS) {
+    return
+  }
+  if (now - audioStallLastFiredAt < AUDIO_STALL_FIRE_COOLDOWN_MS) {
+    return
+  }
+  audioStallCurrentlyDetected = true
+  audioStallLastFiredAt = now
+  const peerId = typeof props.peerId === 'string' ? props.peerId.trim() : ''
+  if (peerId.length === 0) return
+  if (import.meta.env.DEV) {
+    streamAudioLog.warn('audio stall detected (track muted while server expects audio)', {
+      peerId,
+      durationMs: Math.round(now - audioStallSampleStartAt),
+      trackId,
+    })
+  }
+  emit('audioStall', { peerId })
+}
+
+function tickAudioMaintenance(): void {
+  tickAudioCtxHeartbeat()
+  tickAudioStallWatchdog()
+}
+
 onMounted(() => {
-  audioCtxHeartbeat = setInterval(tickAudioCtxHeartbeat, AUDIO_CTX_HEARTBEAT_MS)
+  audioCtxHeartbeat = setInterval(tickAudioMaintenance, AUDIO_CTX_HEARTBEAT_MS)
 })
+
+// Reset stall sample state on the same edge transitions the gate cares about
+// — this catches the cases where the prop change happens between heartbeat
+// ticks (e.g., user toggles listen-mute fast) so the next tick samples fresh
+// instead of inheriting a stale "started" timestamp.
+watch(
+  () => [props.audioEnabled, props.listenMuted ?? false, props.peerId ?? null] as const,
+  () => {
+    if (!shouldRunAudioStallWatchdog()) {
+      resetAudioStallWatchdog()
+    }
+  },
+  { flush: 'post' },
+)
+watch(
+  () => props.stream,
+  () => {
+    resetAudioStallWatchdog()
+  },
+  { flush: 'post' },
+)
 
 watch(
   () => [props.audioLevel ?? 0, props.voiceDucked ?? false] as const,
@@ -559,6 +731,9 @@ onMounted(() => {
         ctxState = 'unknown'
       }
     }
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const audioMutedDurationMs =
+      audioStallSampleStartAt > 0 ? Math.round(now - audioStallSampleStartAt) : 0
     return {
       el: a,
       paused: a?.paused ?? true,
@@ -573,6 +748,9 @@ onMounted(() => {
       usingWebAudio,
       audioCtxState: ctxState,
       gainValue: gainNode ? gainNode.gain.value : null,
+      audioEnabled: !!props.audioEnabled,
+      audioMutedDurationMs,
+      audioStalled: audioStallCurrentlyDetected,
     }
   })
 })
@@ -587,6 +765,7 @@ onUnmounted(() => {
     clearInterval(audioCtxHeartbeat)
     audioCtxHeartbeat = null
   }
+  resetAudioStallWatchdog()
   detachAudioDebugReader?.()
   detachAudioDebugReader = null
   lastBoundAudioTrackId = null

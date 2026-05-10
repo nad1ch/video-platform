@@ -55,6 +55,13 @@ const emit = defineEmits<{
    * resync. Only fires for remote tiles with a known `peerId`.
    */
   'video-stall': [payload: { peerId: string }]
+  /**
+   * Audio-stall detected on the inbound audio track (server says peer should
+   * be sending but `track.muted` has been true for >=30s). Bubbled from
+   * `<StreamAudio>`; CallPage routes through the same soft → hard producer
+   * resync ladder as `video-stall`.
+   */
+  'audio-stall': [payload: { peerId: string }]
   'eat-first-reveal-trait': [payload: { peerId: string; traitKey: EatFirstTraitKey; closed?: boolean }]
   'eat-first-generate-trait': [payload: { peerId: string; traitKey: EatFirstTraitKey }]
   'eat-first-reroll-action-card': [payload: { peerId: string }]
@@ -1377,6 +1384,8 @@ if (import.meta.env.DEV) {
         :listen-volume="remoteListenVolume ?? 1"
         :listen-muted="remoteListenMuted ?? false"
         :peer-id="peerId"
+        :audio-enabled="audioEnabled"
+        @audio-stall="(p) => emit('audio-stall', p)"
       />
       <div
         v-if="showVideo"

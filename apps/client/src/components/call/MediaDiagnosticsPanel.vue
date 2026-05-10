@@ -50,9 +50,10 @@ onBeforeUnmount(() => {
 
 const audioCount = computed(() => audioRows.value.length)
 const videoCount = computed(() => videoRows.value.length)
-const audioStalled = computed(() =>
+const audioElPaused = computed(() =>
   audioRows.value.filter((r) => r.hasSrcObject && !r.usingWebAudio && r.paused && !r.muted).length,
 )
+const audioStalled = computed(() => audioRows.value.filter((r) => r.audioStalled).length)
 const videoStalled = computed(() => videoRows.value.filter((r) => r.stalled).length)
 const driftSuspected = computed(
   () => drift.value.lastDeltaMs > MEDIA_DEBUG_TIMER_DRIFT_THROTTLED_DELTA_MS,
@@ -74,7 +75,7 @@ function fmtTrackState(snap: { trackReadyState: string | null; trackMuted: boole
     <header class="media-debug__head">
       <span class="media-debug__title">media debug</span>
       <span class="media-debug__counts">
-        A {{ audioCount }}<span v-if="audioStalled > 0" class="media-debug__warn"> ({{ audioStalled }})</span>
+        A {{ audioCount }}<span v-if="audioStalled > 0" class="media-debug__warn"> ({{ audioStalled }} stall)</span><span v-else-if="audioElPaused > 0" class="media-debug__warn"> ({{ audioElPaused }})</span>
         · V {{ videoCount }}<span v-if="videoStalled > 0" class="media-debug__warn"> ({{ videoStalled }})</span>
       </span>
       <button class="media-debug__toggle" type="button" @click="collapsed = !collapsed">
@@ -86,10 +87,17 @@ function fmtTrackState(snap: { trackReadyState: string | null; trackMuted: boole
         <h4>audio</h4>
         <table>
           <thead>
-            <tr><th>peer</th><th>el</th><th>vol</th><th>track</th><th>web</th><th>ctx</th></tr>
+            <tr><th>peer</th><th>el</th><th>vol</th><th>track</th><th>web</th><th>ctx</th><th>state</th></tr>
           </thead>
           <tbody>
-            <tr v-for="r in audioRows" :key="r.peerId" :class="{ 'media-debug__row--warn': r.hasSrcObject && !r.usingWebAudio && r.paused && !r.muted }">
+            <tr
+              v-for="r in audioRows"
+              :key="r.peerId"
+              :class="{
+                'media-debug__row--warn':
+                  r.audioStalled || (r.hasSrcObject && !r.usingWebAudio && r.paused && !r.muted),
+              }"
+            >
               <td>{{ shortPeer(r.peerId) }}</td>
               <td>
                 <span :class="{ 'media-debug__warn': r.paused && !r.muted }">
@@ -100,6 +108,12 @@ function fmtTrackState(snap: { trackReadyState: string | null; trackMuted: boole
               <td>{{ fmtTrackState(r) }}</td>
               <td>{{ r.usingWebAudio ? 'wa' : '—' }}<span v-if="r.usingWebAudio">/{{ r.gainValue?.toFixed(2) ?? '?' }}</span></td>
               <td :class="{ 'media-debug__warn': r.audioCtxState === 'suspended' }">{{ r.audioCtxState }}</td>
+              <td>
+                <span v-if="r.audioStalled" class="media-debug__warn">STALL</span>
+                <span v-else-if="r.audioMutedDurationMs > 0" class="media-debug__warn">{{ Math.round(r.audioMutedDurationMs / 1000) }}s</span>
+                <span v-else-if="!r.audioEnabled">muted</span>
+                <span v-else>ok</span>
+              </td>
             </tr>
           </tbody>
         </table>
