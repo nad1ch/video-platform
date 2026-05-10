@@ -313,12 +313,329 @@ export function readMediaDebugResyncStats(): MediaDebugResyncStats {
   return { ...resyncStats }
 }
 
+/**
+ * requestAnimationFrame pacing probe. OBS Browser Source can throttle rAF
+ * down to ~1 Hz when the source is occluded; the timer-drift probe above
+ * catches setInterval throttling but rAF behaves differently in some
+ * Chromium versions. This probe answers: "is the page's render loop
+ * actually running at full speed right now?"
+ *
+ * The loop is a single rAF chain (one callback per frame on a healthy
+ * host = ~60 cb/s). Each callback updates a 1-s rolling FPS estimate and
+ * counts frames whose delta exceeds {@link RAF_LONG_FRAME_DELTA_MS}.
+ * Stopped via the returned disposer; the chain self-terminates when
+ * `running` is false.
+ */
+export type MediaDebugRafStats = {
+  running: boolean
+  /** Rolling 1-s estimate of frames per second. 0 before the first window completes. */
+  approxFps: number
+  /** Largest inter-frame delta seen since the probe started (ms). */
+  maxFrameDeltaMs: number
+  /** Frames seen with delta > {@link MEDIA_DEBUG_RAF_LONG_FRAME_DELTA_MS}. */
+  longFrameCount: number
+  /** Wall-clock ms of the most recent rAF callback. */
+  lastFrameAt: number
+  /** Total rAF callbacks since start (sanity). */
+  totalFrameCount: number
+}
+
+const RAF_LONG_FRAME_DELTA_MS = 100
+const RAF_FPS_WINDOW_MS = 1000
+const rafStats: MediaDebugRafStats = {
+  running: false,
+  approxFps: 0,
+  maxFrameDeltaMs: 0,
+  longFrameCount: 0,
+  lastFrameAt: 0,
+  totalFrameCount: 0,
+}
+let rafProbeRunning = false
+let rafWindowFrameCount = 0
+let rafWindowStartedAt = 0
+/**
+ * Handle of the currently-pending `requestAnimationFrame` callback. Tracked
+ * so {@link stopMediaDebugRafProbe} can `cancelAnimationFrame` an in-flight
+ * tick — without this, a route unmount + remount inside one frame
+ * (~16 ms, e.g. very fast Vue route swap) could leave a stale tick queued
+ * that survives the unmount, sees `rafProbeRunning = true` again after the
+ * fresh start, and schedules a second concurrent chain. The handle-based
+ * cancel makes start/stop deterministic across re-entry.
+ */
+let rafProbeHandle: number | null = null
+
+function tickRafProbe(now: number): void {
+  rafProbeHandle = null
+  if (!rafProbeRunning) return
+  rafStats.totalFrameCount += 1
+  if (rafStats.lastFrameAt > 0) {
+    const delta = now - rafStats.lastFrameAt
+    if (delta > rafStats.maxFrameDeltaMs) {
+      rafStats.maxFrameDeltaMs = delta
+    }
+    if (delta > RAF_LONG_FRAME_DELTA_MS) {
+      rafStats.longFrameCount += 1
+    }
+  }
+  rafStats.lastFrameAt = now
+  if (rafWindowStartedAt === 0) {
+    rafWindowStartedAt = now
+    rafWindowFrameCount = 0
+  } else if (now - rafWindowStartedAt >= RAF_FPS_WINDOW_MS) {
+    rafStats.approxFps = Math.round(
+      (rafWindowFrameCount * 1000) / Math.max(1, now - rafWindowStartedAt),
+    )
+    rafWindowStartedAt = now
+    rafWindowFrameCount = 0
+  } else {
+    rafWindowFrameCount += 1
+  }
+  if (typeof requestAnimationFrame === 'function') {
+    rafProbeHandle = requestAnimationFrame(tickRafProbe)
+  }
+}
+
+export function startMediaDebugRafProbe(): () => void {
+  if (typeof window === 'undefined' || typeof requestAnimationFrame !== 'function') {
+    return () => {}
+  }
+  if (rafProbeRunning) {
+    return stopMediaDebugRafProbe
+  }
+  rafProbeRunning = true
+  rafStats.running = true
+  rafStats.approxFps = 0
+  rafStats.maxFrameDeltaMs = 0
+  rafStats.longFrameCount = 0
+  rafStats.lastFrameAt = 0
+  rafStats.totalFrameCount = 0
+  rafWindowFrameCount = 0
+  rafWindowStartedAt = 0
+  rafProbeHandle = requestAnimationFrame(tickRafProbe)
+  return stopMediaDebugRafProbe
+}
+
+export function stopMediaDebugRafProbe(): void {
+  rafProbeRunning = false
+  rafStats.running = false
+  if (rafProbeHandle !== null && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(rafProbeHandle)
+    rafProbeHandle = null
+  }
+}
+
+export function readMediaDebugRafStats(): MediaDebugRafStats {
+  return { ...rafStats }
+}
+
+export const MEDIA_DEBUG_RAF_LONG_FRAME_DELTA_MS = RAF_LONG_FRAME_DELTA_MS
+
+/**
+ * WebSocket lifecycle counters. Maintained by a Vue watcher in CallPage that
+ * observes the existing `wsStatus` ref from `useCallOrchestrator` — no
+ * call-core change required. Useful to detect OBS Browser Source WS
+ * instability that would otherwise be invisible: the streamer's host page
+ * may stay connected while the OBS source flaps.
+ */
+export type MediaDebugWsStats = {
+  /** Most recent observed `wsStatus` ref value (string). */
+  currentStatus: string | null
+  /** Wall-clock ms when `currentStatus` was last updated. */
+  lastTransitionAt: number
+  /** Number of times the status went TO `'open'`. Includes initial connect. */
+  openCount: number
+  /** Number of times the status went TO `'closed'`. */
+  closeCount: number
+  /** Number of times the status went TO `'error'`. */
+  errorCount: number
+  /**
+   * Number of `closed → open` (or `error → open`) transitions. Excludes the
+   * initial connect (`null → open` or `'idle' → 'connecting' → 'open'`).
+   */
+  reconnectCount: number
+}
+
+const wsStats: MediaDebugWsStats = {
+  currentStatus: null,
+  lastTransitionAt: 0,
+  openCount: 0,
+  closeCount: 0,
+  errorCount: 0,
+  reconnectCount: 0,
+}
+
+export function recordMediaDebugWsTransition(prev: string | null, next: string): void {
+  wsStats.currentStatus = next
+  wsStats.lastTransitionAt = Date.now()
+  if (next === 'open') {
+    wsStats.openCount += 1
+    if (prev === 'closed' || prev === 'error') {
+      wsStats.reconnectCount += 1
+    }
+  } else if (next === 'closed') {
+    wsStats.closeCount += 1
+  } else if (next === 'error') {
+    wsStats.errorCount += 1
+  }
+}
+
+export function readMediaDebugWsStats(): MediaDebugWsStats {
+  return { ...wsStats }
+}
+
+/**
+ * Counts of incoming signaling messages by type. Updated by a single
+ * `subscribeSignalingMessage(...)` registered in CallPage that does NOT
+ * apply state — it only counts. The selected types are the ones whose
+ * volume tells us about teardown / rebuild storms during a stream:
+ *   - `producer-sync`: server resync. The `producerSyncClientRefreshCount`
+ *     sub-counter tracks the dangerous `client-refresh` reason that
+ *     triggers `teardownAllRemoteConsumers` and the public-stream
+ *     "all cameras → fallback icons" flicker.
+ *   - `new-producer` / `producer-closed`: per-track rebuild churn.
+ *   - `room-state`: heavy join/replay.
+ *   - `peer-joined` / `peer-left`: roster churn.
+ *   - `mafia:player-life-state` and other Mafia state messages are NOT
+ *     counted to keep the diff narrow; if needed later, extend the recorder.
+ *
+ * Anything not in the explicit allowlist increments only `otherCount`.
+ */
+export type MediaDebugSignalingStats = {
+  producerSyncCount: number
+  producerSyncClientRefreshCount: number
+  newProducerCount: number
+  producerClosedCount: number
+  roomStateCount: number
+  peerJoinedCount: number
+  peerLeftCount: number
+  mafiaSnapshotApplyCount: number
+  otherCount: number
+  lastTrackedAt: number
+  lastTrackedType: string | null
+}
+
+const signalingStats: MediaDebugSignalingStats = {
+  producerSyncCount: 0,
+  producerSyncClientRefreshCount: 0,
+  newProducerCount: 0,
+  producerClosedCount: 0,
+  roomStateCount: 0,
+  peerJoinedCount: 0,
+  peerLeftCount: 0,
+  mafiaSnapshotApplyCount: 0,
+  otherCount: 0,
+  lastTrackedAt: 0,
+  lastTrackedType: null,
+}
+
+export function recordMediaDebugSignalingIncoming(type: string, extra?: { syncReason?: string }): void {
+  signalingStats.lastTrackedAt = Date.now()
+  signalingStats.lastTrackedType = type
+  switch (type) {
+    case 'producer-sync':
+      signalingStats.producerSyncCount += 1
+      if (extra?.syncReason === 'client-refresh') {
+        signalingStats.producerSyncClientRefreshCount += 1
+      }
+      return
+    case 'new-producer':
+      signalingStats.newProducerCount += 1
+      return
+    case 'producer-closed':
+      signalingStats.producerClosedCount += 1
+      return
+    case 'room-state':
+      signalingStats.roomStateCount += 1
+      return
+    case 'peer-joined':
+      signalingStats.peerJoinedCount += 1
+      return
+    case 'peer-left':
+      signalingStats.peerLeftCount += 1
+      return
+    default:
+      // Mafia snapshot block messages — surface a single counter for
+      // "OBS request-snapshot reply applied" without enumerating every
+      // mafia:* type.
+      if (
+        type === 'mafia:player-life-state' ||
+        type === 'mafia:players-update' ||
+        type === 'mafia:reshuffle' ||
+        type === 'mafia:audio-mix-update' ||
+        type === 'mafia:host-updated' ||
+        type === 'mafia:force-mute-all'
+      ) {
+        signalingStats.mafiaSnapshotApplyCount += 1
+        return
+      }
+      signalingStats.otherCount += 1
+      return
+  }
+}
+
+export function readMediaDebugSignalingStats(): MediaDebugSignalingStats {
+  return { ...signalingStats }
+}
+
+/**
+ * Static environment information set once at CallPage mount. Surfaces in
+ * the panel so a screenshot on incident report is self-describing — what
+ * was the host, was it view mode, how many cores, was the page hidden.
+ */
+export type MediaDebugEnvInfo = {
+  isMafiaView: boolean
+  isEatFirstView: boolean
+  isViewMode: boolean
+  hardwareConcurrency: number | null
+  deviceMemoryGb: number | null
+  userAgentLabel: string | null
+  installedAt: number
+}
+
+const envInfo: MediaDebugEnvInfo = {
+  isMafiaView: false,
+  isEatFirstView: false,
+  isViewMode: false,
+  hardwareConcurrency: null,
+  deviceMemoryGb: null,
+  userAgentLabel: null,
+  installedAt: 0,
+}
+
+export function setMediaDebugEnvInfo(input: Partial<Pick<MediaDebugEnvInfo, 'isMafiaView' | 'isEatFirstView'>>): void {
+  if (typeof input.isMafiaView === 'boolean') envInfo.isMafiaView = input.isMafiaView
+  if (typeof input.isEatFirstView === 'boolean') envInfo.isEatFirstView = input.isEatFirstView
+  envInfo.isViewMode = envInfo.isMafiaView || envInfo.isEatFirstView
+  if (envInfo.installedAt === 0 && typeof window !== 'undefined') {
+    envInfo.installedAt = Date.now()
+    const nav = (typeof navigator !== 'undefined' ? navigator : null) as
+      | (Navigator & { deviceMemory?: number })
+      | null
+    envInfo.hardwareConcurrency = nav?.hardwareConcurrency ?? null
+    envInfo.deviceMemoryGb = typeof nav?.deviceMemory === 'number' ? nav.deviceMemory : null
+    const ua = nav?.userAgent ?? ''
+    envInfo.userAgentLabel = ua ? ua.slice(0, 200) : null
+  }
+}
+
+export function readMediaDebugEnvInfo(): MediaDebugEnvInfo & { documentVisibilityState: string | null } {
+  const documentVisibilityState =
+    typeof document !== 'undefined' && typeof document.visibilityState === 'string'
+      ? document.visibilityState
+      : null
+  return { ...envInfo, documentVisibilityState }
+}
+
 type MediaDebugGlobal = {
   dumpAudio: () => Record<string, MediaDebugAudioSnapshot>
   dumpVideo: () => Record<string, MediaDebugVideoSnapshot>
   dumpAll: () => ReturnType<typeof dumpAllDebug>
   timerDrift: () => MediaDebugTimerDrift
   resyncStats: () => MediaDebugResyncStats
+  rafStats: () => MediaDebugRafStats
+  wsStats: () => MediaDebugWsStats
+  signalingStats: () => MediaDebugSignalingStats
+  envInfo: () => ReturnType<typeof readMediaDebugEnvInfo>
   forceSoftResync?: () => void
 }
 
@@ -343,6 +660,10 @@ export function installMediaDebugGlobal(opts: { forceSoftResync?: () => void }):
     dumpAll: dumpAllDebug,
     timerDrift: readMediaDebugTimerDrift,
     resyncStats: readMediaDebugResyncStats,
+    rafStats: readMediaDebugRafStats,
+    wsStats: readMediaDebugWsStats,
+    signalingStats: readMediaDebugSignalingStats,
+    envInfo: readMediaDebugEnvInfo,
     forceSoftResync: opts.forceSoftResync,
   }
   ;(window as unknown as { __MEDIA_DEBUG__?: MediaDebugGlobal }).__MEDIA_DEBUG__ = api

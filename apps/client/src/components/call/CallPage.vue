@@ -44,7 +44,11 @@ import {
   isMediaDebugEnabled,
   recordMediaDebugHardResync,
   recordMediaDebugHardResyncSkipped,
+  recordMediaDebugSignalingIncoming,
   recordMediaDebugSoftResync,
+  recordMediaDebugWsTransition,
+  setMediaDebugEnvInfo,
+  startMediaDebugRafProbe,
   startMediaDebugTimerDriftProbe,
 } from '@/utils/mediaDebugRuntime'
 import CallRoomPopover from './CallRoomPopover.vue'
@@ -437,6 +441,43 @@ if (import.meta.env.DEV) {
 }
 
 useMafiaHostSignaling(sendSignalingMessage, subscribeSignalingMessage, wsStatus)
+
+// Diagnostics-only WS lifecycle counter. Reads the existing `wsStatus` ref;
+// no call-core change required. Records open/close/error counts and
+// detects `closed → open` (i.e. WS reconnect) transitions for the
+// `?mediaDebug=1` panel + `__MEDIA_DEBUG__.wsStats()` console accessor.
+let lastObservedWsStatus: string | null = null
+watch(
+  () => wsStatus.value,
+  (next) => {
+    const nextStr = typeof next === 'string' ? next : String(next)
+    if (lastObservedWsStatus === nextStr) return
+    recordMediaDebugWsTransition(lastObservedWsStatus, nextStr)
+    lastObservedWsStatus = nextStr
+  },
+  { immediate: true },
+)
+
+// Diagnostics-only counting subscriber. Does NOT apply state — every other
+// `subscribeSignalingMessage` registration handles real apply paths. This
+// one increments per-type counters so post-incident analysis can correlate
+// flicker / blackout reports with WS message bursts (`producer-sync`,
+// `producer-closed`, `new-producer`, `room-state`, `peer-joined/left`,
+// Mafia snapshot replies). Cost: one switch + counter per inbound message.
+const offMediaDebugSignalingCounter = subscribeSignalingMessage((data) => {
+  if (!data || typeof data !== 'object') return
+  const type = (data as { type?: unknown }).type
+  if (typeof type !== 'string') return
+  if (type === 'producer-sync') {
+    const payload = (data as { payload?: { syncReason?: unknown } }).payload
+    const syncReason =
+      payload && typeof payload.syncReason === 'string' ? payload.syncReason : undefined
+    recordMediaDebugSignalingIncoming(type, { syncReason })
+    return
+  }
+  recordMediaDebugSignalingIncoming(type)
+})
+onBeforeUnmount(offMediaDebugSignalingCounter)
 
 const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
 
@@ -3484,6 +3525,17 @@ onMounted(() => {
   // call route; result accessible via `__MEDIA_DEBUG__.timerDrift()` and
   // surfaced in the `?mediaDebug=1` panel.
   detachMediaDebugTimerDriftProbe = startMediaDebugTimerDriftProbe()
+  // Companion rAF probe. setInterval and rAF are throttled differently in
+  // some Chromium versions; the rAF probe surfaces render-loop pressure
+  // (long frames, low FPS) that the timer-drift probe cannot. Pure counter
+  // updates per frame; no DOM access in the callback.
+  detachMediaDebugRafProbe = startMediaDebugRafProbe()
+  // Stamp env info ONCE at mount. Read live `documentVisibilityState`
+  // is included by the reader, so no need to track it reactively.
+  setMediaDebugEnvInfo({
+    isMafiaView: mafiaViewUi.value,
+    isEatFirstView: eatFirstViewUi.value,
+  })
   if (isMediaDebugEnabled()) {
     detachMediaDebugGlobal = installMediaDebugGlobal({
       forceSoftResync: () => {
@@ -3499,6 +3551,7 @@ onMounted(() => {
 
 let detachMediaDebugGlobal: (() => void) | null = null
 let detachMediaDebugTimerDriftProbe: (() => void) | null = null
+let detachMediaDebugRafProbe: (() => void) | null = null
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
@@ -3514,6 +3567,8 @@ onUnmounted(() => {
   lastSentPeerVisibleByPeer.clear()
   detachMediaDebugTimerDriftProbe?.()
   detachMediaDebugTimerDriftProbe = null
+  detachMediaDebugRafProbe?.()
+  detachMediaDebugRafProbe = null
   if (import.meta.env.DEV) {
     delete (globalThis as unknown as { __CALL_DEBUG__?: unknown }).__CALL_DEBUG__
   }

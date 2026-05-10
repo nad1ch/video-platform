@@ -3,14 +3,22 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   dumpAudioDebug,
   dumpVideoDebug,
+  MEDIA_DEBUG_RAF_LONG_FRAME_DELTA_MS,
   MEDIA_DEBUG_TIMER_DRIFT_INTERVAL_MS,
   MEDIA_DEBUG_TIMER_DRIFT_THROTTLED_DELTA_MS,
+  readMediaDebugEnvInfo,
+  readMediaDebugRafStats,
   readMediaDebugResyncStats,
+  readMediaDebugSignalingStats,
   readMediaDebugTimerDrift,
+  readMediaDebugWsStats,
   type MediaDebugAudioSnapshot,
+  type MediaDebugRafStats,
   type MediaDebugResyncStats,
+  type MediaDebugSignalingStats,
   type MediaDebugTimerDrift,
   type MediaDebugVideoSnapshot,
+  type MediaDebugWsStats,
 } from '@/utils/mediaDebugRuntime'
 
 /**
@@ -27,6 +35,10 @@ const audioRows = ref<Array<{ peerId: string } & MediaDebugAudioSnapshot>>([])
 const videoRows = ref<Array<{ peerId: string } & MediaDebugVideoSnapshot>>([])
 const drift = ref<MediaDebugTimerDrift>(readMediaDebugTimerDrift())
 const resync = ref<MediaDebugResyncStats>(readMediaDebugResyncStats())
+const raf = ref<MediaDebugRafStats>(readMediaDebugRafStats())
+const ws = ref<MediaDebugWsStats>(readMediaDebugWsStats())
+const sigStats = ref<MediaDebugSignalingStats>(readMediaDebugSignalingStats())
+const env = ref(readMediaDebugEnvInfo())
 const collapsed = ref(false)
 
 let timer: ReturnType<typeof setInterval> | null = null
@@ -38,6 +50,10 @@ function refresh(): void {
   videoRows.value = Object.entries(v).map(([peerId, snap]) => ({ peerId, ...snap }))
   drift.value = readMediaDebugTimerDrift()
   resync.value = readMediaDebugResyncStats()
+  raf.value = readMediaDebugRafStats()
+  ws.value = readMediaDebugWsStats()
+  sigStats.value = readMediaDebugSignalingStats()
+  env.value = readMediaDebugEnvInfo()
 }
 
 function fmtAge(ts: number): string {
@@ -71,6 +87,14 @@ const driftSuspected = computed(
   () => drift.value.lastDeltaMs > MEDIA_DEBUG_TIMER_DRIFT_THROTTLED_DELTA_MS,
 )
 const driftSeen = computed(() => drift.value.throttledTickCount > 0)
+const tilesWithoutVideoCount = computed(
+  () => videoRows.value.filter((r) => r.videoWidth <= 0 || r.videoHeight <= 0).length,
+)
+const liveVideoTrackCount = computed(
+  () => videoRows.value.filter((r) => r.trackReadyState === 'live' && !r.trackMuted).length,
+)
+const rafFpsLow = computed(() => raf.value.totalFrameCount > 0 && raf.value.approxFps > 0 && raf.value.approxFps < 25)
+const rafLongFrames = computed(() => raf.value.longFrameCount > 0)
 
 function shortPeer(id: string): string {
   return id.length > 10 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id
@@ -180,8 +204,56 @@ function fmtTrackState(snap: { trackReadyState: string | null; trackMuted: boole
           OBS/view skipped a hard resync — refresh the OBS Browser Source if a tile is stuck.
         </div>
       </section>
+      <section class="media-debug__section">
+        <h4>render (rAF)</h4>
+        <div class="media-debug__drift">
+          <span :class="{ 'media-debug__warn': rafFpsLow }">fps: {{ raf.approxFps }}</span>
+          <span :class="{ 'media-debug__warn': rafLongFrames }">long frames: {{ raf.longFrameCount }}</span>
+          <span>max Δ: {{ raf.maxFrameDeltaMs }}ms</span>
+          <span class="media-debug__drift-hint">long &gt; {{ MEDIA_DEBUG_RAF_LONG_FRAME_DELTA_MS }}ms</span>
+        </div>
+      </section>
+      <section class="media-debug__section">
+        <h4>websocket</h4>
+        <div class="media-debug__drift">
+          <span>status: {{ ws.currentStatus ?? '—' }}</span>
+          <span>open: {{ ws.openCount }}</span>
+          <span>close: {{ ws.closeCount }}</span>
+          <span :class="{ 'media-debug__warn': ws.errorCount > 0 }">err: {{ ws.errorCount }}</span>
+          <span :class="{ 'media-debug__warn': ws.reconnectCount > 0 }">reconn: {{ ws.reconnectCount }}</span>
+          <span v-if="ws.lastTransitionAt > 0" class="media-debug__drift-hint">last {{ fmtAge(ws.lastTransitionAt) }}</span>
+        </div>
+      </section>
+      <section class="media-debug__section">
+        <h4>signaling</h4>
+        <div class="media-debug__drift">
+          <span :class="{ 'media-debug__warn': sigStats.producerSyncClientRefreshCount > 0 }">
+            sync: {{ sigStats.producerSyncCount }}<span v-if="sigStats.producerSyncClientRefreshCount > 0"> (refresh ×{{ sigStats.producerSyncClientRefreshCount }})</span>
+          </span>
+          <span>+prod: {{ sigStats.newProducerCount }}</span>
+          <span>−prod: {{ sigStats.producerClosedCount }}</span>
+          <span>room-state: {{ sigStats.roomStateCount }}</span>
+          <span>peer +/−: {{ sigStats.peerJoinedCount }}/{{ sigStats.peerLeftCount }}</span>
+          <span>mafia snap: {{ sigStats.mafiaSnapshotApplyCount }}</span>
+        </div>
+      </section>
+      <section class="media-debug__section">
+        <h4>tiles + env</h4>
+        <div class="media-debug__drift">
+          <span>video els: {{ videoCount }}</span>
+          <span>live tracks: {{ liveVideoTrackCount }}</span>
+          <span :class="{ 'media-debug__warn': tilesWithoutVideoCount > 0 && tilesWithoutVideoCount === videoCount }">no video: {{ tilesWithoutVideoCount }}</span>
+          <span>view: {{ env.isMafiaView ? 'mafia' : env.isEatFirstView ? 'eat-first' : 'no' }}</span>
+          <span>visible: {{ env.documentVisibilityState ?? '—' }}</span>
+          <span v-if="env.hardwareConcurrency != null">cores: {{ env.hardwareConcurrency }}</span>
+          <span v-if="env.deviceMemoryGb != null">mem: {{ env.deviceMemoryGb }}GB</span>
+        </div>
+        <div class="media-debug__drift-hint">
+          GPU / encoder load is NOT visible to JS — see OBS Stats window or Windows Task Manager → Performance → GPU.
+        </div>
+      </section>
       <footer class="media-debug__foot">
-        console: <code>__MEDIA_DEBUG__.dumpAll()</code>, <code>.timerDrift()</code>, <code>.resyncStats()</code>, <code>.forceSoftResync()</code>
+        console: <code>__MEDIA_DEBUG__.dumpAll()</code>, <code>.timerDrift()</code>, <code>.rafStats()</code>, <code>.wsStats()</code>, <code>.signalingStats()</code>, <code>.envInfo()</code>, <code>.resyncStats()</code>, <code>.forceSoftResync()</code>
       </footer>
     </div>
   </div>
