@@ -146,6 +146,13 @@ export function useMafiaAudioMixSignaling(deps: MafiaAudioMixSignalingDeps): Maf
       const pid = typeof p?.peerId === 'string' ? p.peerId.trim() : ''
       if (pid) {
         userIdByPeerId.delete(pid)
+        // `lastServerMixByPeerId` is the OBS-side cache used to restore the
+        // previous host's tile mix on host transfer. Without this prune, it
+        // accumulated one orphan entry per anonymous-peer reload across long
+        // sessions. Authenticated peers re-snapshot through the server's
+        // userId-keyed mix on the next join, so dropping the peerId entry is
+        // safe — the entry will be re-added if the same peerId returns.
+        lastServerMixByPeerId.delete(pid)
       }
     }
   }

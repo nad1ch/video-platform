@@ -3,7 +3,11 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   dumpAudioDebug,
   dumpVideoDebug,
+  MEDIA_DEBUG_TIMER_DRIFT_INTERVAL_MS,
+  MEDIA_DEBUG_TIMER_DRIFT_THROTTLED_DELTA_MS,
+  readMediaDebugTimerDrift,
   type MediaDebugAudioSnapshot,
+  type MediaDebugTimerDrift,
   type MediaDebugVideoSnapshot,
 } from '@/utils/mediaDebugRuntime'
 
@@ -19,6 +23,7 @@ const POLL_MS = 1000
 
 const audioRows = ref<Array<{ peerId: string } & MediaDebugAudioSnapshot>>([])
 const videoRows = ref<Array<{ peerId: string } & MediaDebugVideoSnapshot>>([])
+const drift = ref<MediaDebugTimerDrift>(readMediaDebugTimerDrift())
 const collapsed = ref(false)
 
 let timer: ReturnType<typeof setInterval> | null = null
@@ -28,6 +33,7 @@ function refresh(): void {
   const v = dumpVideoDebug()
   audioRows.value = Object.entries(a).map(([peerId, snap]) => ({ peerId, ...snap }))
   videoRows.value = Object.entries(v).map(([peerId, snap]) => ({ peerId, ...snap }))
+  drift.value = readMediaDebugTimerDrift()
 }
 
 onMounted(() => {
@@ -48,6 +54,10 @@ const audioStalled = computed(() =>
   audioRows.value.filter((r) => r.hasSrcObject && !r.usingWebAudio && r.paused && !r.muted).length,
 )
 const videoStalled = computed(() => videoRows.value.filter((r) => r.stalled).length)
+const driftSuspected = computed(
+  () => drift.value.lastDeltaMs > MEDIA_DEBUG_TIMER_DRIFT_THROTTLED_DELTA_MS,
+)
+const driftSeen = computed(() => drift.value.throttledTickCount > 0)
 
 function shortPeer(id: string): string {
   return id.length > 10 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id
@@ -117,8 +127,22 @@ function fmtTrackState(snap: { trackReadyState: string | null; trackMuted: boole
           </tbody>
         </table>
       </section>
+      <section class="media-debug__section">
+        <h4>timer drift</h4>
+        <div class="media-debug__drift">
+          <span>last:
+            <span :class="{ 'media-debug__warn': driftSuspected }">{{ drift.lastDeltaMs }}ms</span>
+          </span>
+          <span>max: <span :class="{ 'media-debug__warn': driftSeen }">{{ drift.maxDeltaMs }}ms</span></span>
+          <span>throttled: <span :class="{ 'media-debug__warn': driftSeen }">{{ drift.throttledTickCount }}</span></span>
+          <span class="media-debug__drift-hint">expected ~{{ MEDIA_DEBUG_TIMER_DRIFT_INTERVAL_MS }}ms</span>
+        </div>
+        <div v-if="driftSeen" class="media-debug__warn media-debug__drift-hint">
+          OBS / hidden-tab throttling suspected — recovery watchdogs may be unreliable.
+        </div>
+      </section>
       <footer class="media-debug__foot">
-        console: <code>__MEDIA_DEBUG__.dumpAll()</code>, <code>.forceSoftResync()</code>
+        console: <code>__MEDIA_DEBUG__.dumpAll()</code>, <code>.timerDrift()</code>, <code>.forceSoftResync()</code>
       </footer>
     </div>
   </div>
@@ -229,5 +253,18 @@ function fmtTrackState(snap: { trackReadyState: string | null; trackMuted: boole
   background: rgb(255 255 255 / 0.06);
   padding: 0 4px;
   border-radius: 3px;
+}
+
+.media-debug__drift {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.media-debug__drift-hint {
+  flex-basis: 100%;
+  font-size: 10px;
+  color: #8e7dac;
 }
 </style>

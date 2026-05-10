@@ -585,7 +585,7 @@ export function useMafiaHostSignaling(
   }
   watch(
     speakingQueue,
-    () => {
+    (next) => {
       if (applyingQueueFromSignaling.value || applyingPlayersUpdateFromSignaling.value) {
         return
       }
@@ -597,6 +597,19 @@ export function useMafiaHostSignaling(
       }
       if (!isMafiaHost.value) {
         return
+      }
+      // Shallow-equal short-circuit BEFORE scheduling the trailing debounce.
+      // Without this, a watcher fired by a same-value mutation (e.g. an
+      // upstream array spread that produced an identical sequence) still
+      // installed a setTimeout, paid the rAF/macrotask cost, and only
+      // dropped the send inside `flushQueueBroadcast`. With it, no timer
+      // is set at all when the queue genuinely did not change. The flush
+      // path keeps the same equality check as a defensive net.
+      if (queueBroadcastTimer == null) {
+        const snapshot = Array.isArray(next) ? next : [...speakingQueue.value]
+        if (snapshot.join(',') === lastSentQueueKey) {
+          return
+        }
       }
       scheduleQueueBroadcast()
     },

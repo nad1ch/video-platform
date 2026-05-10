@@ -133,6 +133,22 @@ export class Room {
   private mafiaForcedCameraOffPeerIds = new Set<string>()
   private mafiaForcedMicMutedPeerIds = new Set<string>()
   /**
+   * Stable-identity mirror of the per-peer force sets, keyed by `Peer.userId`.
+   * The peerId set above is per-tab (sessionStorage) and dies when the tab
+   * closes; on `peer-left` the peerId entry is dropped so OBS / late joiners
+   * do not see ghost paused state for a peer who is gone for good.
+   *
+   * The userId set persists across `peer-left` so a killed player who closes
+   * the tab and rejoins (fresh peerId, same authenticated user) is re-flagged
+   * before their fresh producers go live. Cleared on `mafia:player-revive` and
+   * on reshuffle (the only legitimate "the kill is over" transitions). Anonymous
+   * peers (no userId) are not added — the peerId set is the only enforcement,
+   * so anonymous fresh-tab rejoin still loses the flag (acceptable: anonymous
+   * identity is intentionally untrusted for cross-tab continuity).
+   */
+  private mafiaForcedCameraOffUserIds = new Set<string>()
+  private mafiaForcedMicMutedUserIds = new Set<string>()
+  /**
    * Host-controlled audio mix (volume + mute per remote tile). Two indexes:
    * `byUserId` is the stable identity used across reloads; `byPeerId` is the
    * fallback for unauthenticated peers. Update flow keeps them disjoint
@@ -644,6 +660,37 @@ export class Room {
     }
   }
 
+  /**
+   * userId-keyed mirror lookups. Empty userId is never persisted, so a
+   * lookup with an empty string always returns false; callers should still
+   * fall through to the peerId-keyed check for anonymous peers.
+   */
+  isMafiaUserForcedCameraOff(userId: string): boolean {
+    return userId.length > 0 && this.mafiaForcedCameraOffUserIds.has(userId)
+  }
+
+  setMafiaUserForcedCameraOff(userId: string, forced: boolean): void {
+    if (userId.length === 0) return
+    if (forced) {
+      this.mafiaForcedCameraOffUserIds.add(userId)
+    } else {
+      this.mafiaForcedCameraOffUserIds.delete(userId)
+    }
+  }
+
+  isMafiaUserForcedMicMuted(userId: string): boolean {
+    return userId.length > 0 && this.mafiaForcedMicMutedUserIds.has(userId)
+  }
+
+  setMafiaUserForcedMicMuted(userId: string, forced: boolean): void {
+    if (userId.length === 0) return
+    if (forced) {
+      this.mafiaForcedMicMutedUserIds.add(userId)
+    } else {
+      this.mafiaForcedMicMutedUserIds.delete(userId)
+    }
+  }
+
   /** Snapshot copies — callers iterate without mutating the live sets. */
   getMafiaForcedCameraOffPeerIds(): string[] {
     return [...this.mafiaForcedCameraOffPeerIds]
@@ -653,15 +700,43 @@ export class Room {
     return [...this.mafiaForcedMicMutedPeerIds]
   }
 
-  /** Reshuffle / new game: drop every per-peer Mafia kill enforcement flag. */
+  /**
+   * Reshuffle / new game: drop every per-peer Mafia kill enforcement flag,
+   * including the stable userId mirror. This is the only place we wipe the
+   * userId sets in bulk — it matches the semantic of `clearAllMafiaPerPeerForceFlags`'s
+   * sole caller (`handleMafiaReshuffle`).
+   */
   clearAllMafiaPerPeerForceFlags(): void {
     this.mafiaForcedCameraOffPeerIds.clear()
     this.mafiaForcedMicMutedPeerIds.clear()
+    this.mafiaForcedCameraOffUserIds.clear()
+    this.mafiaForcedMicMutedUserIds.clear()
   }
 
+  /**
+   * Genuine `peer-left`: drop only the per-peer (peerId) entries. The userId
+   * mirror is preserved so a killed player who reconnects with a fresh peerId
+   * (tab close + new tab; network drop + new socket) is re-flagged on join
+   * via `isMafiaUserForcedCameraOff` / `isMafiaUserForcedMicMuted`.
+   *
+   * Mafia revive is the explicit "kill is over" gate that clears the userId
+   * mirror; see `clearMafiaForceStateForUser`.
+   */
   clearMafiaForceStateForPeer(peerId: string): void {
     this.mafiaForcedCameraOffPeerIds.delete(peerId)
     this.mafiaForcedMicMutedPeerIds.delete(peerId)
+  }
+
+  /**
+   * Mafia revive: drop the userId mirror entry so a future fresh-tab rejoin
+   * is no longer auto-flagged. Caller is also responsible for the peerId-set
+   * cleanup via `setMafiaPeerForcedCameraOff(peerId, false)` /
+   * `setMafiaPeerForcedMicMuted(peerId, false)` for the currently-live peerId.
+   */
+  clearMafiaForceStateForUser(userId: string): void {
+    if (userId.length === 0) return
+    this.mafiaForcedCameraOffUserIds.delete(userId)
+    this.mafiaForcedMicMutedUserIds.delete(userId)
   }
 
   /**
@@ -719,5 +794,36 @@ export class Room {
       out.push({ ...e })
     }
     return out
+  }
+
+  /**
+   * Genuine `peer-left` cleanup for audio-mix entries indexed by peerId only.
+   * The `byUserId` mirror is intentionally preserved across peer-left so a
+   * reload (new peerId, same userId) keeps the host's prior mix without a
+   * fresh slider drag — `rebindMafiaAudioMixEntryPeerId` re-points it on the
+   * next join.
+   *
+   * Without this prune, the `byPeerId` Map accumulated stale entries for
+   * anonymous peers across long sessions, and `getMafiaAudioMixSnapshot`
+   * (which does NOT filter by live peers) replayed them to every late-joining
+   * OBS view — bloating each snapshot reply with dead peerIds.
+   */
+  clearMafiaAudioMixForPeerId(peerId: string): void {
+    const id = peerId.trim()
+    if (!id) return
+    this.mafiaAudioMixByPeerId.delete(id)
+  }
+
+  /**
+   * Genuine `peer-left` cleanup for the nickname Map. The
+   * `getMafiaNicknamesSnapshot` getter already filters by live peers, so
+   * stale entries did not bloat snapshot replies — but they sat in memory
+   * indefinitely. This drops the underlying Map entry for cleanliness so the
+   * Map size matches the live peer set.
+   */
+  clearMafiaNicknameForPeer(peerId: string): void {
+    const id = peerId.trim()
+    if (!id) return
+    this.mafiaNicknameByPeerId.delete(id)
   }
 }

@@ -39,7 +39,11 @@ import { pinHostPeerToEndOfOrder } from '@/utils/mafiaHostOrdering'
 const callPageLog = createLogger('call-page')
 import ParticipantTile from './ParticipantTile.vue'
 import MediaDiagnosticsPanel from './MediaDiagnosticsPanel.vue'
-import { installMediaDebugGlobal, isMediaDebugEnabled } from '@/utils/mediaDebugRuntime'
+import {
+  installMediaDebugGlobal,
+  isMediaDebugEnabled,
+  startMediaDebugTimerDriftProbe,
+} from '@/utils/mediaDebugRuntime'
 import CallRoomPopover from './CallRoomPopover.vue'
 import CallControlsDock from './CallControlsDock.vue'
 import CallChatPanel from './CallChatPanel.vue'
@@ -200,6 +204,7 @@ const {
   playbackRenderFpsPressureByPeerId,
   setPeerVisible,
   requestForcedProducerResync,
+  requestHardProducerResync,
 } = useCallOrchestrator({ allowManualVideoQuality, joinAvatarUrl, joinUserId, role: callEngineRole })
 
 /** Dev-only: gate for the floating `<MediaDiagnosticsPanel>` and the `__MEDIA_DEBUG__` console helpers. */
@@ -224,18 +229,56 @@ function onRemotePlaybackStall(payload: { peerId: string; stalling: boolean }): 
 /**
  * Frame-decode stall recovery: a `<StreamVideo>` tile reports its
  * `<video>.currentTime` did not advance for ~6s while the track was live.
- * We debounce globally to at most one soft producer resync per minute so
- * a flaky per-peer publisher cannot trigger a WS spam loop. The resync
- * itself does NOT tear down the recv transport; it just re-applies the
- * server's producer list (same path the visibility/focus policy uses).
+ *
+ * Two-tier escalation:
+ *
+ * 1. Soft tier (per-minute): re-apply the server's producer list. Same path
+ *    the visibility/focus policy uses; no transport teardown, no media gap.
+ *    Covers most "missed event" recovery cases.
+ *
+ * 2. Hard tier (per-five-minutes, gated on persistence): tear down ALL
+ *    recv consumers and re-consume from a fresh sync. This produces a brief
+ *    media gap on every tile, so it is reserved for confirmed persistent
+ *    stalls that the soft tier did not fix. Trigger requires:
+ *      a) at least one soft resync was already issued, AND
+ *      b) a NEW stall arrives ≥ HARD_GRACE_MS after the last soft resync, AND
+ *      c) the global hard-debounce window has expired.
+ *
+ * We never auto-escalate within the same stall event — only when a fresh
+ * stall recurs after the soft tier had time to do its job.
  */
 const VIDEO_STALL_RESYNC_DEBOUNCE_MS = 60_000
+const VIDEO_STALL_HARD_DEBOUNCE_MS = 5 * 60_000
+const VIDEO_STALL_HARD_GRACE_MS = 30_000
 let lastVideoStallResyncAt = 0
+let lastVideoStallHardResyncAt = 0
 function onTileVideoStall(payload: { peerId: string }): void {
   const id = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
   if (!id) return
   const now =
     typeof performance !== 'undefined' ? performance.now() : Date.now()
+  // Hard escalation: a soft resync was issued ≥ HARD_GRACE_MS ago and a
+  // tile is STILL stalling. Soft did not help. Tear down + re-consume.
+  const softFiredRecently = lastVideoStallResyncAt > 0
+  const softHadGrace = now - lastVideoStallResyncAt >= VIDEO_STALL_HARD_GRACE_MS
+  const hardCooledDown = now - lastVideoStallHardResyncAt >= VIDEO_STALL_HARD_DEBOUNCE_MS
+  if (softFiredRecently && softHadGrace && hardCooledDown) {
+    lastVideoStallHardResyncAt = now
+    // Reset the soft timestamp so any further stall in the next 60 s also
+    // triggers soft (we just consumed our hard window for the next 5 min).
+    lastVideoStallResyncAt = now
+    if (import.meta.env.DEV) {
+      console.warn('[stall] video stall persists — escalating to hard producer resync', {
+        peerId: id,
+      })
+    }
+    try {
+      requestHardProducerResync()
+    } catch (err) {
+      console.warn('[stall] requestHardProducerResync failed', err)
+    }
+    return
+  }
   if (now - lastVideoStallResyncAt < VIDEO_STALL_RESYNC_DEBOUNCE_MS) {
     if (import.meta.env.DEV) {
       console.log('[stall] video stall ignored (debounced)', { peerId: id })
@@ -958,6 +1001,17 @@ watch(
     }
     if (vmChanged) {
       callTileViewportVisibleByPeer.value = vm
+    }
+    // `remoteVideoSuppressDelayTimerByPeer` had no per-peer-set prune; only
+    // the unmount path cleared it. Across long sessions with player reloads,
+    // it accumulated dead-peerId timer entries (each holding a setTimeout
+    // handle + a tag in `remoteVideoSuppressPendingKind`). Mirror the
+    // existing `setPeerVisibleHideTimerByPeer` prune here so dead peerIds
+    // are dropped within one tile-set tick.
+    for (const id of [...remoteVideoSuppressDelayTimerByPeer.keys()]) {
+      if (!ids.has(id)) {
+        clearRemoteVideoSuppressTimer(id)
+      }
     }
     for (const id of [...setPeerVisibleHideTimerByPeer.keys()]) {
       if (!ids.has(id)) {
@@ -3373,6 +3427,13 @@ onMounted(() => {
   window.addEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
   window.addEventListener(EAT_FIRST_OBS_URL_TOAST_EVENT, onEatFirstObsUrlCopiedToast)
   window.addEventListener(MAFIA_SETTINGS_TOAST_EVENT, onMafiaSettingsToast)
+  // Always-on timer-drift probe — diagnostic only, no media side effects.
+  // Surfaces OBS browser-source / hidden-tab throttling that would otherwise
+  // silently break the StreamVideo currentTime stall watchdog and the
+  // StreamAudio AudioContext heartbeat. Cost is one setInterval at 2 s per
+  // call route; result accessible via `__MEDIA_DEBUG__.timerDrift()` and
+  // surfaced in the `?mediaDebug=1` panel.
+  detachMediaDebugTimerDriftProbe = startMediaDebugTimerDriftProbe()
   if (isMediaDebugEnabled()) {
     detachMediaDebugGlobal = installMediaDebugGlobal({
       forceSoftResync: () => {
@@ -3387,6 +3448,7 @@ onMounted(() => {
 })
 
 let detachMediaDebugGlobal: (() => void) | null = null
+let detachMediaDebugTimerDriftProbe: (() => void) | null = null
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
@@ -3400,6 +3462,8 @@ onUnmounted(() => {
     cancelSetPeerVisibleHideTimer(id)
   }
   lastSentPeerVisibleByPeer.clear()
+  detachMediaDebugTimerDriftProbe?.()
+  detachMediaDebugTimerDriftProbe = null
   if (import.meta.env.DEV) {
     delete (globalThis as unknown as { __CALL_DEBUG__?: unknown }).__CALL_DEBUG__
   }

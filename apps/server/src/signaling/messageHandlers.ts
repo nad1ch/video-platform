@@ -684,8 +684,19 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
     // of the same peerId goes through `replaceDuplicatePeerId` and skips
     // this branch (Room.removePeer is called there but the cleanup helpers
     // intentionally live in this signaling layer, not in Room.removePeer).
+    //
+    // The forced-flag userId mirror (set by kick / cleared by revive +
+    // reshuffle) is intentionally NOT touched here: it persists across this
+    // peer-left so a fresh-tab rejoin re-applies the kill flag on join.
     room.clearMafiaForceStateForPeer(peer.id)
     room.clearMafiaPlayerLifeStateForPeer(peer.id)
+    // Audio-mix `byPeerId` and nickname Maps had no peer-left cleanup; over
+    // a long session the audio-mix `byPeerId` orphans bloated every OBS
+    // snapshot reply (snapshot getter does not filter by live peers).
+    // The audio-mix `byUserId` mirror is intentionally preserved (handled
+    // by `rebindMafiaAudioMixEntryPeerId` on rejoin).
+    room.clearMafiaAudioMixForPeerId(peer.id)
+    room.clearMafiaNicknameForPeer(peer.id)
     const changed = room.pruneMafiaSpeakingQueueToMaxSeat(room.getPeers().length)
     if (changed) {
       broadcastServerMessageToRoom(room, {
@@ -823,15 +834,30 @@ export async function handleJoinRoom(
     if (room.isMafiaForceMuteAllActive()) {
       peer.forcedAudioMuted = true
     }
-    // Per-peer Mafia kill enforcement persists across reload: a reloaded
-    // killed player (new Peer object, same peerId) gets the flag re-applied
-    // before `handleProduce` runs, so the new audio/video producers stay
-    // paused until the host explicitly revives.
-    if (room.isMafiaPeerForcedCameraOff(peerId)) {
+    // Per-peer Mafia kill enforcement persists across reload via TWO indexes:
+    // the legacy peerId set (covers F5 / sessionStorage-reuse reload, where
+    // the Peer object is fresh but `peerId` is unchanged) and the userId
+    // mirror (covers fresh-tab / new-socket rejoin where `peerId` differs).
+    //
+    // userId match additionally seeds the peerId set for the new peerId so
+    // subsequent producer-pause / status checks against the live sets stay
+    // O(1) and remain consistent with the existing per-action handlers
+    // (`handleSetOutboundVideoPaused` etc.).
+    const cameraOffByPeerId = room.isMafiaPeerForcedCameraOff(peerId)
+    const cameraOffByUserId = room.isMafiaUserForcedCameraOff(userId)
+    if (cameraOffByPeerId || cameraOffByUserId) {
       peer.forcedCameraOff = true
+      if (!cameraOffByPeerId) {
+        room.setMafiaPeerForcedCameraOff(peerId, true)
+      }
     }
-    if (room.isMafiaPeerForcedMicMuted(peerId)) {
+    const micMutedByPeerId = room.isMafiaPeerForcedMicMuted(peerId)
+    const micMutedByUserId = room.isMafiaUserForcedMicMuted(userId)
+    if (micMutedByPeerId || micMutedByUserId) {
       peer.forcedAudioMuted = true
+      if (!micMutedByPeerId) {
+        room.setMafiaPeerForcedMicMuted(peerId, true)
+      }
     }
   }
   room.addPeer(peer)
@@ -1036,6 +1062,23 @@ function sendMafiaSnapshotToSocket(socket: WsSocket, room: Room, peer: Peer): vo
     sendServerMessage(socket, {
       type: 'peer-audio-muted',
       payload: { peerId: other.id, muted: true },
+    })
+  }
+  // Replay per-peer outbound video pause state. The existing
+  // `peer-outbound-video-paused` deltas (host force-camera-off, target
+  // self-pause) update receivers in real time, but a late joiner / OBS
+  // reconnect that missed the deltas previously had no way to know which
+  // tiles should render the "camera off" placeholder. We use `forcedCameraOff`
+  // as the conservative source: it covers Mafia kill enforcement; user
+  // self-pause is intentionally excluded here because the existing producer
+  // state (consumer `track.muted = true` for paused producers) keeps the
+  // tile in the right visual state via StreamVideo's `hasUsableVideoTrack`.
+  for (const other of room.getPeers()) {
+    if (other.id === peer.id) continue
+    if (!other.forcedCameraOff) continue
+    sendServerMessage(socket, {
+      type: 'peer-outbound-video-paused',
+      payload: { peerId: other.id, paused: true },
     })
   }
   const mt = room.getMafiaTimer()
@@ -1580,6 +1623,10 @@ export async function handleMafiaPlayerKick(
   // Forced camera off (mirrors `handleMafiaForceCameraOff`). Persisted in
   // `mafiaForcedCameraOffPeerIds` so a target reload re-applies the flag
   // before the new producer goes live (see `handleProduce`).
+  //
+  // The userId mirror is updated unconditionally (even when the peer flag
+  // was already true) so a kill performed before authentication settled
+  // still gets userId persistence on the next mutation.
   if (!target.forcedCameraOff) {
     target.forcedCameraOff = true
     room.setMafiaPeerForcedCameraOff(targetId, true)
@@ -1590,6 +1637,7 @@ export async function handleMafiaPlayerKick(
     // the room set agreeing on per-peer enforcement state.
     room.setMafiaPeerForcedCameraOff(targetId, true)
   }
+  room.setMafiaUserForcedCameraOff(target.userId, true)
 
   // Per-peer forced mic mute. Independent from room-wide
   // `mafiaForceMuteAllActive` so a single revive can lift it without
@@ -1614,6 +1662,7 @@ export async function handleMafiaPlayerKick(
   } else if (!room.isMafiaPeerForcedMicMuted(targetId)) {
     room.setMafiaPeerForcedMicMuted(targetId, true)
   }
+  room.setMafiaUserForcedMicMuted(target.userId, true)
 
   // Tell the target's own client to flip its local mic UI off via the
   // existing `toggleMic` action (CallPage listener). The camera UI is
@@ -1677,10 +1726,15 @@ export async function handleMafiaPlayerRevive(
   // the player toggle camera through normal controls. Once the flag is
   // false, `handleSetOutboundVideoPaused` will accept the player's next
   // `set-outbound-video-paused: false`.
+  //
+  // Both the peerId set (live target) and the userId mirror (cross-tab
+  // identity) are cleared so a future fresh-tab rejoin is no longer
+  // auto-flagged.
   if (target.forcedCameraOff) {
     target.forcedCameraOff = false
   }
   room.setMafiaPeerForcedCameraOff(targetId, false)
+  room.clearMafiaForceStateForUser(target.userId)
 
   // Clear per-peer forced mic. Mafia `force-mute-all` is implemented as a
   // soft mute (writes `audioMuted` only, leaves `forcedAudioMuted` alone),
@@ -1741,6 +1795,10 @@ export async function handleMafiaForceCameraOff(
   
   target.forcedCameraOff = paused
   room.setMafiaPeerForcedCameraOff(targetId, paused)
+  // Mirror to userId set so a future fresh-tab rejoin re-applies the flag
+  // (or clears it on toggle-off). Anonymous peers (empty userId) no-op
+  // inside the setter and remain peerId-only.
+  room.setMafiaUserForcedCameraOff(target.userId, paused)
   for (const p of target.getProducers()) {
     if (p.kind !== 'video' || p.closed) {
       continue

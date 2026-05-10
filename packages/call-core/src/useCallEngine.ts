@@ -308,6 +308,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     setPeerVisible,
     removeRemotePeer,
     requestForcedProducerResync,
+    requestHardProducerResync,
     receiveQualityPressure,
     receiveDeviceProfile,
     lastPreferredLayerTargetsByPeerId,
@@ -1612,5 +1613,15 @@ export function useCallEngine(options?: CallEngineOptions) {
      * the existing policy cadence (~once per minute) to avoid WS spam.
      */
     requestForcedProducerResync,
+    /**
+     * Hard recv-side producer-list resync: the same path the server's
+     * `client-refresh` reason already drives — receiver tears down ALL recv
+     * consumers (recv transport stays) and re-consumes from a fresh
+     * `producer-sync`. Use only when the soft path has demonstrably failed:
+     * a confirmed persistent stall, an irrecoverable consumer state, or a
+     * manual debug request. Caller MUST throttle aggressively (≤ 1 per few
+     * minutes); a hard resync produces a brief media gap on every tile.
+     */
+    requestHardProducerResync,
   }
 }

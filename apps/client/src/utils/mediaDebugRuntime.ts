@@ -124,10 +124,123 @@ export function dumpAllDebug(): {
   return { audio: dumpAudioDebug(), video: dumpVideoDebug() }
 }
 
+/**
+ * Timer drift probe for OBS browser source / hidden tab throttling detection.
+ *
+ * OBS Browser Source (CEF) and Chromium hidden tabs can throttle setInterval /
+ * requestAnimationFrame to as low as 1 Hz when the surface is offscreen. Our
+ * recovery watchdogs (StreamVideo currentTime stall, StreamAudio AudioContext
+ * heartbeat, the Mafia overlay timer) all rely on regular timer cadence; if
+ * the host's OBS browser source is throttled, these watchdogs miss events and
+ * the user sees stale media without any in-app signal.
+ *
+ * The probe is a single ~2 s interval that records `Date.now()` deltas. When
+ * the actual delta exceeds the expected by a wide margin, the wall clock
+ * clearly advanced more than the timer fired — i.e., we were throttled. The
+ * probe always runs while the call route is mounted (cost is one timer per
+ * page); the WARN log is rate-limited so production tabs only see it when a
+ * real drift event happens.
+ */
+export type MediaDebugTimerDrift = {
+  /** Whether the probe is currently running. */
+  running: boolean
+  /** Wall-clock ms at the previous tick. 0 before the first sample. */
+  lastTickAt: number
+  /** Wall-clock delta from the previous tick (ms). 0 before the second sample. */
+  lastDeltaMs: number
+  /** Largest delta recorded since the probe started. */
+  maxDeltaMs: number
+  /** Number of ticks where `lastDeltaMs > THROTTLED_DELTA_MS` since start. */
+  throttledTickCount: number
+  /** Wall-clock ms when the most recent throttled tick was observed. */
+  lastThrottledAt: number
+}
+
+const TIMER_DRIFT_INTERVAL_MS = 2000
+const TIMER_DRIFT_THROTTLED_DELTA_MS = 8000
+const TIMER_DRIFT_WARN_THROTTLE_MS = 60_000
+
+const timerDrift: MediaDebugTimerDrift = {
+  running: false,
+  lastTickAt: 0,
+  lastDeltaMs: 0,
+  maxDeltaMs: 0,
+  throttledTickCount: 0,
+  lastThrottledAt: 0,
+}
+let timerDriftInterval: ReturnType<typeof setInterval> | null = null
+let timerDriftLastWarnAt = 0
+
+function tickTimerDrift(): void {
+  const now = Date.now()
+  if (timerDrift.lastTickAt === 0) {
+    timerDrift.lastTickAt = now
+    return
+  }
+  const delta = now - timerDrift.lastTickAt
+  timerDrift.lastTickAt = now
+  timerDrift.lastDeltaMs = delta
+  if (delta > timerDrift.maxDeltaMs) {
+    timerDrift.maxDeltaMs = delta
+  }
+  if (delta > TIMER_DRIFT_THROTTLED_DELTA_MS) {
+    timerDrift.throttledTickCount += 1
+    timerDrift.lastThrottledAt = now
+    if (now - timerDriftLastWarnAt > TIMER_DRIFT_WARN_THROTTLE_MS) {
+      timerDriftLastWarnAt = now
+      console.warn('[media-debug] timer drift detected (likely OBS/hidden-tab throttling)', {
+        deltaMs: delta,
+        expectedMs: TIMER_DRIFT_INTERVAL_MS,
+        throttledTickCount: timerDrift.throttledTickCount,
+      })
+    }
+  }
+}
+
+/**
+ * Install the timer-drift probe. Idempotent. Always-on while the call route
+ * is mounted; cost is one setInterval at {@link TIMER_DRIFT_INTERVAL_MS}.
+ * Diagnostic-only: no media side effects, no recovery actions taken.
+ */
+export function startMediaDebugTimerDriftProbe(): () => void {
+  if (typeof window === 'undefined') {
+    return () => {}
+  }
+  if (timerDriftInterval !== null) {
+    return stopMediaDebugTimerDriftProbe
+  }
+  timerDrift.running = true
+  timerDrift.lastTickAt = 0
+  timerDrift.lastDeltaMs = 0
+  timerDrift.maxDeltaMs = 0
+  timerDrift.throttledTickCount = 0
+  timerDrift.lastThrottledAt = 0
+  timerDriftLastWarnAt = 0
+  timerDriftInterval = setInterval(tickTimerDrift, TIMER_DRIFT_INTERVAL_MS)
+  return stopMediaDebugTimerDriftProbe
+}
+
+export function stopMediaDebugTimerDriftProbe(): void {
+  if (timerDriftInterval === null) {
+    return
+  }
+  clearInterval(timerDriftInterval)
+  timerDriftInterval = null
+  timerDrift.running = false
+}
+
+export function readMediaDebugTimerDrift(): MediaDebugTimerDrift {
+  return { ...timerDrift }
+}
+
+export const MEDIA_DEBUG_TIMER_DRIFT_INTERVAL_MS = TIMER_DRIFT_INTERVAL_MS
+export const MEDIA_DEBUG_TIMER_DRIFT_THROTTLED_DELTA_MS = TIMER_DRIFT_THROTTLED_DELTA_MS
+
 type MediaDebugGlobal = {
   dumpAudio: () => Record<string, MediaDebugAudioSnapshot>
   dumpVideo: () => Record<string, MediaDebugVideoSnapshot>
   dumpAll: () => ReturnType<typeof dumpAllDebug>
+  timerDrift: () => MediaDebugTimerDrift
   forceSoftResync?: () => void
 }
 
@@ -150,6 +263,7 @@ export function installMediaDebugGlobal(opts: { forceSoftResync?: () => void }):
     dumpAudio: dumpAudioDebug,
     dumpVideo: dumpVideoDebug,
     dumpAll: dumpAllDebug,
+    timerDrift: readMediaDebugTimerDrift,
     forceSoftResync: opts.forceSoftResync,
   }
   ;(window as unknown as { __MEDIA_DEBUG__?: MediaDebugGlobal }).__MEDIA_DEBUG__ = api
