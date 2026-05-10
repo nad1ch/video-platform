@@ -42,6 +42,9 @@ import MediaDiagnosticsPanel from './MediaDiagnosticsPanel.vue'
 import {
   installMediaDebugGlobal,
   isMediaDebugEnabled,
+  recordMediaDebugHardResync,
+  recordMediaDebugHardResyncSkipped,
+  recordMediaDebugSoftResync,
   startMediaDebugTimerDriftProbe,
 } from '@/utils/mediaDebugRuntime'
 import CallRoomPopover from './CallRoomPopover.vue'
@@ -256,6 +259,26 @@ const MEDIA_STALL_HARD_GRACE_MS = 30_000
 let lastMediaStallResyncAt = 0
 let lastMediaStallHardResyncAt = 0
 
+/**
+ * Public-stream safety gate for the hard tier.
+ *
+ * Hard producer resync tears down ALL recv consumers (`teardownAllRemoteConsumers`)
+ * and re-consumes from a fresh `client-refresh` sync. For a normal player tab,
+ * the resulting 1.5–3 s blackout-on-every-tile is acceptable: the user is
+ * inside the room and the cure restores stuck consumers. For OBS / `?mode=view`
+ * (Mafia or Eat First), the same teardown is BROADCAST TO STREAM VIEWERS as
+ * a synchronous "all cameras → fallback icons → all cameras" flicker, which
+ * is far worse than the rare stuck consumer the hard tier exists to fix.
+ *
+ * In view mode we keep the SOFT tier (the missed-event recovery that doesn't
+ * teardown anything) and SKIP the hard tier. If a stuck consumer ever does
+ * appear in OBS, the operator refreshes the OBS Browser Source manually —
+ * exactly one click, no public-stream blast radius.
+ */
+function isOperatingAsObsViewSource(): boolean {
+  return mafiaViewUi.value || eatFirstViewUi.value
+}
+
 function triggerMediaStallRecovery(kind: 'audio' | 'video', peerId: string): void {
   const id = peerId.trim()
   if (!id) return
@@ -267,6 +290,19 @@ function triggerMediaStallRecovery(kind: 'audio' | 'video', peerId: string): voi
   const softHadGrace = now - lastMediaStallResyncAt >= MEDIA_STALL_HARD_GRACE_MS
   const hardCooledDown = now - lastMediaStallHardResyncAt >= MEDIA_STALL_HARD_DEBOUNCE_MS
   if (softFiredRecently && softHadGrace && hardCooledDown) {
+    if (isOperatingAsObsViewSource()) {
+      // OBS / view: skip the hard escalation; record + warn so post-incident
+      // analysis can see the policy fired the safety gate, and so support
+      // can prompt the operator to refresh the OBS source if symptoms persist.
+      // We deliberately do NOT bump the soft timestamp here — the next stall
+      // can still use the soft tier at its natural 60-s cadence.
+      recordMediaDebugHardResyncSkipped(kind)
+      console.warn(
+        '[stall] hard producer resync skipped in OBS/view; refresh OBS Browser Source if needed',
+        { peerId: id, kind },
+      )
+      return
+    }
     lastMediaStallHardResyncAt = now
     // Reset the soft timestamp so any further stall in the next 60 s also
     // triggers soft (we just consumed our hard window for the next 5 min).
@@ -278,6 +314,7 @@ function triggerMediaStallRecovery(kind: 'audio' | 'video', peerId: string): voi
     }
     try {
       requestHardProducerResync()
+      recordMediaDebugHardResync(kind)
     } catch (err) {
       console.warn('[stall] requestHardProducerResync failed', err)
     }
@@ -295,6 +332,7 @@ function triggerMediaStallRecovery(kind: 'audio' | 'video', peerId: string): voi
   }
   try {
     requestForcedProducerResync()
+    recordMediaDebugSoftResync(kind)
   } catch (err) {
     console.warn('[stall] requestForcedProducerResync failed', err)
   }

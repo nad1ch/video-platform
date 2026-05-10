@@ -5,8 +5,10 @@ import {
   dumpVideoDebug,
   MEDIA_DEBUG_TIMER_DRIFT_INTERVAL_MS,
   MEDIA_DEBUG_TIMER_DRIFT_THROTTLED_DELTA_MS,
+  readMediaDebugResyncStats,
   readMediaDebugTimerDrift,
   type MediaDebugAudioSnapshot,
+  type MediaDebugResyncStats,
   type MediaDebugTimerDrift,
   type MediaDebugVideoSnapshot,
 } from '@/utils/mediaDebugRuntime'
@@ -24,6 +26,7 @@ const POLL_MS = 1000
 const audioRows = ref<Array<{ peerId: string } & MediaDebugAudioSnapshot>>([])
 const videoRows = ref<Array<{ peerId: string } & MediaDebugVideoSnapshot>>([])
 const drift = ref<MediaDebugTimerDrift>(readMediaDebugTimerDrift())
+const resync = ref<MediaDebugResyncStats>(readMediaDebugResyncStats())
 const collapsed = ref(false)
 
 let timer: ReturnType<typeof setInterval> | null = null
@@ -34,6 +37,15 @@ function refresh(): void {
   audioRows.value = Object.entries(a).map(([peerId, snap]) => ({ peerId, ...snap }))
   videoRows.value = Object.entries(v).map(([peerId, snap]) => ({ peerId, ...snap }))
   drift.value = readMediaDebugTimerDrift()
+  resync.value = readMediaDebugResyncStats()
+}
+
+function fmtAge(ts: number): string {
+  if (ts <= 0) return '—'
+  const ago = Math.max(0, Date.now() - ts)
+  if (ago < 60_000) return `${Math.round(ago / 1000)}s ago`
+  if (ago < 3_600_000) return `${Math.round(ago / 60_000)}m ago`
+  return `${Math.round(ago / 3_600_000)}h ago`
 }
 
 onMounted(() => {
@@ -155,8 +167,21 @@ function fmtTrackState(snap: { trackReadyState: string | null; trackMuted: boole
           OBS / hidden-tab throttling suspected — recovery watchdogs may be unreliable.
         </div>
       </section>
+      <section class="media-debug__section">
+        <h4>resync</h4>
+        <div class="media-debug__drift">
+          <span>soft: {{ resync.softResyncCount }}<span v-if="resync.lastSoftResyncAt > 0"> ({{ resync.lastSoftResyncKind }} {{ fmtAge(resync.lastSoftResyncAt) }})</span></span>
+          <span>hard: {{ resync.hardResyncCount }}<span v-if="resync.lastHardResyncAt > 0"> ({{ resync.lastHardResyncKind }} {{ fmtAge(resync.lastHardResyncAt) }})</span></span>
+          <span :class="{ 'media-debug__warn': resync.hardResyncSkippedCount > 0 }">
+            skipped (view): {{ resync.hardResyncSkippedCount }}<span v-if="resync.lastHardResyncSkippedAt > 0"> ({{ resync.lastHardResyncSkippedKind }} {{ fmtAge(resync.lastHardResyncSkippedAt) }})</span>
+          </span>
+        </div>
+        <div v-if="resync.hardResyncSkippedCount > 0" class="media-debug__drift-hint">
+          OBS/view skipped a hard resync — refresh the OBS Browser Source if a tile is stuck.
+        </div>
+      </section>
       <footer class="media-debug__foot">
-        console: <code>__MEDIA_DEBUG__.dumpAll()</code>, <code>.timerDrift()</code>, <code>.forceSoftResync()</code>
+        console: <code>__MEDIA_DEBUG__.dumpAll()</code>, <code>.timerDrift()</code>, <code>.resyncStats()</code>, <code>.forceSoftResync()</code>
       </footer>
     </div>
   </div>

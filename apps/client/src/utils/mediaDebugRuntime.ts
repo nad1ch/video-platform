@@ -251,11 +251,74 @@ export function readMediaDebugTimerDrift(): MediaDebugTimerDrift {
 export const MEDIA_DEBUG_TIMER_DRIFT_INTERVAL_MS = TIMER_DRIFT_INTERVAL_MS
 export const MEDIA_DEBUG_TIMER_DRIFT_THROTTLED_DELTA_MS = TIMER_DRIFT_THROTTLED_DELTA_MS
 
+/**
+ * Producer-resync counters maintained by `CallPage.triggerMediaStallRecovery`.
+ *
+ * Every fire / skip increments the corresponding counter and stamps the kind +
+ * timestamp; the panel and `__MEDIA_DEBUG__.resyncStats()` surface them so
+ * post-incident analysis can correlate flicker / blackout reports with the
+ * exact resync ladder activity. No timers, no work — just write paths called
+ * from the existing handler.
+ */
+export type MediaDebugResyncStats = {
+  softResyncCount: number
+  lastSoftResyncAt: number
+  lastSoftResyncKind: 'audio' | 'video' | null
+  hardResyncCount: number
+  lastHardResyncAt: number
+  lastHardResyncKind: 'audio' | 'video' | null
+  /**
+   * Hard escalations the policy WOULD have fired but skipped because the tab
+   * is in OBS / `?mode=view`. Counts up every time the OBS-view guard
+   * intercepts an escalation. Useful to confirm the guard actually fired
+   * during a stream and to size the tail of "operator should refresh OBS
+   * source" prompts on the next stream.
+   */
+  hardResyncSkippedCount: number
+  lastHardResyncSkippedAt: number
+  lastHardResyncSkippedKind: 'audio' | 'video' | null
+}
+
+const resyncStats: MediaDebugResyncStats = {
+  softResyncCount: 0,
+  lastSoftResyncAt: 0,
+  lastSoftResyncKind: null,
+  hardResyncCount: 0,
+  lastHardResyncAt: 0,
+  lastHardResyncKind: null,
+  hardResyncSkippedCount: 0,
+  lastHardResyncSkippedAt: 0,
+  lastHardResyncSkippedKind: null,
+}
+
+export function recordMediaDebugSoftResync(kind: 'audio' | 'video'): void {
+  resyncStats.softResyncCount += 1
+  resyncStats.lastSoftResyncAt = Date.now()
+  resyncStats.lastSoftResyncKind = kind
+}
+
+export function recordMediaDebugHardResync(kind: 'audio' | 'video'): void {
+  resyncStats.hardResyncCount += 1
+  resyncStats.lastHardResyncAt = Date.now()
+  resyncStats.lastHardResyncKind = kind
+}
+
+export function recordMediaDebugHardResyncSkipped(kind: 'audio' | 'video'): void {
+  resyncStats.hardResyncSkippedCount += 1
+  resyncStats.lastHardResyncSkippedAt = Date.now()
+  resyncStats.lastHardResyncSkippedKind = kind
+}
+
+export function readMediaDebugResyncStats(): MediaDebugResyncStats {
+  return { ...resyncStats }
+}
+
 type MediaDebugGlobal = {
   dumpAudio: () => Record<string, MediaDebugAudioSnapshot>
   dumpVideo: () => Record<string, MediaDebugVideoSnapshot>
   dumpAll: () => ReturnType<typeof dumpAllDebug>
   timerDrift: () => MediaDebugTimerDrift
+  resyncStats: () => MediaDebugResyncStats
   forceSoftResync?: () => void
 }
 
@@ -279,6 +342,7 @@ export function installMediaDebugGlobal(opts: { forceSoftResync?: () => void }):
     dumpVideo: dumpVideoDebug,
     dumpAll: dumpAllDebug,
     timerDrift: readMediaDebugTimerDrift,
+    resyncStats: readMediaDebugResyncStats,
     forceSoftResync: opts.forceSoftResync,
   }
   ;(window as unknown as { __MEDIA_DEBUG__?: MediaDebugGlobal }).__MEDIA_DEBUG__ = api
