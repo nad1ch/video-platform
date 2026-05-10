@@ -965,105 +965,133 @@ export async function handleJoinRoom(
   
   
   if (isMafiaRoom) {
+    sendMafiaSnapshotToSocket(socket, room, peer)
+  }
+}
+
+/**
+ * Re-emits the entire Mafia snapshot block addressed to one socket. Called
+ * during `handleJoinRoom` (initial load + reconnect re-join) and on demand
+ * from {@link handleMafiaRequestSnapshot} (OBS / `?mode=view` recovery
+ * without a fresh `join-room`).
+ *
+ * Read-only with respect to `room` state — the only mutation is the
+ * `setMafiaTimer(null)` cleanup of an expired timer, which is idempotent
+ * and matches the original `handleJoinRoom` behavior.
+ */
+function sendMafiaSnapshotToSocket(socket: WsSocket, room: Room, peer: Peer): void {
+  sendServerMessage(socket, {
+    type: MafiaWs.hostUpdated,
+    payload: {
+      hostPeerId: room.getMafiaHostPeerId(),
+      hostUserId: room.getMafiaHostUserId(),
+      hostSessionId: room.getMafiaHostSessionId(),
+    },
+  })
+  sendServerMessage(socket, {
+    type: MafiaWs.queueUpdate,
+    payload: { speakingQueue: room.getMafiaSpeakingQueue() },
+  })
+  sendServerMessage(socket, {
+    type: MafiaWs.modeUpdate,
+    payload: { mode: room.getMafiaMode() },
+  })
+  sendServerMessage(socket, {
+    type: MafiaWs.settingsUpdate,
+    payload: {
+      deadBackgrounds: room.getMafiaDeadBackgrounds(),
+      activeBackgroundId: room.getMafiaActiveBackgroundId(),
+    },
+  })
+  sendServerMessage(socket, {
+    type: MafiaWs.pageBackgroundSettings,
+    payload: {
+      backgrounds: room.getMafiaPageBackgrounds(),
+      selectedBackgroundId: null,
+      forcedBackgroundId: room.getMafiaForcedPageBackgroundId(),
+    },
+  })
+  sendServerMessage(socket, {
+    type: MafiaWs.playerLifeState,
+    payload: { states: room.getMafiaPlayerLifeStateSnapshot() },
+  })
+  // Replay room-wide force-mute state to this socket only so OBS/view and
+  // late joiners can derive the host's "mute all" button state and tile
+  // mute badges from server state instead of a local-only host ref.
+  sendServerMessage(socket, {
+    type: MafiaWs.forceMuteAll,
+    payload: { muted: room.isMafiaForceMuteAllActive() },
+  })
+  // `room-state.peers[].audioMuted` only carries user-self-mute. Force-mute
+  // (per-peer kick or `mafia:force-mute-all`) lives in `Peer.forcedAudioMuted`
+  // and is not encoded there. On host reload during an active mute-all this
+  // would leave the host's effective-mute map empty for force-only-muted peers
+  // and the "mute all" button would render as inactive. Replay per-peer
+  // effective state so the host UI derives the correct button state and tile
+  // badges from the server snapshot. OBS/view and late joiners benefit too.
+  for (const other of room.getPeers()) {
+    if (other.id === peer.id) continue
+    const effectiveMuted = other.audioMuted || other.forcedAudioMuted
+    if (!effectiveMuted) continue
     sendServerMessage(socket, {
-      type: MafiaWs.hostUpdated,
-      payload: {
-        hostPeerId: room.getMafiaHostPeerId(),
-        hostUserId: room.getMafiaHostUserId(),
-        hostSessionId: room.getMafiaHostSessionId(),
-      },
+      type: 'peer-audio-muted',
+      payload: { peerId: other.id, muted: true },
     })
-    sendServerMessage(socket, {
-      type: MafiaWs.queueUpdate,
-      payload: { speakingQueue: room.getMafiaSpeakingQueue() },
-    })
-    sendServerMessage(socket, {
-      type: MafiaWs.modeUpdate,
-      payload: { mode: room.getMafiaMode() },
-    })
-    sendServerMessage(socket, {
-      type: MafiaWs.settingsUpdate,
-      payload: {
-        deadBackgrounds: room.getMafiaDeadBackgrounds(),
-        activeBackgroundId: room.getMafiaActiveBackgroundId(),
-      },
-    })
-    sendServerMessage(socket, {
-      type: MafiaWs.pageBackgroundSettings,
-      payload: {
-        backgrounds: room.getMafiaPageBackgrounds(),
-        selectedBackgroundId: null,
-        forcedBackgroundId: room.getMafiaForcedPageBackgroundId(),
-      },
-    })
-    sendServerMessage(socket, {
-      type: MafiaWs.playerLifeState,
-      payload: { states: room.getMafiaPlayerLifeStateSnapshot() },
-    })
-    // Replay room-wide force-mute state to this socket only so OBS/view and
-    // late joiners can derive the host's "mute all" button state and tile
-    // mute badges from server state instead of a local-only host ref.
-    sendServerMessage(socket, {
-      type: MafiaWs.forceMuteAll,
-      payload: { muted: room.isMafiaForceMuteAllActive() },
-    })
-    // `room-state.peers[].audioMuted` only carries user-self-mute. Force-mute
-    // (per-peer kick or `mafia:force-mute-all`) lives in `Peer.forcedAudioMuted`
-    // and is not encoded there. On host reload during an active mute-all this
-    // would leave the host's effective-mute map empty for force-only-muted peers
-    // and the "mute all" button would render as inactive. Replay per-peer
-    // effective state so the host UI derives the correct button state and tile
-    // badges from the server snapshot. OBS/view and late joiners benefit too.
-    for (const other of room.getPeers()) {
-      if (other.id === peer.id) continue
-      const effectiveMuted = other.audioMuted || other.forcedAudioMuted
-      if (!effectiveMuted) continue
-      sendServerMessage(socket, {
-        type: 'peer-audio-muted',
-        payload: { peerId: other.id, muted: true },
-      })
-    }
-    const mt = room.getMafiaTimer()
-    if (mt != null) {
-      const rem = mt.duration - (Date.now() - mt.startedAt)
-      if (rem > 0) {
-        sendServerMessage(socket, { type: MafiaWs.timerStart, payload: { ...mt, isRunning: true } })
-      } else {
-        room.setMafiaTimer(null)
-      }
-    }
-    /**
-     * Replay the latest server-accepted reshuffle to this socket only.
-     * Snapshot is gated by `getMafiaReshuffleSnapshotIfFresh`, which returns
-     * the payload only when every peer in the snapshot is currently live and
-     * the live peer count matches the snapshot length — so we never replay a
-     * stale assignment whose seats no longer cover the room.
-     */
-    const reshuffleSnap = room.getMafiaReshuffleSnapshotIfFresh()
-    if (reshuffleSnap != null) {
-      sendServerMessage(socket, { type: MafiaWs.reshuffle, payload: reshuffleSnap })
-    }
-    const playersUpdateSnap = room.getMafiaPlayersUpdateSnapshotIfFresh()
-    if (playersUpdateSnap != null) {
-      sendServerMessage(socket, { type: MafiaWs.playersUpdate, payload: playersUpdateSnap })
-    }
-    const nicks = room.getMafiaNicknamesSnapshot()
-    for (const [peerId, displayName] of Object.entries(nicks)) {
-      sendServerMessage(socket, { type: MafiaWs.playerNicknameUpdate, payload: { peerId, displayName } })
-    }
-    // Replay host-controlled per-participant audio mix to this socket only.
-    // The OBS `?mode=view` viewer applies it via existing
-    // `setRemoteListenVolume` / `setRemoteListenMuted` keyed by peerId; entries
-    // for users who reloaded since the host last set them have already been
-    // rebound to the current peerId by `rebindMafiaAudioMixEntryPeerId` above.
-    const audioMixSnap = room.getMafiaAudioMixSnapshot()
-    if (audioMixSnap.length > 0) {
-      sendServerMessage(socket, {
-        type: MafiaWs.audioMixUpdate,
-        payload: { entries: audioMixSnap },
-      })
+  }
+  const mt = room.getMafiaTimer()
+  if (mt != null) {
+    const rem = mt.duration - (Date.now() - mt.startedAt)
+    if (rem > 0) {
+      sendServerMessage(socket, { type: MafiaWs.timerStart, payload: { ...mt, isRunning: true } })
+    } else {
+      room.setMafiaTimer(null)
     }
   }
+  /**
+   * Replay the latest server-accepted reshuffle to this socket only.
+   * Snapshot is gated by `getMafiaReshuffleSnapshotIfFresh`, which returns
+   * the payload only when every peer in the snapshot is currently live and
+   * the live peer count matches the snapshot length — so we never replay a
+   * stale assignment whose seats no longer cover the room.
+   */
+  const reshuffleSnap = room.getMafiaReshuffleSnapshotIfFresh()
+  if (reshuffleSnap != null) {
+    sendServerMessage(socket, { type: MafiaWs.reshuffle, payload: reshuffleSnap })
+  }
+  const playersUpdateSnap = room.getMafiaPlayersUpdateSnapshotIfFresh()
+  if (playersUpdateSnap != null) {
+    sendServerMessage(socket, { type: MafiaWs.playersUpdate, payload: playersUpdateSnap })
+  }
+  const nicks = room.getMafiaNicknamesSnapshot()
+  for (const [peerId, displayName] of Object.entries(nicks)) {
+    sendServerMessage(socket, { type: MafiaWs.playerNicknameUpdate, payload: { peerId, displayName } })
+  }
+  // Replay host-controlled per-participant audio mix to this socket only.
+  // The OBS `?mode=view` viewer applies it via existing
+  // `setRemoteListenVolume` / `setRemoteListenMuted` keyed by peerId; entries
+  // for users who reloaded since the host last set them have already been
+  // rebound to the current peerId by `rebindMafiaAudioMixEntryPeerId` above.
+  const audioMixSnap = room.getMafiaAudioMixSnapshot()
+  if (audioMixSnap.length > 0) {
+    sendServerMessage(socket, {
+      type: MafiaWs.audioMixUpdate,
+      payload: { entries: audioMixSnap },
+    })
+  }
+}
+
+/**
+ * `mafia:request-snapshot` handler. Re-emits the snapshot block to the
+ * requesting socket only when the peer is in a Mafia room. No-op otherwise.
+ * Idempotent on the client (each apply path is replace-from-server).
+ */
+export function handleMafiaRequestSnapshot(socket: WsSocket, deps: SignalingDeps): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) return
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) return
+  if (!isMafiaRoomId(room.id)) return
+  sendMafiaSnapshotToSocket(socket, room, peer)
 }
 
 export function handleCallChat(socket: WsSocket, text: string, deps: SignalingDeps): void {

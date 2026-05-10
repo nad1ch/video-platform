@@ -31,6 +31,7 @@ import {
   handleMafiaPlayerRevive,
   handleMafiaForceCameraOff,
   handleMafiaForceMuteAll,
+  handleMafiaRequestSnapshot,
   handleEatFirstForceMuteAll,
   handleEatFirstSlotClaim,
   handleEatFirstTraitRevealRequest,
@@ -324,6 +325,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'mafia:force-mute-all': {
               await handleMafiaForceMuteAll(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:request-snapshot': {
+              handleMafiaRequestSnapshot(socket, deps)
               break
             }
             case 'eat:force-mute-all': {

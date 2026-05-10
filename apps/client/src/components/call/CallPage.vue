@@ -38,6 +38,8 @@ import { pinHostPeerToEndOfOrder } from '@/utils/mafiaHostOrdering'
 
 const callPageLog = createLogger('call-page')
 import ParticipantTile from './ParticipantTile.vue'
+import MediaDiagnosticsPanel from './MediaDiagnosticsPanel.vue'
+import { installMediaDebugGlobal, isMediaDebugEnabled } from '@/utils/mediaDebugRuntime'
 import CallRoomPopover from './CallRoomPopover.vue'
 import CallControlsDock from './CallControlsDock.vue'
 import CallChatPanel from './CallChatPanel.vue'
@@ -197,7 +199,11 @@ const {
   serverActiveSpeakerPeerId,
   playbackRenderFpsPressureByPeerId,
   setPeerVisible,
+  requestForcedProducerResync,
 } = useCallOrchestrator({ allowManualVideoQuality, joinAvatarUrl, joinUserId, role: callEngineRole })
+
+/** Dev-only: gate for the floating `<MediaDiagnosticsPanel>` and the `__MEDIA_DEBUG__` console helpers. */
+const mediaDebugPanelEnabled = isMediaDebugEnabled()
 
 const remotePlaybackWaitingPeerIds = shallowRef(new Set<string>())
 
@@ -213,6 +219,38 @@ function onRemotePlaybackStall(payload: { peerId: string; stalling: boolean }): 
     next.delete(id)
   }
   remotePlaybackWaitingPeerIds.value = next
+}
+
+/**
+ * Frame-decode stall recovery: a `<StreamVideo>` tile reports its
+ * `<video>.currentTime` did not advance for ~6s while the track was live.
+ * We debounce globally to at most one soft producer resync per minute so
+ * a flaky per-peer publisher cannot trigger a WS spam loop. The resync
+ * itself does NOT tear down the recv transport; it just re-applies the
+ * server's producer list (same path the visibility/focus policy uses).
+ */
+const VIDEO_STALL_RESYNC_DEBOUNCE_MS = 60_000
+let lastVideoStallResyncAt = 0
+function onTileVideoStall(payload: { peerId: string }): void {
+  const id = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
+  if (!id) return
+  const now =
+    typeof performance !== 'undefined' ? performance.now() : Date.now()
+  if (now - lastVideoStallResyncAt < VIDEO_STALL_RESYNC_DEBOUNCE_MS) {
+    if (import.meta.env.DEV) {
+      console.log('[stall] video stall ignored (debounced)', { peerId: id })
+    }
+    return
+  }
+  lastVideoStallResyncAt = now
+  if (import.meta.env.DEV) {
+    console.warn('[stall] video stall — requesting soft producer resync', { peerId: id })
+  }
+  try {
+    requestForcedProducerResync()
+  } catch (err) {
+    console.warn('[stall] requestForcedProducerResync failed', err)
+  }
 }
 
 watch(
@@ -3335,7 +3373,20 @@ onMounted(() => {
   window.addEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
   window.addEventListener(EAT_FIRST_OBS_URL_TOAST_EVENT, onEatFirstObsUrlCopiedToast)
   window.addEventListener(MAFIA_SETTINGS_TOAST_EVENT, onMafiaSettingsToast)
+  if (isMediaDebugEnabled()) {
+    detachMediaDebugGlobal = installMediaDebugGlobal({
+      forceSoftResync: () => {
+        try {
+          requestForcedProducerResync()
+        } catch (err) {
+          console.warn('[mediaDebug] forceSoftResync failed', err)
+        }
+      },
+    })
+  }
 })
+
+let detachMediaDebugGlobal: (() => void) | null = null
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
@@ -3352,6 +3403,8 @@ onUnmounted(() => {
   if (import.meta.env.DEV) {
     delete (globalThis as unknown as { __CALL_DEBUG__?: unknown }).__CALL_DEBUG__
   }
+  detachMediaDebugGlobal?.()
+  detachMediaDebugGlobal = null
 })
 
 watch(
@@ -3375,6 +3428,7 @@ watch(joining, (j) => {
 <template>
   <div class="page-route">
     <AppFullPageLoader :visible="joining" :aria-label="t('callPage.joining')" label="" />
+    <MediaDiagnosticsPanel v-if="mediaDebugPanelEnabled" />
     <CallRoomPopover
       v-model:display-name="session.selfDisplayName"
       v-model:room-join-draft="roomJoinDraft"
@@ -3606,6 +3660,7 @@ watch(joining, (j) => {
                 @mafia-set-elimination-background="onMafiaSetEliminationBackground"
                 @mafia-viewport-layers="(v) => onCallTileViewportForLayers(row.tile.peerId, v)"
                 @remote-playback-stall="onRemotePlaybackStall"
+                @video-stall="onTileVideoStall"
                 @eat-first-reveal-trait="onEatFirstRevealTrait"
                 @eat-first-generate-trait="onEatFirstGenerateTrait"
                 @eat-first-reroll-action-card="onEatFirstRerollActionCard"

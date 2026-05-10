@@ -336,6 +336,16 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       muted: z.boolean().optional(),
     }).strict(),
   }),
+  /**
+   * OBS / `?mode=view` snapshot recovery: any peer in a Mafia room may ask
+   * the server to re-send the same snapshot block as `handleJoinRoom`. The
+   * server replies addressed to the requesting socket only. No host
+   * authority required (read-only state already broadcast to the room).
+   */
+  z.object({
+    type: z.literal(MafiaWs.requestSnapshot),
+    payload: z.object({}).strict().optional(),
+  }),
   z.object({
     type: z.literal('eat:force-mute-all'),
     payload: z.object({

@@ -49,6 +49,12 @@ const emit = defineEmits<{
   'mafia-viewport-layers': [visible: boolean]
   
   'remote-playback-stall': [payload: { peerId: string; stalling: boolean }]
+  /**
+   * Frame-decode stall detected on the inbound video track. Bubbled from
+   * `<StreamVideo>`; CallPage debounces these and triggers a soft producer
+   * resync. Only fires for remote tiles with a known `peerId`.
+   */
+  'video-stall': [payload: { peerId: string }]
   'eat-first-reveal-trait': [payload: { peerId: string; traitKey: EatFirstTraitKey; closed?: boolean }]
   'eat-first-generate-trait': [payload: { peerId: string; traitKey: EatFirstTraitKey }]
   'eat-first-reroll-action-card': [payload: { peerId: string }]
@@ -1370,6 +1376,7 @@ if (import.meta.env.DEV) {
         :play-rev="playRev"
         :listen-volume="remoteListenVolume ?? 1"
         :listen-muted="remoteListenMuted ?? false"
+        :peer-id="peerId"
       />
       <div
         v-if="showVideo"
@@ -1384,6 +1391,7 @@ if (import.meta.env.DEV) {
             :play-rev="playRev"
             :report-video-ui="false"
             :remote-playback-stall-peer-id="remotePlaybackStallPeerIdForVideo"
+            :peer-id="remotePlaybackStallPeerIdForVideo"
             :video-presentation="
               videoPresentation && videoPresentation !== 'none' ? videoPresentation : undefined
             "
@@ -1392,6 +1400,7 @@ if (import.meta.env.DEV) {
             :playback-suppressed="Boolean(videoPlaybackSuppressed)"
             :target-playback-fps="videoTargetPlaybackFps"
             @remote-playback-stall="(p) => emit('remote-playback-stall', p)"
+            @video-stall="(p) => emit('video-stall', p)"
           />
         </div>
         <div v-if="mafiaDeadShade" class="tile-dead-veneer" aria-hidden="true" />

@@ -1604,5 +1604,13 @@ export function useCallEngine(options?: CallEngineOptions) {
 
     sendSignalingMessage: sendJson,
     subscribeSignalingMessage: addMessageListener,
+    /**
+     * Soft recv-side producer-list resync: same payload the visibility/focus policy
+     * already issues internally. Exposed so app-layer stall watchdogs (video freeze
+     * detector, manual debug button) can request a recover without forcing a
+     * full transport teardown. Caller MUST debounce — do not call faster than
+     * the existing policy cadence (~once per minute) to avoid WS spam.
+     */
+    requestForcedProducerResync,
   }
 }

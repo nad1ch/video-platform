@@ -72,4 +72,12 @@ export const MafiaWs = {
    * the user's mic — the player must unmute manually after revive.
    */
   forcePeerMic: 'mafia:force-peer-mic',
+  /**
+   * Client → server: request the full Mafia state snapshot. Re-emits the
+   * same snapshot block as `handleJoinRoom` to the requesting socket only.
+   * Used by OBS / `?mode=view` clients on WS reconnect to recover state
+   * without forcing a full reload. No host authority required: the snapshot
+   * is read-only state already broadcast to the room.
+   */
+  requestSnapshot: 'mafia:request-snapshot',
 } as const

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Ref } from 'vue'
-import { inject, nextTick, onUnmounted, ref, watch } from 'vue'
+import { inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   isAudioPlaybackUnlocked,
   playAllPageAudioThrottled,
@@ -9,24 +9,34 @@ import {
 import { getSharedCallPlaybackContext, resumeSharedCallPlaybackContext } from '@/audio/callPlaybackAudioContext'
 import { CALL_AUDIO_OUTPUT_DEVICE_ID_KEY } from '@/audio/callAudioOutputInjection'
 import { createLogger } from '@/utils/logger'
+import {
+  isMediaDebugEnabled,
+  registerAudioDebugReader,
+  type MediaDebugAudioSnapshot,
+} from '@/utils/mediaDebugRuntime'
 
 const streamAudioLog = createLogger('stream-audio')
 
 const props = withDefaults(
   defineProps<{
     stream: MediaStream | null
-    
+
     playRev?: number
-    
+
     listenVolume?: number
-    
+
     listenMuted?: boolean
-    
+
     audioLevel?: number
-    
+
     voiceDucked?: boolean
-    
+
     audioProcessing?: boolean
+    /**
+     * Optional peerId, used only by the dev `?mediaDebug=1` registry. When
+     * unset the diagnostics row is skipped. Has no effect on playback.
+     */
+    peerId?: string | null
   }>(),
   {
     playRev: 0,
@@ -35,6 +45,7 @@ const props = withDefaults(
     audioLevel: 0,
     voiceDucked: false,
     audioProcessing: false,
+    peerId: null,
   },
 )
 
@@ -427,6 +438,88 @@ watch(
   { flush: 'post' },
 )
 
+/**
+ * Long-session recovery: when the host toggles `listenMuted` back to false,
+ * the bind-graph fast-path calls `play()` and silently swallows a rejection
+ * (autoplay policy can deny if the gesture window has expired). One guarded
+ * retry on the next animation frame catches the common case where the call
+ * tab is still focused but the play promise was racing with another bind.
+ *
+ * - Only fires on a true→false transition (no looping).
+ * - Only on the element-fallback path (WebAudio path is unaffected; gain is
+ *   live and there is no `<audio>` element to be paused).
+ * - Logs to `[stream-audio]` via the existing logger; gated diagnostics only.
+ */
+let listenMutedRetryToken = 0
+watch(
+  () => props.listenMuted ?? false,
+  (next, prev) => {
+    if (prev !== true || next !== false) return
+    if (usingWebAudio) return
+    const a = el.value
+    if (!a || !a.srcObject) return
+    listenMutedRetryToken += 1
+    const token = listenMutedRetryToken
+    requestAnimationFrame(() => {
+      if (token !== listenMutedRetryToken) return
+      const cur = el.value
+      if (!cur || !cur.srcObject) return
+      if (!cur.paused) return
+      void cur
+        .play()
+        .then(() => {
+          if (import.meta.env.DEV) {
+            streamAudioLog.debug('unmute play() recovered', { peerId: props.peerId })
+          }
+        })
+        .catch((err) => {
+          if (import.meta.env.DEV) {
+            streamAudioLog.warn('unmute play() rejected; will rely on next user gesture', {
+              peerId: props.peerId,
+              error: (err as { name?: string })?.name ?? String(err),
+            })
+          }
+        })
+    })
+  },
+  { flush: 'post' },
+)
+
+/**
+ * Long-session recovery: a shared `AudioContext` can be auto-suspended by
+ * the browser after long idle (no audio activity) or on output device change.
+ * The component's WebAudio chain stays wired but produces no sound until we
+ * resume. A 5s heartbeat is cheap and only does work when a resume is needed.
+ *
+ * Only runs while WebAudio is in use; element-fallback peers never start it.
+ * The resume promise is fire-and-forget — it can only reject if no user
+ * gesture has happened yet, in which case the existing `audioUnlockHook`
+ * already handles the next gesture.
+ */
+const AUDIO_CTX_HEARTBEAT_MS = 5000
+let audioCtxHeartbeat: ReturnType<typeof setInterval> | null = null
+
+function tickAudioCtxHeartbeat(): void {
+  if (!usingWebAudio) return
+  if (typeof AudioContext === 'undefined') return
+  let state: AudioContextState
+  try {
+    state = getSharedCallPlaybackContext().state
+  } catch {
+    return
+  }
+  if (state !== 'suspended') return
+  void resumeSharedCallPlaybackContext().then(() => {
+    if (import.meta.env.DEV) {
+      streamAudioLog.debug('AudioContext resumed by heartbeat', { peerId: props.peerId })
+    }
+  })
+}
+
+onMounted(() => {
+  audioCtxHeartbeat = setInterval(tickAudioCtxHeartbeat, AUDIO_CTX_HEARTBEAT_MS)
+})
+
 watch(
   () => [props.audioLevel ?? 0, props.voiceDucked ?? false] as const,
   () => {
@@ -445,12 +538,57 @@ watch(
   { flush: 'post' },
 )
 
+/**
+ * Dev-only registration with the `?mediaDebug=1` registry. The reader is a
+ * pure synchronous snapshot from element + track + WebAudio refs. No effect
+ * unless the URL flag is set.
+ */
+let detachAudioDebugReader: (() => void) | null = null
+onMounted(() => {
+  if (!isMediaDebugEnabled()) return
+  const peerId = typeof props.peerId === 'string' && props.peerId.length > 0 ? props.peerId : null
+  if (peerId == null) return
+  detachAudioDebugReader = registerAudioDebugReader(peerId, (): MediaDebugAudioSnapshot => {
+    const a = el.value
+    const track = a?.srcObject ? (a.srcObject as MediaStream).getAudioTracks()[0] ?? null : null
+    let ctxState: MediaDebugAudioSnapshot['audioCtxState'] = 'unknown'
+    if (typeof AudioContext !== 'undefined') {
+      try {
+        ctxState = getSharedCallPlaybackContext().state
+      } catch {
+        ctxState = 'unknown'
+      }
+    }
+    return {
+      el: a,
+      paused: a?.paused ?? true,
+      muted: a?.muted ?? true,
+      volume: a?.volume ?? 0,
+      readyState: a?.readyState ?? 0,
+      hasSrcObject: !!a?.srcObject,
+      trackId: track?.id ?? null,
+      trackMuted: track ? track.muted : null,
+      trackEnabled: track ? track.enabled : null,
+      trackReadyState: track ? track.readyState : null,
+      usingWebAudio,
+      audioCtxState: ctxState,
+      gainValue: gainNode ? gainNode.gain.value : null,
+    }
+  })
+})
+
 onUnmounted(() => {
   bindGeneration++
   offAudioUnlock()
   clearPlayUnlock()
   teardownWebAudio()
   silenceElement(true)
+  if (audioCtxHeartbeat != null) {
+    clearInterval(audioCtxHeartbeat)
+    audioCtxHeartbeat = null
+  }
+  detachAudioDebugReader?.()
+  detachAudioDebugReader = null
   lastBoundAudioTrackId = null
   lastBoundUsingWebAudio = false
 })

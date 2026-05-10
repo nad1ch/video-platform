@@ -455,6 +455,13 @@ export function useMafiaHostSignaling(
     if (queueParsed) {
       applyingQueueFromSignaling.value = true
       mafia.applySpeakingQueueFromSignaling(queueParsed.speakingQueue)
+      // The host's broadcast dedupe (`lastSentQueueKey`) tracks what THIS tab
+      // last sent. When the server replaces local queue state (snapshot replay,
+      // another host's broadcast received after a transfer-back), our cached
+      // key no longer reflects what receivers actually have. Invalidate so the
+      // next local mutation always broadcasts even if it happens to match the
+      // stale cached key.
+      lastSentQueueKey = null
       void nextTick(() => {
         applyingQueueFromSignaling.value = false
       })
@@ -543,9 +550,42 @@ export function useMafiaHostSignaling(
     { immediate: true },
   )
 
+  /**
+   * `speakingQueue` deep watch fires on every array mutation; in active play
+   * with 8-12 cameras the host can produce 3-5 mutations per second
+   * (nominations, reorder, mid-mutation re-emits). The previous code sent
+   * one `mafia:queue-update` WS frame per fire, with no dedupe. Over a
+   * 3-hour stream that adds up to thousands of redundant frames on the host
+   * tab and matching apply work on every receiver.
+   *
+   * Trailing 75 ms debounce + shallow-equal cache: the watcher still fires
+   * synchronously, but we only send when the snapshot has settled and the
+   * payload differs from the last broadcast. Game logic is unchanged — the
+   * receiver applies the same final state. Re-entry guards
+   * (`applyingQueueFromSignaling`, `applyingPlayersUpdateFromSignaling`)
+   * still short-circuit before scheduling.
+   */
+  const QUEUE_BROADCAST_DEBOUNCE_MS = 75
+  let queueBroadcastTimer: ReturnType<typeof setTimeout> | null = null
+  let lastSentQueueKey: string | null = null
+  function flushQueueBroadcast(): void {
+    queueBroadcastTimer = null
+    if (!inCall.value) return
+    if (wsStatus.value !== 'open') return
+    if (!isMafiaHost.value) return
+    const snapshot = [...speakingQueue.value]
+    const key = snapshot.join(',')
+    if (key === lastSentQueueKey) return
+    lastSentQueueKey = key
+    sendSignalingMessage({ type: MafiaWs.queueUpdate, payload: { speakingQueue: snapshot } })
+  }
+  function scheduleQueueBroadcast(): void {
+    if (queueBroadcastTimer != null) return
+    queueBroadcastTimer = setTimeout(flushQueueBroadcast, QUEUE_BROADCAST_DEBOUNCE_MS)
+  }
   watch(
     speakingQueue,
-    (q) => {
+    () => {
       if (applyingQueueFromSignaling.value || applyingPlayersUpdateFromSignaling.value) {
         return
       }
@@ -558,9 +598,44 @@ export function useMafiaHostSignaling(
       if (!isMafiaHost.value) {
         return
       }
-      sendSignalingMessage({ type: MafiaWs.queueUpdate, payload: { speakingQueue: [...q] } })
+      scheduleQueueBroadcast()
     },
     { deep: true },
+  )
+  onBeforeUnmount(() => {
+    if (queueBroadcastTimer != null) {
+      clearTimeout(queueBroadcastTimer)
+      queueBroadcastTimer = null
+    }
+  })
+
+  /**
+   * OBS / `?mode=view` snapshot recovery: ask the server to re-emit the full
+   * Mafia snapshot block whenever this socket transitions `closed → open`
+   * after the initial join. The server already sends the snapshot from
+   * `handleJoinRoom`, so the first transition is a no-op redundancy
+   * (idempotent on the apply side); subsequent reconnects that did not
+   * re-trigger `join-room` (transient flap, browser-source quirk) finally
+   * get a fresh snapshot without forcing a page reload.
+   *
+   * Gated by `isViewMode` so OBS is the only sender — regular participants
+   * already get state through the normal host broadcast loop.
+   */
+  let lastWsStatus: typeof wsStatus.value | null = null
+  watch(
+    [wsStatus, isViewMode],
+    ([wsNow, viewNow]) => {
+      const prev = lastWsStatus
+      lastWsStatus = wsNow
+      // `isViewMode` is route-gated to `name === 'mafia'`, so this watcher
+      // is implicitly Mafia-only. No-op for regular participants and OBS
+      // before the first WS open (initial join already replays).
+      if (!viewNow) return
+      if (wsNow !== 'open') return
+      if (prev === 'open' || prev == null) return
+      sendSignalingMessage({ type: MafiaWs.requestSnapshot })
+    },
+    { immediate: true },
   )
 
   watch(

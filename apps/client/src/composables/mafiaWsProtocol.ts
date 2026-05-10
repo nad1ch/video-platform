@@ -32,4 +32,16 @@ export const MafiaWs = {
   forceMuteAll: 'mafia:force-mute-all',
   /** Server → client: per-peer mic-force side-effect of Mafia kill/revive. */
   forcePeerMic: 'mafia:force-peer-mic',
+  /**
+   * Client → server: request the full Mafia state snapshot (host, queue, mode,
+   * settings, page background, life state, force-mute-all, per-peer effective
+   * audio-muted, timer, reshuffle, players-update, nicknames, audio mix).
+   *
+   * Belt-and-suspenders for OBS / `?mode=view` clients whose WS may reconnect
+   * without re-running `join-room` (transient flap, browser-source quirk).
+   * Server replies with the same snapshot block it sends from `handleJoinRoom`
+   * but addresses it to the requesting socket only. Idempotent on the client
+   * (every message is an apply-from-signaling, never re-emit).
+   */
+  requestSnapshot: 'mafia:request-snapshot',
 } as const
