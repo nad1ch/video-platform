@@ -35,6 +35,7 @@ import {
   saveCallTileLocalDisplayOverrides,
 } from '@/utils/callTileLocalDisplayNames'
 import { pinHostPeerToEndOfOrder } from '@/utils/mafiaHostOrdering'
+import { resolveHostPeerIdForGrid, sortPeerIdsHostLast } from './callTileOrderRules'
 
 const callPageLog = createLogger('call-page')
 import ParticipantTile from './ParticipantTile.vue'
@@ -42,15 +43,13 @@ import MediaDiagnosticsPanel from './MediaDiagnosticsPanel.vue'
 import {
   installMediaDebugGlobal,
   isMediaDebugEnabled,
-  recordMediaDebugHardResync,
-  recordMediaDebugHardResyncSkipped,
   recordMediaDebugSignalingIncoming,
-  recordMediaDebugSoftResync,
   recordMediaDebugWsTransition,
   setMediaDebugEnvInfo,
   startMediaDebugRafProbe,
   startMediaDebugTimerDriftProbe,
 } from '@/utils/mediaDebugRuntime'
+import { useMediaStallRecovery } from './useMediaStallRecovery'
 import CallRoomPopover from './CallRoomPopover.vue'
 import CallControlsDock from './CallControlsDock.vue'
 import CallChatPanel from './CallChatPanel.vue'
@@ -67,6 +66,7 @@ import {
   useCallRoomHeaderJoinStore,
 } from '@/stores/callRoomHeaderJoin'
 import { useMafiaHostSignaling } from '@/composables/useMafiaHostSignaling'
+import { useEatFirstCallSignaling } from '@/composables/useEatFirstCallSignaling'
 import {
   mafiaBaseRoomIdFromSignaling,
   mafiaSignalingRoomId,
@@ -217,153 +217,28 @@ const {
 /** Dev-only: gate for the floating `<MediaDiagnosticsPanel>` and the `__MEDIA_DEBUG__` console helpers. */
 const mediaDebugPanelEnabled = isMediaDebugEnabled()
 
-const remotePlaybackWaitingPeerIds = shallowRef(new Set<string>())
-
-function onRemotePlaybackStall(payload: { peerId: string; stalling: boolean }): void {
-  const id = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
-  if (!id) {
-    return
-  }
-  const next = new Set(remotePlaybackWaitingPeerIds.value)
-  if (payload.stalling) {
-    next.add(id)
-  } else {
-    next.delete(id)
-  }
-  remotePlaybackWaitingPeerIds.value = next
-}
-
 /**
- * Media stall recovery (shared by video and audio): a tile reports that
- * inbound media has been stuck for the per-kind threshold (`<video>.currentTime`
- * for video, `track.muted` while server says peer is sending for audio).
- *
- * Two-tier escalation, SHARED across video + audio so a peer flapping in
- * one kind does not let the other kind escape the global debounce:
- *
- * 1. Soft tier (per-minute global): re-apply the server's producer list.
- *    Same path the visibility/focus policy uses; no transport teardown, no
- *    media gap. Covers most "missed event" recovery cases.
- *
- * 2. Hard tier (per-five-minutes global, gated on persistence): tear down
- *    ALL recv consumers and re-consume from a fresh sync. Brief media gap
- *    on every tile, so reserved for confirmed persistent stalls that the
- *    soft tier did not fix. Trigger requires:
- *      a) at least one soft resync was already issued, AND
- *      b) a NEW stall arrives ≥ HARD_GRACE_MS after the last soft resync, AND
- *      c) the global hard-debounce window has expired.
- *
- * Audio + video share the same timestamps deliberately: a single bad peer
- * with both audio and video failing should not produce two hard resyncs in
- * 30s, and the cure (re-consume from server) helps both kinds at once.
- */
-const MEDIA_STALL_RESYNC_DEBOUNCE_MS = 60_000
-const MEDIA_STALL_HARD_DEBOUNCE_MS = 5 * 60_000
-const MEDIA_STALL_HARD_GRACE_MS = 30_000
-let lastMediaStallResyncAt = 0
-let lastMediaStallHardResyncAt = 0
-
-/**
- * Public-stream safety gate for the hard tier.
- *
- * Hard producer resync tears down ALL recv consumers (`teardownAllRemoteConsumers`)
- * and re-consumes from a fresh `client-refresh` sync. For a normal player tab,
- * the resulting 1.5–3 s blackout-on-every-tile is acceptable: the user is
- * inside the room and the cure restores stuck consumers. For OBS / `?mode=view`
- * (Mafia or Eat First), the same teardown is BROADCAST TO STREAM VIEWERS as
- * a synchronous "all cameras → fallback icons → all cameras" flicker, which
- * is far worse than the rare stuck consumer the hard tier exists to fix.
- *
- * In view mode we keep the SOFT tier (the missed-event recovery that doesn't
- * teardown anything) and SKIP the hard tier. If a stuck consumer ever does
- * appear in OBS, the operator refreshes the OBS Browser Source manually —
- * exactly one click, no public-stream blast radius.
+ * OBS / `?mode=view` safety gate. Read by `useMediaStallRecovery` to skip the
+ * hard producer resync (which would broadcast a synchronous all-cameras
+ * flicker to stream viewers) and by anything else that needs to know whether
+ * this CallPage instance is acting as a public OBS source rather than a
+ * normal participant.
  */
 function isOperatingAsObsViewSource(): boolean {
   return mafiaViewUi.value || eatFirstViewUi.value
 }
 
-function triggerMediaStallRecovery(kind: 'audio' | 'video', peerId: string): void {
-  const id = peerId.trim()
-  if (!id) return
-  const now =
-    typeof performance !== 'undefined' ? performance.now() : Date.now()
-  // Hard escalation: a soft resync was issued ≥ HARD_GRACE_MS ago and a
-  // tile is STILL stalling. Soft did not help. Tear down + re-consume.
-  const softFiredRecently = lastMediaStallResyncAt > 0
-  const softHadGrace = now - lastMediaStallResyncAt >= MEDIA_STALL_HARD_GRACE_MS
-  const hardCooledDown = now - lastMediaStallHardResyncAt >= MEDIA_STALL_HARD_DEBOUNCE_MS
-  if (softFiredRecently && softHadGrace && hardCooledDown) {
-    if (isOperatingAsObsViewSource()) {
-      // OBS / view: skip the hard escalation; record + warn so post-incident
-      // analysis can see the policy fired the safety gate, and so support
-      // can prompt the operator to refresh the OBS source if symptoms persist.
-      // We deliberately do NOT bump the soft timestamp here — the next stall
-      // can still use the soft tier at its natural 60-s cadence.
-      recordMediaDebugHardResyncSkipped(kind)
-      console.warn(
-        '[stall] hard producer resync skipped in OBS/view; refresh OBS Browser Source if needed',
-        { peerId: id, kind },
-      )
-      return
-    }
-    lastMediaStallHardResyncAt = now
-    // Reset the soft timestamp so any further stall in the next 60 s also
-    // triggers soft (we just consumed our hard window for the next 5 min).
-    lastMediaStallResyncAt = now
-    if (import.meta.env.DEV) {
-      console.warn(`[stall] ${kind} stall persists — escalating to hard producer resync`, {
-        peerId: id,
-      })
-    }
-    try {
-      requestHardProducerResync()
-      recordMediaDebugHardResync(kind)
-    } catch (err) {
-      console.warn('[stall] requestHardProducerResync failed', err)
-    }
-    return
-  }
-  if (now - lastMediaStallResyncAt < MEDIA_STALL_RESYNC_DEBOUNCE_MS) {
-    if (import.meta.env.DEV) {
-      console.log(`[stall] ${kind} stall ignored (debounced)`, { peerId: id })
-    }
-    return
-  }
-  lastMediaStallResyncAt = now
-  if (import.meta.env.DEV) {
-    console.warn(`[stall] ${kind} stall — requesting soft producer resync`, { peerId: id })
-  }
-  try {
-    requestForcedProducerResync()
-    recordMediaDebugSoftResync(kind)
-  } catch (err) {
-    console.warn('[stall] requestForcedProducerResync failed', err)
-  }
-}
-
-function onTileVideoStall(payload: { peerId: string }): void {
-  triggerMediaStallRecovery('video', typeof payload.peerId === 'string' ? payload.peerId : '')
-}
-
-function onTileAudioStall(payload: { peerId: string }): void {
-  triggerMediaStallRecovery('audio', typeof payload.peerId === 'string' ? payload.peerId : '')
-}
-
-watch(
-  () => tiles.value.map((t) => `${t.peerId}:${t.isLocal ? 'L' : 'R'}`).join('|'),
-  () => {
-    const remoteIds = new Set(tiles.value.filter((t) => !t.isLocal).map((t) => t.peerId))
-    const stale = [...remotePlaybackWaitingPeerIds.value].some((id) => !remoteIds.has(id))
-    if (!stale) {
-      return
-    }
-    remotePlaybackWaitingPeerIds.value = new Set(
-      [...remotePlaybackWaitingPeerIds.value].filter((id) => remoteIds.has(id)),
-    )
-  },
-  { flush: 'post' },
-)
+const {
+  remotePlaybackWaitingPeerIds,
+  onRemotePlaybackStall,
+  onTileVideoStall,
+  onTileAudioStall,
+} = useMediaStallRecovery({
+  tiles,
+  isOperatingAsObsViewSource,
+  requestForcedProducerResync,
+  requestHardProducerResync,
+})
 
 /**
  * Global health for **playback budget / full-power** only (strong profile).
@@ -484,25 +359,15 @@ const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
 const MAFIA_FORCE_CAMERA_OFF_SIGNAL = MafiaWs.forceCameraOff
 const MAFIA_FORCE_MUTE_ALL_SIGNAL = MafiaWs.forceMuteAll
 const EAT_FIRST_FORCE_MUTE_ALL_SIGNAL = EatFirstWs.forceMuteAll
-const EAT_FIRST_HOST_UPDATED_SIGNAL = EatFirstWs.hostUpdated
 const EAT_FIRST_TRAIT_REVEAL_REQUEST_SIGNAL = EatFirstWs.traitRevealRequest
-const EAT_FIRST_TRAIT_REVEALED_SIGNAL = EatFirstWs.traitRevealed
 const EAT_FIRST_TRAIT_REGENERATE_REQUEST_SIGNAL = EatFirstWs.traitRegenerateRequest
-const EAT_FIRST_TRAIT_REGENERATED_SIGNAL = EatFirstWs.traitRegenerated
 const EAT_FIRST_TRAIT_TYPE_REROLL_REQUEST_SIGNAL = EatFirstWs.traitTypeRerollRequest
-const EAT_FIRST_TRAIT_TYPE_REROLLED_SIGNAL = EatFirstWs.traitTypeRerolled
 const EAT_FIRST_ACTION_CARD_REROLL_REQUEST_SIGNAL = EatFirstWs.actionCardRerollRequest
-const EAT_FIRST_ACTION_CARD_REROLLED_SIGNAL = EatFirstWs.actionCardRerolled
 const EAT_FIRST_ACTION_CARD_USE_SIGNAL = EatFirstWs.actionCardUse
-const EAT_FIRST_ACTION_CARD_USED_SIGNAL = EatFirstWs.actionCardUsed
 const EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL = EatFirstWs.tableRoundDeal
 const EAT_FIRST_SPEAKING_QUEUE_UPDATE_SIGNAL = EatFirstWs.speakingQueueUpdate
-const EAT_FIRST_TRAIT_STATE_SYNC_SIGNAL = EatFirstWs.traitStateSync
-const EAT_FIRST_TABLE_STATE_SYNC_SIGNAL = EatFirstWs.tableStateSync
 const EAT_FIRST_SLOT_CLAIM_SIGNAL = EatFirstWs.slotClaim
-
-/** Suppress host echo when applying `eat:speaking-queue-update` from the server. */
-const applyingEatFirstSpeakingQueueFromSignaling = ref(false)
+// Inbound `eat:*` response signals are handled by `useEatFirstCallSignaling`.
 
 type EatFirstTraitKey =
   | 'gender'
@@ -513,17 +378,6 @@ type EatFirstTraitKey =
   | 'phobia'
   | 'fact'
   | 'baggage'
-
-const EAT_FIRST_TRAIT_ORDER: readonly EatFirstTraitKey[] = [
-  'gender',
-  'age',
-  'profession',
-  'health',
-  'hobby',
-  'phobia',
-  'fact',
-  'baggage',
-]
 
 function mafiaSignalPayload(data: unknown, type: string): Record<string, unknown> | null {
   if (data == null || typeof data !== 'object') {
@@ -922,32 +776,6 @@ const remoteVideoSuppressDelayTimerByPeer = new Map<string, ReturnType<typeof se
 const remoteVideoSuppressPendingKind = new Map<string, 'offscreen' | 'outside-budget'>()
 const remoteVideoPlaybackSuppressed = shallowRef(new Map<string, boolean>())
 const eatFirstShell = useEatFirstCallShellStore()
-/**
- * Eat First trait state is keyed by **slotId** (`p1..p11`), not peerId.
- * Server-side `revealedBySlot`/`overridesBySlot`/`openedBySlot` is the source
- * of truth; on a hard refresh the new peer rebinds via `eat:slot-claim` and
- * the same reveal/override state re-attaches to it.
- */
-const eatFirstRevealedBySlot = shallowRef<Record<string, Record<string, boolean>>>({})
-const eatFirstOverridesBySlot = shallowRef<Record<string, Record<string, string>>>({})
-const eatFirstOpenedBySlot = shallowRef<Record<string, Record<string, boolean>>>({})
-/**
- * Server-authoritative `peerId → slotId` map and `playerOrder` in `eat:trait-state-sync` / `eat:table-state-sync`.
- * Replaces the old `eatFirstSeatByPeer` (which derived seat from local tile
- * index and made every client see only the first player's traits).
- */
-const eatFirstSlotByPeer = shallowRef<Record<string, string>>({})
-
-watch(
-  () => session.roomId,
-  () => {
-    eatFirstRevealedBySlot.value = {}
-    eatFirstOverridesBySlot.value = {}
-    eatFirstOpenedBySlot.value = {}
-    eatFirstSlotByPeer.value = {}
-  },
-)
-
 function bumpRemotePlaybackSuppressed(peerId: string, suppressed: boolean, reason: string): void {
   const prev = remoteVideoPlaybackSuppressed.value.get(peerId) === true
   if (prev === suppressed) {
@@ -1311,375 +1139,38 @@ function patchEatFirstTraitForSlot(slotId: string, traitKey: EatFirstTraitKey, v
   })
 }
 
-const offEatFirstForceControls = subscribeSignalingMessage((data) => {
-  if (!isEatFirstRoute.value) {
-    return
-  }
-  const rec = data as { type?: unknown; payload?: unknown }
-  if (rec.type === 'room-state') {
-    attemptEatFirstSlotClaim()
-    return
-  }
-  if (rec.type === EAT_FIRST_HOST_UPDATED_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const hostPeerId = typeof payload?.hostPeerId === 'string' ? payload.hostPeerId.trim() : ''
-    const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
-    eatFirstShell.setEatFirstHostPeer(hostPeerId || null, selfId || null)
-    return
-  }
-  if (rec.type === EAT_FIRST_SPEAKING_QUEUE_UPDATE_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const raw = payload?.speakingQueue
-    applyingEatFirstSpeakingQueueFromSignaling.value = true
-    eatFirstShell.applySpeakingQueueFromSignaling(Array.isArray(raw) ? raw : [])
-    void nextTick(() => {
-      applyingEatFirstSpeakingQueueFromSignaling.value = false
-    })
-    return
-  }
-  if (rec.type === EAT_FIRST_TABLE_STATE_SYNC_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    if (!payload) return
-    eatFirstOverridesBySlot.value = {}
-    const playerOrderRaw = Array.isArray(payload.playerOrder) ? payload.playerOrder : []
-    const nextPlayerOrder = playerOrderRaw
-      .filter((x): x is string => typeof x === 'string' && /^p([1-9]|1[01])$/i.test(x.trim()))
-      .map((x) => x.trim())
-    if (nextPlayerOrder.length > 0) {
-      eatFirstShell.setPlayerOrder(nextPlayerOrder)
-    }
-    const slotByPeerRaw =
-      payload.slotByPeer && typeof payload.slotByPeer === 'object' && !Array.isArray(payload.slotByPeer)
-        ? (payload.slotByPeer as Record<string, unknown>)
-        : {}
-    const nextSlotByPeer: Record<string, string> = {}
-    for (const [peerId, slotUnknown] of Object.entries(slotByPeerRaw)) {
-      if (typeof slotUnknown !== 'string') continue
-      const slot = slotUnknown.trim()
-      if (!/^p([1-9]|1[01])$/i.test(slot)) continue
-      nextSlotByPeer[peerId] = slot
-    }
-    eatFirstSlotByPeer.value = nextSlotByPeer
-    const traitsBySlotRaw =
-      payload.traitsBySlot && typeof payload.traitsBySlot === 'object' && !Array.isArray(payload.traitsBySlot)
-        ? (payload.traitsBySlot as Record<string, unknown>)
-        : {}
-    const mergedTraitsBySlot: Record<string, Record<EatFirstTraitKey, string>> = { ...eatFirstShell.traitsBySlot }
-    for (const [slotId, rowUnknown] of Object.entries(traitsBySlotRaw)) {
-      if (!/^p([1-9]|1[01])$/i.test(String(slotId).trim())) continue
-      if (!rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
-      const row = rowUnknown as Record<string, unknown>
-      const normalized = {} as Record<EatFirstTraitKey, string>
-      let complete = true
-      for (const key of EAT_FIRST_TRAIT_ORDER) {
-        const value = typeof row[key] === 'string' ? row[key].trim() : ''
-        if (value.length < 1) {
-          complete = false
-          break
-        }
-        normalized[key] = value
-      }
-      if (complete) mergedTraitsBySlot[slotId.trim()] = normalized
-    }
-    eatFirstShell.setTraitsBySlot(mergedTraitsBySlot)
-    const actionCardBySlotRaw =
-      payload.actionCardBySlot &&
-      typeof payload.actionCardBySlot === 'object' &&
-      !Array.isArray(payload.actionCardBySlot)
-        ? (payload.actionCardBySlot as Record<string, unknown>)
-        : {}
-    const mergedActionCardBySlot: Record<
-      string,
-      { title: string; description: string; templateId: string; effectId: string; used: boolean }
-    > = { ...eatFirstShell.actionCardBySlot }
-    for (const [slotId, rowUnknown] of Object.entries(actionCardBySlotRaw)) {
-      if (!/^p([1-9]|1[01])$/i.test(String(slotId).trim())) continue
-      if (!rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
-      const row = rowUnknown as Record<string, unknown>
-      const title = typeof row.title === 'string' ? row.title.trim() : ''
-      const description = typeof row.description === 'string' ? row.description.trim() : ''
-      const templateId = typeof row.templateId === 'string' ? row.templateId.trim() : ''
-      const effectId = typeof row.effectId === 'string' ? row.effectId.trim() : ''
-      const used = row.used === true
-      if (title.length < 1 && templateId.length < 1) continue
-      mergedActionCardBySlot[slotId.trim()] = { title, description, templateId, effectId, used }
-    }
-    eatFirstShell.setActionCardBySlot(mergedActionCardBySlot)
-    const lastUsedRaw =
-      payload.lastUsedActionCard &&
-      typeof payload.lastUsedActionCard === 'object' &&
-      !Array.isArray(payload.lastUsedActionCard)
-        ? (payload.lastUsedActionCard as Record<string, unknown>)
-        : null
-    if (lastUsedRaw) {
-      const slotId = typeof lastUsedRaw.slotId === 'string' ? lastUsedRaw.slotId.trim() : ''
-      const title = typeof lastUsedRaw.title === 'string' ? lastUsedRaw.title.trim() : ''
-      const description = typeof lastUsedRaw.description === 'string' ? lastUsedRaw.description.trim() : ''
-      if (slotId.length > 0 && title.length > 0) {
-        eatFirstShell.setLastUsedActionCard({ slotId, title, description })
-      } else {
-        eatFirstShell.setLastUsedActionCard(null)
-      }
-    } else {
-      eatFirstShell.setLastUsedActionCard(null)
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'timer')) {
-      const timerRaw = payload.timer
-      let nextCallTimer: { startedAt: number; durationMs: number; isRunning: boolean } | null = null
-      if (timerRaw === null) {
-        nextCallTimer = null
-      } else if (timerRaw && typeof timerRaw === 'object' && !Array.isArray(timerRaw)) {
-        const tr = timerRaw as Record<string, unknown>
-        const startedAt = typeof tr.startedAt === 'number' ? tr.startedAt : Number.NaN
-        const duration = typeof tr.duration === 'number' ? tr.duration : Number.NaN
-        if (
-          tr.isRunning === true &&
-          Number.isFinite(startedAt) &&
-          Number.isFinite(duration) &&
-          duration >= 5000 &&
-          duration <= 7_200_000
-        ) {
-          nextCallTimer = { startedAt, durationMs: duration, isRunning: true }
-        }
-      }
-      eatFirstShell.setEatFirstCallTimerFromTableSync(nextCallTimer)
-    }
-    const revealedRaw =
-      payload.revealedTraitsBySlot &&
-      typeof payload.revealedTraitsBySlot === 'object' &&
-      !Array.isArray(payload.revealedTraitsBySlot)
-        ? (payload.revealedTraitsBySlot as Record<string, unknown>)
-        : {}
-    const openedRaw =
-      payload.openedByBySlot && typeof payload.openedByBySlot === 'object' && !Array.isArray(payload.openedByBySlot)
-        ? (payload.openedByBySlot as Record<string, unknown>)
-        : {}
-    const nextRevealedBySlot: Record<string, Record<string, boolean>> = {}
-    for (const [slotId, keysUnknown] of Object.entries(revealedRaw)) {
-      if (!Array.isArray(keysUnknown)) continue
-      const row: Record<string, boolean> = {}
-      for (const key of keysUnknown) {
-        if (typeof key === 'string' && key.trim().length > 0) row[key.trim()] = true
-      }
-      if (Object.keys(row).length > 0) nextRevealedBySlot[slotId] = row
-    }
-    const nextOpenedBySlot: Record<string, Record<string, boolean>> = {}
-    for (const [slotId, rowUnknown] of Object.entries(openedRaw)) {
-      if (!rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
-      const row = rowUnknown as Record<string, unknown>
-      const out: Record<string, boolean> = {}
-      for (const [traitKey, openedBy] of Object.entries(row)) {
-        if (openedBy === 'player' || openedBy === 'host') out[traitKey] = true
-      }
-      if (Object.keys(out).length > 0) nextOpenedBySlot[slotId] = out
-    }
-    eatFirstRevealedBySlot.value = nextRevealedBySlot
-    eatFirstOpenedBySlot.value = nextOpenedBySlot
-    attemptEatFirstSlotClaim()
-    return
-  }
-  if (rec.type === EAT_FIRST_TRAIT_STATE_SYNC_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    if (!payload) return
-    const traitSyncPlayerOrderRaw = Array.isArray(payload.playerOrder) ? payload.playerOrder : []
-    const traitSyncPlayerOrder = traitSyncPlayerOrderRaw
-      .filter((x): x is string => typeof x === 'string' && /^p([1-9]|1[01])$/i.test(x.trim()))
-      .map((x) => x.trim())
-    if (traitSyncPlayerOrder.length > 0) {
-      eatFirstShell.setPlayerOrder(traitSyncPlayerOrder)
-    }
-    const revealedRaw =
-      payload.revealedBySlot && typeof payload.revealedBySlot === 'object' && !Array.isArray(payload.revealedBySlot)
-        ? (payload.revealedBySlot as Record<string, unknown>)
-        : {}
-    const overridesRaw =
-      payload.overridesBySlot && typeof payload.overridesBySlot === 'object' && !Array.isArray(payload.overridesBySlot)
-        ? (payload.overridesBySlot as Record<string, unknown>)
-        : {}
-    const openedRaw =
-      payload.openedBySlot && typeof payload.openedBySlot === 'object' && !Array.isArray(payload.openedBySlot)
-        ? (payload.openedBySlot as Record<string, unknown>)
-        : {}
-    const slotByPeerRaw =
-      payload.slotByPeer && typeof payload.slotByPeer === 'object' && !Array.isArray(payload.slotByPeer)
-        ? (payload.slotByPeer as Record<string, unknown>)
-        : {}
-    const nextSlotByPeer: Record<string, string> = {}
-    for (const [peerId, slotUnknown] of Object.entries(slotByPeerRaw)) {
-      if (typeof slotUnknown !== 'string') continue
-      const slot = slotUnknown.trim()
-      if (slot.length < 1) continue
-      nextSlotByPeer[peerId] = slot
-    }
-    eatFirstSlotByPeer.value = nextSlotByPeer
-    if (import.meta.env.DEV) {
-      callPageLog.info('[eat-first:slot-map:update]', {
-        selfPeerId: selfPeerId.value,
-        selfSlotId: selfPeerId.value ? nextSlotByPeer[selfPeerId.value] ?? null : null,
-      })
-    }
-    const nextRevealedBySlot: Record<string, Record<string, boolean>> = {}
-    const nextOverridesBySlot: Record<string, Record<string, string>> = {}
-    const nextOpenedBySlot: Record<string, Record<string, boolean>> = {}
-    for (const [slotId, keysUnknown] of Object.entries(revealedRaw)) {
-      if (!Array.isArray(keysUnknown)) continue
-      const row: Record<string, boolean> = {}
-      for (const k of keysUnknown) {
-        if (typeof k === 'string' && k.trim().length > 0) {
-          row[k.trim()] = true
-        }
-      }
-      if (Object.keys(row).length > 0) nextRevealedBySlot[slotId] = row
-    }
-    for (const [slotId, rowUnknown] of Object.entries(overridesRaw)) {
-      if (!rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
-      const row = rowUnknown as Record<string, unknown>
-      const out: Record<string, string> = {}
-      for (const [k, v] of Object.entries(row)) {
-        if (typeof k === 'string' && k.trim().length > 0 && typeof v === 'string' && v.trim().length > 0) {
-          out[k.trim()] = v.trim()
-        }
-      }
-      if (Object.keys(out).length > 0) nextOverridesBySlot[slotId] = out
-    }
-    for (const [slotId, keysUnknown] of Object.entries(openedRaw)) {
-      if (!Array.isArray(keysUnknown)) continue
-      const row: Record<string, boolean> = {}
-      for (const k of keysUnknown) {
-        if (typeof k === 'string' && k.trim().length > 0) {
-          row[k.trim()] = true
-        }
-      }
-      if (Object.keys(row).length > 0) nextOpenedBySlot[slotId] = row
-    }
-    eatFirstRevealedBySlot.value = nextRevealedBySlot
-    eatFirstOverridesBySlot.value = nextOverridesBySlot
-    eatFirstOpenedBySlot.value = nextOpenedBySlot
-    return
-  }
-  if (rec.type === EAT_FIRST_TRAIT_REVEALED_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const slotId = typeof payload?.slotId === 'string' ? payload.slotId.trim() : ''
-    const traitKey = typeof payload?.traitKey === 'string' ? payload.traitKey.trim() : ''
-    const openedBy = payload?.openedBy === 'host' ? 'host' : 'player'
-    const closed = payload?.closed === true
-    if (!slotId || !traitKey) return
-    if (closed) {
-      const prevRevealed = eatFirstRevealedBySlot.value[slotId]
-      if (prevRevealed && prevRevealed[traitKey]) {
-        const nextRow = { ...prevRevealed }
-        delete nextRow[traitKey]
-        const next = { ...eatFirstRevealedBySlot.value }
-        if (Object.keys(nextRow).length > 0) next[slotId] = nextRow
-        else delete next[slotId]
-        eatFirstRevealedBySlot.value = next
-      }
-      const prevOpened = eatFirstOpenedBySlot.value[slotId]
-      if (prevOpened && prevOpened[traitKey]) {
-        const nextRow = { ...prevOpened }
-        delete nextRow[traitKey]
-        const next = { ...eatFirstOpenedBySlot.value }
-        if (Object.keys(nextRow).length > 0) next[slotId] = nextRow
-        else delete next[slotId]
-        eatFirstOpenedBySlot.value = next
-      }
-      return
-    }
-    eatFirstRevealedBySlot.value = {
-      ...eatFirstRevealedBySlot.value,
-      [slotId]: { ...(eatFirstRevealedBySlot.value[slotId] ?? {}), [traitKey]: true },
-    }
-    if (openedBy === 'player') {
-      eatFirstOpenedBySlot.value = {
-        ...eatFirstOpenedBySlot.value,
-        [slotId]: { ...(eatFirstOpenedBySlot.value[slotId] ?? {}), [traitKey]: true },
-      }
-    }
-    return
-  }
-  if (rec.type === EAT_FIRST_TRAIT_REGENERATED_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const slotId = typeof payload?.slotId === 'string' ? payload.slotId.trim() : ''
-    const traitKey = typeof payload?.traitKey === 'string' ? payload.traitKey.trim() : ''
-    const value = typeof payload?.value === 'string' ? payload.value.trim() : ''
-    if (!slotId || !traitKey || !value) return
-    patchEatFirstTraitForSlot(slotId, traitKey as EatFirstTraitKey, value)
-    eatFirstOverridesBySlot.value = {
-      ...eatFirstOverridesBySlot.value,
-      [slotId]: { ...(eatFirstOverridesBySlot.value[slotId] ?? {}), [traitKey]: value },
-    }
-    return
-  }
-  if (rec.type === EAT_FIRST_TRAIT_TYPE_REROLLED_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const traitKey = typeof payload?.traitKey === 'string' ? payload.traitKey.trim() : ''
-    const valuesBySlotRaw =
-      payload?.valuesBySlot &&
-      typeof payload.valuesBySlot === 'object' &&
-      !Array.isArray(payload.valuesBySlot)
-        ? (payload.valuesBySlot as Record<string, unknown>)
-        : null
-    if (!traitKey || !valuesBySlotRaw) return
-    const next = { ...eatFirstOverridesBySlot.value }
-    for (const [slotId, valueUnknown] of Object.entries(valuesBySlotRaw)) {
-      if (typeof valueUnknown !== 'string') continue
-      const value = valueUnknown.trim()
-      if (value.length < 1) continue
-      patchEatFirstTraitForSlot(slotId, traitKey as EatFirstTraitKey, value)
-      next[slotId] = { ...(next[slotId] ?? {}), [traitKey]: value }
-    }
-    eatFirstOverridesBySlot.value = next
-    return
-  }
-  if (rec.type === EAT_FIRST_ACTION_CARD_REROLLED_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const slotId = typeof payload?.slotId === 'string' ? payload.slotId.trim() : ''
-    const card =
-      payload?.card && typeof payload.card === 'object' && !Array.isArray(payload.card)
-        ? (payload.card as Record<string, unknown>)
-        : null
-    if (!slotId || !card) return
-    const title = typeof card.title === 'string' ? card.title : ''
-    const description = typeof card.description === 'string' ? card.description : ''
-    const templateId = typeof card.templateId === 'string' ? card.templateId : ''
-    const effectId = typeof card.effectId === 'string' ? card.effectId : ''
-    const used = card.used === true
-    eatFirstShell.setActionCardForSlot(slotId, { title, description, templateId, effectId, used })
-    return
-  }
-  if (rec.type === EAT_FIRST_ACTION_CARD_USED_SIGNAL) {
-    if (!eatFirstShell.isEatFirstRoomHost) return
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const peerId = typeof payload?.peerId === 'string' ? payload.peerId.trim() : ''
-    const title = typeof payload?.title === 'string' ? payload.title.trim() : ''
-    if (!peerId || title.length < 1) return
+/**
+ * Eat First inbound signaling — extracted into `useEatFirstCallSignaling`.
+ *
+ * The composable owns the four `slot/revealed/overrides/opened-bySlot`
+ * shallowRefs (returned here so the rest of CallPage's computeds can read
+ * them with the original variable names) plus the `applyingSpeakingQueueFromSignaling`
+ * flag the host-side rebroadcast watcher uses to suppress its own echo.
+ *
+ * Cross-cutting effects that need other CallPage-scope deps stay here as
+ * callbacks: slot-claim (route + per-game token store), trait patcher
+ * (writes through `eatFirstShell.traitsBySlot`), and the action-card-used
+ * toast (i18n + display name + `callToasts`).
+ */
+// `overridesBySlot` and `openedBySlot` are internal to the composable today
+// (the dispatcher writes them; no CallPage computed reads them). Kept on the
+// composable's return shape for future EatFirst adapters; not destructured
+// here to avoid lint warnings.
+const {
+  applyingSpeakingQueueFromSignaling: applyingEatFirstSpeakingQueueFromSignaling,
+  slotByPeer: eatFirstSlotByPeer,
+  revealedBySlot: eatFirstRevealedBySlot,
+} = useEatFirstCallSignaling({
+  subscribeSignalingMessage,
+  selfPeerId,
+  roomId: computed(() => session.roomId),
+  isEatFirstRoute,
+  eatFirstShell,
+  micEnabled,
+  toggleMic,
+  attemptSlotClaim: attemptEatFirstSlotClaim,
+  patchTraitForSlot: patchEatFirstTraitForSlot,
+  onPlayerUsedActionCard: ({ peerId, title }) => {
     const name = peerDisplayName(peerId)
     const id = `eat-ac-${Date.now()}-${peerId}`
     const text = t('eatFirstCall.playerUsedActionCardToast', { name, card: title })
@@ -1687,20 +1178,9 @@ const offEatFirstForceControls = subscribeSignalingMessage((data) => {
     window.setTimeout(() => {
       callToasts.value = callToasts.value.filter((x) => x.id !== id)
     }, 5200)
-    return
-  }
-  if (rec.type !== EAT_FIRST_FORCE_MUTE_ALL_SIGNAL || rec.payload == null || typeof rec.payload !== 'object') return
-  if (eatFirstShell.isEatFirstRoomHost) return
-  const payload = rec.payload as Record<string, unknown>
-  const muted = payload.muted !== false
-  if (muted && micEnabled.value) {
-    void toggleMic()
-  } else if (!muted && !micEnabled.value) {
-    void toggleMic()
-  }
+  },
+  log: callPageLog,
 })
-
-onBeforeUnmount(offEatFirstForceControls)
 
 /**
  * Host-panel <-> CallPage bridge. The panel is rendered as a sibling of
@@ -2286,27 +1766,13 @@ watch(
     let ids = list.map((t) => t.peerId)
     if (isEatFirstRoute.value) {
       const hostId = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId : ''
-      const sorted = [...ids].sort((a, b) => a.localeCompare(b))
-      ids =
-        hostId && sorted.includes(hostId)
-          ? [...sorted.filter((id) => id !== hostId), hostId]
-          : sorted
+      ids = sortPeerIdsHostLast(ids, hostId)
     }
     if (isMafiaRoute.value) {
       const explicitHostId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
       const prevDisplayOrder = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
-      const fallbackHostId =
-        explicitHostId.length > 0
-          ? ''
-          : prevDisplayOrder.length > 0
-            ? prevDisplayOrder[prevDisplayOrder.length - 1] ?? ''
-            : ''
-      const hostId = explicitHostId.length > 0 ? explicitHostId : fallbackHostId
-      const sorted = [...ids].sort((a, b) => a.localeCompare(b))
-      ids =
-        hostId && sorted.includes(hostId)
-          ? [...sorted.filter((id) => id !== hostId), hostId]
-          : sorted
+      const hostId = resolveHostPeerIdForGrid(explicitHostId, prevDisplayOrder)
+      ids = sortPeerIdsHostLast(ids, hostId)
       tileOrder.value = ids
       return
     }
@@ -2368,12 +1834,7 @@ const mafiaNumberByPeer = computed(() => {
   const m = new Map<string, number>()
   const order = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
   const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
-  const hostPeerId =
-    explicitHostPeerId.length > 0
-      ? explicitHostPeerId
-      : order.length > 0
-        ? order[order.length - 1] ?? ''
-        : ''
+  const hostPeerId = resolveHostPeerIdForGrid(explicitHostPeerId, order)
   const numbered = hostPeerId.length > 0 ? order.filter((id) => id !== hostPeerId) : order
   numbered.forEach((id, i) => {
     m.set(id, i + 1)
@@ -2594,12 +2055,7 @@ const orderedTiles = computed(() => {
   if (isMafiaRoute.value && list.length > 0) {
     const base = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
     const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
-    const hostPidForGrid =
-      explicitHostPeerId.length > 0
-        ? explicitHostPeerId
-        : base.length > 0
-          ? base[base.length - 1] ?? ''
-          : ''
+    const hostPidForGrid = resolveHostPeerIdForGrid(explicitHostPeerId, base)
     const order = hostPidForGrid.length > 0 ? pinHostPeerToEndOfOrder(base, hostPidForGrid) : base.slice()
 
     const orderIndex = new Map<string, number>()
