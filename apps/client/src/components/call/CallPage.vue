@@ -66,6 +66,7 @@ import {
   useCallRoomHeaderJoinStore,
 } from '@/stores/callRoomHeaderJoin'
 import { useMafiaHostSignaling } from '@/composables/useMafiaHostSignaling'
+import { useMafiaCallHostUi } from '@/composables/useMafiaCallHostUi'
 import { useEatFirstCallSignaling } from '@/composables/useEatFirstCallSignaling'
 import {
   mafiaBaseRoomIdFromSignaling,
@@ -96,8 +97,7 @@ import { MAFIA_OBS_URL_TOAST_EVENT, MAFIA_SETTINGS_TOAST_EVENT } from '@/composa
 import { MafiaWs } from '@/composables/mafiaWsProtocol'
 import { useMafiaAudioMixSignaling } from '@/composables/useMafiaAudioMixSignaling'
 import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
-import type { MafiaEliminationBackground } from '@/utils/mafiaGameTypes'
-import { decodeSpeakingNominationFlat, nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
+import { nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
 import {
   applyCallAudioOutputSinkToStreamAudios,
   CALL_AUDIO_OUTPUT_DEVICE_ID_KEY,
@@ -1034,30 +1034,6 @@ watch(
   },
 )
 
-function onMafiaToggleLifeFromTile(peerId: string): void {
-  if (typeof peerId !== 'string' || peerId.length < 1) {
-    return
-  }
-  mafiaGameStore.hostToggleMafiaPlayerLife(peerId)
-}
-
-function onMafiaForceCameraOffFromTile(peerId: string): void {
-  if (!isMafiaRoute.value || !mafiaGameStore.isMafiaHost) {
-    return
-  }
-  if (typeof peerId !== 'string' || peerId.length < 1 || peerId === selfPeerId.value) {
-    return
-  }
-  sendSignalingMessage({ type: MAFIA_FORCE_CAMERA_OFF_SIGNAL, payload: { peerId } })
-}
-
-function onMafiaForceMuteAll(muted: boolean): void {
-  if (!isMafiaRoute.value || !mafiaGameStore.isMafiaHost) {
-    return
-  }
-  sendSignalingMessage({ type: MAFIA_FORCE_MUTE_ALL_SIGNAL, payload: { muted } })
-}
-
 function onEatFirstForceMuteAll(muted: boolean): void {
   if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) {
     return
@@ -1842,6 +1818,39 @@ const mafiaNumberByPeer = computed(() => {
   return m
 })
 
+/**
+ * Mafia call-host UI behaviour — extracted into `useMafiaCallHostUi` (Phase 2).
+ *
+ * Owns the host-side handlers, the night-action/speaking seat-highlight
+ * computeds, the speak-hint visibility ref + lifecycle, and the Mafia branch
+ * of the tile-click router. CallPage's template binds the destructured names
+ * unchanged, so no template edits are required.
+ *
+ * The Mafia OBS/host-claim flow, audio-mix host broadcast, and inbound
+ * Mafia signaling continue to live in `useMafiaHostSignaling` and
+ * `useMafiaAudioMixSignaling`; this composable is strictly the CallPage-level
+ * host-UI surface.
+ */
+const {
+  mafiaSpeakingOrderHintVisible,
+  isMafiaHostNightActionSeat,
+  isMafiaHostSpeakingNominationUiSeat,
+  onMafiaToggleLifeFromTile,
+  onMafiaForceCameraOffFromTile,
+  onMafiaForceMuteAll,
+  onMafiaSetEliminationBackground,
+  handleMafiaHostTileClick,
+} = useMafiaCallHostUi({
+  isMafiaRoute,
+  mafiaViewUi,
+  selfPeerId,
+  mafiaGameStore,
+  mafiaNumberByPeer,
+  sendSignalingMessage,
+  pushCallToast,
+  t,
+})
+
 const eatFirstSeatByPeer = computed(() => {
   if (!isEatFirstRoute.value) {
     return new Map<string, number>()
@@ -2501,35 +2510,6 @@ function resumeCallAudioAnalysisFromGesture(): void {
 }
 
 
-const mafiaHostNightActionSeatSet = computed(() => {
-  const a = mafiaGameStore.nightActions
-  const s = new Set<number>()
-  for (const x of [a.mafia, a.doctor, a.sheriff, a.don] as const) {
-    if (typeof x === 'number' && Number.isInteger(x) && x >= 1) {
-      s.add(x)
-    }
-  }
-  return s
-})
-
-const mafiaHostSpeakingNominationTargetSeatSet = computed(() =>
-  nominationTargetSeatsFromSpeakingFlat(mafiaGameStore.speakingQueue),
-)
-
-function isMafiaHostNightActionSeat(seat: number | undefined): boolean {
-  if (seat == null) {
-    return false
-  }
-  return mafiaHostNightActionSeatSet.value.has(seat)
-}
-
-function isMafiaHostSpeakingNominationUiSeat(seat: number | undefined): boolean {
-  if (seat == null) {
-    return false
-  }
-  return mafiaHostSpeakingNominationTargetSeatSet.value.has(seat)
-}
-
 function isEatFirstHostSpeakingNominationSeat(seat: number | undefined): boolean {
   if (seat == null) {
     return false
@@ -2537,6 +2517,17 @@ function isEatFirstHostSpeakingNominationSeat(seat: number | undefined): boolean
   return nominationTargetSeatsFromSpeakingFlat(eatFirstShell.speakingQueue).has(seat)
 }
 
+/**
+ * Tile-click router across all three call routes.
+ *
+ * The EatFirst speaking-mode branch (host-only nomination toggle) remains
+ * inline here because it reads `eatFirstShell` state owned by the EatFirst
+ * domain in CallPage's setup. The Mafia branch (swap / speaking / night
+ * action) is delegated to `useMafiaCallHostUi.handleMafiaHostTileClick`.
+ *
+ * Behaviour preserved 1:1: same guards, same `ev.stopPropagation()`
+ * semantics, same toast keys, same store dispatch order.
+ */
 function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value)[number]): void {
   if (isEatFirstRoute.value && !eatFirstViewUi.value && eatFirstShell.isEatFirstRoomHost) {
     if (!eatFirstShell.speakingMode) {
@@ -2566,117 +2557,8 @@ function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value
     ev.stopPropagation()
     return
   }
-  if (mafiaViewUi.value) {
-    return
-  }
-  if (!isMafiaRoute.value || !mafiaGameStore.isMafiaHost) {
-    return
-  }
-  const clickTarget = ev.target
-  if (clickTarget instanceof Element) {
-    if (clickTarget.closest('button, input, textarea, a, [data-no-mafia-tile-host]')) {
-      return
-    }
-    if (clickTarget.closest('.tile-overlay__label-group, .tile-overlay__name-input, .tile-overlay__name-edit')) {
-      return
-    }
-  }
-  if (mafiaGameStore.hostInteractionMode === 'swap') {
-    const pid = row.tile.peerId
-    const sel = mafiaGameStore.hostSeatSwapSelectionPeerId
-    if (sel == null) {
-      mafiaGameStore.setSeatSwapSelectionPeerId(pid)
-    } else if (sel === pid) {
-      mafiaGameStore.setSeatSwapSelectionPeerId(null)
-    } else {
-      mafiaGameStore.swapSeatsByPeerId(sel, pid)
-    }
-    ev.stopPropagation()
-    return
-  }
-  const seat = mafiaNumberByPeer.value.get(row.tile.peerId)
-  if (seat == null) {
-    return
-  }
-  if (mafiaGameStore.hostInteractionMode === 'speaking') {
-    const draft = mafiaGameStore.speakingNominationDraftBySeat
-    const segments = decodeSpeakingNominationFlat(mafiaGameStore.speakingQueue)
-    if (draft == null) {
-      const existingBy = segments.find((seg) => seg.bySeat === seat)
-      if (existingBy) {
-        pushCallToast(
-          t('mafiaPage.speakingByAlreadyNominatedToast', {
-            by: seat,
-            target: existingBy.targetSeat,
-          }),
-          'leave',
-        )
-        ev.stopPropagation()
-        return
-      }
-      mafiaGameStore.setSpeakingNominationDraftBySeat(seat)
-    } else if (draft === seat) {
-      mafiaGameStore.setSpeakingNominationDraftBySeat(null)
-    } else {
-      const existingTarget = segments.find((seg) => seg.targetSeat === seat)
-      if (existingTarget) {
-        pushCallToast(
-          t('mafiaPage.speakingTargetAlreadyNominatedToast', {
-            target: seat,
-            by: existingTarget.bySeat ?? '?',
-          }),
-          'leave',
-        )
-        ev.stopPropagation()
-        return
-      }
-      const existingBy = segments.find((seg) => seg.bySeat === draft)
-      if (existingBy) {
-        pushCallToast(
-          t('mafiaPage.speakingByAlreadyNominatedToast', {
-            by: draft,
-            target: existingBy.targetSeat,
-          }),
-          'leave',
-        )
-        mafiaGameStore.setSpeakingNominationDraftBySeat(null)
-        ev.stopPropagation()
-        return
-      }
-      mafiaGameStore.appendSpeakingNominationPair(draft, seat)
-    }
-  } else {
-    mafiaGameStore.assignOrClearNightActionForActiveRole(seat)
-  }
-  ev.stopPropagation()
+  handleMafiaHostTileClick(ev, row)
 }
-
-function onMafiaSetEliminationBackground(payload: { peerId: string; background: MafiaEliminationBackground }): void {
-  mafiaGameStore.setPeerEliminationBackground(payload.peerId, payload.background)
-}
-
-const mafiaSpeakingOrderHintVisible = ref(false)
-let mafiaSpeakingOrderHintTimer: ReturnType<typeof setTimeout> | undefined
-
-watch(
-  () => mafiaGameStore.hostInteractionMode,
-  (mode, prev) => {
-    if (!isMafiaRoute.value || mafiaViewUi.value || !mafiaGameStore.isMafiaHost) {
-      return
-    }
-    if (mode !== 'speaking' || prev == null || prev === 'speaking') {
-      return
-    }
-    mafiaSpeakingOrderHintVisible.value = true
-    if (mafiaSpeakingOrderHintTimer != null) {
-      clearTimeout(mafiaSpeakingOrderHintTimer)
-    }
-    mafiaSpeakingOrderHintTimer = setTimeout(() => {
-      mafiaSpeakingOrderHintVisible.value = false
-      mafiaSpeakingOrderHintTimer = undefined
-    }, 4500)
-  },
-)
 
 function refreshMafiaPlayersState(): void {
   if (!isMafiaRoute.value) {
