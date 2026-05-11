@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue'
+import { computed, type Ref } from 'vue'
 import { MafiaWs } from '@/composables/mafiaWsProtocol'
 import type { useMafiaGameStore } from '@/stores/mafiaGame'
 import {
@@ -14,10 +14,14 @@ import type { MafiaEliminationBackground } from '@/utils/mafiaGameTypes'
  *   - thin outbound WS-send handlers (`mafia:force-mute-all`, `mafia:force-camera-off`)
  *   - thin Mafia store dispatchers (life toggle, elimination background)
  *   - host-side seat-highlight computeds for the tile-wrap class bindings
- *   - the "speaking-order hint" transient toast state machine
  *   - the host tile-click router (swap / speaking / night-action assignment) —
  *     Mafia branch only; the EatFirst branch of the original click handler
  *     remains in CallPage where the EatFirst state lives.
+ *
+ * Phase 2B note: the "speaking-order hint" transient toast state machine
+ * previously lived here. It has moved to `useMafiaSpeakingHint`, invoked
+ * from `MafiaCallAdapter` (a sibling of `<CallPage>` mounted from
+ * `MafiaPage`). The hint UI no longer travels through CallPage.
  *
  * The composable does NOT own:
  *   - any media/WebRTC state (call-core owns the orchestrator)
@@ -58,8 +62,6 @@ export interface UseMafiaCallHostUiDeps {
 }
 
 export interface UseMafiaCallHostUiReturn {
-  /** Visibility ref for the "speaking order" host hint toast. */
-  mafiaSpeakingOrderHintVisible: Ref<boolean>
   /** Tile-wrap class predicate: highlight night-action target seats. */
   isMafiaHostNightActionSeat: (seat: number | undefined) => boolean
   /** Tile-wrap class predicate: highlight queued speaking-nomination targets. */
@@ -78,9 +80,6 @@ export interface UseMafiaCallHostUiReturn {
 
 const MAFIA_FORCE_CAMERA_OFF_SIGNAL = MafiaWs.forceCameraOff
 const MAFIA_FORCE_MUTE_ALL_SIGNAL = MafiaWs.forceMuteAll
-
-/** Speak-hint visibility duration (ms); preserved from the original inline timer. */
-const MAFIA_SPEAKING_HINT_VISIBLE_MS = 4500
 
 export function useMafiaCallHostUi(
   deps: UseMafiaCallHostUiDeps,
@@ -249,48 +248,7 @@ export function useMafiaCallHostUi(
     ev.stopPropagation()
   }
 
-  // ---- Speak-hint transient toast (host-only) ----
-  //
-  // Toggled on when the host enters `speaking` mode from any non-speaking
-  // state; auto-clears after MAFIA_SPEAKING_HINT_VISIBLE_MS. The rendering of
-  // the toast (`<div class="call-page__mafia-speak-hint">`) stays in
-  // CallPage's `.call-page__toasts` stack — this composable only owns the
-  // visibility ref and lifecycle.
-
-  const mafiaSpeakingOrderHintVisible = ref(false)
-  let mafiaSpeakingOrderHintTimer: ReturnType<typeof setTimeout> | undefined
-
-  function clearSpeakingHintTimer(): void {
-    if (mafiaSpeakingOrderHintTimer != null) {
-      clearTimeout(mafiaSpeakingOrderHintTimer)
-      mafiaSpeakingOrderHintTimer = undefined
-    }
-  }
-
-  watch(
-    () => mafiaGameStore.hostInteractionMode,
-    (mode, prev) => {
-      if (!isMafiaRoute.value || mafiaViewUi.value || !mafiaGameStore.isMafiaHost) {
-        return
-      }
-      if (mode !== 'speaking' || prev == null || prev === 'speaking') {
-        return
-      }
-      mafiaSpeakingOrderHintVisible.value = true
-      clearSpeakingHintTimer()
-      mafiaSpeakingOrderHintTimer = setTimeout(() => {
-        mafiaSpeakingOrderHintVisible.value = false
-        mafiaSpeakingOrderHintTimer = undefined
-      }, MAFIA_SPEAKING_HINT_VISIBLE_MS)
-    },
-  )
-
-  onBeforeUnmount(() => {
-    clearSpeakingHintTimer()
-  })
-
   return {
-    mafiaSpeakingOrderHintVisible,
     isMafiaHostNightActionSeat,
     isMafiaHostSpeakingNominationUiSeat,
     onMafiaToggleLifeFromTile,

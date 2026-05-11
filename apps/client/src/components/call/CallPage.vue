@@ -1832,7 +1832,6 @@ const mafiaNumberByPeer = computed(() => {
  * host-UI surface.
  */
 const {
-  mafiaSpeakingOrderHintVisible,
   isMafiaHostNightActionSeat,
   isMafiaHostSpeakingNominationUiSeat,
   onMafiaToggleLifeFromTile,
@@ -2807,10 +2806,11 @@ onBeforeUnmount(() => {
     clearTimeout(roomCopyFlashTimer)
     roomCopyFlashTimer = null
   }
-  if (mafiaSpeakingOrderHintTimer != null) {
-    clearTimeout(mafiaSpeakingOrderHintTimer)
-    mafiaSpeakingOrderHintTimer = undefined
-  }
+  // The Mafia speaking-hint timer is owned by `useMafiaSpeakingHint`
+  // (inside `MafiaCallAdapter`); the composable's own `onBeforeUnmount`
+  // clears it. A leftover reference here from before the Phase 2A
+  // extraction was throwing a `ReferenceError` at unmount and aborting
+  // the rest of this hook — including `leaveCall()` below.
   for (const pid of [...remoteVideoSuppressDelayTimerByPeer.keys()]) {
     clearRemoteVideoSuppressTimer(pid)
   }
@@ -2984,15 +2984,13 @@ watch(joining, (j) => {
             </div>
           </TransitionGroup>
         </div>
-        <Transition name="call-toast" appear>
-          <div
-            v-if="mafiaSpeakingOrderHintVisible"
-            class="call-page__toast call-page__toast--join call-page__mafia-speak-hint"
-            role="status"
-          >
-            {{ t('mafiaPage.speakingOrderFloatHint') }}
-          </div>
-        </Transition>
+        <!--
+          The Mafia "speaking order" hint toast lives on
+          `MafiaCallAdapter.vue`, mounted from `MafiaPage` as a sibling of
+          `<CallPage>`. Its CSS positioning is `position: fixed` (top: 4.75rem;
+          right: 1rem; z-index: 110) so rendering from a different DOM
+          ancestor does not change visual placement.
+        -->
 
         <div
           v-if="session.inCall && !mafiaViewUi && !eatFirstViewUi && callChatInboundToasts.length > 0"
