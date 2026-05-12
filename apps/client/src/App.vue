@@ -74,10 +74,18 @@ useSaTooltips()
 
 onMounted(async () => {
   try {
-    await Promise.all([
-      useAuth().refresh(),
-      isVisualCloudRoute() ? waitForMainCloud() : Promise.resolve(),
-    ])
+    /**
+     * Kick off auth refresh without blocking the initial paint. Private
+     * routes are protected by `router.beforeEach` (`ensureAuthLoaded`),
+     * and the full-page loader stays visible while `routeNavLoading` is
+     * still true — so we can't reveal private UI early just because the
+     * loader's `initialAppLoading` flag flipped. Pinning the loader on a
+     * slow `/api/auth/me` was the dominant LCP regression on `/app`.
+     */
+    void useAuth().refresh()
+    if (isVisualCloudRoute()) {
+      await waitForMainCloud()
+    }
   } finally {
     initialAppLoading.value = false
   }

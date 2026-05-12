@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, defineAsyncComponent, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import AppEconomySection from '@/pages/app/components/AppEconomySection.vue'
 import AppGamesSection from '@/pages/app/components/AppGamesSection.vue'
 import AppVideoCallSection from '@/pages/app/components/AppVideoCallSection.vue'
-import BetaAccessModal from '@/pages/app/components/BetaAccessModal.vue'
-import eatFirstImage from '@/assets/landing/eat-first.png'
-import eatFirstImageWebp from '@/assets/landing/eat-first.webp'
-import mafiaImage from '@/assets/landing/mafia.png'
-import mafiaImageWebp from '@/assets/landing/mafia.webp'
-import nadleImage from '@/assets/landing/nadle.png'
-import nadleImageWebp from '@/assets/landing/nadle.webp'
-import nadrawImage from '@/assets/landing/nadraw-phone.png'
-import nadrawImageWebp from '@/assets/landing/nadraw-phone.webp'
+// Beta-access modal is gated behind `?betaAccess=…` query — lazy so the
+// modal chunk (and its assets) does not ship with the initial `/app` paint.
+const BetaAccessModal = defineAsyncComponent(
+  () => import('@/pages/app/components/BetaAccessModal.vue'),
+)
+// WebP is universally supported by every browser we target; the PNG twins
+// were dead weight in the bundle (every game card paired a ~10 KB PNG with
+// a smaller WebP that the `<picture>` always preferred).
+import eatFirstImage from '@/assets/landing/eat-first.webp'
+import mafiaImage from '@/assets/landing/mafia.webp'
+import nadleImage from '@/assets/landing/nadle.webp'
+import nadrawImage from '@/assets/landing/nadraw-phone.webp'
 import checkersMarkImage from '@/assets/landing/checkers-mark.svg'
 import durakCardImage from '@/assets/landing/durak-card.svg'
 import { useAuth } from '@/composables/useAuth'
@@ -79,7 +82,6 @@ const gameCards = computed<AppGameCard[]>(() => [
     title: t('home.gameEatFirst'),
     to: eatFirstRoute,
     image: eatFirstImage,
-    imageWebp: eatFirstImageWebp,
     ariaLabel: t('home.openEatFirst'),
     tone: 'amber',
     prefetch: prefetchEatFirst,
@@ -89,7 +91,6 @@ const gameCards = computed<AppGameCard[]>(() => [
     title: t('home.gameMafia'),
     to: mafiaRoute,
     image: mafiaImage,
-    imageWebp: mafiaImageWebp,
     ariaLabel: t('home.openMafia'),
     tone: 'slate',
     prefetch: prefetchMafia,
@@ -99,7 +100,6 @@ const gameCards = computed<AppGameCard[]>(() => [
     title: t('home.gameNadle'),
     to: nadleRoute.value,
     image: nadleImage,
-    imageWebp: nadleImageWebp,
     ariaLabel: t('home.openNadle'),
     tone: 'green',
     prefetch: prefetchNadle,
@@ -109,7 +109,6 @@ const gameCards = computed<AppGameCard[]>(() => [
     title: t('home.gameNadraw'),
     to: nadrawRoute.value,
     image: nadrawImage,
-    imageWebp: nadrawImageWebp,
     ariaLabel: t('home.openNadraw'),
     tone: 'violet',
   },
@@ -189,9 +188,6 @@ function closeBetaAccessModal(): void {
   void router.replace({ name: 'home', query })
 }
 
-onMounted(() => {
-  void auth.refresh()
-})
 
 watch(
   () => route.query.needLogin,

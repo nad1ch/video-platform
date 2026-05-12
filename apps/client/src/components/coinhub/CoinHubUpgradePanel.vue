@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { defineAsyncComponent, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import PremiumPlansModal from '@/components/coinhub/PremiumPlansModal.vue'
+// Premium-plans modal is 24 KB of source — it stays behind the "Upgrade"
+// CTA and never renders on first paint, so load it lazily.
+const PremiumPlansModal = defineAsyncComponent(
+  () => import('@/components/coinhub/PremiumPlansModal.vue'),
+)
 import '@/styles/coinhub-design-system.css'
 
 withDefaults(
@@ -110,7 +114,7 @@ function openPremiumModal() {
     </div>
   </section>
 
-  <PremiumPlansModal v-model:open="premiumModalOpen" />
+  <PremiumPlansModal v-if="premiumModalOpen" v-model:open="premiumModalOpen" />
 </template>
 
 <style scoped>

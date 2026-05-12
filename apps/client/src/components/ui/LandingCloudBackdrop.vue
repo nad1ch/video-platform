@@ -1,14 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import cloudRoundedWideOne from '@/assets/landing/clouds/cloud-rounded-wide-1.png'
+// WebP is universally supported on every browser we target. We previously
+// imported a PNG twin for every cloud (each ~200 KB) just so the
+// `<picture>` fallback `<img>` had a value — those PNGs shipped to
+// `dist/assets/` for no runtime benefit. The variable names below keep the
+// short non-`Webp` suffix because the `<img :src>` and `<source srcset>`
+// inside the `<picture>` now both resolve to the same WebP asset; the
+// browser fetches it exactly once.
+import cloudRoundedWideOne from '@/assets/landing/clouds/cloud-rounded-wide-1.webp'
 import cloudRoundedWideOneWebp from '@/assets/landing/clouds/cloud-rounded-wide-1.webp'
-import cloudRoundedWideTwo from '@/assets/landing/clouds/cloud-rounded-wide-2.png'
+import cloudRoundedWideTwo from '@/assets/landing/clouds/cloud-rounded-wide-2.webp'
 import cloudRoundedWideTwoWebp from '@/assets/landing/clouds/cloud-rounded-wide-2.webp'
-import cloudTransparentOne from '@/assets/landing/clouds/cloud-transparent-1.png'
+import cloudTransparentOne from '@/assets/landing/clouds/cloud-transparent-1.webp'
 import cloudTransparentOneWebp from '@/assets/landing/clouds/cloud-transparent-1.webp'
-import cloudTransparentTwo from '@/assets/landing/clouds/cloud-transparent-2.png'
+import cloudTransparentTwo from '@/assets/landing/clouds/cloud-transparent-2.webp'
 import cloudTransparentTwoWebp from '@/assets/landing/clouds/cloud-transparent-2.webp'
-import cloudWideVolumetric from '@/assets/landing/clouds/cloud-wide-volumetric.png'
+import cloudWideVolumetric from '@/assets/landing/clouds/cloud-wide-volumetric.webp'
 import cloudWideVolumetric768Webp from '@/assets/landing/clouds/cloud-wide-volumetric-768.webp'
 import cloudWideVolumetricWebp from '@/assets/landing/clouds/cloud-wide-volumetric.webp'
 import { landingDesignPx as px } from '@/utils/landingDesignPx'

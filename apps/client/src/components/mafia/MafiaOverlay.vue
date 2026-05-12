@@ -12,7 +12,8 @@
  *
  * The chip itself (countdown text, preset chips, Start/Stop button, 1 s tick,
  * compact layout) is now owned by `GameTimerOverlay` in `components/game-call`.
- * That component is store-free and is also mounted by `GameTemplatePage`.
+ * That component is store-free and consumed only via this adapter today;
+ * future games can mount it directly with their own labels + adapter.
  */
 
 import { computed } from 'vue'

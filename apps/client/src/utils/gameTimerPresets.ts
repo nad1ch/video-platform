@@ -1,9 +1,8 @@
 /**
  * Shared game-timer preset durations (in milliseconds).
  *
- * Single source of truth for the `GameTimerOverlay` chip used by:
- *   - production Mafia (`MafiaOverlay.vue` → passes via prop)
- *   - the reusable Game Template page (`GameTemplatePage.vue`)
+ * Single source of truth for the `GameTimerOverlay` chip used by production
+ * Mafia (`MafiaOverlay.vue` → passes via prop) and any future game page.
  *
  * Lives in `utils/` so both stores (Mafia) and components (game-call) can
  * import it without crossing layering boundaries (a store importing from a

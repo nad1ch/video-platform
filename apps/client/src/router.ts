@@ -13,7 +13,6 @@ import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import {
   loadCheckersPage,
   loadEatFirstPage,
-  loadGameTemplatePage,
   loadMafiaPage,
   loadNadleStreamPage,
 } from '@/routerRouteLoaders'
@@ -105,7 +104,18 @@ export const router = createRouter({
           component: () => import('./components/call/CallPage.vue'),
         },
         {
+          /**
+           * Mafia route. Also serves `/app/game-template` as an alias so
+           * that admin-facing future-game prototyping happens against the
+           * exact production Mafia stack (same `<MafiaPage>` mount, same
+           * `<CallPage>` orchestrator, same Mafia store + signaling, same
+           * `isMafiaRoute = route.name === 'mafia'` checks across the
+           * 10 files that gate Mafia-specific behavior). The URL bar
+           * shows `/app/game-template` for the alias path; everything
+           * else is the same room/host/queue/timer protocol.
+           */
           path: 'mafia',
+          alias: '/app/game-template',
           name: 'mafia',
           meta: {
             appTitleKey: 'routes.mafia',
@@ -143,27 +153,6 @@ export const router = createRouter({
           name: 'eat',
           meta: { footerContext: 'eat' },
           component: loadEatFirstPage,
-        },
-        {
-          /**
-           * Experimental Game Template page — admin-only. Reusable
-           * foundation for future games: validates the
-           * <GameCallShell>/<GameCallVideoGrid>/<GameCallTile> + a
-           * demo Mafia-style overlay layer in isolation from production
-           * routes. Uses real WebRTC via call-core on a `gamecall-lab:`
-           * signaling room namespace so it never collides with production
-           * Mafia / EatFirst rooms.
-           */
-          path: 'game-template',
-          name: 'game-template',
-          meta: {
-            appTitle: 'Game Template',
-            footerContext: 'home',
-            footer: false,
-            requiresAuth: true,
-            requiresAdmin: true,
-          },
-          component: loadGameTemplatePage,
         },
         {
           path: 'coin-hub',

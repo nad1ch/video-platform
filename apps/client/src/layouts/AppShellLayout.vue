@@ -107,7 +107,6 @@ const isNadrawRoute = computed(() => route.name === 'nadraw-show')
 const isBetaAccessRoute = computed(() => route.name === 'beta-access')
 const isAdminRoute = computed(() => String(route.name ?? '').startsWith('admin-'))
 const isHeavyVisualRoute = computed(() => isHomeRoute.value)
-const shellShowsCoinBalance = computed(() => showChrome.value)
 
 /** Hide header coin chip on interactive game routes (Coin Hub page keeps its own balance UI). */
 const APP_SHELL_HIDE_HEADER_COIN_ROUTE_NAMES = new Set([
@@ -298,9 +297,16 @@ watch([isMafiaRoute, isEatFirstCallGameView], ([onMafia, eatCall]) => {
 })
 
 watch(
-  [() => auth.isAuthenticated.value, () => shellShowsCoinBalance.value],
-  ([authed, showsBalance]) => {
-    if (authed && showsBalance) {
+  /**
+   * Fetch the CoinHub snapshot from the shell only when the header coin
+   * chip is actually visible. Game/call routes hide the chip via
+   * `APP_SHELL_HIDE_HEADER_COIN_ROUTE_NAMES`, so on those routes a
+   * shell-level snapshot fetch was wasted network — the standalone
+   * `/app/coin-hub` page still loads its own snapshot.
+   */
+  [() => auth.isAuthenticated.value, () => appLandingHeaderShowCoin.value],
+  ([authed, showsCoinChip]) => {
+    if (authed && showsCoinChip) {
       void coinHub.loadSnapshot({ background: true })
     }
   },

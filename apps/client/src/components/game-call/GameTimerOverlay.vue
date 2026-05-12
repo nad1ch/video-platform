@@ -12,7 +12,6 @@
  * signaling, or i18n keys. All locale strings arrive via the `labels` prop so
  * the same component can be mounted by:
  *   - `MafiaOverlay.vue`         → Mafia adapter (labels from `mafiaPage.*`)
- *   - `GameTemplatePage.vue`     → demo adapter
  *   - future game pages          → game-specific adapter
  *
  * Visual scope preserved 1:1 from the original `MafiaOverlay` header chip:
