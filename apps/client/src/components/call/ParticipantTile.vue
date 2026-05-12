@@ -92,14 +92,10 @@ const props = withDefaults(
 
 
     rowSpeaking: boolean
-    
+
     remoteListenVolume?: number
-    
+
     remoteListenMuted?: boolean
-    
-    remoteAudioLevel?: number
-    
-    remoteVoiceDucked?: boolean
     /** “Raise hand” from signaling (call room). */
     raiseHand?: boolean
     

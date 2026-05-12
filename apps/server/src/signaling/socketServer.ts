@@ -344,11 +344,11 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'eat:trait-regenerate-request': {
-              handleEatFirstTraitRegenerateRequest(socket, parsed.data.payload, deps)
+              await handleEatFirstTraitRegenerateRequest(socket, parsed.data.payload, deps)
               break
             }
             case 'eat:trait-type-reroll-request': {
-              handleEatFirstTraitTypeRerollRequest(socket, parsed.data.payload, deps)
+              await handleEatFirstTraitTypeRerollRequest(socket, parsed.data.payload, deps)
               break
             }
             case 'eat:action-card-reroll-request': {

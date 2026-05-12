@@ -351,7 +351,10 @@ export function attachNadleSocketServer(wss: WebSocketServer): void {
             return
           }
           const meta = startPlayerNewGame(streamerId, session.id, session.display_name, msg.wordLength)
-          clearTwitchGuessThrottleForStreamer(streamerId)
+          // Per-player "next word" must not clear the streamer-wide Twitch chat
+          // guess throttle: that would let any logged-in viewer wipe the 1.5 s
+          // anti-spam cooldown for every chat guesser by spamming this WS path.
+          // Streamer-wide resets happen in `broadcastNewRound` only.
           safeSend(ws, { type: NadleWs.newGame, payload: meta })
           safeSend(ws, {
             type: NadleWs.state,

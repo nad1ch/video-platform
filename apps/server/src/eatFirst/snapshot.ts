@@ -12,14 +12,40 @@ function stripKey<T extends Record<string, unknown>>(o: T): T {
   return c
 }
 
+/**
+ * Fields that must never leave the server through a public snapshot. The room
+ * snapshot is fanned out to anonymous `/eat-first-ws` subscribers and any caller
+ * of `GET /api/eat-first/games/:gameId/snapshot`, so the room owner identity and
+ * the call-signaling persistence blob (host-only state) are redacted here.
+ */
+const PRIVATE_ROOM_FIELDS = ['ownerUserId', 'callSignalingSnapshot'] as const
+
+/**
+ * Per-player auth credentials. `joinToken` + `joinDeviceId` together form the
+ * seat-claim secret consumed by `eat:slot-claim` / `verifyEatFirstSlotAuth`, so
+ * leaking them is full impersonation. `joinClaimedAt` is the timestamp paired
+ * with the token and has no reason to be public either.
+ */
+const PRIVATE_PLAYER_FIELDS = ['joinToken', 'joinDeviceId', 'joinClaimedAt'] as const
+
+function stripFields<T extends Record<string, unknown>>(o: T, fields: ReadonlyArray<string>): T {
+  const c = { ...o }
+  for (const f of fields) {
+    delete c[f as keyof typeof c]
+  }
+  return c
+}
+
 function sanitizeRoom(room: unknown): Record<string, unknown> {
   if (!room || typeof room !== 'object' || Array.isArray(room)) return {}
-  return stripKey({ ...(room as Record<string, unknown>) }) as Record<string, unknown>
+  const base = stripKey({ ...(room as Record<string, unknown>) }) as Record<string, unknown>
+  return stripFields(base, PRIVATE_ROOM_FIELDS)
 }
 
 function sanitizePlayerData(data: unknown): Record<string, unknown> {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return {}
-  return stripKey({ ...(data as Record<string, unknown>) }) as Record<string, unknown>
+  const base = stripKey({ ...(data as Record<string, unknown>) }) as Record<string, unknown>
+  return stripFields(base, PRIVATE_PLAYER_FIELDS)
 }
 
 export type EatFirstSnapshot = {

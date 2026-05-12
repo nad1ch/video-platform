@@ -1,7 +1,7 @@
 import './loadDotEnv'
 
 import cookieParser from 'cookie-parser'
-import express from 'express'
+import express, { type NextFunction, type Request, type Response } from 'express'
 import http from 'http'
 import { WebSocketServer } from 'ws'
 import { MediasoupWorkerPool } from './mediasoup/workerPool'
@@ -39,6 +39,50 @@ async function bootstrap(): Promise<void> {
   services.roomManager = roomManager
 
   const app = express()
+
+  /**
+   * Behind exactly one trusted proxy (Cloudflare). Lets Express derive `req.ip`
+   * from `X-Forwarded-For` and `req.protocol` from `X-Forwarded-Proto`, which
+   * is needed for accurate logging and any future `req.secure` checks. The
+   * manual XFF parse in `utils/rateLimit.ts:getClientIp` keeps working — it
+   * checks the header first and falls back to `req.ip`, so both paths agree.
+   */
+  app.set('trust proxy', 1)
+
+  /**
+   * One-line JSON access log per HTTP request. Captures `cf-ray` so any 4xx/5xx
+   * in Cloudflare analytics can be correlated to a server log line. Intentionally
+   * minimal — no body, no headers — to avoid leaking PII.
+   */
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.url === '/health') {
+      return next()
+    }
+    const start = Date.now()
+    res.on('finish', () => {
+      const ray = req.headers['cf-ray']
+      console.log(JSON.stringify({
+        t: new Date().toISOString(),
+        m: req.method,
+        p: req.originalUrl,
+        s: res.statusCode,
+        ms: Date.now() - start,
+        ip: req.ip,
+        ray: typeof ray === 'string' ? ray : undefined,
+      }))
+    })
+    next()
+  })
+
+  /**
+   * Defense-in-depth: ensure nothing under /api/* is ever cached by Cloudflare
+   * or an intermediate proxy, even if a future page/cache rule is configured
+   * too broadly. Per-route handlers may still override (e.g. webhooks).
+   */
+  app.use('/api', (_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Cache-Control', 'no-store')
+    next()
+  })
 
   app.use((req, res, next) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined
@@ -181,6 +225,16 @@ async function bootstrap(): Promise<void> {
       return
     }
 
+    /**
+     * Unknown WS path. Send a clean HTTP 404 before tearing down so Cloudflare
+     * reports a 4xx (not a 520/521 from a bare TCP reset). Old SPA builds,
+     * scanners, and stale proxies all hit this path.
+     */
+    try {
+      socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
+    } catch {
+      /* socket already broken — fall through to destroy */
+    }
     socket.destroy()
   })
 
@@ -207,6 +261,36 @@ async function bootstrap(): Promise<void> {
         dead: e.dead,
       })),
     })
+  })
+
+  /**
+   * Catch-all 404 for unmounted /api/* paths. Returns JSON so SPA fetchers and
+   * monitoring tools get a consistent error shape instead of the default HTML
+   * 404. Scoped to /api so it cannot accidentally serve a Pages SPA route.
+   */
+  app.use('/api', (_req: Request, res: Response) => {
+    res.status(404).json({ error: 'NOT_FOUND' })
+  })
+
+  /**
+   * Backstop error handler. Per-route try/catch blocks already set their own
+   * status; this only fires when something throws past them. Stack is logged
+   * but never sent to the client.
+   */
+  app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) {
+      return next(err)
+    }
+    const message = err instanceof Error ? err.message : String(err)
+    const stack = err instanceof Error ? err.stack : undefined
+    console.error('[unhandled]', JSON.stringify({
+      m: req.method,
+      p: req.originalUrl,
+      ray: typeof req.headers['cf-ray'] === 'string' ? req.headers['cf-ray'] : undefined,
+      msg: message,
+      stack,
+    }))
+    res.status(500).json({ error: 'INTERNAL_ERROR' })
   })
 
   void startTwitchChatIngest().catch((err: unknown) => {

@@ -72,6 +72,7 @@ import { syncHostControlChrome, clearHostControlChrome } from '../hostControlChr
 import { debugDelete } from '../../utils/debugDelete.js'
 import { normalizePlayerSlotId } from '../../utils/playerSlot.js'
 import { getJoinSessionToken } from '../../utils/joinSessionToken.js'
+import { getEatFirstJoinToken } from '../../utils/joinTokenStore.js'
 import {
   saveLastPlayerSlot,
   getValidatedLastPlayerSlot,
@@ -2308,8 +2309,13 @@ watch(
     }
     unsubCharacter = subscribeToCharacter(gid, pid, (data) => {
       if (!isAdmin.value) {
-        playerDocJoinToken.value =
-          data && typeof data.joinToken === 'string' ? String(data.joinToken).trim() : ''
+        // The public `eat-first:init/update` snapshot no longer leaks `joinToken`
+        // (server redaction in `apps/server/src/eatFirst/snapshot.ts`). Read the
+        // locally-stored join token written by `claimPlayerSlot` instead so the
+        // `playerSlotAccessBlocked` defense-in-depth gate (line ~160) still
+        // detects URL-token mismatches. Server authority via
+        // `verifyEatFirstSlotAuth` remains the actual gate for mutations.
+        playerDocJoinToken.value = getEatFirstJoinToken(gid, pid)
         playerJoinGateReady.value = true
       }
       applyFromFirestoreSnapshot(data)

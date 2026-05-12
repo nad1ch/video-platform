@@ -547,9 +547,25 @@ function eatFirstHostPeerId(room: Room): string | null {
   return resolveEatFirstHostPeerId(room, getEatFirstOwnerUserId(room.id))
 }
 
+/**
+ * Strict Eat First host authority for WS host-only commands. Requires a
+ * server-authoritative `ownerUserId` AND a matching `peer.userId`. The loose
+ * "first peer in room" fallback that `resolveEatFirstHostPeerId` performs is
+ * intentionally not honored here — it remains valid only for the seat-assignment
+ * heuristic in `assignEatFirstSlotsToUnclaimedPeers`. Legacy unstamped rooms
+ * (no `ownerUserId`) cannot drive WS host actions; the HTTP gate
+ * (`eatFirstSessionCanOperateGame`) still permits role-based admin operations.
+ */
 function isEatFirstHostPeer(room: Room, peer: Peer): boolean {
-  const hostPeerId = resolveEatFirstHostPeerId(room, getEatFirstOwnerUserId(room.id))
-  return hostPeerId != null && peer.id === hostPeerId
+  const ownerUserId = getEatFirstOwnerUserId(room.id)
+  if (ownerUserId == null || ownerUserId.length === 0) {
+    return false
+  }
+  const peerUserId = typeof peer.userId === 'string' ? peer.userId.trim() : ''
+  if (peerUserId.length === 0) {
+    return false
+  }
+  return peerUserId === ownerUserId
 }
 
 function eatFirstTraitStatePayloadFromTable(
@@ -671,6 +687,16 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
   if (isEatFirstRoomId(room.id)) {
     void broadcastEatFirstTableState(room)
     broadcastEatFirstHostUpdated(room)
+  }
+  // Clear the Mafia host *peer* binding when the host peer itself is the one
+  // leaving so the next broadcast reflects "host offline" instead of advertising
+  // a peerId that no longer exists in the room. The stable `hostUserId` /
+  // `hostSessionId` are intentionally preserved so the same authenticated owner
+  // can reclaim host on reconnect via `mafia:claim-host` (which also consults
+  // `mafiaRoomOwnerStore`). Anonymous peers cannot reclaim because the claim
+  // path requires `peer.userId.length >= 1`.
+  if (isMafiaRoomId(room.id) && room.getMafiaHostPeerId() === peer.id) {
+    room.setMafiaHostPeerId(null)
   }
   broadcastMafiaHostUpdated(room)
   
@@ -1197,16 +1223,21 @@ export async function handleSetAudioMuted(
   
   
   if (!muted && !peer.forcedAudioMuted) {
-    for (const p of peer.getProducers()) {
-      if (p.kind === 'audio' && !p.closed && p.paused) {
-        try {
-          await p.resume()
-        } catch (e) {
-          console.warn('[signaling] audio producer resume on unmute failed', {
-            peerId: peer.id,
-            producerId: p.id,
-          }, e)
-        }
+    // Snapshot the paused audio producers BEFORE awaiting `p.resume()` —
+    // `peer.getProducers()` is a live collection; an audio producer swap
+    // (`handleProduce`) racing with this loop would otherwise mutate the
+    // iteration mid-flight, skipping or double-resuming entries.
+    const pausedAudioProducers = peer
+      .getProducers()
+      .filter((p) => p.kind === 'audio' && !p.closed && p.paused)
+    for (const p of pausedAudioProducers) {
+      try {
+        await p.resume()
+      } catch (e) {
+        console.warn('[signaling] audio producer resume on unmute failed', {
+          peerId: peer.id,
+          producerId: p.id,
+        }, e)
       }
     }
   }
@@ -2136,28 +2167,26 @@ export async function handleEatFirstTraitRevealRequest(
   await broadcastEatFirstTableState(room)
 }
 
-export function handleEatFirstTraitRegenerateRequest(
+export async function handleEatFirstTraitRegenerateRequest(
   socket: WsSocket,
   payload: { slotId: string; traitKey: EatFirstTraitKey },
   deps: SignalingDeps,
-): void {
-  void (async () => {
-    const rp = resolveEatFirstPeerAndRoom(socket, deps)
-    if (!rp) return
-    const { peer, room } = rp
-    if (!isEatFirstHostPeer(room, peer)) return
-    await getHydratedEatFirstTableState(room.id)
-    const slotId = normalizeEatFirstSlot(payload.slotId)
-    if (!isEatFirstPlayerSlotId(slotId)) return
-    const traitKey = payload.traitKey
-    const nextValue = applyEatFirstTraitReroll(room.id, slotId, traitKey)
-    if (typeof nextValue !== 'string' || nextValue.length < 1) return
-    broadcastServerMessageToRoom(room, {
-      type: 'eat:trait-regenerated',
-      payload: { slotId, traitKey, value: nextValue },
-    })
-    await broadcastEatFirstTableState(room)
-  })()
+): Promise<void> {
+  const rp = resolveEatFirstPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isEatFirstHostPeer(room, peer)) return
+  await getHydratedEatFirstTableState(room.id)
+  const slotId = normalizeEatFirstSlot(payload.slotId)
+  if (!isEatFirstPlayerSlotId(slotId)) return
+  const traitKey = payload.traitKey
+  const nextValue = applyEatFirstTraitReroll(room.id, slotId, traitKey)
+  if (typeof nextValue !== 'string' || nextValue.length < 1) return
+  broadcastServerMessageToRoom(room, {
+    type: 'eat:trait-regenerated',
+    payload: { slotId, traitKey, value: nextValue },
+  })
+  await broadcastEatFirstTableState(room)
 }
 
 /**
@@ -2169,49 +2198,47 @@ export function handleEatFirstTraitRegenerateRequest(
  * the override map, so the host can rotate values mid-game without touching
  * the persistent player records.
  */
-export function handleEatFirstTraitTypeRerollRequest(
+export async function handleEatFirstTraitTypeRerollRequest(
   socket: WsSocket,
   payload: { traitKey: EatFirstTraitKey },
   deps: SignalingDeps,
-): void {
-  void (async () => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.info('[eat-first:handler:start]', {
-        action: 'trait-type-reroll',
-        traitKey: payload.traitKey,
-      })
-    }
-    const rp = resolveEatFirstPeerAndRoom(socket, deps)
-    if (!rp) return
-    const { peer, room } = rp
-    if (!isEatFirstHostPeer(room, peer)) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.info('[eat-first:handler:reject]', {
-          action: 'trait-type-reroll',
-          reason: 'not-host',
-          peerId: peer.id,
-          roomId: room.id,
-        })
-      }
-      return
-    }
-    await getHydratedEatFirstTableState(room.id)
-    const traitKey = payload.traitKey
-    const valuesBySlot = applyEatFirstTraitTypeReroll(room.id, traitKey)
-    if (Object.keys(valuesBySlot).length < 1) return
-    broadcastServerMessageToRoom(room, {
-      type: 'eat:trait-type-rerolled',
-      payload: { traitKey, valuesBySlot },
+): Promise<void> {
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[eat-first:handler:start]', {
+      action: 'trait-type-reroll',
+      traitKey: payload.traitKey,
     })
+  }
+  const rp = resolveEatFirstPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isEatFirstHostPeer(room, peer)) {
     if (process.env.NODE_ENV !== 'production') {
-      console.info('[eat-first:handler:success]', {
+      console.info('[eat-first:handler:reject]', {
         action: 'trait-type-reroll',
+        reason: 'not-host',
+        peerId: peer.id,
         roomId: room.id,
-        slots: Object.keys(valuesBySlot).length,
       })
     }
-    await broadcastEatFirstTableState(room)
-  })()
+    return
+  }
+  await getHydratedEatFirstTableState(room.id)
+  const traitKey = payload.traitKey
+  const valuesBySlot = applyEatFirstTraitTypeReroll(room.id, traitKey)
+  if (Object.keys(valuesBySlot).length < 1) return
+  broadcastServerMessageToRoom(room, {
+    type: 'eat:trait-type-rerolled',
+    payload: { traitKey, valuesBySlot },
+  })
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[eat-first:handler:success]', {
+      action: 'trait-type-reroll',
+      roomId: room.id,
+      slots: Object.keys(valuesBySlot).length,
+    })
+  }
+  await broadcastEatFirstTableState(room)
 }
 
 /**
@@ -2268,7 +2295,12 @@ export async function handleEatFirstActionCardRerollRequest(
       payload: { slotId, card },
     })
   }
-  void broadcastEatFirstTableState(room)
+  broadcastEatFirstTableState(room).catch((err) => {
+    console.error('[eat-first] broadcastEatFirstTableState after action-card-reroll failed', {
+      roomId: room.id,
+      err: err instanceof Error ? err.message : String(err),
+    })
+  })
 }
 
 export async function handleEatFirstActionCardUse(
@@ -2757,7 +2789,22 @@ export function handleMafiaAudioMixUpdate(
   if (!isMafiaHostPeer(room, peer)) {
     return
   }
-  const resolved = room.applyMafiaAudioMixEntries(payload.entries)
+  // Never trust the client-supplied `userId`. Resolve each entry's userId from
+  // the target peer's server-side identity so a malicious host cannot store a
+  // mix entry under a victim's userId (which would persist across rebinds via
+  // `rebindMafiaAudioMixEntryPeerId`).
+  const serverAuthoritativeEntries = payload.entries.map((entry) => {
+    const targetPeerId = typeof entry.peerId === 'string' ? entry.peerId.trim() : ''
+    const target = targetPeerId.length > 0 ? room.getPeer(targetPeerId) : null
+    const serverUserId = typeof target?.userId === 'string' ? target.userId.trim() : ''
+    return {
+      peerId: entry.peerId,
+      userId: serverUserId.length > 0 ? serverUserId : null,
+      volume: entry.volume,
+      muted: entry.muted,
+    }
+  })
+  const resolved = room.applyMafiaAudioMixEntries(serverAuthoritativeEntries)
   if (resolved.length === 0) {
     return
   }
@@ -3082,9 +3129,26 @@ export async function handleProduce(
         ? { appData: { source: initialVideoSource } as Record<string, unknown> }
         : {}),
     })
-    
+
+    // Register the `transportclose` listener synchronously, before any further
+    // `await` in this handler. If the transport closes while we're awaiting
+    // pause/resume/`addAudioProducerToLevelObserver`, the producer emits
+    // `transportclose` immediately and the event is dropped if no listener is
+    // installed yet — leaving `producer-closed` un-broadcast and remote peers
+    // decoding a dead producer id.
+    producer.on('transportclose', () => {
+      // During `removePeerFromNetwork` → `closeAllMedia()` every transport
+      // closes in a loop and would fire this listener once per producer;
+      // the outer `peer-left` broadcast already covers client cleanup, so
+      // skip the redundant per-producer fan-out.
+      if (peer.isTearingDown) return
+      const r = deps.roomManager.getRoom(peer.roomId)
+      if (!r) return
+      closeAndBroadcastProducer(r, peer, producer.id, producer.kind)
+    })
+
     // currently host-forced for audio (or video), keep the new producer
-    
+
     const keepPausedForForced =
       (producer.kind === 'audio' && peer.forcedAudioMuted) ||
       (producer.kind === 'video' && peer.forcedCameraOff)
@@ -3121,21 +3185,6 @@ export async function handleProduce(
     if (producer.kind === 'audio') {
       await room.addAudioProducerToLevelObserver(producer.id)
     }
-
-    // If the underlying transport goes away while the peer is still connected
-    // (e.g. ICE failure on a single direction), mediasoup emits `transportclose`
-    // on the Producer. Tell the room so consumers can drop it without waiting
-    
-    producer.on('transportclose', () => {
-      // During `removePeerFromNetwork` → `closeAllMedia()` every transport
-      // closes in a loop and would fire this listener once per producer;
-      // the outer `peer-left` broadcast already covers client cleanup, so
-      // skip the redundant per-producer fan-out.
-      if (peer.isTearingDown) return
-      const r = deps.roomManager.getRoom(peer.roomId)
-      if (!r) return
-      closeAndBroadcastProducer(r, peer, producer.id, producer.kind)
-    })
 
     if (process.env.NODE_ENV !== 'production') {
       console.log('[mediasoup] SERVER PRODUCER', producer.kind, producer.id)

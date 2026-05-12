@@ -104,7 +104,7 @@ export function mountCoinHubRoutes(app: Express): void {
           denyRateLimited(res, rl.retryAfterSec)
           return
         }
-        const adminBypass = await shouldBypassCoinHubMutations(userId)
+        const adminBypass = await shouldBypassCoinHubMutations()
         const out = await spin(userId, new Date(), { adminBypass })
         res.json(out)
       } catch (err) {
@@ -129,7 +129,7 @@ export function mountCoinHubRoutes(app: Express): void {
           res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'caseId is required' } })
           return
         }
-        const adminBypass = await shouldBypassCoinHubMutations(userId)
+        const adminBypass = await shouldBypassCoinHubMutations()
         const out = await openCase(userId, caseId, new Date(), { adminBypass })
         res.json(out)
       } catch (err) {

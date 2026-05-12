@@ -76,23 +76,30 @@ export function attachEatFirstSocketServer(wss: WebSocketServer): void {
 const pendingBroadcasts = new Set<string>()
 
 function flushBroadcast(gameId: string): void {
-  void eatFirstSnapshot(prisma, gameId).then((snap) => {
-    const payload = { type: 'eat-first:update' as const, gameId, ...snap }
-    const msg = JSON.stringify(payload)
-    const set = subs.get(gameId)
-    if (!set) {
-      return
-    }
-    for (const ws of set) {
-      if (ws.readyState === 1) {
-        try {
-          ws.send(msg)
-        } catch {
-          /* ignore */
+  eatFirstSnapshot(prisma, gameId)
+    .then((snap) => {
+      const payload = { type: 'eat-first:update' as const, gameId, ...snap }
+      const msg = JSON.stringify(payload)
+      const set = subs.get(gameId)
+      if (!set) {
+        return
+      }
+      for (const ws of set) {
+        if (ws.readyState === 1) {
+          try {
+            ws.send(msg)
+          } catch {
+            /* ignore */
+          }
         }
       }
-    }
-  })
+    })
+    .catch((err) => {
+      console.error('[eat-first-ws] flushBroadcast failed', {
+        gameId,
+        err: err instanceof Error ? err.message : String(err),
+      })
+    })
 }
 
 export function broadcastEatFirstUpdate(gameId: string): void {

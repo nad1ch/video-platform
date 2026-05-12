@@ -1,0 +1,23 @@
+# Cloudflare Pages redirects — see https://developers.cloudflare.com/pages/configuration/redirects/
+#
+# SPA fallback for the known Vue Router paths (createWebHistory). We do NOT use
+# a wildcard /* fallback because the marketing folders under public/ ship as
+# physical HTML and should be served as-is:
+#   - /video-calls-for-streamers/
+#   - /twitch-nadle-game/
+#   - /stream-overlay-tools/
+# Static files (and /assets/*) always take precedence over these rules in Pages.
+
+/app           /index.html  200
+/app/*         /index.html  200
+/auth          /index.html  200
+/auth/*        /index.html  200
+/call          /index.html  200
+/nadle         /index.html  200
+/nadle/*       /index.html  200
+/nadraw-show   /index.html  200
+/nadraw-show/* /index.html  200
+/eat           /index.html  200
+/eat/*         /index.html  200
+/admin         /index.html  200
+/admin/*       /index.html  200

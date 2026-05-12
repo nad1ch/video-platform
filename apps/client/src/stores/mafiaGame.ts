@@ -31,6 +31,7 @@ import { computeMafiaLastNightResult } from '@/utils/mafiaLastNightResult'
 import { fisherYatesShuffle } from '@/utils/fisherYatesShuffle'
 import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
 import { mafiaNightActionMaxSeatForOrder, pinHostPeerToEndOfOrder } from '@/utils/mafiaHostOrdering'
+import { GAME_TIMER_PRESET_MS } from '@/utils/gameTimerPresets'
 
 const mafiaGameLog = createLogger('mafia-game')
 
@@ -71,7 +72,13 @@ const MAFIA_PAGE_BACKGROUND_ITEMS = Object.freeze([
 ]) satisfies readonly BackgroundItem[]
 
 
-export const MAFIA_TIMER_PRESET_MS = [30_000, 60_000, 90_000] as const
+/**
+ * Mafia timer presets — re-exported from `@/utils/gameTimerPresets` so the
+ * shared `GameTimerOverlay` chip and production Mafia share one source of
+ * truth (single tuple, single set of values, no duplication). The constant
+ * name is preserved for any in-tree importers of `MAFIA_TIMER_PRESET_MS`.
+ */
+export const MAFIA_TIMER_PRESET_MS = GAME_TIMER_PRESET_MS
 
 const MAFIA_TIMER_MIN_MS = 30_000
 const MAFIA_TIMER_MAX_MS = 7_200_000

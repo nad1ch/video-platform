@@ -16,6 +16,7 @@ import { getPersistedGameId, setPersistedGameId } from '../utils/persistedGameId
 import { useMosaicPlayerOrder } from '../composables/useMosaicPlayerOrder.js'
 import { normalizePlayerSlotId } from '../utils/playerSlot.js'
 import { getOrCreateDeviceId } from '../utils/deviceId.js'
+import { getEatFirstJoinToken } from '../utils/joinTokenStore.js'
 import { useEatOverlayMediasoup } from '../composables/useEatOverlayMediasoup.js'
 import { useOverlayMediaTileMap } from '../composables/useOverlayMediaTileMap.js'
 import { useOverlaySpeakerCountdown } from '../composables/useOverlaySpeakerCountdown.js'
@@ -70,9 +71,20 @@ const overlayTokenGateBlocks = computed(() => {
   if (!isPersonal.value) return false
   const urlTok = String(route.query.token ?? '').trim()
   if (!urlTok) return false
+  // Wait for the player's snapshot to arrive before deciding so the wall does
+  // not flash during initial load (same UI timing as the previous server-token
+  // path).
   const p = singlePlayer.value
   if (!p) return false
-  const st = typeof p.joinToken === 'string' ? p.joinToken.trim() : ''
+  // The public `eat-first:init/update` snapshot no longer leaks `joinToken`
+  // (server redaction in `apps/server/src/eatFirst/snapshot.ts`). Compare the
+  // URL token against the locally-stored join token written by `claimPlayerSlot`
+  // on a successful claim (`gameService.js:373` → `saveEatFirstJoinToken`). This
+  // is defense-in-depth UX: the server still authoritatively rejects mis-token
+  // publishes via `verifyEatFirstSlotAuth`.
+  const pid = personalPlayerId.value
+  if (!pid) return false
+  const st = getEatFirstJoinToken(gameId.value, pid)
   if (!st) return false
   return urlTok !== st
 })

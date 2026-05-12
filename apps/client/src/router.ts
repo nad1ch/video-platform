@@ -10,7 +10,13 @@ import { useAuth, type AppUser } from '@/composables/useAuth'
 import { registerEatFirstRouterGuards } from '@/eat-first/router.js'
 import { installRouteNavLoadingGuards, releaseRouteNavLoading } from '@/routeNavLoading'
 import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
-import { loadCheckersPage, loadEatFirstPage, loadMafiaPage, loadNadleStreamPage } from '@/routerRouteLoaders'
+import {
+  loadCheckersPage,
+  loadEatFirstPage,
+  loadGameTemplatePage,
+  loadMafiaPage,
+  loadNadleStreamPage,
+} from '@/routerRouteLoaders'
 
 
 const DEFAULT_NADLE_STREAMER =
@@ -137,6 +143,27 @@ export const router = createRouter({
           name: 'eat',
           meta: { footerContext: 'eat' },
           component: loadEatFirstPage,
+        },
+        {
+          /**
+           * Experimental Game Template page — admin-only. Reusable
+           * foundation for future games: validates the
+           * <GameCallShell>/<GameCallVideoGrid>/<GameCallTile> + a
+           * demo Mafia-style overlay layer in isolation from production
+           * routes. Uses real WebRTC via call-core on a `gamecall-lab:`
+           * signaling room namespace so it never collides with production
+           * Mafia / EatFirst rooms.
+           */
+          path: 'game-template',
+          name: 'game-template',
+          meta: {
+            appTitle: 'Game Template',
+            footerContext: 'home',
+            footer: false,
+            requiresAuth: true,
+            requiresAdmin: true,
+          },
+          component: loadGameTemplatePage,
         },
         {
           path: 'coin-hub',

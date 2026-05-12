@@ -1,13 +1,32 @@
 <script setup lang="ts">
+/**
+ * MafiaSpeakingQueueBar — Mafia adapter around the shared
+ * `<GameSpeakingQueueBar>` HUD (Phase 5b extraction).
+ *
+ * Owns the Mafia-specific bits:
+ *   - reading `speakingQueue` + `hostInteractionMode` from the store
+ *   - decoding the flat number queue into segments
+ *   - swap-mode 'night' off-sentinel via `setHostInteractionMode`
+ *   - direct store dispatch for `removeSpeakingNominationPairAt` / `clearSpeakingQueue`
+ *   - i18n key resolution (`mafiaPage.*`)
+ *
+ * The HUD surface (chips, animations, transitions, layout-context-aware
+ * CSS) is now in `GameSpeakingQueueBar` under `components/game-call/`,
+ * shared with the Game Template page.
+ *
+ * Note: the shared component keeps the `mafia-vote-hud*` class namespace so
+ * `CallPage.css :deep()` rules continue to match in Mafia stream-view +
+ * mobile layouts. See the comment block in `GameSpeakingQueueBar.vue`.
+ */
+
 import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
-import { mafiaGameSeatText } from '@/utils/mafiaSeatLabel'
-import type { MafiaHostInteractionMode } from '@/utils/mafiaGameTypes'
 import { decodeSpeakingNominationFlat } from '@/utils/speakingNominationQueue'
-import mafiaVoteClear from '@/assets/mafia/ui/vote-clear.svg'
-import mafiaVoteStart from '@/assets/mafia/ui/vote-start.svg'
+import GameSpeakingQueueBar, {
+  type GameSpeakingQueueLabels,
+} from '@/components/game-call/GameSpeakingQueueBar.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -22,388 +41,46 @@ const { t } = useI18n()
 const mafia = useMafiaGameStore()
 const { speakingQueue, hostInteractionMode } = storeToRefs(mafia)
 
-const readOnly = computed(() => !props.showTools)
+const segments = computed(() => decodeSpeakingNominationFlat(speakingQueue.value))
+const speakingActive = computed(() => hostInteractionMode.value === 'speaking')
 
-const segments = computed(() =>
-  decodeSpeakingNominationFlat(speakingQueue.value).map((seg) => ({
-    id: `pair-${seg.pairIndex}`,
-    pairIndex: seg.pairIndex,
-    byLabel: seg.bySeat == null ? '?' : mafiaGameSeatText(seg.bySeat),
-    target: seg.targetSeat,
-    targetLabel: mafiaGameSeatText(seg.targetSeat),
-  })),
-)
+const labels = computed<GameSpeakingQueueLabels>(() => ({
+  containerAria: t('mafiaPage.speakingQueueAria'),
+  toolbarAria: t('mafiaPage.hostInteractionModeLabel'),
+  speakingModeTitle: t('mafiaPage.speakingModeHint'),
+  speakingModeAria: t('mafiaPage.modeSpeaking'),
+  clearAllTitle: t('mafiaPage.speakingQueueClearAllTitle'),
+  chipRemoveTitle: (by, target) =>
+    t('mafiaPage.speakingQueueRemoveTitle', { by, target }),
+  chipViewOnlyTitle: (by, target) =>
+    t('mafiaPage.speakingQueueChipViewOnly', { by, target }),
+}))
 
-const hudWidth = computed(() => {
-  const n = segments.value.length
-  if (readOnly.value) {
-    return n === 0 ? 0 : Math.min(451, 14 + n * 22 + Math.max(0, n - 1) * 6)
-  }
-  if (n === 0) {
-    return 104
-  }
-  return Math.min(451, 104 + 8 + n * 22 + Math.max(0, n - 1) * 6)
-})
-
-const canClearSpeakingQueue = computed(() => {
-  if (readOnly.value) {
-    return false
-  }
-  return speakingQueue.value.length > 0
-})
-
-function onModeToolClick(mode: MafiaHostInteractionMode, ev: MouseEvent): void {
-  ev.stopPropagation()
-  if (readOnly.value) {
-    return
-  }
-  mafia.setHostInteractionMode(hostInteractionMode.value === mode ? 'night' : mode)
+function onToggleSpeakingMode(): void {
+  if (!props.showTools) return
+  mafia.setHostInteractionMode(speakingActive.value ? 'night' : 'speaking')
 }
 
-function isModeOn(mode: MafiaHostInteractionMode): boolean {
-  return hostInteractionMode.value === mode
-}
-
-function onRemove(pairIndex: number, ev: MouseEvent): void {
-  ev.stopPropagation()
-  if (readOnly.value) {
-    return
-  }
+function onRemovePair(pairIndex: number): void {
+  if (!props.showTools) return
   mafia.removeSpeakingNominationPairAt(pairIndex)
 }
 
-function onClearSpeakingQueue(ev: MouseEvent): void {
-  ev.stopPropagation()
-  if (readOnly.value || !canClearSpeakingQueue.value) {
-    return
-  }
+function onClearAll(): void {
+  if (!props.showTools) return
+  if (speakingQueue.value.length === 0) return
   mafia.clearSpeakingQueue()
 }
 </script>
 
 <template>
-  <div
-    v-if="!readOnly || segments.length > 0"
-    class="mafia-vote-hud"
-    :class="{
-      'mafia-vote-hud--empty': segments.length === 0,
-      'mafia-vote-hud--readonly': readOnly,
-    }"
-    :style="{ '--mafia-vote-hud-width': `${hudWidth}px` }"
-    role="region"
-    :aria-label="t('mafiaPage.speakingQueueAria')"
-  >
-    <div
-      v-if="!readOnly"
-      class="mafia-vote-hud__tools"
-      role="toolbar"
-      :aria-label="t('mafiaPage.hostInteractionModeLabel')"
-    >
-      <button
-        type="button"
-        class="mafia-vote-hud__tool mafia-vote-hud__tool--start"
-        :class="{ 'mafia-vote-hud__tool--on': isModeOn('speaking') }"
-        :disabled="readOnly"
-        :title="t('mafiaPage.speakingModeHint')"
-        :aria-pressed="isModeOn('speaking')"
-        :aria-label="t('mafiaPage.modeSpeaking')"
-        @click="onModeToolClick('speaking', $event)"
-      >
-        <img class="mafia-vote-hud__tool-art" :src="mafiaVoteStart" alt="" aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        class="mafia-vote-hud__tool mafia-vote-hud__tool--clear"
-        :disabled="readOnly || !canClearSpeakingQueue"
-        :title="t('mafiaPage.speakingQueueClearAllTitle')"
-        :aria-label="t('mafiaPage.speakingQueueClearAllTitle')"
-        @click="onClearSpeakingQueue"
-      >
-        <img class="mafia-vote-hud__tool-art" :src="mafiaVoteClear" alt="" aria-hidden="true" />
-      </button>
-    </div>
-
-    <div
-      v-if="segments.length > 0"
-      class="mafia-vote-hud__chips"
-      role="status"
-    >
-      <TransitionGroup name="mafia-vote-chip">
-        <button
-          v-for="seg in segments"
-          :key="seg.id"
-          type="button"
-          class="mafia-vote-hud__chip"
-          :disabled="readOnly"
-          :title="
-            readOnly
-              ? t('mafiaPage.speakingQueueChipViewOnly', { by: seg.byLabel, target: seg.targetLabel })
-              : t('mafiaPage.speakingQueueRemoveTitle', { by: seg.byLabel, target: seg.targetLabel })
-          "
-          :aria-label="
-            readOnly
-              ? t('mafiaPage.speakingQueueChipViewOnly', { by: seg.byLabel, target: seg.targetLabel })
-              : t('mafiaPage.speakingQueueRemoveTitle', { by: seg.byLabel, target: seg.targetLabel })
-          "
-          @click="onRemove(seg.pairIndex, $event)"
-        >
-          <span class="mafia-vote-hud__chip-voter">{{ seg.byLabel }}</span>
-          <span class="mafia-vote-hud__chip-arrow" aria-hidden="true">↓</span>
-          <span class="mafia-vote-hud__chip-target">{{ seg.targetLabel }}</span>
-        </button>
-      </TransitionGroup>
-    </div>
-  </div>
+  <GameSpeakingQueueBar
+    :segments="segments"
+    :speaking-active="speakingActive"
+    :show-tools="showTools"
+    :labels="labels"
+    @toggle-speaking-mode="onToggleSpeakingMode"
+    @remove-pair="onRemovePair"
+    @clear-all="onClearAll"
+  />
 </template>
-
-<style scoped>
-.mafia-vote-hud {
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  width: min(var(--mafia-vote-hud-width, 104px), calc(100vw - 16px));
-  max-width: min(451px, calc(100vw - 16px));
-  height: 55px;
-  padding: 7px;
-  gap: 8px;
-  border-radius: 33px;
-  background: rgb(32 20 51 / 0.29);
-  color: #fff;
-  pointer-events: auto;
-  overflow: hidden;
-  transition:
-    width 0.26s ease,
-    background 0.18s ease;
-}
-
-.mafia-vote-hud--empty {
-  justify-content: center;
-  gap: 8px;
-}
-
-.mafia-vote-hud--readonly {
-  justify-content: center;
-}
-
-.mafia-vote-hud__tools {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-}
-
-.mafia-vote-hud__tool,
-.mafia-vote-hud__chip {
-  margin: 0;
-  font: inherit;
-  border: 0;
-  cursor: pointer;
-}
-
-.mafia-vote-hud__tool {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 41px;
-  height: 41px;
-  padding: 0;
-  border-radius: 999px;
-  background: transparent;
-  transition:
-    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.16s ease;
-}
-
-.mafia-vote-hud__tool:hover:not(:disabled) {
-  transform: scale(1.025);
-}
-
-.mafia-vote-hud__chip:hover:not(:disabled),
-.mafia-vote-hud__chip:focus-visible:not(:disabled) {
-  filter: brightness(1.08);
-  transform: scale(1.03);
-}
-
-.mafia-vote-hud__tool:focus-visible,
-.mafia-vote-hud__chip:focus-visible {
-  outline: 2px solid rgb(255 255 255 / 0.82);
-  outline-offset: 2px;
-}
-
-.mafia-vote-hud__tool:disabled,
-.mafia-vote-hud__chip:disabled {
-  cursor: default;
-}
-
-.mafia-vote-hud__tool:disabled {
-  opacity: 0.48;
-}
-
-.mafia-vote-hud__tool--on {
-  filter: brightness(1.15);
-  box-shadow:
-    inset 0 0 0 2px color-mix(in srgb, #facc15 70%, transparent),
-    0 0 0 1px rgb(250 204 21 / 0.28);
-}
-
-.mafia-vote-hud__tool-art {
-  --mafia-vote-tool-hover: 0;
-  --mafia-vote-tool-x: 0px;
-  --mafia-vote-tool-y: 0px;
-  --mafia-vote-tool-scale: 0;
-  --mafia-vote-tool-rotate: 0deg;
-  display: block;
-  width: 41px;
-  height: 41px;
-  object-fit: contain;
-  transform:
-    translate(
-      calc(var(--mafia-vote-tool-x) * var(--mafia-vote-tool-hover)),
-      calc(var(--mafia-vote-tool-y) * var(--mafia-vote-tool-hover))
-    )
-    scale(calc(1 + var(--mafia-vote-tool-scale) * var(--mafia-vote-tool-hover)))
-    rotate(calc(var(--mafia-vote-tool-rotate) * var(--mafia-vote-tool-hover)));
-  transform-origin: center;
-  animation: mafia-vote-tool-nudge 1.16s ease-in-out infinite;
-  transition: --mafia-vote-tool-hover 0.24s ease;
-}
-
-.mafia-vote-hud__tool:hover:not(:disabled) .mafia-vote-hud__tool-art {
-  --mafia-vote-tool-hover: 1;
-}
-
-.mafia-vote-hud__chips {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 22px;
-  align-items: stretch;
-  justify-content: start;
-  gap: 6px;
-  min-width: 0;
-  flex: 1 1 auto;
-  height: 41px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-}
-
-.mafia-vote-hud__chips::-webkit-scrollbar {
-  display: none;
-}
-
-.mafia-vote-hud__chip {
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 41px;
-  padding: 4px 0 3px;
-  border-radius: 33px;
-  background: rgb(102 56 143 / 0.47);
-  color: #fff;
-  font-family: var(--app-home-counter, 'Coda Caption', var(--sa-font-display, system-ui, sans-serif));
-  font-size: 11px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  transition:
-    filter 0.16s ease,
-    transform 0.16s ease;
-}
-
-.mafia-vote-chip-enter-active,
-.mafia-vote-chip-leave-active {
-  transition:
-    opacity 0.18s ease,
-    transform 0.18s ease;
-}
-
-.mafia-vote-chip-enter-from,
-.mafia-vote-chip-leave-to {
-  opacity: 0;
-  transform: scaleX(0.72);
-}
-
-.mafia-vote-hud__chip-voter,
-.mafia-vote-hud__chip-arrow,
-.mafia-vote-hud__chip-target {
-  display: block;
-  width: 100%;
-  text-align: center;
-}
-
-.mafia-vote-hud__chip-voter {
-  color: rgb(255 255 255 / 0.94);
-}
-
-.mafia-vote-hud__chip-arrow {
-  margin: 2px 0 1px;
-  color: rgb(255 255 255 / 0.72);
-  font-size: 8px;
-  line-height: 1;
-}
-
-.mafia-vote-hud__chip-target {
-  color: #ffd455;
-}
-
-@media (max-width: 760px) {
-  .mafia-vote-hud {
-    width: min(var(--mafia-vote-hud-width, 104px), calc(100vw - 16px));
-  }
-}
-
-@property --mafia-vote-tool-hover {
-  syntax: '<number>';
-  inherits: false;
-  initial-value: 0;
-}
-
-@property --mafia-vote-tool-x {
-  syntax: '<length>';
-  inherits: false;
-  initial-value: 0px;
-}
-
-@property --mafia-vote-tool-y {
-  syntax: '<length>';
-  inherits: false;
-  initial-value: 0px;
-}
-
-@property --mafia-vote-tool-scale {
-  syntax: '<number>';
-  inherits: false;
-  initial-value: 0;
-}
-
-@property --mafia-vote-tool-rotate {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
-}
-
-@keyframes mafia-vote-tool-nudge {
-  0%,
-  100% {
-    --mafia-vote-tool-x: 0px;
-    --mafia-vote-tool-y: 0px;
-    --mafia-vote-tool-scale: 0;
-    --mafia-vote-tool-rotate: 0deg;
-  }
-
-  40% {
-    --mafia-vote-tool-y: -1.2px;
-    --mafia-vote-tool-scale: 0.04;
-    --mafia-vote-tool-rotate: -2deg;
-  }
-
-  72% {
-    --mafia-vote-tool-y: -0.5px;
-    --mafia-vote-tool-scale: 0.018;
-    --mafia-vote-tool-rotate: 1.1deg;
-  }
-}
-</style>
