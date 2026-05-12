@@ -13,6 +13,7 @@ import { STREAMER_NICK } from '@/eat-first/constants/brand.js'
 import {
   loadCheckersPage,
   loadEatFirstPage,
+  loadGameTemplatePage,
   loadMafiaPage,
   loadNadleStreamPage,
 } from '@/routerRouteLoaders'
@@ -105,17 +106,15 @@ export const router = createRouter({
         },
         {
           /**
-           * Mafia route. Also serves `/app/game-template` as an alias so
-           * that admin-facing future-game prototyping happens against the
-           * exact production Mafia stack (same `<MafiaPage>` mount, same
-           * `<CallPage>` orchestrator, same Mafia store + signaling, same
-           * `isMafiaRoute = route.name === 'mafia'` checks across the
-           * 10 files that gate Mafia-specific behavior). The URL bar
-           * shows `/app/game-template` for the alias path; everything
-           * else is the same room/host/queue/timer protocol.
+           * Production Mafia route. Owned by `MafiaPage` + the shared
+           * `<CallPage>` orchestrator, the Mafia store, and the `mafia:*`
+           * WS protocol. Do NOT add an alias here — `/app/game-template`
+           * is now a fully separate route record below so its page tree
+           * (page wrapper, host panel, overlay, host actions bar,
+           * speaking queue bar, and a forked `GameTemplateCallPage`) can
+           * evolve independently of Mafia.
            */
           path: 'mafia',
-          alias: '/app/game-template',
           name: 'mafia',
           meta: {
             appTitleKey: 'routes.mafia',
@@ -124,6 +123,29 @@ export const router = createRouter({
             requiresAuth: true,
           },
           component: loadMafiaPage,
+        },
+        {
+          /**
+           * Game Template route — a forked / duplicated copy of the Mafia
+           * page stack mounted under `/app/game-template`. Initially 1:1
+           * behaviorally and visually with `/app/mafia`; future game
+           * scaffolding lives here without touching production Mafia.
+           *
+           * Frontend files are forked and renamed under `GameTemplate*`;
+           * the WS protocol and signaling room prefix (`mafia:<base>`)
+           * are intentionally still shared with Mafia for now so the
+           * existing backend continues to work end-to-end. A generic
+           * `gameroom:` namespace is a future server-side step.
+           */
+          path: 'game-template',
+          name: 'game-template',
+          meta: {
+            appTitleKey: 'routes.gameTemplate',
+            footerContext: 'call',
+            footer: false,
+            requiresAuth: true,
+          },
+          component: loadGameTemplatePage,
         },
         {
           path: 'nadle',
@@ -309,7 +331,7 @@ function eatViewNeedsStreamAuth(query: Record<string, unknown>): boolean {
 }
 
 function isMafiaObsViewRoute(to: RouteLocationGeneric): boolean {
-  if (to.name !== 'mafia') {
+  if (to.name !== 'mafia' && to.name !== 'game-template') {
     return false
   }
   const mode = (to.query as Record<string, unknown>).mode
@@ -317,10 +339,11 @@ function isMafiaObsViewRoute(to: RouteLocationGeneric): boolean {
   return value === 'view'
 }
 
-const BETA_GATED_ROUTE_NAMES = new Set(['call', 'mafia', 'eat'])
+const BETA_GATED_ROUTE_NAMES = new Set(['call', 'mafia', 'game-template', 'eat'])
 const BETA_ACCESS_MODAL_BY_ROUTE_NAME = {
   call: 'video-call',
   mafia: 'mafia',
+  'game-template': 'mafia',
   eat: 'eat-first',
 } as const
 

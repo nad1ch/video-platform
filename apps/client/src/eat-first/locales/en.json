@@ -197,6 +197,7 @@
   "routes": {
     "call": "Video call",
     "mafia": "Mafia",
+    "gameTemplate": "Game Template",
     "nadle": "Nadle",
     "admin": "Admin",
     "nadrawShow": "Nadraw",

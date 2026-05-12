@@ -23,7 +23,10 @@ export function mafiaViewQueryIsView(mode: LocationQueryValue | LocationQueryVal
 
 
 export function mafiaStreamViewFromRoute(route: RouteLocationNormalizedLoaded): boolean {
-  if (route.name !== 'mafia') {
+  // Accept the Game Template route too — it forks the Mafia page tree and
+  // reuses the same `?mode=view` OBS contract. Mafia behaviour is byte-
+  // identical when `route.name === 'mafia'`; this is purely additive.
+  if (route.name !== 'mafia' && route.name !== 'game-template') {
     return false
   }
   return mafiaViewQueryIsView(route.query.mode)

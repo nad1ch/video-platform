@@ -101,7 +101,19 @@ const { theme, setTheme } = useTheme()
 const isEatRoute = computed(() => route.path.startsWith('/app/eat'))
 const isHomeRoute = computed(() => route.name === 'home')
 const isCallRoute = computed(() => route.name === 'call')
-const isMafiaRoute = computed(() => route.name === 'mafia')
+/**
+ * `isMafiaRoute` was historically a literal `route.name === 'mafia'` check;
+ * the Game Template fork introduces `/app/game-template` which mounts the
+ * same Mafia-style page tree (host panel, OBS view mode, room chip, copy-
+ * OBS button, old/new toggle, page-background popover). Widening this
+ * computed lets the header chrome appear on both routes byte-identically.
+ * Production Mafia behaviour is unchanged: when `route.name === 'mafia'`
+ * the predicate still returns true. The Game Template route only adds a
+ * second route name to the same OR.
+ */
+const isMafiaRoute = computed(
+  () => route.name === 'mafia' || route.name === 'game-template',
+)
 const isCoinHubRoute = computed(() => route.name === 'coin-hub')
 const isNadrawRoute = computed(() => route.name === 'nadraw-show')
 const isBetaAccessRoute = computed(() => route.name === 'beta-access')
@@ -112,6 +124,7 @@ const isHeavyVisualRoute = computed(() => isHomeRoute.value)
 const APP_SHELL_HIDE_HEADER_COIN_ROUTE_NAMES = new Set([
   'call',
   'mafia',
+  'game-template',
   'nadle-streamer',
   'app-streamer',
   'nadraw-show',
@@ -345,7 +358,9 @@ function mafiaQueryAsStringRecord(
 }
 
 const mafiaHeaderHasRoom = computed(() => {
-  if (route.name !== 'mafia') {
+  // Widened for the Game Template fork: the room chip on `/app/game-template`
+  // shares the Mafia behaviour 1:1 (same query, same copy-OBS contract).
+  if (route.name !== 'mafia' && route.name !== 'game-template') {
     return false
   }
   return Boolean(mafiaQueryAsStringRecord(route.query).room)
@@ -788,7 +803,10 @@ function mafiaBackgroundUploadAccept(): string {
 }
 
 async function copyMafiaObsViewUrl(): Promise<void> {
-  if (route.name !== 'mafia') {
+  // Widened for the Game Template fork: the OBS copy button on
+  // `/app/game-template` builds `/app/game-template?...&mode=view`. Mafia
+  // keeps emitting `/app/mafia?...&mode=view`. Same toast event for both.
+  if (route.name !== 'mafia' && route.name !== 'game-template') {
     return
   }
   const room = mafiaQueryAsStringRecord(route.query).room
@@ -796,7 +814,8 @@ async function copyMafiaObsViewUrl(): Promise<void> {
     return
   }
   const next = { ...mafiaQueryAsStringRecord(route.query), mode: 'view' as const }
-  const viewUrl = `${window.location.origin}/app/mafia?${new URLSearchParams(next).toString()}`
+  const basePath = route.name === 'game-template' ? '/app/game-template' : '/app/mafia'
+  const viewUrl = `${window.location.origin}${basePath}?${new URLSearchParams(next).toString()}`
   obsGuideUrl.value = viewUrl
   obsGuideOpen.value = true
   try {
