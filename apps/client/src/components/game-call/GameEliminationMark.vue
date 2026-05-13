@@ -1,13 +1,13 @@
 <script setup lang="ts">
 /**
- * Neutral presentational sibling of `components/mafia/MafiaEliminationMark.vue`.
- * Pure SVG renderer (no store/composable/runtime dependency). Used by
- * `ParticipantTile.vue` (a shared component) so the shared tile no longer
- * has to import from `components/mafia/**`.
+ * Shared elimination-mark SVG renderer used by `ParticipantTile.vue` for
+ * the placeholder shown when a tile is dead and video is off. Pure
+ * presentational — no store/composable/runtime dependency. Both
+ * production Mafia and Game Template render through this component.
  *
- * The Mafia adapter file remains in place byte-identically for
- * production Mafia compatibility; this file is a verbatim presentational
- * copy with neutral identifier naming and scoped class names.
+ * Originally extracted from the now-removed `MafiaEliminationMark.vue`
+ * (see git history at commit `74876d1` for the verbatim presentational
+ * copy and the rationale for the neutral relocation).
  */
 import type { GameEliminationAvatarKind } from '@/utils/gameTileTypes'
 

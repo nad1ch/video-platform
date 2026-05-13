@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useCallSessionStore } from 'call-core'
 import CallPage from '@/components/call/CallPage.vue'
+import GameRoomPageShell from '@/components/game-room/GameRoomPageShell.vue'
 import MafiaCallAdapter from '@/components/mafia/adapters/MafiaCallAdapter.vue'
 import MafiaHostPanel from '@/components/mafia/MafiaHostPanel.vue'
 import MafiaOverlay from '@/components/mafia/MafiaOverlay.vue'
@@ -33,54 +34,23 @@ const showSignalingSessionWarning = computed(
 </script>
 
 <template>
-  <div
-    class="mafia-page"
-    :class="{
-      'mafia-page--view-mode': isViewMode,
-      'mafia-page--stream-view': isViewMode,
-    }"
+  <GameRoomPageShell
+    route-class="mafia-page"
+    :is-view-mode="isViewMode"
+    :signaling-warning-visible="showSignalingSessionWarning"
+    :signaling-warning-text="t('mafiaPage.signalingSessionMissing')"
   >
-    <div
-      v-if="showSignalingSessionWarning"
-      class="mafia-page__signaling-warning"
-      role="alert"
-    >
-      {{ t('mafiaPage.signalingSessionMissing') }}
-    </div>
-    <CallPage :mafia-stream-view="isViewMode" />
-    <MafiaCallAdapter />
-    <MafiaHostPanel v-if="showHostTools" />
-    <MafiaOverlay v-if="showMafiaOverlay" :view-mode="isViewMode" />
-  </div>
+    <template #stage>
+      <CallPage :mafia-stream-view="isViewMode" />
+    </template>
+    <template #adapters>
+      <MafiaCallAdapter />
+    </template>
+    <template #host-panel>
+      <MafiaHostPanel v-if="showHostTools" />
+    </template>
+    <template #overlays>
+      <MafiaOverlay v-if="showMafiaOverlay" :view-mode="isViewMode" />
+    </template>
+  </GameRoomPageShell>
 </template>
-
-<style scoped>
-.mafia-page {
-  position: relative;
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  width: 100%;
-  max-height: 100%;
-  overflow: hidden;
-}
-
-.mafia-page__signaling-warning {
-  flex: 0 0 auto;
-  margin: 0 12px 8px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(180, 60, 60, 0.2);
-  border: 1px solid rgba(255, 120, 120, 0.45);
-  color: #fbeaea;
-  font-size: 0.9rem;
-  line-height: 1.35;
-}
-
-@media (hover: hover) {
-  .mafia-page :deep(.call-page__tile-wrap:hover:not(.call-page__tile-wrap--pinned)) {
-    z-index: 50;
-  }
-}
-</style>

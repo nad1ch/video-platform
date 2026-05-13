@@ -1,4 +1,4 @@
-import { normalizeDisplayName } from 'call-core'
+import { createSignalingRoomHelpers } from '@/composables/game-room/createSignalingRoomHelpers'
 
 /**
  * Generic game-room signaling namespace (Phase 3B).
@@ -9,25 +9,20 @@ import { normalizeDisplayName } from 'call-core'
  *
  * The server enforces the namespace split (`isGameRoomId` vs
  * `isMafiaRoomId`); the client wraps the call-join id via the helper below.
+ *
+ * Implementation note: the two helpers below are now produced by the
+ * generic `createSignalingRoomHelpers` factory (shared with the
+ * `mafia:` namespace). Public export names and behaviour are
+ * preserved byte-for-byte.
  */
 export const GAME_ROOM_SIGNALING_ROOM_PREFIX = 'gameroom:' as const
+
+const gameRoomSignalingRoom = createSignalingRoomHelpers(GAME_ROOM_SIGNALING_ROOM_PREFIX)
 
 /**
  * `join-room` id for the generic game-room. Idempotent if `baseRoomId`
  * already includes the prefix.
  */
-export function gameRoomSignalingRoomId(baseRoomId: string): string {
-  const b = normalizeDisplayName(baseRoomId) || 'demo'
-  if (b.startsWith(GAME_ROOM_SIGNALING_ROOM_PREFIX)) {
-    return b
-  }
-  return `${GAME_ROOM_SIGNALING_ROOM_PREFIX}${b}`
-}
+export const gameRoomSignalingRoomId = gameRoomSignalingRoom.signalingRoomId
 
-export function gameRoomBaseRoomIdFromSignaling(signalingRoomId: string): string {
-  const s = normalizeDisplayName(signalingRoomId) || 'demo'
-  if (s.startsWith(GAME_ROOM_SIGNALING_ROOM_PREFIX)) {
-    return s.slice(GAME_ROOM_SIGNALING_ROOM_PREFIX.length) || 'demo'
-  }
-  return s
-}
+export const gameRoomBaseRoomIdFromSignaling = gameRoomSignalingRoom.baseRoomIdFromSignaling
