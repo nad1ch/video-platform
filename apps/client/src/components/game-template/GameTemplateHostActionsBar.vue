@@ -53,16 +53,16 @@ const canReshuffle = computed(() => players.joinOrder.length >= 2)
 const swapModeActive = computed(() => hostInteractionMode.value === 'swap')
 
 const labels = computed<GameHostActionsLabels>(() => ({
-  toolbarAria: t('mafiaPage.hostActionsAria'),
-  muteAllTitle: t('mafiaPage.forceMuteAllTitle'),
-  reshuffleTitle: t('mafiaPage.overlayShuffleButtonTitle'),
-  reshuffleDisabledHint: t('mafiaPage.reshuffleCountHint'),
-  swapModeTitle: t('mafiaPage.swapModeHint'),
-  swapModeAria: t('mafiaPage.modeSwap'),
-  reshuffleConfirmTitle: t('mafiaPage.reshuffleConfirmTitle'),
-  reshuffleConfirmBody: t('mafiaPage.reshuffleConfirmBody'),
-  reshuffleConfirmProceed: t('mafiaPage.reshuffleConfirmProceed'),
-  reshuffleConfirmCancel: t('mafiaPage.reshuffleConfirmCancel'),
+  toolbarAria: t('gameRoom.hostActionsAria'),
+  muteAllTitle: t('gameRoom.forceMuteAllTitle'),
+  reshuffleTitle: t('gameRoom.overlayShuffleButtonTitle'),
+  reshuffleDisabledHint: t('gameRoom.reshuffleCountHint'),
+  swapModeTitle: t('gameRoom.swapModeHint'),
+  swapModeAria: t('gameRoom.modeSwap'),
+  reshuffleConfirmTitle: t('gameRoom.reshuffleConfirmTitle'),
+  reshuffleConfirmBody: t('gameRoom.reshuffleConfirmBody'),
+  reshuffleConfirmProceed: t('gameRoom.reshuffleConfirmProceed'),
+  reshuffleConfirmCancel: t('gameRoom.reshuffleConfirmCancel'),
 }))
 
 function onSetMuteAll(muted: boolean): void {

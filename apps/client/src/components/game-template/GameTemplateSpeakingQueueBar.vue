@@ -40,15 +40,15 @@ const segments = computed(() => decodeSpeakingNominationFlat(speakingQueue.value
 const speakingActive = computed(() => hostInteractionMode.value === 'speaking')
 
 const labels = computed<GameSpeakingQueueLabels>(() => ({
-  containerAria: t('mafiaPage.speakingQueueAria'),
-  toolbarAria: t('mafiaPage.hostInteractionModeLabel'),
-  speakingModeTitle: t('mafiaPage.speakingModeHint'),
-  speakingModeAria: t('mafiaPage.modeSpeaking'),
-  clearAllTitle: t('mafiaPage.speakingQueueClearAllTitle'),
+  containerAria: t('gameRoom.speakingQueueAria'),
+  toolbarAria: t('gameRoom.hostInteractionModeLabel'),
+  speakingModeTitle: t('gameRoom.speakingModeHint'),
+  speakingModeAria: t('gameRoom.modeSpeaking'),
+  clearAllTitle: t('gameRoom.speakingQueueClearAllTitle'),
   chipRemoveTitle: (by, target) =>
-    t('mafiaPage.speakingQueueRemoveTitle', { by, target }),
+    t('gameRoom.speakingQueueRemoveTitle', { by, target }),
   chipViewOnlyTitle: (by, target) =>
-    t('mafiaPage.speakingQueueChipViewOnly', { by, target }),
+    t('gameRoom.speakingQueueChipViewOnly', { by, target }),
 }))
 
 function onToggleSpeakingMode(): void {

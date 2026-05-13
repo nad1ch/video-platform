@@ -183,7 +183,7 @@ export function useGameRoomCallHostUi(
         const existingBy = segments.find((seg) => seg.bySeat === seat)
         if (existingBy) {
           pushCallToast(
-            t('mafiaPage.speakingByAlreadyNominatedToast', {
+            t('gameRoom.speakingByAlreadyNominatedToast', {
               by: seat,
               target: existingBy.targetSeat,
             }),
@@ -199,7 +199,7 @@ export function useGameRoomCallHostUi(
         const existingTarget = segments.find((seg) => seg.targetSeat === seat)
         if (existingTarget) {
           pushCallToast(
-            t('mafiaPage.speakingTargetAlreadyNominatedToast', {
+            t('gameRoom.speakingTargetAlreadyNominatedToast', {
               target: seat,
               by: existingTarget.bySeat ?? '?',
             }),
@@ -211,7 +211,7 @@ export function useGameRoomCallHostUi(
         const existingBy = segments.find((seg) => seg.bySeat === draft)
         if (existingBy) {
           pushCallToast(
-            t('mafiaPage.speakingByAlreadyNominatedToast', {
+            t('gameRoom.speakingByAlreadyNominatedToast', {
               by: draft,
               target: existingBy.targetSeat,
             }),

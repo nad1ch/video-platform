@@ -52,12 +52,12 @@ const sharedTimer = computed<GameTimerState | null>(() => {
 })
 
 const timerLabels = computed<GameTimerLabels>(() => ({
-  countdown: (time) => t('mafiaPage.timerCountdown', { time }),
-  durationSec: (n) => t('mafiaPage.timerSecTitle', { n }),
-  start: t('mafiaPage.timerStartButton'),
-  stop: t('mafiaPage.timerStopButton'),
-  controlsAria: t('mafiaPage.timerControlsAria'),
-  durationsAria: t('mafiaPage.timerDurationsAria'),
+  countdown: (time) => t('gameRoom.timerCountdown', { time }),
+  durationSec: (n) => t('gameRoom.timerSecTitle', { n }),
+  start: t('gameRoom.timerStartButton'),
+  stop: t('gameRoom.timerStopButton'),
+  controlsAria: t('gameRoom.timerControlsAria'),
+  durationsAria: t('gameRoom.timerDurationsAria'),
 }))
 
 function onStart(durationMs: number): void {

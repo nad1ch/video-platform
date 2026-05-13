@@ -1010,7 +1010,7 @@ function onGameRoomObsUrlCopiedToast(): void {
   const id = `gameroom-obs-${Date.now()}`
   callToasts.value = [
     ...callToasts.value,
-    { id, text: t('mafiaPage.obsViewUrlCopiedToast'), kind: 'join' },
+    { id, text: t('gameRoom.obsViewUrlCopiedToast'), kind: 'join' },
   ]
   window.setTimeout(() => {
     callToasts.value = callToasts.value.filter((x) => x.id !== id)
@@ -1020,7 +1020,7 @@ function onGameRoomObsUrlCopiedToast(): void {
 function onGameRoomSettingsToast(ev: Event): void {
   const text = ev instanceof CustomEvent && typeof ev.detail?.text === 'string'
     ? ev.detail.text
-    : t('mafiaPage.backgroundUploadFailed')
+    : t('gameRoom.backgroundUploadFailed')
   const id = `gameroom-settings-${Date.now()}`
   callToasts.value = [
     ...callToasts.value,

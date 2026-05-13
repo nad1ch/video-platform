@@ -47,7 +47,7 @@ const { speakingOrderHintVisible } = useGameRoomSpeakingHint({
       class="call-page__toast call-page__toast--join call-page__mafia-speak-hint"
       role="status"
     >
-      {{ t('mafiaPage.speakingOrderFloatHint') }}
+      {{ t('gameRoom.speakingOrderFloatHint') }}
     </div>
   </Transition>
 </template>
