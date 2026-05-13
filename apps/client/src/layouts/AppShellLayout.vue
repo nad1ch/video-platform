@@ -22,6 +22,7 @@ import {
   MAFIA_SETTINGS_TOAST_EVENT,
   mafiaViewQueryIsView,
 } from '@/composables/mafiaStreamViewRoute'
+import { GAME_ROOM_OBS_URL_TOAST_EVENT } from '@/composables/gameRoomStreamViewRoute'
 import {
   CALL_ROOM_DROPDOWN_HOST_ID,
   CALL_ROOM_POPOVER_PANEL_ID,
@@ -863,7 +864,17 @@ async function copyMafiaObsViewUrl(): Promise<void> {
   } catch {
     /* clipboard may be denied */
   }
-  window.dispatchEvent(new CustomEvent(MAFIA_OBS_URL_TOAST_EVENT))
+  // Route-aware toast event: `/app/mafia` keeps dispatching the legacy
+  // Mafia event (CallPage.vue listens for it); `/app/game-template`
+  // dispatches the generic event that GameTemplateCallPage.vue listens
+  // for. Without this split, the in-call "OBS URL copied" toast never
+  // appeared on the game-template route after Phase 3C — clipboard +
+  // modal still worked, but the toast listener never fired.
+  const toastEventName =
+    route.name === 'game-template'
+      ? GAME_ROOM_OBS_URL_TOAST_EVENT
+      : MAFIA_OBS_URL_TOAST_EVENT
+  window.dispatchEvent(new CustomEvent(toastEventName))
 }
 
 async function copyEatFirstCallObsUrl(): Promise<void> {
