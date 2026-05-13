@@ -185,8 +185,14 @@ export const router = createRouter({
         {
           path: 'billing',
           name: 'billing',
-          meta: { appTitle: 'StreamAssist Pro', footerContext: 'home', requiresAuth: true },
+          meta: { appTitle: 'Stream Assist Pro', footerContext: 'home', requiresAuth: true },
           component: () => import('./pages/BillingPage.vue'),
+        },
+        {
+          path: 'account',
+          name: 'account',
+          meta: { appTitle: 'Акаунт', footerContext: 'home', requiresAuth: true, chromeless: true },
+          component: () => import('./pages/AccountPage.vue'),
         },
         {
           path: 'admin',

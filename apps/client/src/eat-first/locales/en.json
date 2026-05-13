@@ -863,7 +863,8 @@
     "openProfileMenuFor": "Open profile menu for {name}",
     "mediaMuted": "Muted",
     "mediaVolume": "Volume",
-    "openAdminPanel": "Open admin panel"
+    "openAdminPanel": "Open admin panel",
+    "openAccount": "My account"
   },
   "onboarding": {
     "openGuide": "How to use",

@@ -859,7 +859,8 @@
     "openProfileMenuFor": "Profilmenü für {name} öffnen",
     "mediaMuted": "Stummgeschaltet",
     "mediaVolume": "Lautstärke",
-    "openAdminPanel": "Adminbereich öffnen"
+    "openAdminPanel": "Adminbereich öffnen",
+    "openAccount": "Mein Konto"
   },
   "onboarding": {
     "openGuide": "Kurzanleitung",
