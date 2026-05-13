@@ -132,7 +132,14 @@ const isBillingRoute = computed(() => route.name === 'billing')
 const isAccountRoute = computed(() => route.name === 'account')
 const isAdminRoute = computed(() => String(route.name ?? '').startsWith('admin-'))
 const isHeavyVisualRoute = computed(
-  () => isHomeRoute.value || isBillingRoute.value || isAccountRoute.value,
+  () =>
+    isHomeRoute.value ||
+    isBillingRoute.value ||
+    isAccountRoute.value ||
+    isNadrawRoute.value ||
+    route.name === 'nadle-streamer' ||
+    route.name === 'app-streamer' ||
+    route.name === 'checkers',
 )
 
 /** Hide header coin chip on interactive game routes (Coin Hub page keeps its own balance UI). */

@@ -2,21 +2,22 @@
 /**
  * GameTemplatePage — route component for `/app/game-template`.
  *
- * Phase 3C: switched off the Mafia client stack. Now uses the generic
- * GameRoom client layer end-to-end:
- *   - `<GameTemplateCallPage>` (fork of CallPage, wired to GameRoomWs)
- *   - `<GameTemplateCallAdapter>` (speaking-hint via `useGameRoomSpeakingHint`)
- *   - `<GameTemplateOverlay>` (timer via `useGameTemplateGameStore`)
+ * Runs on the generic GameRoom client layer end-to-end:
+ *   - `<GameTemplateCallPage>` — fork of CallPage wired to
+ *     `gameroom:*` WS, `useGameRoomHostSignaling`,
+ *     `useGameRoomAudioMixSignaling`, `useGameRoomCallHostUi`, and
+ *     `useGameTemplateGameStore` / `useGameTemplatePlayersStore`.
+ *   - `<GameTemplateCallAdapter>` — speaking-hint state via
+ *     `useGameRoomSpeakingHint`.
+ *   - `<GameTemplateOverlay>` — timer chip via the generic store.
  *
- * The Mafia-only `<GameTemplateHostPanel>` (role + night-action grid) was
- * REMOVED in Phase 3C — the generic protocol has no roles or night
+ * Intentionally NOT mounted: a host panel. The Mafia host panel was a
+ * role + night-action grid; the generic protocol has no roles or night
  * actions. Host actions (mute-all, reshuffle, swap-mode toggle) and the
- * speaking-queue HUD continue to mount from the CallPage fork's
- * bottom-cluster, unchanged.
+ * speaking-queue HUD live in the CallPage fork's bottom-cluster.
  *
- * View-mode detection is now `useGameRoomViewMode` (route name
- * `'game-template'`); the previous Phase 2 widening of
- * `mafiaStreamViewRoute` was reverted in this PR.
+ * View-mode detection is `useGameRoomViewMode`, gated on
+ * `route.name === 'game-template'`.
  */
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'

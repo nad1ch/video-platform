@@ -1469,6 +1469,14 @@ onBeforeUnmount(() => {
     var(--nadle-panel-bg);
 }
 
+.nadle-page__stack--leader {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .nadle-page__grid :deep(.nadle-page__stack--game > p) {
   flex-shrink: 0;
 }

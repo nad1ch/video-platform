@@ -1,40 +1,42 @@
 <script setup lang="ts">
 /**
- * GameTemplateCallPage — byte-faithful fork of `components/call/CallPage.vue`
- * for the `/app/game-template` route.
+ * GameTemplateCallPage — fork of `components/call/CallPage.vue` for the
+ * `/app/game-template` route. The file was originally cut byte-faithful
+ * from CallPage; Phase 3C migrated it off the Mafia runtime to the
+ * generic GameRoom client layer, and Phase 4A cleaned up local naming
+ * left over from the migration.
  *
- * Why a fork: production Mafia behaviour is owned by ~40 `route.name === 'mafia'`
- * gating branches inside CallPage (room-id derivation, Mafia inbound WS
- * dispatch, host-claim flow, audio-mix sync, host-tile click router, OBS view
- * re-join behaviour, host action bar / speaking queue bar mounts, tile
- * numbering / host-last ordering, peer-effective-mute snapshot). Forking the
- * file lets the Game Template page evolve without touching production Mafia
- * one byte.
+ * Current runtime wiring on this file:
+ *   - signaling room prefix: `gameroom:<base>` via `useGameRoomMediaRoom`.
+ *   - WS protocol: `GameRoomWs.*` (`@/composables/gameRoomWsProtocol`).
+ *   - host signaling: `useGameRoomHostSignaling` (no Mafia inbound parsers).
+ *   - audio mix:      `useGameRoomAudioMixSignaling`.
+ *   - tile-click host UI: `useGameRoomCallHostUi` (swap + speaking only,
+ *     no Mafia night-action branch).
+ *   - game store:    `useGameTemplateGameStore` (no roles, no night
+ *     actions, no old/new mode, no background galleries).
+ *   - players store: `useGameTemplatePlayersStore`.
+ *   - view mode:     `useGameRoomViewMode` (gated on
+ *     `route.name === 'game-template'`).
  *
- * What changed vs CallPage.vue, intentionally and minimally:
- *   1. The route-name predicate is rewritten as `route.name === 'game-template'`.
- *      The local variable name `isGameRoomRoute` is preserved everywhere so the
- *      ~40 downstream branches keep their identity verbatim; the predicate
- *      is the only behavioural switch.
- *   2. `MafiaHostActionsBar` / `MafiaSpeakingQueueBar` mounts are swapped for
- *      the `GameTemplate*` adapters under `components/game-template/`. The
- *      shared `GameHostActionsBar` / `GameSpeakingQueueBar` primitives are
- *      reused unchanged.
- *   3. Stylesheet is shared via `<style src="@/components/call/CallPage.css">`
- *      so visual parity is byte-identical and a future CSS namespace change
- *      will only touch the canonical file.
+ * Shared infrastructure deliberately kept:
+ *   - `useCallOrchestrator` from call-core (mediasoup + media SSOT).
+ *   - `ParticipantTile.vue` is consumed as-is — its Mafia-prefixed props
+ *     (`mafia-seat-index`, `mafia-life-state`, etc.) are still wired
+ *     from this fork. Renaming those props is a future phase that
+ *     coordinates Mafia + Game Template + the props themselves.
+ *   - Stylesheet: `<style src="@/components/call/CallPage.css">`. Mafia
+ *     and Game Template share the same class names (`call-page__*`,
+ *     `mafia-vote-hud*`, `mafia-host-mode-*`); renaming those classes
+ *     is the same coordinated future phase.
  *
- * What did NOT change:
- *   - `useCallOrchestrator` import and consumption (call-core SSOT).
- *   - Mafia stores (`mafiaGame`, `mafiaPlayers`), Mafia composables, Mafia
- *     WS protocol, `mafia:<base>` signaling room prefix. The initial fork
- *     keeps the existing backend contract; a generic `gameroom:` namespace
- *     is a future server-side step.
- *   - EatFirst branches inside this file. They are dead code on the
- *     Game Template route because `isEatFirstRoute` is gated on
- *     `route.name === 'eat'` and that name never matches here; keeping
- *     them in the fork preserves a 1:1 diff against CallPage so future
- *     audits can re-derive this file mechanically.
+ * Phase 4B stripped the EatFirst dead-code branches inherited from the
+ * original CallPage byte-faithful fork (trait/action-card/slot-claim
+ * helpers, EatFirst-only watchers, the `<EatFirstHostActionsBar>` /
+ * `<EatFirstSpeakingQueueBar>` mounts, the `route.name === 'eat'`
+ * disjuncts in `isCallAppRoute` / `switchToRoom` / route watcher /
+ * `qSignaling` ternary). EatFirst logic still lives in its own
+ * `apps/client/src/eat-first/**` tree and on `/app/eat`, untouched.
  */
 import { storeToRefs } from 'pinia'
 import {
@@ -95,7 +97,7 @@ import { computeCallVideoGridLayout } from '@/components/call/callVideoGridLayou
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
-import mafiaTilePinIcon from '@/assets/mafia/ui/tile-pin.svg'
+import tilePinIcon from '@/assets/mafia/ui/tile-pin.svg'
 import { generateCallRoomCode } from '@/utils/callRoomUi'
 import {
   CALL_ROOM_DROPDOWN_HOST_ID,
@@ -104,43 +106,28 @@ import {
 } from '@/stores/callRoomHeaderJoin'
 import { useGameRoomHostSignaling } from '@/composables/useGameRoomHostSignaling'
 import { useGameRoomCallHostUi } from '@/composables/useGameRoomCallHostUi'
-import { useEatFirstCallSignaling } from '@/composables/useEatFirstCallSignaling'
 import {
   gameRoomBaseRoomIdFromSignaling,
   gameRoomSignalingRoomId,
   GAME_ROOM_SIGNALING_ROOM_PREFIX,
 } from '@/composables/useGameRoomMediaRoom'
-import {
-  eatFirstBaseRoomIdFromSignaling,
-  eatFirstSignalingRoomId,
-  EAT_FIRST_SIGNALING_ROOM_PREFIX,
-} from '@/eat-first/utils/eatFirstCallRoomId'
-// GameTemplate fork: route mounts the Game Template adapters instead of
-// the production Mafia adapters. Both adapters wrap the same shared
-// `GameHostActionsBar` / `GameSpeakingQueueBar` primitives.
-import MafiaSpeakingQueueBar from '@/components/game-template/GameTemplateSpeakingQueueBar.vue'
-import MafiaHostActionsBar from '@/components/game-template/GameTemplateHostActionsBar.vue'
-import EatFirstHostActionsBar from '@/eat-first/components/EatFirstHostActionsBar.vue'
-import EatFirstSpeakingQueueBar from '@/eat-first/components/EatFirstSpeakingQueueBar.vue'
-import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
-import { EatFirstWs } from '@/eat-first/eatFirstWsProtocol'
-import {
-  getActiveEatFirstSlotForSession,
-  pickPrimaryEatFirstJoinTokenForGame,
-} from '@/eat-first/utils/joinTokenStore.js'
-import { getOrCreateDeviceId } from '@/eat-first/utils/deviceId.js'
+// GameTemplate fork: mounts the GameTemplate adapters that wrap the
+// shared `GameHostActionsBar` / `GameSpeakingQueueBar` presentational
+// primitives under `components/game-call/`. (Mafia mounts its own
+// parallel adapters from `components/mafia/`; both stacks share the
+// same shared primitives.)
+import GameTemplateSpeakingQueueBar from '@/components/game-template/GameTemplateSpeakingQueueBar.vue'
+import GameTemplateHostActionsBar from '@/components/game-template/GameTemplateHostActionsBar.vue'
 import { useGameTemplateGameStore } from '@/stores/gameTemplateGame'
 import { useGameTemplatePlayersStore } from '@/stores/gameTemplatePlayers'
-// Phase 3C: `mafiaEliminationAvatarKindForPeerId` was dropped — the
-// Mafia-specific elimination avatar variant has no generic equivalent.
+// `mafiaEliminationAvatarKindForPeerId` is intentionally not imported —
+// the Mafia-specific elimination avatar variant has no generic equivalent.
 // ParticipantTile receives `undefined` for `mafia-elimination-kind` on
 // the game-template route, which renders the default tile chrome.
-import { EAT_FIRST_OBS_URL_TOAST_EVENT } from '@/composables/eatFirstCallStreamView'
 import { GAME_ROOM_OBS_URL_TOAST_EVENT, GAME_ROOM_SETTINGS_TOAST_EVENT } from '@/composables/gameRoomStreamViewRoute'
 import { GameRoomWs } from '@/composables/gameRoomWsProtocol'
 import { useGameRoomAudioMixSignaling } from '@/composables/useGameRoomAudioMixSignaling'
-import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
-import { nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
+import tilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
 import {
   applyCallAudioOutputSinkToStreamAudios,
   CALL_AUDIO_OUTPUT_DEVICE_ID_KEY,
@@ -159,40 +146,36 @@ const CALL_ROUTE_HTML_CLASS = 'sa-call-route'
 
 /**
  * GameTemplate fork: this file is only mounted on `/app/game-template`.
- * The local variable name `isGameRoomRoute` is preserved verbatim from the
- * Mafia source of truth so every downstream `if (isGameRoomRoute.value)` /
- * `isGameRoomRoute: isGameRoomRoute` composable wiring keeps its identity; the
- * predicate itself is route-name agnostic. The WS protocol and signaling
- * room prefix (`mafia:<base>`) are still shared with the production Mafia
- * backend — see this file's top-of-script docblock.
+ * `isGameRoomRoute` is the single route predicate every downstream
+ * branch checks; the WS protocol (`gameroom:*`) and signaling room
+ * prefix (`gameroom:<base>`) are owned by the generic GameRoom client
+ * layer — see this file's top-of-script docblock.
+ *
+ * `isCallAppRoute` is kept as an alias of `isGameRoomRoute` because
+ * several call-shell side effects (HTML class toggle, route-watch
+ * room-code generation, normalize-session-room-id, chat panel inbound
+ * toasts) historically guarded on a generic "in a call-app route"
+ * boolean and we keep the same name to minimize the diff inside those
+ * branches.
  */
-const isCallAppRoute = computed(
-  () =>
-    route.name === 'call' ||
-    route.name === 'mafia' ||
-    route.name === 'game-template' ||
-    route.name === 'eat',
-)
 const isGameRoomRoute = computed(() => route.name === 'game-template')
-const isEatFirstRoute = computed(() => route.name === 'eat')
+const isCallAppRoute = isGameRoomRoute
 
 const props = withDefaults(
   defineProps<{
     gameRoomStreamView?: boolean
-    eatFirstStreamView?: boolean
   }>(),
-  { gameRoomStreamView: false, eatFirstStreamView: false },
+  { gameRoomStreamView: false },
 )
 
 const gameRoomViewUi = computed(() => isGameRoomRoute.value && props.gameRoomStreamView)
-const eatFirstViewUi = computed(() => isEatFirstRoute.value && props.eatFirstStreamView)
 
 /**
- * Mafia `?mode=view` and Eat First `?mode=view`: recv-only in call-core — no camera/mic publish
- * (`wireCallMediaAfterRoomState` skips send transport for `viewer`). `/app/call` stays `participant`.
+ * Game Template `?mode=view`: recv-only in call-core — no camera/mic publish
+ * (`wireCallMediaAfterRoomState` skips send transport for `viewer`).
  */
 const callEngineRole = computed((): CallEngineRole =>
-  gameRoomViewUi.value || eatFirstViewUi.value ? 'viewer' : 'participant',
+  gameRoomViewUi.value ? 'viewer' : 'participant',
 )
 
 watch(
@@ -277,7 +260,7 @@ const mediaDebugPanelEnabled = isMediaDebugEnabled()
  * normal participant.
  */
 function isOperatingAsObsViewSource(): boolean {
-  return gameRoomViewUi.value || eatFirstViewUi.value
+  return gameRoomViewUi.value
 }
 
 const {
@@ -357,10 +340,8 @@ if (import.meta.env.DEV) {
       callPageLog.info('[call-qa:role] callEngineRole', {
         role,
         gameRoomViewUi: gameRoomViewUi.value,
-        eatFirstViewUi: eatFirstViewUi.value,
         routeName: route.name,
         isGameRoomRoute: isGameRoomRoute.value,
-        isEatFirstRoute: isEatFirstRoute.value,
       })
     },
     { immediate: true },
@@ -390,7 +371,7 @@ watch(
 // one increments per-type counters so post-incident analysis can correlate
 // flicker / blackout reports with WS message bursts (`producer-sync`,
 // `producer-closed`, `new-producer`, `room-state`, `peer-joined/left`,
-// Mafia snapshot replies). Cost: one switch + counter per inbound message.
+// `gameroom:*` snapshot replies). Cost: one switch + counter per inbound message.
 const offMediaDebugSignalingCounter = subscribeSignalingMessage((data) => {
   if (!data || typeof data !== 'object') return
   const type = (data as { type?: unknown }).type
@@ -410,26 +391,6 @@ const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
 
 const GAME_ROOM_FORCE_CAMERA_OFF_SIGNAL = GameRoomWs.forceCameraOff
 const GAME_ROOM_FORCE_MUTE_ALL_SIGNAL = GameRoomWs.forceMuteAll
-const EAT_FIRST_FORCE_MUTE_ALL_SIGNAL = EatFirstWs.forceMuteAll
-const EAT_FIRST_TRAIT_REVEAL_REQUEST_SIGNAL = EatFirstWs.traitRevealRequest
-const EAT_FIRST_TRAIT_REGENERATE_REQUEST_SIGNAL = EatFirstWs.traitRegenerateRequest
-const EAT_FIRST_TRAIT_TYPE_REROLL_REQUEST_SIGNAL = EatFirstWs.traitTypeRerollRequest
-const EAT_FIRST_ACTION_CARD_REROLL_REQUEST_SIGNAL = EatFirstWs.actionCardRerollRequest
-const EAT_FIRST_ACTION_CARD_USE_SIGNAL = EatFirstWs.actionCardUse
-const EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL = EatFirstWs.tableRoundDeal
-const EAT_FIRST_SPEAKING_QUEUE_UPDATE_SIGNAL = EatFirstWs.speakingQueueUpdate
-const EAT_FIRST_SLOT_CLAIM_SIGNAL = EatFirstWs.slotClaim
-// Inbound `eat:*` response signals are handled by `useEatFirstCallSignaling`.
-
-type EatFirstTraitKey =
-  | 'gender'
-  | 'age'
-  | 'profession'
-  | 'health'
-  | 'hobby'
-  | 'phobia'
-  | 'fact'
-  | 'baggage'
 
 function gameRoomSignalPayload(data: unknown, type: string): Record<string, unknown> | null {
   if (data == null || typeof data !== 'object') {
@@ -460,7 +421,7 @@ const offGameRoomForceControls = subscribeSignalingMessage((data) => {
       next[peerId] = displayName
     }
     nicknameOverrideByPeerId.value = next
-    // Ensure an older local-only rename doesn't shadow the Mafia-synced nickname.
+    // Ensure an older local-only rename doesn't shadow the server-synced nickname.
     if (Object.prototype.hasOwnProperty.call(localTileDisplayOverrides.value, peerId)) {
       const cleaned = { ...localTileDisplayOverrides.value }
       delete cleaned[peerId]
@@ -487,11 +448,12 @@ const offGameRoomForceControls = subscribeSignalingMessage((data) => {
   if (typeof peerId === 'string' && peerId === selfPeerId.value && camEnabled.value) {
     void toggleCam()
   }
-  // Per-peer Mafia mic-force (server-emitted side effect of kick/revive).
-  // `muted: true` flips the local mic UI off via the existing call-core
-  // `toggleMic` action so the killed peer stops trying to talk into a
-  // server-paused producer. `muted: false` is a UI hint clear only — we
-  // do NOT auto-unmute the user; they unmute manually after revive.
+  // Per-peer game-room mic-force (server-emitted side effect of kick/revive
+  // via `gameroom:force-peer-mic`). `muted: true` flips the local mic UI off
+  // through the existing call-core `toggleMic` action so the killed peer
+  // stops trying to talk into a server-paused producer. `muted: false` is a
+  // UI hint clear only — we do NOT auto-unmute the user; they unmute
+  // manually after revive.
   const forcePeerMicPayload = gameRoomSignalPayload(data, GameRoomWs.forcePeerMic)
   if (forcePeerMicPayload != null) {
     const targetPeerId = forcePeerMicPayload.peerId
@@ -510,14 +472,15 @@ const offGameRoomForceControls = subscribeSignalingMessage((data) => {
 onBeforeUnmount(offGameRoomForceControls)
 
 /**
- * Mafia P1 Bug 1+2: per-peer effective audio-muted tracking for the host's
- * "mute all" button visual state. Server's `peer-audio-muted` already
- * encodes effective mute (`audioMuted || forcedAudioMuted`); the room-state
- * snapshot at join carries the same data per peer. Both flow into the
- * store's `peerEffectiveMutedByPeerId`, which `MafiaHostActionsBar`
- * reduces against `nonHostPeerIds` for the visual.
+ * Per-peer effective audio-muted tracking for the host's "mute all" button
+ * visual state. Server's `peer-audio-muted` already encodes effective mute
+ * (`audioMuted || forcedAudioMuted`); the room-state snapshot at join
+ * carries the same data per peer. Both flow into the store's
+ * `peerEffectiveMutedByPeerId`, which `GameTemplateHostActionsBar` reduces
+ * against `nonHostPeerIds` for the visual.
  *
- * Gated on `isGameRoomRoute` so non-Mafia rooms never write to the Mafia store.
+ * Gated on `isGameRoomRoute` so non-game-room rooms never write to the
+ * generic game-room store.
  */
 const offGameRoomPeerAudioMuted = subscribeSignalingMessage((data) => {
   if (!isGameRoomRoute.value) {
@@ -565,7 +528,7 @@ const offGameRoomPeerAudioMuted = subscribeSignalingMessage((data) => {
 onBeforeUnmount(offGameRoomPeerAudioMuted)
 
 /**
- * Toggling Mafia `?mode=view` (header / router) flips `callEngineRole` only after a new wire; re-join
+ * Toggling Game Template `?mode=view` (header / router) flips `callEngineRole` only after a new wire; re-join
  * so OBS drops any existing send transport from a prior participant session in the same tab.
  */
 watch(
@@ -589,29 +552,6 @@ watch(
     })()
   },
 )
-
-watch(
-  eatFirstViewUi,
-  (v, oldV) => {
-    if (!isEatFirstRoute.value) {
-      return
-    }
-    if (v === oldV) {
-      return
-    }
-    if (!session.inCall) {
-      return
-    }
-    if (joining.value) {
-      return
-    }
-    void (async () => {
-      await leaveCall()
-      await joinCall()
-    })()
-  },
-)
-
 
 const participantsByPeerId = computed(() =>
   buildCallParticipantMap(tiles.value, { ...remoteDisplayNames.value }, selfPeerId.value),
@@ -663,7 +603,7 @@ function onCommitLocalTileDisplayName(payload: { peerId: string; name: string | 
       next[id] = t
     }
     nicknameOverrideByPeerId.value = next
-    // Mafia nickname overrides are server-authoritative; avoid a stale local override
+    // Game-room nickname overrides are server-authoritative; avoid a stale local override
     // shadowing the optimistic / server nickname.
     if (Object.prototype.hasOwnProperty.call(localTileDisplayOverrides.value, id)) {
       const cleaned = { ...localTileDisplayOverrides.value }
@@ -725,11 +665,11 @@ const remoteListenVolumeByPeer = new Map<string, (v: number) => void>()
 const remoteListenMutedByPeer = new Map<string, (v: boolean) => void>()
 
 /**
- * Deferred slot: assigned by `useGameRoomAudioMixSignaling` further down the
- * setup script (it depends on `gameStore` which is initialized later).
- * Handlers below reference the slot lazily so the host's slider/mute toggle
- * also fans out a `mafia:audio-mix-update` to the room (OBS view applies it).
- * No-op for non-host or non-Mafia routes.
+ * Deferred slot: assigned by `useGameRoomAudioMixSignaling` further down
+ * the setup script (it depends on `gameStore` which is initialized later).
+ * Handlers below reference the slot lazily so the host's slider/mute
+ * toggle also fans out a `gameroom:audio-mix-update` to the room (OBS
+ * view applies it). No-op for non-host or non-game-room routes.
  */
 const audioMixBroadcasterSlot: { broadcast: ((delta: { peerId: string; volume: number; muted: boolean }) => void) | null } = {
   broadcast: null,
@@ -827,7 +767,6 @@ const remoteVideoSuppressDelayTimerByPeer = new Map<string, ReturnType<typeof se
 
 const remoteVideoSuppressPendingKind = new Map<string, 'offscreen' | 'outside-budget'>()
 const remoteVideoPlaybackSuppressed = shallowRef(new Map<string, boolean>())
-const eatFirstShell = useEatFirstCallShellStore()
 function bumpRemotePlaybackSuppressed(peerId: string, suppressed: boolean, reason: string): void {
   const prev = remoteVideoPlaybackSuppressed.value.get(peerId) === true
   if (prev === suppressed) {
@@ -1004,26 +943,7 @@ watch(
       localTileDisplayOverrides.value = next
       saveCallTileLocalDisplayOverrides(next)
     }
-    if (isEatFirstRoute.value) {
-      const hostPeerId = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId : null
-      const connectedPlayers = hostPeerId != null && ids.has(hostPeerId) ? Math.max(0, ids.size - 1) : ids.size
-      eatFirstShell.setConnectedPlayerCount(connectedPlayers)
-    }
   },
-)
-
-watch(
-  () => [isEatFirstRoute.value, eatFirstShell.hostPeerId, tiles.value.map((t) => t.peerId).join('|')] as const,
-  ([isEatRoute, hostPeerId]) => {
-    if (!isEatRoute) {
-      return
-    }
-    const ids = new Set(tiles.value.map((t) => t.peerId))
-    const hostId = typeof hostPeerId === 'string' ? hostPeerId : null
-    const connectedPlayers = hostId != null && ids.has(hostId) ? Math.max(0, ids.size - 1) : ids.size
-    eatFirstShell.setConnectedPlayerCount(connectedPlayers)
-  },
-  { immediate: true },
 )
 
 const videoQualityChoice = computed({
@@ -1086,237 +1006,11 @@ watch(
   },
 )
 
-function onEatFirstForceMuteAll(muted: boolean): void {
-  if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) {
-    return
-  }
-  sendSignalingMessage({ type: EAT_FIRST_FORCE_MUTE_ALL_SIGNAL, payload: { muted } })
-}
-
-function onEatFirstReshuffle(): void {
-  if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) {
-    return
-  }
-  if (import.meta.env.DEV) {
-    callPageLog.info('[eat-first:ws:send]', { type: EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL, payload: {} })
-  }
-  sendSignalingMessage({
-    type: EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL,
-    payload: {},
-  })
-}
-
-function attemptEatFirstSlotClaim(): void {
-  if (!isEatFirstRoute.value) return
-  const gid = (() => {
-    const q = route.query?.game
-    return typeof q === 'string' ? q.trim() : ''
-  })()
-  if (!gid) return
-
-  const sessionTok = getActiveEatFirstSlotForSession(gid)
-  const picked = pickPrimaryEatFirstJoinTokenForGame(gid)
-
-  // GameTemplate fork: lint-clean form of the same branch. Every reachable
-  // path either assigns all three vars or `return`s, so TS definite-assignment
-  // is satisfied without the `= ''` initializers production CallPage carries.
-  // Behaviour is byte-identical to the production version on every branch.
-  let slotId: string
-  let joinToken: string
-  let deviceId: string
-
-  if (sessionTok && sessionTok.joinToken.length > 0) {
-    slotId = sessionTok.slotId.trim()
-    joinToken = sessionTok.joinToken.trim()
-    deviceId = typeof sessionTok.deviceId === 'string' ? sessionTok.deviceId.trim() : ''
-  } else if (picked && picked.token.trim().length > 0) {
-    slotId = typeof picked.slotId === 'string' ? picked.slotId.trim() : ''
-    joinToken = picked.token.trim()
-    deviceId = ''
-  } else {
-    return
-  }
-
-  if (!slotId) return
-
-  const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
-
-  if (joinToken.length > 0) {
-    const fallbackDeviceId = deviceId.length >= 8 ? deviceId : getOrCreateDeviceId()
-    if (fallbackDeviceId.length < 8) return
-    if (import.meta.env.DEV) {
-      callPageLog.info('[eat-first:slot-claim:send]', {
-        gameId: gid,
-        slotId,
-        peerId: selfId || null,
-        mode: 'token',
-      })
-    }
-    sendSignalingMessage({
-      type: EAT_FIRST_SLOT_CLAIM_SIGNAL,
-      payload: { slotId, joinToken, deviceId: fallbackDeviceId },
-    })
-  }
-}
-
-function patchEatFirstTraitForSlot(slotId: string, traitKey: EatFirstTraitKey, value: string): void {
-  const sid = slotId.trim()
-  const nextValue = value.trim()
-  if (!sid || !nextValue) return
-  const prev = eatFirstShell.traitsBySlot[sid]
-  if (!prev || typeof prev !== 'object') return
-  eatFirstShell.setTraitsBySlot({
-    ...eatFirstShell.traitsBySlot,
-    [sid]: { ...prev, [traitKey]: nextValue },
-  })
-}
-
-/**
- * Eat First inbound signaling — extracted into `useEatFirstCallSignaling`.
- *
- * The composable owns the four `slot/revealed/overrides/opened-bySlot`
- * shallowRefs (returned here so the rest of CallPage's computeds can read
- * them with the original variable names) plus the `applyingSpeakingQueueFromSignaling`
- * flag the host-side rebroadcast watcher uses to suppress its own echo.
- *
- * Cross-cutting effects that need other CallPage-scope deps stay here as
- * callbacks: slot-claim (route + per-game token store), trait patcher
- * (writes through `eatFirstShell.traitsBySlot`), and the action-card-used
- * toast (i18n + display name + `callToasts`).
- */
-// `overridesBySlot` and `openedBySlot` are internal to the composable today
-// (the dispatcher writes them; no CallPage computed reads them). Kept on the
-// composable's return shape for future EatFirst adapters; not destructured
-// here to avoid lint warnings.
-const {
-  applyingSpeakingQueueFromSignaling: applyingEatFirstSpeakingQueueFromSignaling,
-  slotByPeer: eatFirstSlotByPeer,
-  revealedBySlot: eatFirstRevealedBySlot,
-} = useEatFirstCallSignaling({
-  subscribeSignalingMessage,
-  selfPeerId,
-  roomId: computed(() => session.roomId),
-  isEatFirstRoute,
-  eatFirstShell,
-  micEnabled,
-  toggleMic,
-  attemptSlotClaim: attemptEatFirstSlotClaim,
-  patchTraitForSlot: patchEatFirstTraitForSlot,
-  onPlayerUsedActionCard: ({ peerId, title }) => {
-    const name = peerDisplayName(peerId)
-    const id = `eat-ac-${Date.now()}-${peerId}`
-    const text = t('eatFirstCall.playerUsedActionCardToast', { name, card: title })
-    callToasts.value = [...callToasts.value, { id, text, kind: 'join' }]
-    window.setTimeout(() => {
-      callToasts.value = callToasts.value.filter((x) => x.id !== id)
-    }, 5200)
-  },
-  log: callPageLog,
-})
-
-/**
- * Host-panel <-> CallPage bridge. The panel is rendered as a sibling of
- * `<CallPage />` (Teleport-d to body from `EatFirstCallPage`), so it cannot
- * call signaling methods directly. Instead the panel dispatches a typed
- * `CustomEvent` on `window` and CallPage forwards it through the live socket.
- * Listener is removed on unmount; only acts when on the Eat First route AND
- * the local user is the room host (server still re-validates).
- */
-function onEatFirstHostActionEvent(ev: Event): void {
-  if (!isEatFirstRoute.value) return
-  if (!eatFirstShell.isEatFirstRoomHost) return
-  const detail = (ev as CustomEvent).detail
-  if (!detail || typeof detail !== 'object') return
-  if (import.meta.env.DEV) {
-    callPageLog.info('[eat-first:host-action:received]', detail)
-  }
-  const action = (detail as { action?: unknown }).action
-  if (action === 'trait-type-reroll-all') {
-    const traitKey = (detail as { traitKey?: unknown }).traitKey
-    if (typeof traitKey !== 'string') return
-    if (import.meta.env.DEV) {
-      callPageLog.info('[eat-first:ws:send]', {
-        type: EAT_FIRST_TRAIT_TYPE_REROLL_REQUEST_SIGNAL,
-        payload: { traitKey },
-      })
-    }
-    sendSignalingMessage({
-      type: EAT_FIRST_TRAIT_TYPE_REROLL_REQUEST_SIGNAL,
-      payload: { traitKey },
-    })
-    return
-  }
-  if (action === 'action-card-reroll') {
-    const slotId = (detail as { slotId?: unknown }).slotId
-    if (typeof slotId !== 'string' || slotId.length < 1) return
-    if (import.meta.env.DEV) {
-      callPageLog.info('[eat-first:ws:send]', {
-        type: EAT_FIRST_ACTION_CARD_REROLL_REQUEST_SIGNAL,
-        payload: { slotId },
-      })
-    }
-    sendSignalingMessage({
-      type: EAT_FIRST_ACTION_CARD_REROLL_REQUEST_SIGNAL,
-      payload: { slotId },
-    })
-    return
-  }
-}
-
-const EAT_FIRST_HOST_ACTION_EVENT = 'streamassist:eat-first:host-action'
-
-function onEatFirstTimerActionEvent(ev: Event): void {
-  if (!isEatFirstRoute.value) return
-  if (!eatFirstShell.isEatFirstRoomHost) return
-  const detail = (ev as CustomEvent).detail
-  if (!detail || typeof detail !== 'object') return
-  const action = (detail as { action?: unknown }).action
-  if (action === 'timer-start') {
-    const raw = (detail as { durationSec?: unknown }).durationSec
-    const durationSec =
-      typeof raw === 'number' && Number.isFinite(raw) ? Math.max(5, Math.floor(raw)) : 30
-    const durationMs = durationSec * 1000
-    sendSignalingMessage({
-      type: EatFirstWs.timerStart,
-      payload: { startedAt: Date.now(), duration: durationMs },
-    })
-    return
-  }
-  if (action === 'timer-stop') {
-    sendSignalingMessage({ type: EatFirstWs.timerStop, payload: {} })
-  }
-}
-
-const EAT_FIRST_TIMER_ACTION_EVENT = 'streamassist:eat-first:timer-action'
-
-if (typeof window !== 'undefined') {
-  window.addEventListener(EAT_FIRST_HOST_ACTION_EVENT, onEatFirstHostActionEvent)
-  window.addEventListener(EAT_FIRST_TIMER_ACTION_EVENT, onEatFirstTimerActionEvent)
-  onBeforeUnmount(() => {
-    window.removeEventListener(EAT_FIRST_HOST_ACTION_EVENT, onEatFirstHostActionEvent)
-    window.removeEventListener(EAT_FIRST_TIMER_ACTION_EVENT, onEatFirstTimerActionEvent)
-  })
-}
-
 function onGameRoomObsUrlCopiedToast(): void {
-  const id = `mafia-obs-${Date.now()}`
+  const id = `gameroom-obs-${Date.now()}`
   callToasts.value = [
     ...callToasts.value,
     { id, text: t('mafiaPage.obsViewUrlCopiedToast'), kind: 'join' },
-  ]
-  window.setTimeout(() => {
-    callToasts.value = callToasts.value.filter((x) => x.id !== id)
-  }, 4200)
-}
-
-function onEatFirstObsUrlCopiedToast(): void {
-  if (!isEatFirstRoute.value) {
-    return
-  }
-  const id = `eat-first-obs-${Date.now()}`
-  callToasts.value = [
-    ...callToasts.value,
-    { id, text: t('eatFirstCall.obsCopied'), kind: 'join' },
   ]
   window.setTimeout(() => {
     callToasts.value = callToasts.value.filter((x) => x.id !== id)
@@ -1327,7 +1021,7 @@ function onGameRoomSettingsToast(ev: Event): void {
   const text = ev instanceof CustomEvent && typeof ev.detail?.text === 'string'
     ? ev.detail.text
     : t('mafiaPage.backgroundUploadFailed')
-  const id = `mafia-settings-${Date.now()}`
+  const id = `gameroom-settings-${Date.now()}`
   callToasts.value = [
     ...callToasts.value,
     { id, text, kind: 'leave' },
@@ -1398,13 +1092,7 @@ watch(chatOpen, (open) => {
 watch(
   callChatMessages,
   (msgs) => {
-    if (
-      !session.inCall ||
-      joining.value ||
-      gameRoomViewUi.value ||
-      eatFirstViewUi.value ||
-      msgs.length === 0
-    ) {
+    if (!session.inCall || joining.value || gameRoomViewUi.value || msgs.length === 0) {
       return
     }
     const last = msgs[msgs.length - 1]
@@ -1521,28 +1209,19 @@ function displayCallOrGameRoomCode(): string {
   if (isGameRoomRoute.value) {
     return gameRoomBaseRoomIdFromSignaling(raw)
   }
-  if (isEatFirstRoute.value) {
-    return eatFirstBaseRoomIdFromSignaling(raw)
-  }
   return raw
 }
 
 /**
- * Keep `session.roomId` consistent with the route: Mafia → `mafia:<base>`, Eat First → `eat:<base>`,
- * Call → neither prefix.
+ * Keep `session.roomId` consistent with the route: Game Template → `gameroom:<base>`.
+ * If the stored room id carries the prefix on a non-game-room mount (defensive),
+ * strip it back to the base form.
  */
 function normalizeSessionRoomIdForStreamRoute(): void {
   if (!isCallAppRoute.value) {
     return
   }
   const s = normalizeDisplayName(session.roomId) || 'demo'
-  if (isEatFirstRoute.value) {
-    const desired = eatFirstSignalingRoomId(eatFirstBaseRoomIdFromSignaling(s))
-    if (s !== desired) {
-      session.roomId = desired
-    }
-    return
-  }
   if (isGameRoomRoute.value) {
     const desired = gameRoomSignalingRoomId(gameRoomBaseRoomIdFromSignaling(s))
     if (s !== desired) {
@@ -1553,18 +1232,11 @@ function normalizeSessionRoomIdForStreamRoute(): void {
   if (s.startsWith(GAME_ROOM_SIGNALING_ROOM_PREFIX)) {
     session.roomId = gameRoomBaseRoomIdFromSignaling(s)
   }
-  if (s.startsWith(EAT_FIRST_SIGNALING_ROOM_PREFIX)) {
-    session.roomId = eatFirstBaseRoomIdFromSignaling(s)
-  }
 }
 
 async function switchToRoom(nextRaw: string, opts?: { fromRoute?: boolean }): Promise<void> {
   const base = normalizeDisplayName(nextRaw) || 'demo'
-  const signalingId = isGameRoomRoute.value
-    ? gameRoomSignalingRoomId(base)
-    : isEatFirstRoute.value
-      ? eatFirstSignalingRoomId(base)
-      : base
+  const signalingId = gameRoomSignalingRoomId(base)
   if (joining.value) {
     return
   }
@@ -1579,17 +1251,7 @@ async function switchToRoom(nextRaw: string, opts?: { fromRoute?: boolean }): Pr
   session.roomId = signalingId
   if (!opts?.fromRoute && isCallAppRoute.value) {
     try {
-      const name =
-        route.name === 'game-template'
-          ? 'game-template'
-          : route.name === 'mafia'
-            ? 'mafia'
-            : route.name === 'eat'
-              ? 'eat'
-              : 'call'
-      const query =
-        name === 'eat' ? { ...route.query, game: base } : { ...route.query, room: base }
-      await router.replace({ name, query })
+      await router.replace({ name: 'game-template', query: { ...route.query, room: base } })
     } catch {
       /* ignore */
     }
@@ -1603,7 +1265,6 @@ watch(
     [
       route.name,
       typeof route.query.room === 'string' ? route.query.room : '',
-      typeof route.query.game === 'string' ? route.query.game : '',
       callAuthReady.value,
     ] as const,
   async () => {
@@ -1611,29 +1272,15 @@ watch(
       return
     }
     normalizeSessionRoomIdForStreamRoute()
-    const q =
-      route.name === 'eat'
-        ? typeof route.query.game === 'string'
-          ? normalizeDisplayName(route.query.game)
-          : ''
-        : typeof route.query.room === 'string'
-          ? normalizeDisplayName(route.query.room)
-          : ''
+    const q = typeof route.query.room === 'string' ? normalizeDisplayName(route.query.room) : ''
     if (!q) {
       if (!session.inCall && !joining.value) {
         try {
           const code = generateCallRoomCode()
-          if (route.name === 'eat') {
-            await router.replace({
-              name: 'eat',
-              query: { ...route.query, game: code },
-            })
-          } else {
-            await router.replace({
-              name: route.name as 'call' | 'mafia' | 'game-template',
-              query: { ...route.query, room: code },
-            })
-          }
+          await router.replace({
+            name: 'game-template',
+            query: { ...route.query, room: code },
+          })
         } catch {
           /* ignore */
         }
@@ -1641,12 +1288,7 @@ watch(
       return
     }
     const currentSignaling = normalizeDisplayName(session.roomId) || 'demo'
-    const qSignaling =
-      route.name === 'mafia' || route.name === 'game-template'
-        ? gameRoomSignalingRoomId(q)
-        : route.name === 'eat'
-          ? eatFirstSignalingRoomId(q)
-          : q
+    const qSignaling = gameRoomSignalingRoomId(q)
     if (qSignaling !== currentSignaling) {
       await switchToRoom(q, { fromRoute: true })
       return
@@ -1802,17 +1444,12 @@ function syncSpotlightDesktop(ev?: MediaQueryListEvent): void {
 watch(
   tiles,
   (list) => {
-    let ids = list.map((t) => t.peerId)
-    if (isEatFirstRoute.value) {
-      const hostId = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId : ''
-      ids = sortPeerIdsHostLast(ids, hostId)
-    }
+    const ids = list.map((t) => t.peerId)
     if (isGameRoomRoute.value) {
       const explicitHostId = typeof gameStore.hostPeerId === 'string' ? gameStore.hostPeerId.trim() : ''
       const prevDisplayOrder = gameStore.getDisplayNumberingOrder(tileOrder.value)
       const hostId = resolveHostPeerIdForGrid(explicitHostId, prevDisplayOrder)
-      ids = sortPeerIdsHostLast(ids, hostId)
-      tileOrder.value = ids
+      tileOrder.value = sortPeerIdsHostLast(ids, hostId)
       return
     }
     const prev = tileOrder.value
@@ -1843,9 +1480,9 @@ watch(
 )
 
 /**
- * Push the current non-host participant peerIds to the Mafia store so it
- * can compute "every non-host effectively muted" for the host UI button
- * (P1 Bug 1+2). The store filters out the host peerId internally.
+ * Push the current non-host participant peerIds to the game-room store so
+ * it can compute "every non-host effectively muted" for the host UI
+ * button. The store filters out the host peerId internally.
  */
 watch(
   () => [
@@ -1882,13 +1519,11 @@ const seatNumberByPeer = computed(() => {
 })
 
 /**
- * Generic game-room call-host UI behaviour (Phase 3C: switched from
- * Mafia composable to `useGameRoomCallHostUi`).
+ * Generic game-room call-host UI behaviour via `useGameRoomCallHostUi`.
  *
  * Owns the host-side handlers and the speaking-mode seat-highlight
  * computed, plus the generic tile-click router (swap + speaking branches
- * only — the Mafia night-action branch has no equivalent in the generic
- * protocol and is intentionally absent).
+ * only — there is no night-action branch in the generic protocol).
  *
  * The OBS/host-claim flow, audio-mix host broadcast, and inbound
  * `gameroom:*` signaling live in `useGameRoomHostSignaling` and
@@ -1911,214 +1546,6 @@ const {
   pushCallToast,
   t,
 })
-
-const eatFirstSeatByPeer = computed(() => {
-  if (!isEatFirstRoute.value) {
-    return new Map<string, number>()
-  }
-  const m = new Map<string, number>()
-  for (const [peerId, slotId] of Object.entries(eatFirstSlotByPeer.value)) {
-    if (typeof slotId !== 'string') continue
-    const hit = /^p([1-9]|1[01])$/i.exec(slotId.trim())
-    if (!hit) continue
-    const seat = Number(hit[1])
-    if (Number.isInteger(seat) && seat >= 1) {
-      m.set(peerId, seat)
-    }
-  }
-  return m
-})
-
-/** 1-based position in `playerOrder` for the tile badge (speaking / table order). */
-const eatFirstDisplayOrderByPeer = computed(() => {
-  const m = new Map<string, number>()
-  if (!isEatFirstRoute.value) return m
-  const slotByPeer = eatFirstSlotByPeer.value
-  const peerBySlot = new Map<string, string>()
-  for (const [peerId, slotId] of Object.entries(slotByPeer)) {
-    const sid = typeof slotId === 'string' ? slotId.trim() : ''
-    if (!/^p([1-9]|1[01])$/i.test(sid)) continue
-    peerBySlot.set(sid, peerId)
-  }
-  eatFirstShell.playerOrder.forEach((slotId, idx) => {
-    const peerId = peerBySlot.get(slotId)
-    if (peerId && !m.has(peerId)) {
-      m.set(peerId, idx + 1)
-    }
-  })
-  return m
-})
-
-/** Same 1-based index as the Eat First tile badge; host nomination queue must match that label, not `pN` slot digits. */
-function eatFirstNominationNumberForPeer(peerId: string): number | undefined {
-  if (!isEatFirstRoute.value) return undefined
-  const disp = eatFirstDisplayOrderByPeer.value.get(peerId)
-  if (typeof disp === 'number' && Number.isInteger(disp) && disp >= 1) return disp
-  const slotNum = eatFirstSeatByPeer.value.get(peerId)
-  if (typeof slotNum === 'number' && Number.isInteger(slotNum) && slotNum >= 1) return slotNum
-  return undefined
-}
-
-watch(
-  () => eatFirstShell.speakingQueue,
-  (q) => {
-    if (applyingEatFirstSpeakingQueueFromSignaling.value) {
-      return
-    }
-    if (!isEatFirstRoute.value) {
-      return
-    }
-    if (!session.inCall) {
-      return
-    }
-    if (wsStatus.value !== 'open') {
-      return
-    }
-    if (!eatFirstShell.isEatFirstRoomHost) {
-      return
-    }
-    sendSignalingMessage({
-      type: EAT_FIRST_SPEAKING_QUEUE_UPDATE_SIGNAL,
-      payload: { speakingQueue: [...q] },
-    })
-  },
-  { deep: true },
-)
-
-const eatFirstActiveTabSlotId = computed(() => {
-  if (!isEatFirstRoute.value) return ''
-  const gid = typeof route.query?.game === 'string' ? route.query.game.trim() : ''
-  if (!gid) return ''
-  const active = getActiveEatFirstSlotForSession(gid)
-  return active?.slotId ?? ''
-})
-
-function eatFirstTraitsForPeer(peerId: string): Record<EatFirstTraitKey, string> | null {
-  if (!isEatFirstRoute.value) return null
-  const hostPid = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId.trim() : ''
-  if (hostPid.length > 0 && peerId === hostPid) return null
-  const slot = eatFirstSlotByPeer.value[peerId]
-  if (typeof slot === 'string' && slot.length > 0) {
-    const bySlot = eatFirstShell.traitsBySlot[slot]
-    if (bySlot && typeof bySlot === 'object') return bySlot
-  }
-  return null
-}
-
-function eatFirstTraitHostView(): boolean {
-  return isEatFirstRoute.value && eatFirstShell.isEatFirstRoomHost
-}
-
-function eatFirstTraitOwnerView(peerId: string): boolean {
-  if (!isEatFirstRoute.value) return false
-  const peerSlot = eatFirstSlotForPeer(peerId)
-  if (!peerSlot) return false
-  const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
-  if (selfId.length > 0 && peerId === selfId) return true
-  const tabSlot = eatFirstActiveTabSlotId.value
-  if (tabSlot.length > 0 && peerSlot === tabSlot) return true
-  return false
-}
-
-function eatFirstSlotForPeer(peerId: string): string {
-  if (!isEatFirstRoute.value) return ''
-  const slot = eatFirstSlotByPeer.value[peerId]
-  return typeof slot === 'string' ? slot : ''
-}
-
-function eatFirstRevealedTraitsForPeer(peerId: string): string[] {
-  if (!isEatFirstRoute.value) return []
-  const slot = eatFirstSlotForPeer(peerId)
-  if (!slot) return []
-  const bySlot = eatFirstRevealedBySlot.value[slot]
-  if (!bySlot || typeof bySlot !== 'object') return []
-  const out: string[] = []
-  for (const [k, open] of Object.entries(bySlot)) {
-    if (open === true) out.push(k)
-  }
-  return out
-}
-
-function eatFirstActionCardForPeer(peerId: string): {
-  title: string
-  description: string
-  templateId: string
-  used: boolean
-} | null {
-  if (!isEatFirstRoute.value) return null
-  const hostPid = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId.trim() : ''
-  if (hostPid.length > 0 && peerId === hostPid) return null
-  const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
-  const isHost = eatFirstShell.isEatFirstRoomHost === true
-  if (!isHost) {
-    if (!selfId || peerId !== selfId) return null
-  }
-  const slot = eatFirstSlotForPeer(peerId)
-  if (!slot) return null
-  const card = eatFirstShell.actionCardBySlot[slot]
-  if (!card) return null
-  const title = typeof card.title === 'string' ? card.title : ''
-  if (title.length < 1) return null
-  return {
-    title,
-    description: typeof card.description === 'string' ? card.description : '',
-    templateId: typeof card.templateId === 'string' ? card.templateId : '',
-    used: card.used === true,
-  }
-}
-
-function onEatFirstRevealTrait(payload: {
-  peerId: string
-  traitKey: EatFirstTraitKey
-  closed?: boolean
-}): void {
-  if (!isEatFirstRoute.value) return
-  const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
-  const slotId = eatFirstSlotForPeer(peerId)
-  if (!slotId) return
-  const close = payload.closed === true
-  sendSignalingMessage({
-    type: EAT_FIRST_TRAIT_REVEAL_REQUEST_SIGNAL,
-    payload: close
-      ? { slotId, traitKey: payload.traitKey, closed: true }
-      : { slotId, traitKey: payload.traitKey },
-  })
-}
-
-function onEatFirstGenerateTrait(payload: { peerId: string; traitKey: EatFirstTraitKey }): void {
-  if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) return
-  const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
-  const slotId = eatFirstSlotForPeer(peerId)
-  if (!slotId) return
-  sendSignalingMessage({
-    type: EAT_FIRST_TRAIT_REGENERATE_REQUEST_SIGNAL,
-    payload: { slotId, traitKey: payload.traitKey },
-  })
-}
-
-function onEatFirstRerollActionCard(payload: { peerId: string }): void {
-  if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) return
-  const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
-  const slotId = eatFirstSlotForPeer(peerId)
-  if (!slotId) return
-  sendSignalingMessage({
-    type: EAT_FIRST_ACTION_CARD_REROLL_REQUEST_SIGNAL,
-    payload: { slotId },
-  })
-}
-
-function onEatFirstPlayerUseActionCard(payload: { peerId: string }): void {
-  if (!isEatFirstRoute.value) return
-  const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
-  const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
-  if (!peerId || peerId !== selfId) return
-  const slotId = eatFirstSlotForPeer(peerId)
-  if (!slotId) return
-  sendSignalingMessage({
-    type: EAT_FIRST_ACTION_CARD_USE_SIGNAL,
-    payload: { slotId },
-  })
-}
 
 const orderedTiles = computed(() => {
   const list = tiles.value.slice()
@@ -2149,44 +1576,6 @@ const orderedTiles = computed(() => {
       const ai = orderIndex.get(a.peerId) ?? Number.MAX_SAFE_INTEGER
       const bi = orderIndex.get(b.peerId) ?? Number.MAX_SAFE_INTEGER
       if (ai !== bi) return ai - bi
-      return a.peerId.localeCompare(b.peerId)
-    })
-  }
-
-  if (isEatFirstRoute.value && list.length > 0) {
-    const orderIndex = new Map<string, number>()
-    const slotByPeer = eatFirstSlotByPeer.value
-    const peerBySlot = new Map<string, string>()
-    for (const [peerId, slotId] of Object.entries(slotByPeer)) {
-      if (typeof slotId === 'string' && /^p([1-9]|1[01])$/i.test(slotId.trim())) {
-        peerBySlot.set(slotId.trim(), peerId)
-      }
-    }
-    let cursor = 0
-    for (const slotId of eatFirstShell.playerOrder) {
-      const peerId = peerBySlot.get(slotId)
-      if (!peerId) continue
-      if (orderIndex.has(peerId)) continue
-      orderIndex.set(peerId, cursor)
-      cursor += 1
-    }
-    const hostPidRaw = eatFirstShell.hostPeerId
-    const hostPidForGrid = typeof hostPidRaw === 'string' ? hostPidRaw.trim() : ''
-    const extras = list.filter((t) => !orderIndex.has(t.peerId))
-    const extrasOrdered =
-      hostPidForGrid.length > 0
-        ? [...extras.filter((t) => t.peerId !== hostPidForGrid), ...extras.filter((t) => t.peerId === hostPidForGrid)]
-        : extras.slice()
-    for (const tile of extrasOrdered) {
-      orderIndex.set(tile.peerId, cursor)
-      cursor += 1
-    }
-    return [...list].sort((a, b) => {
-      const ai = orderIndex.get(a.peerId) ?? Number.MAX_SAFE_INTEGER
-      const bi = orderIndex.get(b.peerId) ?? Number.MAX_SAFE_INTEGER
-      if (ai !== bi) {
-        return ai - bi
-      }
       return a.peerId.localeCompare(b.peerId)
     })
   }
@@ -2514,14 +1903,14 @@ const orderedGridRows = computed(() => {
   }
   const names = displayNameUiByPeerId.value
   const overrides = localTileDisplayOverrides.value
-  const mafiaNicknames = nicknameOverrideByPeerId.value
+  const nicknameOverrides = nicknameOverrideByPeerId.value
   return orderedTiles.value.map((tile) => {
     const ov = overrides[tile.peerId]
     if (typeof ov === 'string' && normalizeDisplayName(ov)) {
       return { tile, displayName: normalizeDisplayName(ov).slice(0, 64) }
     }
     if (isGameRoomRoute.value) {
-      const n = mafiaNicknames[tile.peerId]
+      const n = nicknameOverrides[tile.peerId]
       if (typeof n === 'string' && normalizeDisplayName(n)) {
         return { tile, displayName: normalizeDisplayName(n).slice(0, 64) }
       }
@@ -2560,54 +1949,13 @@ function resumeCallAudioAnalysisFromGesture(): void {
   void getAudioAnalysisAudioContext().resume().catch(() => {})
 }
 
-
-function isEatFirstHostSpeakingNominationSeat(seat: number | undefined): boolean {
-  if (seat == null) {
-    return false
-  }
-  return nominationTargetSeatsFromSpeakingFlat(eatFirstShell.speakingQueue).has(seat)
-}
-
 /**
- * Tile-click router across all three call routes.
- *
- * The EatFirst speaking-mode branch (host-only nomination toggle) remains
- * inline here because it reads `eatFirstShell` state owned by the EatFirst
- * domain in CallPage's setup. The Mafia branch (swap / speaking / night
- * action) is delegated to `useGameRoomCallHostUi.handleHostTileClick`.
- *
- * Behaviour preserved 1:1: same guards, same `ev.stopPropagation()`
- * semantics, same toast keys, same store dispatch order.
+ * Tile-click router for `/app/game-template`. Delegates to
+ * `useGameRoomCallHostUi.handleHostTileClick`, which owns the swap +
+ * speaking branches. There is no other host-interaction mode on the
+ * generic protocol.
  */
 function onGameRoomHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value)[number]): void {
-  if (isEatFirstRoute.value && !eatFirstViewUi.value && eatFirstShell.isEatFirstRoomHost) {
-    if (!eatFirstShell.speakingMode) {
-      return
-    }
-    const clickTarget = ev.target
-    if (clickTarget instanceof Element) {
-      if (clickTarget.closest('button, input, textarea, a, [data-no-mafia-tile-host]')) {
-        return
-      }
-      if (clickTarget.closest('.tile-overlay__label-group, .tile-overlay__name-input, .tile-overlay__name-edit')) {
-        return
-      }
-    }
-    const seat = eatFirstNominationNumberForPeer(row.tile.peerId)
-    if (seat == null) {
-      return
-    }
-    const draft = eatFirstShell.speakingNominationDraftBySeat
-    if (draft == null) {
-      eatFirstShell.setSpeakingNominationDraftBySeat(seat)
-    } else if (draft === seat) {
-      eatFirstShell.setSpeakingNominationDraftBySeat(null)
-    } else {
-      eatFirstShell.appendSpeakingNominationPair(draft, seat)
-    }
-    ev.stopPropagation()
-    return
-  }
   handleHostTileClick(ev, row)
 }
 
@@ -2671,20 +2019,18 @@ function refreshGameRoomPlayersState(): void {
 
 /**
  * Stable scalar key for `refreshGameRoomPlayersState`. Replaces the previous
- * `deep: true` watcher over `[tiles, orderedGridRows, nightActions, speakingQueue]`
- * which fired on every audio-level / tile-reorder / speaker-change tick (3-5/s
- * in active mafia discussion at 8-12 cameras) and re-ran the full reconcile
- * pass even when no peer-set / numbering / queue change had actually occurred.
+ * `deep: true` watcher over `[tiles, orderedGridRows, speakingQueue]` which
+ * fired on every audio-level / tile-reorder / speaker-change tick (3-5/s
+ * in active discussion at 8-12 cameras) and re-ran the full reconcile pass
+ * even when no peer-set / numbering / queue change had actually occurred.
  *
  * `refreshGameRoomPlayersState` only consumes:
  *   - peerIds from `tiles.value` (set membership)
  *   - `gameStore.numberingKey` (engine ordering)
  *   - `gameStore.speakingQueue` (length / contents)
- *   - `isApplyingMafiaReshuffle` (branch selector)
- * It does NOT read `orderedGridRows.value` or `gameStore.nightActions`
- * content; nightActions are pruned by max-seat which is derived from peer count.
+ *   - `isApplyingGameRoomReshuffle` (branch selector)
  *
- * The function itself is idempotent so an extra run on an unrelated mafia state
+ * The function itself is idempotent so an extra run on an unrelated state
  * change would only waste CPU, not produce a wrong result.
  */
 const playersWatcherKey = computed(() => {
@@ -2714,11 +2060,6 @@ watch(
   { immediate: true },
 )
 
-// Phase 3C: the Mafia<->EatFirst elimination-host binding was a
-// Mafia-store side-effect (`setEatFirstCallEliminationHost`) used to
-// let Eat First hosts share the Mafia kill flow. The generic
-// `useGameTemplateGameStore` has no such binding because the generic
-// protocol does not expose Eat First's host identity. Dropped.
 
 const gridStyle = computed(() => {
   const n = orderedTiles.value.length
@@ -2852,11 +2193,10 @@ onBeforeUnmount(() => {
     clearTimeout(roomCopyFlashTimer)
     roomCopyFlashTimer = null
   }
-  // The Mafia speaking-hint timer is owned by `useMafiaSpeakingHint`
-  // (inside `MafiaCallAdapter`); the composable's own `onBeforeUnmount`
-  // clears it. A leftover reference here from before the Phase 2A
-  // extraction was throwing a `ReferenceError` at unmount and aborting
-  // the rest of this hook — including `leaveCall()` below.
+  // The "speaking order" hint timer is owned by `useGameRoomSpeakingHint`
+  // (inside `GameTemplateCallAdapter`); the composable's own
+  // `onBeforeUnmount` clears it. Do not reach for the timer ref from
+  // here — it lives in the adapter, not in this file.
   for (const pid of [...remoteVideoSuppressDelayTimerByPeer.keys()]) {
     clearRemoteVideoSuppressTimer(pid)
   }
@@ -2900,7 +2240,6 @@ onMounted(() => {
     }
   }
   window.addEventListener(GAME_ROOM_OBS_URL_TOAST_EVENT, onGameRoomObsUrlCopiedToast)
-  window.addEventListener(EAT_FIRST_OBS_URL_TOAST_EVENT, onEatFirstObsUrlCopiedToast)
   window.addEventListener(GAME_ROOM_SETTINGS_TOAST_EVENT, onGameRoomSettingsToast)
   // Always-on timer-drift probe — diagnostic only, no media side effects.
   // Surfaces OBS browser-source / hidden-tab throttling that would otherwise
@@ -2916,9 +2255,12 @@ onMounted(() => {
   detachMediaDebugRafProbe = startMediaDebugRafProbe()
   // Stamp env info ONCE at mount. Read live `documentVisibilityState`
   // is included by the reader, so no need to track it reactively.
+  // `isMafiaView` is the legacy contract key with `setMediaDebugEnvInfo`
+  // (also written from production CallPage.vue). On `/app/game-template`
+  // we pass the game-room view flag through that same key; renaming
+  // requires touching the shared util + production CallPage.
   setMediaDebugEnvInfo({
     isMafiaView: gameRoomViewUi.value,
-    isEatFirstView: eatFirstViewUi.value,
   })
   if (isMediaDebugEnabled()) {
     detachMediaDebugGlobal = installMediaDebugGlobal({
@@ -2942,7 +2284,6 @@ onUnmounted(() => {
   window.removeEventListener('resize', syncChatPanelToViewport)
   stopChatPanelGesture()
   window.removeEventListener(GAME_ROOM_OBS_URL_TOAST_EVENT, onGameRoomObsUrlCopiedToast)
-  window.removeEventListener(EAT_FIRST_OBS_URL_TOAST_EVENT, onEatFirstObsUrlCopiedToast)
   window.removeEventListener(GAME_ROOM_SETTINGS_TOAST_EVENT, onGameRoomSettingsToast)
   document.documentElement.classList.remove(CALL_ROUTE_HTML_CLASS)
   for (const id of [...setPeerVisibleHideTimerByPeer.keys()]) {
@@ -3004,7 +2345,7 @@ watch(joining, (j) => {
       <section
         class="call-page__active"
         :class="{
-          'call-page__active--with-dock': (session.inCall || joining) && !gameRoomViewUi && !eatFirstViewUi,
+          'call-page__active--with-dock': (session.inCall || joining) && !gameRoomViewUi,
           'call-page__active--with-mafia-bottom': isGameRoomRoute && (session.inCall || joining) && !gameRoomViewUi,
         }"
       >
@@ -3031,15 +2372,16 @@ watch(joining, (j) => {
           </TransitionGroup>
         </div>
         <!--
-          The Mafia "speaking order" hint toast lives on
-          `MafiaCallAdapter.vue`, mounted from `MafiaPage` as a sibling of
-          `<CallPage>`. Its CSS positioning is `position: fixed` (top: 4.75rem;
-          right: 1rem; z-index: 110) so rendering from a different DOM
-          ancestor does not change visual placement.
+          The "speaking order" hint toast lives on
+          `GameTemplateCallAdapter.vue`, mounted from `GameTemplatePage`
+          as a sibling of this component. Its CSS positioning is
+          `position: fixed` (top: 4.75rem; right: 1rem; z-index: 110) so
+          rendering from a different DOM ancestor does not change visual
+          placement.
         -->
 
         <div
-          v-if="session.inCall && !gameRoomViewUi && !eatFirstViewUi && callChatInboundToasts.length > 0"
+          v-if="session.inCall && !gameRoomViewUi && callChatInboundToasts.length > 0"
           class="call-page__chat-toasts"
           role="region"
           :aria-label="t('callPage.chatInboundToastAria')"
@@ -3094,7 +2436,7 @@ watch(joining, (j) => {
               :ref="(el) => setTileWrapRef(row.tile.peerId, el)"
               class="call-page__tile-wrap"
               :style="tileLayoutStyle(row)"
-              :draggable="!gameRoomViewUi && !isGameRoomRoute && !isEatFirstRoute"
+              :draggable="!gameRoomViewUi && !isGameRoomRoute"
               :title="t('callPage.dragReorder')"
               :aria-label="t('callPage.dragReorder')"
               :class="{
@@ -3111,10 +2453,6 @@ watch(joining, (j) => {
                 'call-page__tile-wrap--mafia-host-speaking-queued':
                   isGameRoomRoute &&
                   isHostSpeakingNominationUiSeat(seatNumberByPeer.get(row.tile.peerId)),
-                'call-page__tile-wrap--eat-first-host-speaking-seat':
-                  isEatFirstRoute &&
-                  !eatFirstViewUi &&
-                  isEatFirstHostSpeakingNominationSeat(eatFirstNominationNumberForPeer(row.tile.peerId)),
                 'call-page__tile-wrap--mafia-host-mode': isGameRoomRoute && !gameRoomViewUi && gameStore.isGameRoomHost,
                 'call-page__tile-wrap--mafia-host-mode-speaking':
                   isGameRoomRoute &&
@@ -3151,15 +2489,9 @@ watch(joining, (j) => {
                 :display-name="row.displayName"
                 :avatar-fallback-name="peerAvatarFallbackName(row.tile.peerId)"
                 :can-edit-display-name="canEditTileDisplayName(row.tile.peerId)"
-                :mafia-seat-index="
-                  isGameRoomRoute
-                    ? seatNumberByPeer.get(row.tile.peerId)
-                    : isEatFirstRoute
-                      ? eatFirstDisplayOrderByPeer.get(row.tile.peerId)
-                      : undefined
-                "
+                :mafia-seat-index="isGameRoomRoute ? seatNumberByPeer.get(row.tile.peerId) : undefined"
                 :mafia-visible-role="undefined"
-                :stream-view-mode="gameRoomViewUi || eatFirstViewUi"
+                :stream-view-mode="gameRoomViewUi"
                 :stream="row.tile.stream"
                 :is-local="row.tile.isLocal"
                 :video-enabled="row.tile.videoEnabled"
@@ -3173,21 +2505,11 @@ watch(joining, (j) => {
                 :raise-hand="Boolean(row.tile.handRaised)"
                 :video-presentation="row.tile.videoPresentation"
                 :avatar-url="row.tile.avatarUrl ?? ''"
-                :mafia-life-state="
-                  isGameRoomRoute || isEatFirstRoute ? gameStore.lifeStateForPeer(row.tile.peerId) : 'alive'
-                "
-                :eat-first-traits="isEatFirstRoute ? eatFirstTraitsForPeer(row.tile.peerId) : undefined"
-                :eat-first-trait-host-view="isEatFirstRoute ? eatFirstTraitHostView() : false"
-                :eat-first-trait-owner-view="isEatFirstRoute ? eatFirstTraitOwnerView(row.tile.peerId) : false"
-                :eat-first-revealed-trait-keys="isEatFirstRoute ? eatFirstRevealedTraitsForPeer(row.tile.peerId) : []"
-                :eat-first-action-card="isEatFirstRoute ? eatFirstActionCardForPeer(row.tile.peerId) : null"
+                :mafia-life-state="isGameRoomRoute ? gameStore.lifeStateForPeer(row.tile.peerId) : 'alive'"
                 :mafia-elimination-kind="undefined"
                 :mafia-elimination-background="undefined"
                 :mafia-dead-background-url="null"
-                :mafia-host-show-life-toggle="
-                  (isGameRoomRoute && !gameRoomViewUi && gameStore.isGameRoomHost) ||
-                  (isEatFirstRoute && !eatFirstViewUi && eatFirstShell.isEatFirstRoomHost)
-                "
+                :mafia-host-show-life-toggle="isGameRoomRoute && !gameRoomViewUi && gameStore.isGameRoomHost"
                 :mafia-layer-viewport-observe="isCallAppRoute && !row.tile.isLocal"
                 :video-playback-suppressed="
                   !row.tile.isLocal && videoPlaybackSuppressedForPeer(row.tile.peerId)
@@ -3202,13 +2524,9 @@ watch(joining, (j) => {
                 @remote-playback-stall="onRemotePlaybackStall"
                 @video-stall="onTileVideoStall"
                 @audio-stall="onTileAudioStall"
-                @eat-first-reveal-trait="onEatFirstRevealTrait"
-                @eat-first-generate-trait="onEatFirstGenerateTrait"
-                @eat-first-reroll-action-card="onEatFirstRerollActionCard"
-                @eat-first-use-action-card="onEatFirstPlayerUseActionCard"
               />
               <button
-                v-if="!gameRoomViewUi && !eatFirstViewUi"
+                v-if="!gameRoomViewUi"
                 type="button"
                 class="call-page__pin-btn"
                 :class="{ 'call-page__pin-btn--active': pinnedPeerId === row.tile.peerId }"
@@ -3219,7 +2537,7 @@ watch(joining, (j) => {
               >
                 <img
                   class="call-page__pin-icon"
-                  :src="pinnedPeerId === row.tile.peerId ? mafiaTilePinActiveIcon : mafiaTilePinIcon"
+                  :src="pinnedPeerId === row.tile.peerId ? tilePinActiveIcon : tilePinIcon"
                   alt=""
                   aria-hidden="true"
                 />
@@ -3239,7 +2557,7 @@ watch(joining, (j) => {
         </div>
 
         <div
-          v-if="(session.inCall || joining) && !gameRoomViewUi && !eatFirstViewUi"
+          v-if="(session.inCall || joining) && !gameRoomViewUi"
           class="call-page__bottom-cluster"
         >
           <div
@@ -3249,14 +2567,9 @@ watch(joining, (j) => {
           <div
             class="call-page__bottom-cluster__center call-page__bottom-cluster__center--speak-dock"
           >
-            <MafiaHostActionsBar
+            <GameTemplateHostActionsBar
               v-if="isGameRoomRoute && gameStore.isGameRoomHost"
               @force-mute-all="onForceMuteAll"
-            />
-            <EatFirstHostActionsBar
-              v-if="isEatFirstRoute && eatFirstShell.isEatFirstRoomHost"
-              @force-mute-all="onEatFirstForceMuteAll"
-              @reshuffle="onEatFirstReshuffle"
             />
             <CallControlsDock
               ref="callControlsDockRef"
@@ -3287,19 +2600,18 @@ watch(joining, (j) => {
               @pick-video-input="pickVideoInput"
               @pick-audio-output="pickAudioOutput"
             />
-            <MafiaSpeakingQueueBar v-if="isGameRoomRoute" :show-tools="gameStore.isGameRoomHost" />
-            <EatFirstSpeakingQueueBar v-if="isEatFirstRoute" :show-tools="eatFirstShell.isEatFirstRoomHost" />
+            <GameTemplateSpeakingQueueBar v-if="isGameRoomRoute" :show-tools="gameStore.isGameRoomHost" />
           </div>
         </div>
         <div
           v-if="(session.inCall || joining) && gameRoomViewUi && isGameRoomRoute"
           class="call-page__mafia-view-bottom"
         >
-          <MafiaSpeakingQueueBar :show-tools="false" />
+          <GameTemplateSpeakingQueueBar :show-tools="false" />
         </div>
 
         <CallChatPanel
-          v-if="session.inCall && !gameRoomViewUi && !eatFirstViewUi"
+          v-if="session.inCall && !gameRoomViewUi"
           v-model:open="chatOpen"
           :messages="callChatMessages"
           :self-peer-id="selfPeerId"
@@ -3312,7 +2624,7 @@ watch(joining, (j) => {
         />
 
         <aside
-          v-if="session.callDebugOverlay && showCallDebugControls && !gameRoomViewUi && !eatFirstViewUi"
+          v-if="session.callDebugOverlay && showCallDebugControls && !gameRoomViewUi"
           class="call-page__debug"
           :aria-label="t('callPage.debugAria')"
         >
