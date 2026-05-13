@@ -1447,6 +1447,7 @@
     "navBilling": "Billing",
     "navStats": "Stats",
     "navSession": "Session",
+    "navDiagnostics": "Diagnostics",
     "usersTitle": "Users",
     "usersLead": "Registered accounts and nadle stats from the database.",
     "usersLoading": "Loading…",

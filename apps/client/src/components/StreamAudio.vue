@@ -14,6 +14,7 @@ import {
   registerAudioDebugReader,
   type MediaDebugAudioSnapshot,
 } from '@/utils/mediaDebugRuntime'
+import { emitDiagnosticEvent } from '@/diagnostics'
 
 const streamAudioLog = createLogger('stream-audio')
 
@@ -421,6 +422,20 @@ async function bindElementFallback(s: MediaStream, generation = bindGeneration):
       return
     }
     streamAudioLog.warn('play failed', e)
+    // Best-effort diagnostics fanout. Per-peer 10s throttle in the emitter.
+    try {
+      emitDiagnosticEvent({
+        level: 'warn',
+        area: 'playback',
+        type: 'audio_play_failed',
+        message: e instanceof Error ? `${e.name}: ${e.message || ''}`.trim() : 'audio play failed',
+        context: { peerId: props.peerId ?? null, stage: 'initial-play' },
+        error: e,
+        override: { peerId: props.peerId ?? null },
+      })
+    } catch {
+      /* never throw from diagnostics */
+    }
     const isNotAllowed =
       e instanceof DOMException
         ? e.name === 'NotAllowedError'
@@ -512,6 +527,22 @@ watch(
               peerId: props.peerId,
               error: (err as { name?: string })?.name ?? String(err),
             })
+          }
+          // Production-visible: surface as audio_play_failed too, throttled per peer.
+          try {
+            emitDiagnosticEvent({
+              level: 'warn',
+              area: 'playback',
+              type: 'audio_play_failed',
+              message: err instanceof Error
+                ? `${err.name}: ${err.message || ''}`.trim()
+                : 'audio unmute play() rejected',
+              context: { peerId: props.peerId ?? null, stage: 'unmute-recovery' },
+              error: err,
+              override: { peerId: props.peerId ?? null },
+            })
+          } catch {
+            /* never throw */
           }
         })
     })

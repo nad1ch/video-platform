@@ -13,6 +13,7 @@ const items = computed(() => [
   { name: 'admin-billing' as const, label: t('adminPanel.navBilling'), to: '/app/admin/billing' },
   { name: 'admin-stats' as const, label: t('adminPanel.navStats'), to: '/app/admin/stats' },
   { name: 'admin-debug' as const, label: t('adminPanel.navSession'), to: '/app/admin/debug' },
+  { name: 'admin-diagnostics' as const, label: t('adminPanel.navDiagnostics'), to: '/app/admin/diagnostics' },
 ])
 
 const activeName = computed(() => String(route.name ?? ''))

@@ -233,6 +233,11 @@ export const router = createRouter({
               name: 'admin-billing',
               component: () => import('./admin/ui/AdminBilling.vue'),
             },
+            {
+              path: 'diagnostics',
+              name: 'admin-diagnostics',
+              component: () => import('./admin/ui/AdminDiagnostics.vue'),
+            },
           ],
         },
         /**

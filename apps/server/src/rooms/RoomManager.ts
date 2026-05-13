@@ -1,7 +1,44 @@
 import type { PooledWorker } from '../mediasoup/mediasoupWorkerTypes'
 import type { MediasoupWorkerPool } from '../mediasoup/workerPool'
 import { removePeerFromNetwork, type SignalingDeps } from '../signaling/messageHandlers'
+import { newDiagnosticEventId, recordDiagnosticEvent } from '../signaling/roomDiagnosticsBus'
 import { Room } from './Room'
+
+function gameTypeForRoomId(roomId: string): 'mafia' | 'game-room' | 'eat-first' | null {
+  if (roomId.startsWith('mafia:')) return 'mafia'
+  if (roomId.startsWith('gameroom:')) return 'game-room'
+  if (roomId.startsWith('eat:')) return 'eat-first'
+  return null
+}
+
+/** Best-effort server emit; never throws into the caller path. */
+function emitRoomLifecycle(
+  roomId: string,
+  type: 'room_created' | 'room_closed',
+  context: Record<string, unknown> = {},
+): void {
+  try {
+    recordDiagnosticEvent({
+      id: newDiagnosticEventId(),
+      reportVersion: 1,
+      timestamp: Date.now(),
+      source: 'server',
+      level: 'info',
+      area: 'room',
+      type,
+      roomId,
+      gameType: gameTypeForRoomId(roomId),
+      peerId: null,
+      userId: null,
+      sessionId: null,
+      correlationId: null,
+      message: type,
+      context,
+    })
+  } catch {
+    /* never throw from diagnostics */
+  }
+}
 
 export class RoomManager {
   private readonly rooms = new Map<string, Room>()
@@ -50,6 +87,7 @@ export class RoomManager {
           }
           this.workerPool.registerRoom(pooled)
           this.rooms.set(roomId, room)
+          emitRoomLifecycle(roomId, 'room_created', { workerIndex: pooled.index })
           return room
         })
         .finally(() => {
@@ -72,6 +110,7 @@ export class RoomManager {
     this.rooms.delete(roomId)
     if (existing) {
       this.workerPool.unregisterRoom(existing.getPooledWorker())
+      emitRoomLifecycle(roomId, 'room_closed')
     }
   }
 

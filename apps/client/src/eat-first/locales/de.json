@@ -1443,6 +1443,7 @@
     "navBilling": "Abrechnung",
     "navStats": "Statistik",
     "navSession": "Sitzung",
+    "navDiagnostics": "Diagnose",
     "usersTitle": "Nutzer",
     "usersLead": "Registrierte Konten und nadle-Statistik aus der Datenbank.",
     "usersLoading": "Laden…",

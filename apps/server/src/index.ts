@@ -11,6 +11,9 @@ import { corsAllowedOrigins } from './auth/clientOrigin'
 import { mountGlobalAuth } from './auth/oauthRouter'
 import { mountAdminRoutes } from './adminRouter'
 import { mountClientEventRoutes } from './clientEventsRouter'
+import { mountDiagnosticsAdminRoutes } from './diagnosticsAdminRouter'
+import { initRoomDiagnosticsPersistence } from './signaling/roomDiagnosticsPersistence'
+import { finalizeAllPendingRoomDiagnostics } from './signaling/roomDiagnosticsBus'
 import { mountLeaderboardRoutes } from './leaderboardRouter'
 import { mountStreamerApiRoutes } from './nadle/streamerApiRouter'
 import { mountTwitchNadleAuth } from './nadle/twitchAuthRouter'
@@ -244,6 +247,8 @@ async function bootstrap(): Promise<void> {
   mountTwitchNadleAuth(app)
   mountLeaderboardRoutes(app)
   mountAdminRoutes(app)
+  mountDiagnosticsAdminRoutes(app)
+  initRoomDiagnosticsPersistence()
   mountEatFirstRoutes(app)
   mountNadrawShowRoutes(app)
   mountCoinHubRoutes(app)
@@ -307,6 +312,17 @@ async function bootstrap(): Promise<void> {
     void stopTwitchChatIngest().catch((err: unknown) => {
       console.error('[nadle] stopTwitchChatIngest failed', err)
     })
+
+    // Drain in-flight RoomDiagnostics reports BEFORE we tear down the
+    // mediasoup state. The function never throws; the registered
+    // persistence finalizer fires a `void prisma.create().catch(...)`
+    // per bucket, so this is best-effort under SIGTERM but strictly
+    // improves over losing every in-flight report.
+    try {
+      finalizeAllPendingRoomDiagnostics()
+    } catch (err: unknown) {
+      console.error('finalizeAllPendingRoomDiagnostics failed', err)
+    }
 
     try {
       roomManager?.disposeAllRooms()

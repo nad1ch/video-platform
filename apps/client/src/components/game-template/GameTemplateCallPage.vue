@@ -42,7 +42,6 @@
 import { storeToRefs } from 'pinia'
 import {
   computed,
-  nextTick,
   onBeforeUnmount,
   onMounted,
   onUnmounted,
@@ -51,7 +50,6 @@ import {
   shallowRef,
   watch,
 } from 'vue'
-import type { ComponentPublicInstance } from 'vue'
 import type { CallEngineRole } from 'call-core'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -94,7 +92,11 @@ import CallRoomPopover from '@/components/call/CallRoomPopover.vue'
 import CallControlsDock from '@/components/call/CallControlsDock.vue'
 import CallChatPanel from '@/components/call/CallChatPanel.vue'
 import { useCallChatPanel } from '@/components/call/useCallChatPanel'
-import { computeCallVideoGridLayout } from '@/components/call/callVideoGridLayout'
+import { GAP, useCallTileLayoutFlip } from '@/composables/game-room/useCallTileLayoutFlip'
+import {
+  SPOTLIGHT_STRIP_VISIBLE_LIMIT,
+  useCallSpotlightLayout,
+} from '@/composables/game-room/useCallSpotlightLayout'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
@@ -1432,16 +1434,6 @@ const dragPeerId = ref<string | null>(null)
 const dragOverPeerId = ref<string | null>(null)
 const tileDragStartedFromControls = ref(false)
 const pinnedPeerId = ref<string | null>(null)
-const SPOTLIGHT_DESKTOP_MEDIA = '(min-width: 1024px)'
-const spotlightDesktop = ref(
-  typeof window !== 'undefined' ? window.matchMedia(SPOTLIGHT_DESKTOP_MEDIA).matches : true,
-)
-let spotlightDesktopMediaQuery: MediaQueryList | null = null
-
-function syncSpotlightDesktop(ev?: MediaQueryListEvent): void {
-  spotlightDesktop.value = ev?.matches ?? spotlightDesktopMediaQuery?.matches ?? true
-}
-
 watch(
   tiles,
   (list) => {
@@ -1607,267 +1599,30 @@ const orderedTiles = computed(() => {
   })
 })
 
-const layoutMode = computed<'grid' | 'spotlight'>(() =>
-  spotlightDesktop.value && (pinnedPeerId.value != null || orderedTiles.value.length === 1) ? 'spotlight' : 'grid',
-)
+const {
+  spotlightDesktop,
+  layoutMode,
+  spotlightPeerId,
+  spotlightStripPeerIds,
+  spotlightOverflowCount,
+  spotlightOverflowTileStyle,
+  spotlightStripSlotForPeer,
+  isSpotlightStripPeerHidden,
+  togglePin,
+} = useCallSpotlightLayout({ orderedTiles, pinnedPeerId })
 
-const SPOTLIGHT_STRIP_VISIBLE_LIMIT = 6
-
-const spotlightPeerId = computed(() => {
-  if (pinnedPeerId.value != null) {
-    return pinnedPeerId.value
-  }
-  return orderedTiles.value.length === 1 ? orderedTiles.value[0]?.peerId ?? null : null
-})
-
-const spotlightStripPeerIds = computed(() => {
-  const main = spotlightPeerId.value
-  return main == null ? [] : orderedTiles.value.filter((tile) => tile.peerId !== main).map((tile) => tile.peerId)
-})
-
-const spotlightVisibleStripPeerIds = computed(() => {
-  const ids = spotlightStripPeerIds.value
-  if (ids.length > SPOTLIGHT_STRIP_VISIBLE_LIMIT) {
-    return ids.slice(0, SPOTLIGHT_STRIP_VISIBLE_LIMIT - 1)
-  }
-  return ids.slice(0, SPOTLIGHT_STRIP_VISIBLE_LIMIT)
-})
-
-const spotlightVisibleStripPeerIdSet = computed(() => new Set(spotlightVisibleStripPeerIds.value))
-
-const spotlightOverflowCount = computed(() =>
-  Math.max(0, spotlightStripPeerIds.value.length - spotlightVisibleStripPeerIds.value.length),
-)
-
-const spotlightOverflowTileStyle = computed(() => ({
-  '--call-page-spotlight-slot': String(SPOTLIGHT_STRIP_VISIBLE_LIMIT),
-}))
-
-function spotlightStripSlotForPeer(peerId: string): number {
-  const index = spotlightVisibleStripPeerIds.value.indexOf(peerId)
-  return index >= 0 ? index + 1 : 1
-}
-
-function isSpotlightStripPeerHidden(peerId: string): boolean {
-  return layoutMode.value === 'spotlight' && peerId !== spotlightPeerId.value && !spotlightVisibleStripPeerIdSet.value.has(peerId)
-}
-
-function togglePin(peerId: string): void {
-  if (!orderedTiles.value.some((tile) => tile.peerId === peerId)) {
-    return
-  }
-  pinnedPeerId.value = pinnedPeerId.value === peerId ? null : peerId
-}
-
-
-const GAP = 12
-const MIN_TILE_WIDTH = 180
-
-
-
-
-
-const GRID_CONTENT_INSET_PX = 12
-
-function getGrid(n: number, width: number, height: number) {
-  const g = computeCallVideoGridLayout(n, width, height, {
-    gapPx: GAP,
-    minTileWidthPx: MIN_TILE_WIDTH,
-    contentInsetPx: GRID_CONTENT_INSET_PX,
-  })
-  if (import.meta.env.DEV && n > 0) {
-    callPageLog.debug('grid layout', {
-      n,
-      cols: g.cols,
-      rows: g.rows,
-      tileWidth: g.tileWidth,
-      tileHeight: g.tileHeight,
-    })
-  }
-  return g
-}
-
-
-type TileRectMap = Map<string, DOMRectReadOnly>
-
-const TILE_LAYOUT_FLIP_MS = 220
-const TILE_LAYOUT_FLIP_EPSILON_PX = 0.5
 const stageRef = ref<HTMLElement | null>(null)
-const stageSize = shallowRef({ width: 0, height: 0 })
 const gridRef = ref<HTMLElement | null>(null)
-const tileWrapEls = new Map<string, HTMLElement>()
-let tileLayoutFlipTimer: ReturnType<typeof window.setTimeout> | null = null
-let tileLayoutFlipRaf = 0
 
-function setTileWrapRef(peerId: string, el: Element | ComponentPublicInstance | null): void {
-  if (el instanceof HTMLElement) {
-    tileWrapEls.set(peerId, el)
-    return
-  }
-  tileWrapEls.delete(peerId)
-}
-
-watch(
+const { stageSize, setTileWrapRef, getGrid } = useCallTileLayoutFlip({
   stageRef,
-  (el, _prev, onCleanup) => {
-    if (!el) {
-      return
-    }
-    const update = (): void => {
-      const rect = el.getBoundingClientRect()
-      if (typeof getComputedStyle === 'undefined') {
-        stageSize.value = { width: rect.width, height: rect.height }
-        return
-      }
-      const cs = getComputedStyle(el)
-      const pl = parseFloat(cs.paddingLeft) || 0
-      const pr = parseFloat(cs.paddingRight) || 0
-      const pt = parseFloat(cs.paddingTop) || 0
-      const pb = parseFloat(cs.paddingBottom) || 0
-      stageSize.value = {
-        width: Math.max(0, rect.width - pl - pr),
-        height: Math.max(0, rect.height - pt - pb),
-      }
-    }
-    update()
-    if (typeof ResizeObserver === 'undefined') {
-      return
-    }
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    onCleanup(() => {
-      ro.disconnect()
-    })
-  },
-  { immediate: true, flush: 'post' },
-)
+  gridRef,
+  orderedTiles,
+  layoutMode,
+  spotlightPeerId,
+  dragPeerId,
+})
 
-const tileLayoutAnimationKey = computed(() =>
-  [
-    layoutMode.value,
-    spotlightPeerId.value ?? '',
-    orderedTiles.value.map((tile) => tile.peerId).join(','),
-    Math.round(stageSize.value.width),
-    Math.round(stageSize.value.height),
-  ].join('|'),
-)
-
-function readTileRects(): TileRectMap {
-  const rects: TileRectMap = new Map()
-  for (const [peerId, el] of tileWrapEls) {
-    rects.set(peerId, el.getBoundingClientRect())
-  }
-  return rects
-}
-
-function clearTileFlip(el: HTMLElement): void {
-  el.classList.remove('call-page__tile-wrap--flip-prepare', 'call-page__tile-wrap--flipping')
-  el.style.removeProperty('--tile-flip-x')
-  el.style.removeProperty('--tile-flip-y')
-  el.style.removeProperty('--tile-flip-scale-x')
-  el.style.removeProperty('--tile-flip-scale-y')
-}
-
-function clearAllTileFlips(): void {
-  if (typeof window !== 'undefined') {
-    window.cancelAnimationFrame(tileLayoutFlipRaf)
-    if (tileLayoutFlipTimer != null) {
-      window.clearTimeout(tileLayoutFlipTimer)
-      tileLayoutFlipTimer = null
-    }
-  }
-  for (const el of tileWrapEls.values()) {
-    clearTileFlip(el)
-  }
-}
-
-function playTileLayoutFlip(firstRects: TileRectMap): void {
-  if (typeof window === 'undefined') {
-    return
-  }
-  window.cancelAnimationFrame(tileLayoutFlipRaf)
-  if (tileLayoutFlipTimer != null) {
-    window.clearTimeout(tileLayoutFlipTimer)
-    tileLayoutFlipTimer = null
-  }
-
-  void nextTick(() => {
-    const animated: HTMLElement[] = []
-    for (const [peerId, lastEl] of tileWrapEls) {
-      const first = firstRects.get(peerId)
-      if (!first) {
-        continue
-      }
-      const last = lastEl.getBoundingClientRect()
-      if (first.width <= 0 || first.height <= 0 || last.width <= 0 || last.height <= 0) {
-        continue
-      }
-
-      const dx = first.left - last.left
-      const dy = first.top - last.top
-      const sx = first.width / last.width
-      const sy = first.height / last.height
-      const moved = Math.abs(dx) > TILE_LAYOUT_FLIP_EPSILON_PX || Math.abs(dy) > TILE_LAYOUT_FLIP_EPSILON_PX
-      const resized = Math.abs(1 - sx) > 0.01 || Math.abs(1 - sy) > 0.01
-      if (!moved && !resized) {
-        continue
-      }
-
-      lastEl.classList.add('call-page__tile-wrap--flip-prepare')
-      lastEl.style.setProperty('--tile-flip-x', `${dx}px`)
-      lastEl.style.setProperty('--tile-flip-y', `${dy}px`)
-      lastEl.style.setProperty('--tile-flip-scale-x', String(sx))
-      lastEl.style.setProperty('--tile-flip-scale-y', String(sy))
-      animated.push(lastEl)
-    }
-
-    if (animated.length === 0) {
-      return
-    }
-
-    void gridRef.value?.offsetWidth
-
-    tileLayoutFlipRaf = window.requestAnimationFrame(() => {
-      for (const el of animated) {
-        el.classList.remove('call-page__tile-wrap--flip-prepare')
-        el.classList.add('call-page__tile-wrap--flipping')
-        el.style.setProperty('--tile-flip-x', '0px')
-        el.style.setProperty('--tile-flip-y', '0px')
-        el.style.setProperty('--tile-flip-scale-x', '1')
-        el.style.setProperty('--tile-flip-scale-y', '1')
-      }
-
-      tileLayoutFlipTimer = window.setTimeout(() => {
-        for (const el of animated) {
-          clearTileFlip(el)
-        }
-        tileLayoutFlipTimer = null
-      }, TILE_LAYOUT_FLIP_MS + 60)
-    })
-  })
-}
-
-watch(
-  tileLayoutAnimationKey,
-  () => {
-    if (dragPeerId.value != null) {
-      return
-    }
-    const firstRects = readTileRects()
-    if (firstRects.size > 0) {
-      playTileLayoutFlip(firstRects)
-    }
-  },
-  { flush: 'pre' },
-)
-
-watch(
-  () => orderedTiles.value.map((tile) => tile.peerId).join('|'),
-  () => {
-    clearAllTileFlips()
-  },
-  { flush: 'pre' },
-)
 
 if (import.meta.env.DEV) {
   watch(
@@ -2176,17 +1931,8 @@ function onTileDragEnd(): void {
 }
 
 onBeforeUnmount(() => {
-  if (spotlightDesktopMediaQuery) {
-    spotlightDesktopMediaQuery.removeEventListener('change', syncSpotlightDesktop)
-    spotlightDesktopMediaQuery = null
-  }
-  if (typeof window !== 'undefined') {
-    window.cancelAnimationFrame(tileLayoutFlipRaf)
-    if (tileLayoutFlipTimer != null) {
-      window.clearTimeout(tileLayoutFlipTimer)
-      tileLayoutFlipTimer = null
-    }
-  }
+  // matchMedia teardown + FLIP RAF/timer cleanup are owned by
+  // `useCallSpotlightLayout` and `useCallTileLayoutFlip` (Block 23).
   clearFullPowerEnterTimer()
   isFullPowerMode.value = false
   remotePlaybackWaitingPeerIds.value = new Set()
@@ -2210,11 +1956,8 @@ onBeforeUnmount(() => {
 })
 
 onMounted(() => {
-  if (typeof window !== 'undefined') {
-    spotlightDesktopMediaQuery = window.matchMedia(SPOTLIGHT_DESKTOP_MEDIA)
-    syncSpotlightDesktop()
-    spotlightDesktopMediaQuery.addEventListener('change', syncSpotlightDesktop)
-  }
+  // The spotlight matchMedia listener is owned by `useCallSpotlightLayout`
+  // (Block 23).
   document.addEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
   window.addEventListener('resize', syncChatPanelToViewport)
   void (async () => {

@@ -6,6 +6,7 @@ import {
   registerVideoDebugReader,
   type MediaDebugVideoSnapshot,
 } from '@/utils/mediaDebugRuntime'
+import { emitDiagnosticEvent } from '@/diagnostics'
 
 const streamVideoLog = createLogger('stream-video')
 
@@ -125,6 +126,24 @@ async function playIgnoringAbort(v: HTMLVideoElement): Promise<void> {
       return
     }
     streamVideoLog.warn('play failed', err)
+    // Best-effort diagnostics fanout. Per-peer 10s throttle lives in
+    // the emitter; never throws into the playback path.
+    try {
+      emitDiagnosticEvent({
+        level: 'warn',
+        area: 'playback',
+        type: 'video_play_failed',
+        message: err instanceof Error ? `${err.name}: ${err.message || ''}`.trim() : 'video play failed',
+        context: {
+          peerId: props.peerId ?? null,
+          presentation: props.videoPresentation ?? null,
+        },
+        error: err,
+        override: { peerId: props.peerId ?? null },
+      })
+    } catch {
+      /* never throw from diagnostics */
+    }
   }
 }
 

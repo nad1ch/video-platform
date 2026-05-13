@@ -430,3 +430,41 @@ model Subscription {
 
   @@index([expiresAt])
 }
+
+/// Finalized RoomDiagnostics report (D1.3).
+///
+/// One row per finalized lifecycle (after the empty-room grace window).
+/// `reportJson` carries the full sanitized `GameSessionReport` that the
+/// in-memory bus generates; the indexed columns are denormalized so the
+/// admin list page can filter without scanning JSON.
+///
+/// `roomId` is the bucket key — typically `mafia:<base>` / `gameroom:<base>` /
+/// `eat:<base>`. Session-bucket reports (`session:<sid>`) are NOT persisted
+/// in D1.3 by design; they remain admin-fetchable from the live in-memory
+/// snapshot for the lifetime of the tab's session.
+model RoomDiagnosticReport {
+  id               String   @id @default(cuid())
+  roomId           String
+  gameType         String?
+  startedAt        DateTime
+  endedAt          DateTime?
+  durationMs       Int?
+  eventCount       Int
+  warningCount     Int      @default(0)
+  errorCount       Int      @default(0)
+  criticalCount    Int      @default(0)
+  hasErrors        Boolean  @default(false)
+  hasWarnings      Boolean  @default(false)
+  truncated        Boolean  @default(false)
+  hostUserId       String?
+  hostDisplayName  String?
+  participantCount Int?
+  finalizedReason  String?
+  reportJson       Json
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([roomId, createdAt])
+  @@index([gameType, createdAt])
+  @@index([hasErrors, createdAt])
+}

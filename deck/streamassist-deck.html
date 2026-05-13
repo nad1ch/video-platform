@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StreamAssist — Investor Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   StreamAssist — Investor Deck
+   Style: "Control Room" — premium, dark, neon-violet/cyan
+   Sample build: slides 1–3 fully implemented, 4–12 stubbed
+   ============================================================ */
+
+:root {
+  --bg-base: #0A0B14;
+  --bg-edge: #06070C;
+  --surface-glass: rgba(255,255,255,0.06);
+  --surface-glass-hi: rgba(255,255,255,0.09);
+  --stroke-soft: rgba(255,255,255,0.08);
+  --stroke-mid: rgba(255,255,255,0.14);
+  --accent-violet: #7C5CFF;
+  --accent-violet-soft: rgba(124,92,255,0.5);
+  --accent-violet-glow: rgba(124,92,255,0.22);
+  --accent-cyan: #3FE0FF;
+  --accent-cyan-soft: rgba(63,224,255,0.4);
+  --accent-magenta: #FF3CC6;
+  --text-hi: #F4F5FF;
+  --text-mid: #B8BBD6;
+  --text-low: #6F7393;
+  --font-display: 'Inter Tight', 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --scale: 1;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-edge);
+  font-family: var(--font-body);
+  color: var(--text-hi);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#deck {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 30%, #14162E 0%, transparent 70%),
+    radial-gradient(ellipse 100% 80% at 50% 100%, #0F1124 0%, transparent 60%),
+    var(--bg-base);
+}
+
+#particles {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.stage {
+  width: 1920px;
+  height: 1080px;
+  position: relative;
+  transform: scale(var(--scale));
+  transform-origin: center;
+  flex-shrink: 0;
+}
+
+/* subtle scanline texture for broadcast feel */
+.stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 3px,
+    rgba(255,255,255,0.012) 3px,
+    rgba(255,255,255,0.012) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ---------- slide shell + transitions ---------- */
+.slide {
+  position: absolute;
+  inset: 0;
+  padding: 72px 96px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 350ms ease-out, transform 350ms ease-out;
+  pointer-events: none;
+  z-index: 2;
+}
+.slide.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* ---------- glass card primitive ---------- */
+.glass {
+  background: var(--surface-glass);
+  border: 1px solid var(--stroke-soft);
+  border-radius: 20px;
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    0 12px 40px -12px rgba(0,0,0,0.6);
+  transition: transform 180ms ease-out, border-color 180ms ease-out, box-shadow 180ms ease-out;
+}
+.glass:hover {
+  border-color: var(--stroke-mid);
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    0 16px 48px -16px rgba(0,0,0,0.7),
+    0 0 32px -8px var(--accent-violet-soft);
+}
+
+/* ---------- type ---------- */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-violet);
+}
+.label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-low);
+}
+.h-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.022em;
+  color: var(--text-hi);
+  line-height: 1.04;
+}
+.h1 { font-size: 120px; }
+.h2 { font-size: 76px; }
+.h3 { font-size: 42px; }
+.h4 { font-size: 28px; }
+.body {
+  font-size: 20px;
+  line-height: 1.5;
+  color: var(--text-mid);
+  font-weight: 400;
+}
+
+/* ---------- pills ---------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-mid);
+  background: var(--surface-glass);
+  border: 1px solid var(--stroke-soft);
+  border-radius: 999px;
+  backdrop-filter: blur(20px);
+}
+.pill.violet { color: #B49DFF; border-color: var(--accent-violet-soft); background: rgba(124,92,255,0.06); }
+.pill.cyan { color: var(--accent-cyan); border-color: var(--accent-cyan-soft); background: rgba(63,224,255,0.04); }
+.pill .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+/* ---------- entrance stagger ---------- */
+.slide.active .anim-in { animation: fadeUp 520ms cubic-bezier(.2,.7,.3,1) backwards; }
+.slide.active .anim-in.d50  { animation-delay: 50ms; }
+.slide.active .anim-in.d100 { animation-delay: 100ms; }
+.slide.active .anim-in.d200 { animation-delay: 200ms; }
+.slide.active .anim-in.d300 { animation-delay: 300ms; }
+.slide.active .anim-in.d400 { animation-delay: 400ms; }
+.slide.active .anim-in.d500 { animation-delay: 500ms; }
+.slide.active .anim-in.d600 { animation-delay: 600ms; }
+.slide.active .anim-in.d700 { animation-delay: 700ms; }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   SLIDE 01 — COVER
+   ============================================================ */
+.slide-cover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+.cover-mosaic {
+  position: absolute;
+  inset: 80px 96px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 28px;
+  opacity: 0.55;
+  filter: blur(34px) saturate(110%);
+  z-index: 0;
+}
+.cover-mosaic .tile {
+  background: linear-gradient(135deg, rgba(124,92,255,0.20) 0%, rgba(63,224,255,0.06) 100%);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 24px;
+}
+.cover-mosaic .tile:nth-child(2)  { background: linear-gradient(135deg, rgba(63,224,255,0.16), rgba(124,92,255,0.05)); }
+.cover-mosaic .tile:nth-child(4)  { background: linear-gradient(135deg, rgba(255,60,198,0.10), rgba(124,92,255,0.05)); }
+.cover-mosaic .tile:nth-child(5)  { background: linear-gradient(135deg, rgba(124,92,255,0.14), rgba(63,224,255,0.09)); }
+.cover-mosaic .tile:nth-child(7)  { background: linear-gradient(135deg, rgba(63,224,255,0.12), rgba(124,92,255,0.04)); }
+
+.cover-glow {
+  position: absolute;
+  width: 1200px; height: 1200px;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(124,92,255,0.16) 0%, transparent 55%);
+  z-index: 0;
+  pointer-events: none;
+  animation: glowPulse 8s ease-in-out infinite alternate;
+}
+@keyframes glowPulse {
+  from { opacity: 0.85; }
+  to   { opacity: 1; }
+}
+
+.cover-wordmark {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 144px;
+  letter-spacing: -0.038em;
+  line-height: 1;
+  color: var(--text-hi);
+  text-shadow: 0 0 60px rgba(124,92,255,0.18);
+}
+.cover-wordmark .accent {
+  background: linear-gradient(135deg, #FFFFFF 0%, #C8B4FF 40%, #7C5CFF 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.cover-sub {
+  margin-top: 28px;
+  font-family: var(--font-display);
+  font-size: 32px;
+  color: var(--text-mid);
+  font-weight: 400;
+  letter-spacing: -0.005em;
+}
+
+.cover-meta-tl, .cover-meta-tr, .cover-meta-bl, .cover-meta-br {
+  position: absolute;
+  z-index: 3;
+}
+.cover-meta-tl { top: 64px; left: 96px; }
+.cover-meta-tr { top: 64px; right: 96px; }
+.cover-meta-bl { bottom: 64px; left: 96px; }
+.cover-meta-br { bottom: 64px; right: 96px; text-align: right; }
+.cover-founders {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--text-mid);
+  font-weight: 500;
+}
+.cover-meta-br .hint {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-low);
+  letter-spacing: 0.12em;
+}
+.cover-meta-br .hint .arrow {
+  color: var(--accent-cyan);
+  margin-left: 6px;
+  animation: arrowPulse 1.8s ease-in-out infinite;
+}
+@keyframes arrowPulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+
+/* ============================================================
+   SLIDE 02 — PROBLEM
+   ============================================================ */
+.slide-problem {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: start;
+  height: 100%;
+  padding-bottom: 240px; /* leave room for stats row */
+}
+.problem-left { padding-top: 36px; }
+.problem-tools {
+  position: relative;
+  width: 100%;
+  height: 680px;
+}
+.tool-tile {
+  position: absolute;
+  width: 200px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tool-role {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--text-low);
+  text-transform: uppercase;
+}
+.tool-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 22px;
+  color: var(--text-hi);
+  letter-spacing: -0.01em;
+}
+.problem-tangle {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.problem-stats {
+  position: absolute;
+  bottom: 80px;
+  left: 96px;
+  right: 96px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  z-index: 4;
+}
+.problem-stat {
+  padding: 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.stat-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 22px;
+  color: var(--text-hi);
+  letter-spacing: -0.01em;
+}
+.stat-body {
+  font-size: 15px;
+  color: var(--text-mid);
+  line-height: 1.45;
+}
+
+/* tangled neon lines */
+.tangle-line {
+  fill: none;
+  stroke: rgba(180,157,255,0.45);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 8px rgba(124,92,255,0.55));
+}
+.tangle-line.cyan {
+  stroke: rgba(63,224,255,0.45);
+  filter: drop-shadow(0 0 8px rgba(63,224,255,0.5));
+}
+.tangle-line.magenta {
+  stroke: rgba(255,60,198,0.35);
+  filter: drop-shadow(0 0 6px rgba(255,60,198,0.4));
+}
+.draw-on {
+  stroke-dasharray: 900;
+  stroke-dashoffset: 900;
+}
+.slide.active .draw-on {
+  animation: drawOn 1.4s cubic-bezier(.65,.05,.36,1) forwards;
+}
+.slide.active .draw-on.d300 { animation-delay: 0.3s; }
+.slide.active .draw-on.d500 { animation-delay: 0.5s; }
+.slide.active .draw-on.d700 { animation-delay: 0.7s; }
+.slide.active .draw-on.d900 { animation-delay: 0.9s; }
+.slide.active .draw-on.d1100 { animation-delay: 1.1s; }
+.slide.active .draw-on.d1300 { animation-delay: 1.3s; }
+@keyframes drawOn { to { stroke-dashoffset: 0; } }
+
+/* ============================================================
+   SLIDE 03 — WHY NOW
+   ============================================================ */
+.slide-whynow {
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+  height: 100%;
+}
+.whynow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+  flex: 1;
+  min-height: 0;
+}
+.trend-card {
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.trend-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--accent-violet);
+}
+.trend-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 32px;
+  color: var(--text-hi);
+  letter-spacing: -0.012em;
+  line-height: 1.1;
+}
+.trend-body {
+  font-size: 17px;
+  color: var(--text-mid);
+  line-height: 1.5;
+}
+.trend-sub {
+  margin-top: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--text-low);
+  padding-top: 18px;
+  border-top: 1px solid var(--stroke-soft);
+  line-height: 1.5;
+}
+.whynow-timeline {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 22px 32px;
+  margin-top: 8px;
+}
+.timeline-axis {
+  flex: 1;
+  position: relative;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(124,92,255,0.06) 0%, rgba(124,92,255,0.4) 55%, rgba(63,224,255,0.7) 100%);
+  border-radius: 2px;
+}
+.timeline-axis .marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent-violet);
+  box-shadow: 0 0 8px var(--accent-violet);
+}
+.timeline-axis .marker.now {
+  width: 18px; height: 18px;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 16px var(--accent-cyan), 0 0 36px var(--accent-cyan-soft);
+  animation: nowPulse 2.4s ease-in-out infinite;
+}
+@keyframes nowPulse {
+  0%, 100% { box-shadow: 0 0 16px var(--accent-cyan), 0 0 36px var(--accent-cyan-soft); }
+  50%      { box-shadow: 0 0 22px var(--accent-cyan), 0 0 56px var(--accent-cyan-soft); }
+}
+.timeline-axis .marker .marker-label {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text-low);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.timeline-axis .marker.now .marker-label {
+  color: var(--accent-cyan);
+  font-weight: 500;
+}
+.timeline-cap {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--text-low);
+}
+.timeline-cap.cyan { color: var(--accent-cyan); }
+
+/* ============================================================
+   PLACEHOLDER SLIDES 4–12
+   ============================================================ */
+.slide-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  height: 100%;
+  gap: 18px;
+}
+.ph-label {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-low);
+}
+.ph-title {
+  font-family: var(--font-display);
+  font-size: 64px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-mid);
+  line-height: 1.1;
+}
+.ph-note {
+  font-size: 17px;
+  color: var(--text-low);
+  max-width: 720px;
+  line-height: 1.5;
+}
+.ph-num {
+  font-family: var(--font-mono);
+  font-size: 96px;
+  font-weight: 500;
+  color: rgba(124,92,255,0.18);
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+/* ============================================================
+   FOOTER NAV
+   ============================================================ */
+#nav {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(10,11,20,0.75);
+  border: 1px solid var(--stroke-soft);
+  border-radius: 999px;
+  backdrop-filter: blur(20px);
+  opacity: 0.45;
+  transition: opacity 220ms ease-out;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--text-mid);
+}
+#nav:hover { opacity: 1; }
+#nav .nav-btn {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--surface-glass);
+  border: 1px solid var(--stroke-soft);
+  color: var(--text-mid);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  transition: all 180ms ease-out;
+}
+#nav .nav-btn:hover {
+  border-color: var(--accent-violet-soft);
+  color: var(--text-hi);
+  background: rgba(124,92,255,0.10);
+}
+#nav .nav-count {
+  min-width: 64px;
+  text-align: center;
+  font-weight: 500;
+}
+
+/* ============================================================
+   UTILITIES
+   ============================================================ */
+.mt-8 { margin-top: 8px; }
+.mt-16 { margin-top: 16px; }
+.mt-24 { margin-top: 24px; }
+.mt-32 { margin-top: 32px; }
+.mt-48 { margin-top: 48px; }
+</style>
+</head>
+<body>
+
+<canvas id="particles"></canvas>
+
+<div id="deck">
+  <div class="stage">
+
+    <!-- ================== SLIDE 01 — COVER ================== -->
+    <section class="slide active" data-slide="1" aria-label="Cover">
+      <div class="cover-mosaic">
+        <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+        <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+      </div>
+      <div class="cover-glow"></div>
+
+      <div class="cover-meta-tl anim-in">
+        <span class="eyebrow">Investor preview</span>
+      </div>
+      <div class="cover-meta-tr anim-in">
+        <span class="pill cyan"><span class="dot"></span>v0.6 · 2026</span>
+      </div>
+
+      <div class="slide-cover">
+        <div>
+          <div class="cover-wordmark anim-in d100">Stream<span class="accent">Assist</span></div>
+          <div class="cover-sub anim-in d300">Interactive live-show platform for creators</div>
+        </div>
+      </div>
+
+      <div class="cover-meta-bl anim-in d500">
+        <div class="label">Founders</div>
+        <div class="cover-founders">Bohdan Nadebernyi &nbsp;·&nbsp; Roman</div>
+      </div>
+      <div class="cover-meta-br anim-in d500">
+        <div class="hint">Press<span class="arrow">→</span></div>
+      </div>
+    </section>
+
+    <!-- ================== SLIDE 02 — PROBLEM ================== -->
+    <section class="slide" data-slide="2" aria-label="Problem">
+      <div class="slide-problem">
+        <div class="problem-left">
+          <span class="eyebrow anim-in">Problem</span>
+          <h2 class="h-display h2 mt-24 anim-in d100">Creators duct-tape&nbsp;six tools to&nbsp;run one show.</h2>
+          <p class="body mt-32 anim-in d200" style="max-width: 600px;">
+            Discord for talent. Whereby or Zoom for the call. OBS for the stream. Streamlabs for overlays. Manual bots for chat games. Twitch chat for the audience.
+          </p>
+          <p class="body mt-16 anim-in d300" style="max-width: 600px;">
+            Every show is rebuilt from scratch. Every new format costs weeks. Every viewer interaction is glued on with tape.
+          </p>
+        </div>
+
+        <div class="problem-tools">
+          <svg class="problem-tangle" viewBox="0 0 720 680" preserveAspectRatio="none">
+            <path class="tangle-line draw-on d300"          d="M 110 90 C 320 60, 380 320, 610 150" />
+            <path class="tangle-line cyan draw-on d500"     d="M 110 340 C 280 360, 460 240, 610 380" />
+            <path class="tangle-line violet draw-on d700"   d="M 110 590 C 320 560, 420 380, 610 580" />
+            <path class="tangle-line magenta draw-on d900"  d="M 610 150 C 480 280, 280 360, 110 340" />
+            <path class="tangle-line cyan draw-on d1100"    d="M 610 380 C 480 280, 280 200, 110 90" />
+            <path class="tangle-line violet draw-on d1300"  d="M 110 590 C 280 460, 400 320, 610 150" />
+          </svg>
+
+          <div class="glass tool-tile anim-in d200" style="top: 50px; left: 0;">
+            <div class="tool-role">Talent</div>
+            <div class="tool-name">Discord</div>
+          </div>
+          <div class="glass tool-tile anim-in d300" style="top: 50px; right: 0;">
+            <div class="tool-role">Stream</div>
+            <div class="tool-name">OBS</div>
+          </div>
+          <div class="glass tool-tile anim-in d400" style="top: 300px; left: 0;">
+            <div class="tool-role">Call</div>
+            <div class="tool-name">Whereby</div>
+          </div>
+          <div class="glass tool-tile anim-in d500" style="top: 300px; right: 0;">
+            <div class="tool-role">Overlays</div>
+            <div class="tool-name">Streamlabs</div>
+          </div>
+          <div class="glass tool-tile anim-in d600" style="top: 550px; left: 0;">
+            <div class="tool-role">Games</div>
+            <div class="tool-name">Manual bots</div>
+          </div>
+          <div class="glass tool-tile anim-in d700" style="top: 550px; right: 0;">
+            <div class="tool-role">Audience</div>
+            <div class="tool-name">Twitch chat</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="problem-stats">
+        <div class="glass problem-stat anim-in d500">
+          <span class="label">Setup</span>
+          <div class="stat-title">Hours per show</div>
+          <div class="stat-body">Every format change means re-wiring scenes, overlays, bots, and call links.</div>
+        </div>
+        <div class="glass problem-stat anim-in d600">
+          <span class="label">Mid-show</span>
+          <div class="stat-title">Fragile live</div>
+          <div class="stat-body">A broken bot, missed alert, or dropped call breaks the show in front of the audience.</div>
+        </div>
+        <div class="glass problem-stat anim-in d700">
+          <span class="label">Audience</span>
+          <div class="stat-title">Watching, not playing</div>
+          <div class="stat-body">Viewers stay passive — chat is the only lever, and most of it is wasted on noise.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================== SLIDE 03 — WHY NOW ================== -->
+    <section class="slide" data-slide="3" aria-label="Why now">
+      <div class="slide-whynow">
+        <div>
+          <span class="eyebrow anim-in">Why now</span>
+          <h2 class="h-display h2 mt-24 anim-in d100" style="max-width: 1500px;">
+            Live content is becoming interactive — the toolchain hasn't caught up.
+          </h2>
+        </div>
+
+        <div class="whynow-grid">
+          <div class="glass trend-card anim-in d200">
+            <div class="trend-num">01 · Format</div>
+            <div class="trend-title">Audiences expect to play, not just watch.</div>
+            <div class="trend-body">
+              Twitch Plays, IRL game shows, multi-creator collabs. The format is shifting from broadcast to participation.
+            </div>
+            <div class="trend-sub">Streamer collabs are the highest-engagement format on Twitch and Kick.</div>
+          </div>
+
+          <div class="glass trend-card anim-in d300">
+            <div class="trend-num">02 · Money</div>
+            <div class="trend-title">Creators monetize the audience directly.</div>
+            <div class="trend-body">
+              Subs, gifted subs, tips and direct purchases have replaced ads. The money moved — the tools didn't.
+            </div>
+            <div class="trend-sub">Viewer-paid revenue is now the dominant creator income on Twitch &amp; Kick.</div>
+          </div>
+
+          <div class="glass trend-card anim-in d400">
+            <div class="trend-num">03 · AI</div>
+            <div class="trend-title">New formats cost cents, not weeks.</div>
+            <div class="trend-body">
+              Clip captioning, summaries, format suggestions, moderation — all become cheap layers on top of the show.
+            </div>
+            <div class="trend-sub">Show experimentation moves from a quarterly project to a weekly one.</div>
+          </div>
+        </div>
+
+        <div class="glass whynow-timeline anim-in d600">
+          <span class="timeline-cap">2020</span>
+          <div class="timeline-axis">
+            <div class="marker" style="left: 0%;"><div class="marker-label">2020 · pandemic spike</div></div>
+            <div class="marker" style="left: 32%;"><div class="marker-label">2022 · creator economy</div></div>
+            <div class="marker" style="left: 60%;"><div class="marker-label">2024 · viewer monetization</div></div>
+            <div class="marker now" style="left: 88%;"><div class="marker-label">2026 · you are here</div></div>
+          </div>
+          <span class="timeline-cap cyan">2026</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================== PLACEHOLDERS 4–12 ================== -->
+    <section class="slide" data-slide="4" aria-label="Solution"><div class="slide-placeholder">
+      <div class="ph-num">04</div>
+      <span class="ph-label">Next up · Solution</span>
+      <div class="ph-title">Interactive live-show OS</div>
+      <p class="ph-note">Hex-hub diagram with 7 spokes — video rooms · games · overlays · viewer interaction · economy · clips · AI layer. Will animate spoke-by-spoke. Clips and AI tagged as future vision.</p>
+    </div></section>
+
+    <section class="slide" data-slide="5" aria-label="Product demo flow"><div class="slide-placeholder">
+      <div class="ph-num">05</div>
+      <span class="ph-label">Product demo flow</span>
+      <div class="ph-title">From idea to clip — in one place</div>
+      <p class="ph-note">5-step horizontal ribbon, each step a glass card with a labelled GIF placeholder. Hover plays the GIF full-size.</p>
+    </div></section>
+
+    <section class="slide" data-slide="6" aria-label="B2B2C model"><div class="slide-placeholder">
+      <div class="ph-num">06</div>
+      <span class="ph-label">B2B2C model</span>
+      <div class="ph-title">Streamers bring trust. Viewers bring scale.</div>
+      <p class="ph-note">Two-sided diagram with a rotating flywheel and StreamAssist as the platform layer.</p>
+    </div></section>
+
+    <section class="slide" data-slide="7" aria-label="Validation"><div class="slide-placeholder">
+      <div class="ph-num">07</div>
+      <span class="ph-label">Current validation</span>
+      <div class="ph-title">Already built. Already tested with real streamers.</div>
+      <p class="ph-note">Two columns: 9 "shipped" items from the codebase + 3 real-pilot data points. Strictly defensible.</p>
+    </div></section>
+
+    <section class="slide" data-slide="8" aria-label="Loops"><div class="slide-placeholder">
+      <div class="ph-num">08</div>
+      <span class="ph-label">Growth + retention loops</span>
+      <div class="ph-title">Four loops compound on each other</div>
+      <p class="ph-note">2×2 grid of circular flywheel diagrams: acquisition, retention, monetization, viral clips.</p>
+    </div></section>
+
+    <section class="slide" data-slide="9" aria-label="Monetization"><div class="slide-placeholder">
+      <div class="ph-num">09</div>
+      <span class="ph-label">Monetization</span>
+      <div class="ph-title">Three sides, one revenue model</div>
+      <p class="ph-note">Streamer plan cards (Free / Plus / Pro / Studio-later), viewer economy chips, creator referrals card.</p>
+    </div></section>
+
+    <section class="slide" data-slide="10" aria-label="Roadmap"><div class="slide-placeholder">
+      <div class="ph-num">10</div>
+      <span class="ph-label">Roadmap</span>
+      <div class="ph-title">Now · 6 months · 1 year</div>
+      <p class="ph-note">Three swim lanes with a neon traversal line lighting up Now → 6 months → 1 year.</p>
+    </div></section>
+
+    <section class="slide" data-slide="11" aria-label="Team"><div class="slide-placeholder">
+      <div class="ph-num">11</div>
+      <span class="ph-label">Team · founder-market fit</span>
+      <div class="ph-title">Builder · Streamer · Designer</div>
+      <p class="ph-note">Two portrait cards — Bohdan + Roman — plus a "Together" strip with three differentiation chips.</p>
+    </div></section>
+
+    <section class="slide" data-slide="12" aria-label="Ask"><div class="slide-placeholder">
+      <div class="ph-num">12</div>
+      <span class="ph-label">Ask · next step</span>
+      <div class="ph-title">What we're looking for</div>
+      <p class="ph-note">Four ask buckets, CTA block, email + Calendly. Glow pulse on the primary CTA.</p>
+    </div></section>
+
+  </div>
+</div>
+
+<nav id="nav" role="navigation" aria-label="Slide navigation">
+  <button class="nav-btn" id="prev" aria-label="Previous slide">‹</button>
+  <span class="nav-count"><span id="cur">01</span> / <span id="total">12</span></span>
+  <button class="nav-btn" id="next" aria-label="Next slide">›</button>
+</nav>
+
+<script>
+// ---------- stage scaling ----------
+function fitStage() {
+  const sx = window.innerWidth / 1920;
+  const sy = window.innerHeight / 1080;
+  document.documentElement.style.setProperty('--scale', Math.min(sx, sy, 1));
+}
+window.addEventListener('resize', fitStage);
+fitStage();
+
+// ---------- navigation ----------
+const slides = document.querySelectorAll('.slide');
+const total = slides.length;
+let current = 1;
+document.getElementById('total').textContent = String(total).padStart(2, '0');
+
+function goTo(n) {
+  n = Math.max(1, Math.min(total, n));
+  if (n === current) return;
+  slides.forEach(s => s.classList.remove('active'));
+  const next = document.querySelector(`.slide[data-slide="${n}"]`);
+  if (next) {
+    next.classList.add('active');
+    current = n;
+    document.getElementById('cur').textContent = String(n).padStart(2, '0');
+  }
+}
+
+document.getElementById('prev').addEventListener('click', () => goTo(current - 1));
+document.getElementById('next').addEventListener('click', () => goTo(current + 1));
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { goTo(current + 1); e.preventDefault(); }
+  if (e.key === 'ArrowLeft'  || e.key === 'PageUp')                    { goTo(current - 1); e.preventDefault(); }
+  if (e.key === 'Home') goTo(1);
+  if (e.key === 'End')  goTo(total);
+  if (e.key === 'f' || e.key === 'F') {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  }
+});
+
+// ---------- particle drift ----------
+const canvas = document.getElementById('particles');
+const ctx = canvas.getContext('2d');
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+const particles = [];
+for (let i = 0; i < 70; i++) {
+  particles.push({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    vx: (Math.random() - 0.5) * 0.16,
+    vy: (Math.random() - 0.5) * 0.16,
+    r: Math.random() * 1.3 + 0.4,
+    alpha: Math.random() * 0.35 + 0.08,
+    cyan: Math.random() > 0.7,
+  });
+}
+
+function tick() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const p of particles) {
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.x < -2) p.x = canvas.width + 2;
+    if (p.x > canvas.width + 2) p.x = -2;
+    if (p.y < -2) p.y = canvas.height + 2;
+    if (p.y > canvas.height + 2) p.y = -2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = p.cyan
+      ? `rgba(63, 224, 255, ${p.alpha})`
+      : `rgba(180, 157, 255, ${p.alpha})`;
+    ctx.fill();
+  }
+  requestAnimationFrame(tick);
+}
+tick();
+</script>
+</body>
+</html>

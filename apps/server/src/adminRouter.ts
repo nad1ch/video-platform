@@ -6,6 +6,19 @@ import { resolvePrismaUserIdFromSession } from './auth/resolvePrismaUserFromSess
 import { readSessionFromCookie } from './auth/session/sessionJwt'
 import { getUserRoles, parseFeaturePermissions, parseSystemRoles, setUserRoles } from './auth/userRoles'
 import { normalizeTwitchLogin } from './streamerIdentity'
+import {
+  BUCKET_PREFIX_SESSION,
+  ROOM_ID_MAX_LENGTH,
+  snapshotRoomDiagnostics,
+} from './signaling/roomDiagnosticsBus'
+import { buildGameSessionReport } from './signaling/roomDiagnosticsReport'
+
+/**
+ * Max length of the `roomId` slug used in the `Content-Disposition`
+ * attachment filename. Bounded so a pathological key cannot produce a
+ * megabyte-long header.
+ */
+const DIAGNOSTIC_FILENAME_SLUG_MAX_LENGTH = 80
 
 async function requireAdmin(req: Request, res: Response): Promise<boolean> {
   if (!(await isSessionAdminFromCookie(req.headers.cookie))) {
@@ -611,4 +624,50 @@ export function mountAdminRoutes(app: Express): void {
       res.status(500).json({ error: 'server_error' })
     }
   })
+
+  /**
+   * Block D1 — admin diagnostics export.
+   *
+   * Returns the in-memory `GameSessionReport` snapshot for one bucket.
+   * Accepted bucket keys:
+   *   - signaling room id (e.g. `mafia:foo`, `gameroom:bar`, `eat:baz`)
+   *   - synthetic session bucket key (`session:<analyticsSessionId>`)
+   *     for client errors that fired without a room correlation
+   *
+   * `Cache-Control: no-store` because the report is a fresh snapshot.
+   * `?download=1` adds an attachment Content-Disposition for direct
+   * file download from the browser address bar.
+   */
+  app.get('/api/admin/rooms/:roomId/diagnostics', async (req: Request, res: Response) => {
+    if (!(await requireAdmin(req, res))) {
+      return
+    }
+    const rawRoomId = typeof req.params.roomId === 'string' ? req.params.roomId : ''
+    const roomId = rawRoomId.trim().slice(0, ROOM_ID_MAX_LENGTH)
+    if (!roomId) {
+      res.status(400).json({ error: 'invalid_room_id' })
+      return
+    }
+    const snapshot = snapshotRoomDiagnostics(roomId)
+    const isSessionBucket = roomId.startsWith(BUCKET_PREFIX_SESSION)
+    const report = buildGameSessionReport(roomId, snapshot, {
+      isSessionBucket,
+      exportedBy: 'admin',
+    })
+    res.setHeader('Cache-Control', 'no-store')
+    if (req.query.download === '1') {
+      const safeName = roomId
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .slice(0, DIAGNOSTIC_FILENAME_SLUG_MAX_LENGTH)
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="diagnostics-${safeName}.json"`,
+      )
+    }
+    res.json(report)
+  })
 }
+
+/* The inline GameSessionReport builder lives in
+ * `signaling/roomDiagnosticsReport.ts` (D1.3) so the persistence layer
+ * and the live admin route share one source of truth. */

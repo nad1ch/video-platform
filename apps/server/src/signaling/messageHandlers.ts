@@ -39,6 +39,12 @@ import {
 import { MafiaWs } from './mafiaWsProtocol'
 import { GameRoomWs } from './gameRoomWsProtocol'
 import {
+  newDiagnosticEventId,
+  recordDiagnosticEvent,
+  type RoomDiagnosticArea,
+  type RoomDiagnosticLevel,
+} from './roomDiagnosticsBus'
+import {
   EAT_FIRST_ROOM_PREFIX,
   GAME_ROOM_MAX_SEAT,
   MAFIA_MAX_SEAT,
@@ -309,6 +315,55 @@ export type ServerMessage =
       }
     }
   | { type: 'eat:table-state-sync'; payload: EatFirstTableSyncPayload }
+
+/**
+ * Best-effort diagnostics emit from server signaling code. Type is `string`
+ * to keep this file decoupled from the diagnostic event-type union; the
+ * bus tolerates and clamps any string and the ingestion/export endpoints
+ * already enforce shape.
+ *
+ * Never awaits, never throws, never mutates room/peer state.
+ */
+function diagEmit(
+  type: string,
+  level: RoomDiagnosticLevel,
+  area: RoomDiagnosticArea,
+  roomId: string | null,
+  peer: Peer | null,
+  context: Record<string, unknown> = {},
+  message?: string,
+): void {
+  try {
+    const gt: 'mafia' | 'game-room' | 'eat-first' | null = !roomId
+      ? null
+      : roomId.startsWith('mafia:')
+        ? 'mafia'
+        : roomId.startsWith('gameroom:')
+          ? 'game-room'
+          : roomId.startsWith('eat:')
+            ? 'eat-first'
+            : null
+    recordDiagnosticEvent({
+      id: newDiagnosticEventId(),
+      reportVersion: 1,
+      timestamp: Date.now(),
+      source: 'server',
+      level,
+      area,
+      type,
+      roomId,
+      gameType: gt,
+      peerId: peer?.id ?? null,
+      userId: peer && peer.userId.length > 0 ? peer.userId : null,
+      sessionId: null,
+      correlationId: null,
+      message: typeof message === 'string' && message.length > 0 ? message : type,
+      context,
+    })
+  } catch {
+    /* never throw from diagnostics */
+  }
+}
 
 export type SignalingDeps = {
   roomManager: RoomManager
@@ -795,6 +850,10 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
       })
     }
   }
+  diagEmit('room_left', 'info', 'room', room.id, peer, {
+    displayName: peer.displayName,
+    peersInRoomAfter: room.getPeers().length,
+  })
   finalizeRoomIfEmpty(room, deps.roomManager)
 }
 
@@ -827,6 +886,9 @@ function replaceDuplicatePeerId(
   console.warn('[signaling] duplicate peerId in room; closing previous socket (open a new tab with a fresh peer id)', {
     roomId: room.id,
     peerId,
+  })
+  diagEmit('stale_socket_ignored', 'warn', 'ws', room.id, existing, {
+    reason: 'duplicate_peer_id_replaced',
   })
 
   detachPeerAudioProducersFromLevelObserver(existing, room)
@@ -1105,6 +1167,12 @@ export async function handleJoinRoom(
   if (gameRoomHostAssignedOnJoin) {
     broadcastGameRoomHostUpdated(room)
   }
+  diagEmit('room_joined', 'info', 'room', room.id, peer, {
+    displayName: name,
+    peersInRoom: room.getPeers().length,
+    avatarKnown: avatarUrlSafe.length > 0,
+    hostAssignedOnJoin: mafiaHostAssignedOnJoin || gameRoomHostAssignedOnJoin,
+  })
   // Rebind any prior audio-mix entry keyed by this user's stable userId to
   // the new peerId so a host page reload / participant reload keeps its mix
   // visible to OBS without the host re-clicking the slider. The rebound entry
@@ -1417,6 +1485,10 @@ export function handleMafiaClaimHost(
       if (currentSession != null && currentSession !== sessionId) {
         // Same userId, different active session, original peer still online: reject
         // so two tabs of the same host do not race for the host peer slot.
+        diagEmit('host_conflict', 'warn', 'game', room.id, peer, {
+          namespace: 'mafia',
+          reason: 'same_user_other_session',
+        })
         return
       }
       room.setMafiaHostSessionId(sessionId)
@@ -1424,10 +1496,18 @@ export function handleMafiaClaimHost(
       // Refresh owner TTL: this user is actively asserting ownership now.
       setMafiaRoomOwnerUserId(room.id, peer.userId)
       broadcastMafiaHostUpdated(room)
+      diagEmit('host_claimed', 'info', 'game', room.id, peer, {
+        namespace: 'mafia',
+        reason: 'rebind',
+      })
     }
     return
   }
   if (current != null) {
+    diagEmit('host_conflict', 'warn', 'game', room.id, peer, {
+      namespace: 'mafia',
+      reason: 'host_already_held_by_other_user',
+    })
     return
   }
   // Owner-lock: the room currently has no in-memory host. Consult the
@@ -1436,6 +1516,10 @@ export function handleMafiaClaimHost(
   // original owner keeps host ownership across `Room` finalization.
   const ownerUserId = getMafiaRoomOwnerUserId(room.id)
   if (ownerUserId != null && ownerUserId !== peer.userId) {
+    diagEmit('host_conflict', 'warn', 'game', room.id, peer, {
+      namespace: 'mafia',
+      reason: 'owner_lock_mismatch',
+    })
     return
   }
   room.setMafiaHostUserId(peer.userId)
@@ -1445,6 +1529,10 @@ export function handleMafiaClaimHost(
   // room locks ownership to this userId for the TTL window.
   setMafiaRoomOwnerUserId(room.id, peer.userId)
   broadcastMafiaHostUpdated(room)
+  diagEmit('host_claimed', 'info', 'game', room.id, peer, {
+    namespace: 'mafia',
+    reason: ownerUserId == null ? 'first_claim' : 'owner_lock_match',
+  })
 }
 
 export function handleMafiaTransferHost(
@@ -2989,6 +3077,10 @@ export function handleMafiaTimerStart(
   }
   room.setMafiaTimer({ startedAt, duration })
   broadcastMafiaTimerStart(room, { startedAt, duration, isRunning: true })
+  diagEmit('timer_started', 'info', 'game', room.id, peer, {
+    namespace: 'mafia',
+    durationMs: duration,
+  })
 }
 
 
@@ -3003,6 +3095,7 @@ export function handleMafiaTimerStop(socket: WsSocket, deps: SignalingDeps): voi
   }
   room.setMafiaTimer(null)
   broadcastMafiaTimerStop(room)
+  diagEmit('timer_stopped', 'info', 'game', room.id, peer, { namespace: 'mafia' })
 }
 
 export function handleUpdateDisplayName(
@@ -3854,20 +3947,36 @@ export function handleGameRoomClaimHost(
     const currentPeerOnline = currentPeerId != null && room.getPeer(currentPeerId) != null
     if (currentSession == null || currentPeerId == null || !currentPeerOnline || currentPeerId === peer.id) {
       if (currentSession != null && currentSession !== sessionId) {
+        diagEmit('host_conflict', 'warn', 'game', room.id, peer, {
+          namespace: 'game-room',
+          reason: 'same_user_other_session',
+        })
         return
       }
       room.setGameRoomHostSessionId(sessionId)
       room.setGameRoomHostPeerId(peer.id)
       setGameRoomOwnerUserId(room.id, peer.userId)
       broadcastGameRoomHostUpdated(room)
+      diagEmit('host_claimed', 'info', 'game', room.id, peer, {
+        namespace: 'game-room',
+        reason: 'rebind',
+      })
     }
     return
   }
   if (current != null) {
+    diagEmit('host_conflict', 'warn', 'game', room.id, peer, {
+      namespace: 'game-room',
+      reason: 'host_already_held_by_other_user',
+    })
     return
   }
   const ownerUserId = getGameRoomOwnerUserId(room.id)
   if (ownerUserId != null && ownerUserId !== peer.userId) {
+    diagEmit('host_conflict', 'warn', 'game', room.id, peer, {
+      namespace: 'game-room',
+      reason: 'owner_lock_mismatch',
+    })
     return
   }
   room.setGameRoomHostUserId(peer.userId)
@@ -3875,6 +3984,10 @@ export function handleGameRoomClaimHost(
   room.setGameRoomHostPeerId(peer.id)
   setGameRoomOwnerUserId(room.id, peer.userId)
   broadcastGameRoomHostUpdated(room)
+  diagEmit('host_claimed', 'info', 'game', room.id, peer, {
+    namespace: 'game-room',
+    reason: ownerUserId == null ? 'first_claim' : 'owner_lock_match',
+  })
 }
 
 export function handleGameRoomTransferHost(
@@ -4098,6 +4211,10 @@ export function handleGameRoomTimerStart(
     type: GameRoomWs.timerStart,
     payload: { startedAt, duration, isRunning: true },
   })
+  diagEmit('timer_started', 'info', 'game', room.id, peer, {
+    namespace: 'game-room',
+    durationMs: duration,
+  })
 }
 
 export function handleGameRoomTimerStop(socket: WsSocket, deps: SignalingDeps): void {
@@ -4107,6 +4224,7 @@ export function handleGameRoomTimerStop(socket: WsSocket, deps: SignalingDeps): 
   if (!isGameRoomHostPeer(room, peer)) return
   room.setGameRoomTimer(null)
   broadcastServerMessageToRoom(room, { type: GameRoomWs.timerStop, payload: {} })
+  diagEmit('timer_stopped', 'info', 'game', room.id, peer, { namespace: 'game-room' })
 }
 
 export async function handleGameRoomPlayerKick(

@@ -3,6 +3,15 @@ import { Prisma } from '@prisma/client'
 import { resolvePrismaUserIdFromSession } from './auth/resolvePrismaUserFromSession'
 import { readSessionFromCookie } from './auth/session/sessionJwt'
 import { isDatabaseConfigured, prisma } from './prisma'
+import {
+  newDiagnosticEventId,
+  recordDiagnosticEvent,
+  ROOM_ID_MAX_LENGTH,
+  type RoomDiagnosticArea,
+  type RoomDiagnosticEvent,
+  type RoomDiagnosticGameType,
+  type RoomDiagnosticLevel,
+} from './signaling/roomDiagnosticsBus'
 
 const ALLOWED_CLIENT_EVENTS = new Set([
   'route_change',
@@ -168,6 +177,132 @@ function sanitizeMetadata(input: unknown): Prisma.InputJsonValue | typeof Prisma
   return safe as Prisma.InputJsonValue
 }
 
+const VALID_DIAG_LEVELS: ReadonlySet<RoomDiagnosticLevel> = new Set([
+  'debug',
+  'info',
+  'warn',
+  'error',
+  'critical',
+])
+const VALID_DIAG_AREAS: ReadonlySet<RoomDiagnosticArea> = new Set([
+  'room',
+  'ws',
+  'webrtc',
+  'media',
+  'playback',
+  'game',
+  'auth',
+  'twitch',
+  'ui',
+  'performance',
+  'backend',
+])
+const VALID_DIAG_GAME_TYPES: ReadonlySet<Exclude<RoomDiagnosticGameType, null>> = new Set([
+  'mafia',
+  'game-room',
+  'eat-first',
+  'nadle',
+  'nadraw-show',
+  'checkers',
+])
+const MAX_DIAG_TYPE_LENGTH = 80
+const MAX_DIAG_MESSAGE_LENGTH = 500
+const MAX_DIAG_STACK_LENGTH = 2000
+const MAX_DIAG_ID_LENGTH = 80
+
+/**
+ * Hard cap on batched events accepted per `POST /api/events/room`.
+ * Aligns with the 16 KB body cap and the client emitter's
+ * `BATCH_MAX_EVENTS = 16` — 32 leaves headroom for one duplicate flush.
+ */
+const MAX_DIAGNOSTIC_BATCH_ITEMS = 32
+
+function asNonEmptyString(value: unknown, maxLength: number): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return truncateString(trimmed, maxLength)
+}
+
+function sanitizeDiagnosticEvent(
+  raw: unknown,
+  fallbackSessionId: string | null,
+): RoomDiagnosticEvent | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+
+  const roomId = asNonEmptyString(r.roomId, ROOM_ID_MAX_LENGTH)
+  const sessionIdField = sanitizeSessionId(r.sessionId) ?? fallbackSessionId
+  // Accept events with either a roomId OR a sessionId. The bus routes
+  // sessionId-only events into a `session:<sid>` bucket so global client
+  // errors that fire outside a room still surface in an admin report.
+  if (!roomId && !sessionIdField) return null
+
+  const level = typeof r.level === 'string' && VALID_DIAG_LEVELS.has(r.level as RoomDiagnosticLevel)
+    ? (r.level as RoomDiagnosticLevel)
+    : 'info'
+  const area = typeof r.area === 'string' && VALID_DIAG_AREAS.has(r.area as RoomDiagnosticArea)
+    ? (r.area as RoomDiagnosticArea)
+    : 'ui'
+  const type = asNonEmptyString(r.type, MAX_DIAG_TYPE_LENGTH) ?? 'unknown'
+  const id = asNonEmptyString(r.id, MAX_DIAG_ID_LENGTH) ?? newDiagnosticEventId()
+  const timestamp = typeof r.timestamp === 'number' && Number.isFinite(r.timestamp)
+    ? r.timestamp
+    : Date.now()
+  const message = asNonEmptyString(r.message, MAX_DIAG_MESSAGE_LENGTH) ?? type
+
+  const gameTypeRaw = typeof r.gameType === 'string' ? r.gameType : null
+  const gameType: RoomDiagnosticGameType =
+    gameTypeRaw && VALID_DIAG_GAME_TYPES.has(gameTypeRaw as Exclude<RoomDiagnosticGameType, null>)
+      ? (gameTypeRaw as Exclude<RoomDiagnosticGameType, null>)
+      : null
+
+  const peerId = asNonEmptyString(r.peerId, ROOM_ID_MAX_LENGTH)
+  const userId = asNonEmptyString(r.userId, ROOM_ID_MAX_LENGTH)
+  const correlationId = asNonEmptyString(r.correlationId, ROOM_ID_MAX_LENGTH)
+
+  const ctxSafe = sanitizeMetadataValue(r.context, 0)
+  const context: Record<string, unknown> =
+    ctxSafe && typeof ctxSafe === 'object' && !Array.isArray(ctxSafe)
+      ? (ctxSafe as Record<string, unknown>)
+      : {}
+
+  const event: RoomDiagnosticEvent = {
+    id,
+    reportVersion: 1,
+    timestamp,
+    source: 'client',
+    level,
+    area,
+    type,
+    roomId,
+    gameType,
+    peerId,
+    userId,
+    sessionId: sessionIdField,
+    correlationId,
+    message,
+    context,
+  }
+
+  if (r.error && typeof r.error === 'object' && !Array.isArray(r.error)) {
+    const e = r.error as Record<string, unknown>
+    const name = asNonEmptyString(e.name, 120) ?? 'Error'
+    const stack = asNonEmptyString(e.stack, MAX_DIAG_STACK_LENGTH) ?? undefined
+    const code = asNonEmptyString(e.code, 80) ?? undefined
+    event.error = { name, ...(stack ? { stack } : {}), ...(code ? { code } : {}) }
+  }
+
+  if (r.env && typeof r.env === 'object' && !Array.isArray(r.env)) {
+    const envSafe = sanitizeMetadataValue(r.env, 0)
+    if (envSafe && typeof envSafe === 'object' && !Array.isArray(envSafe)) {
+      event.env = envSafe as Record<string, unknown>
+    }
+  }
+
+  return event
+}
+
 function rateKey(req: Request): string {
   const forwarded = req.headers['x-forwarded-for']
   const ip = Array.isArray(forwarded) ? forwarded[0] : forwarded
@@ -265,6 +400,40 @@ export function mountClientEventRoutes(app: Express): void {
       console.error('[events] POST /api/events/client', error)
       res.status(500).json({ error: 'server_error' })
     }
+  })
+
+  /**
+   * Block D1 — room diagnostics ingestion.
+   *
+   * Accepts batched events (max 16 per batch on the client side; the
+   * 16 KB body cap and per-IP rate limit are inherited from the
+   * existing `mountWithBodyCap` + `consumeRateLimit` plumbing).
+   *
+   * No DB writes in this block — accepted events are pushed into the
+   * in-memory `roomDiagnosticsBus`. Each event is sanitized server-side
+   * (redaction + metadata truncation) before being recorded.
+   */
+  mountWithBodyCap('/api/events/room', (req: Request, res: Response) => {
+    if (!consumeRateLimit(req)) {
+      res.status(429).json({ error: 'rate_limited' })
+      return
+    }
+    const body = req.body as { events?: unknown; sessionId?: unknown }
+    const events = Array.isArray(body.events) ? body.events : null
+    if (!events) {
+      res.status(400).json({ error: 'invalid_body' })
+      return
+    }
+    const sessionId = sanitizeSessionId(body.sessionId)
+    let accepted = 0
+    for (const raw of events.slice(0, MAX_DIAGNOSTIC_BATCH_ITEMS)) {
+      const ev = sanitizeDiagnosticEvent(raw, sessionId)
+      if (ev) {
+        recordDiagnosticEvent(ev)
+        accepted += 1
+      }
+    }
+    res.status(202).json({ ok: true, accepted })
   })
 
   mountWithBodyCap('/api/events/error', async (req: Request, res: Response) => {

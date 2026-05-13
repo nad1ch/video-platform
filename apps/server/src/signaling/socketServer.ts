@@ -6,6 +6,7 @@ import type { Peer } from '../peers/Peer'
 import WebSocket from 'ws'
 import { readSessionFromCookie } from '../auth/session/sessionJwt'
 import { attachWsHeartbeat } from '../utils/wsHeartbeat'
+import { newDiagnosticEventId, recordDiagnosticEvent } from './roomDiagnosticsBus'
 import type { SignalingDeps } from './messageHandlers'
 import {
   clientMessageSchema,
@@ -194,6 +195,35 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
                   peerId,
                   err: err instanceof Error ? err.message : String(err),
                 })
+                try {
+                  recordDiagnosticEvent({
+                    id: newDiagnosticEventId(),
+                    reportVersion: 1,
+                    timestamp: Date.now(),
+                    source: 'server',
+                    level: 'error',
+                    area: 'backend',
+                    type: 'backend_handler_error',
+                    roomId: typeof roomId === 'string' ? roomId : null,
+                    gameType: null,
+                    peerId: typeof peerId === 'string' ? peerId : null,
+                    userId: null,
+                    sessionId: null,
+                    correlationId: null,
+                    message: err instanceof Error
+                      ? `join-room: ${err.name}: ${err.message || ''}`.trim()
+                      : 'join-room failed',
+                    context: { handler: 'join-room' },
+                    error: err instanceof Error
+                      ? {
+                          name: err.name,
+                          ...(err.stack ? { stack: err.stack } : {}),
+                        }
+                      : undefined,
+                  })
+                } catch {
+                  /* never throw from diagnostics */
+                }
                 try {
                   if (socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({
