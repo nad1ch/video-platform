@@ -2256,12 +2256,12 @@ onMounted(() => {
   detachMediaDebugRafProbe = startMediaDebugRafProbe()
   // Stamp env info ONCE at mount. Read live `documentVisibilityState`
   // is included by the reader, so no need to track it reactively.
-  // `isMafiaView` is the legacy contract key with `setMediaDebugEnvInfo`
-  // (also written from production CallPage.vue). On `/app/game-template`
-  // we pass the game-room view flag through that same key; renaming
-  // requires touching the shared util + production CallPage.
+  // Game Template writes the neutral `isGameRoomView` key; production
+  // Mafia continues to write `isMafiaView` from its own CallPage. The
+  // shared util ORs both into `isViewMode` and `MediaDiagnosticsPanel`
+  // labels them distinctly.
   setMediaDebugEnvInfo({
-    isMafiaView: gameRoomViewUi.value,
+    isGameRoomView: gameRoomViewUi.value,
   })
   if (isMediaDebugEnabled()) {
     detachMediaDebugGlobal = installMediaDebugGlobal({

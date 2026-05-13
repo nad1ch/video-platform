@@ -243,7 +243,7 @@ function fmtTrackState(snap: { trackReadyState: string | null; trackMuted: boole
           <span>video els: {{ videoCount }}</span>
           <span>live tracks: {{ liveVideoTrackCount }}</span>
           <span :class="{ 'media-debug__warn': tilesWithoutVideoCount > 0 && tilesWithoutVideoCount === videoCount }">no video: {{ tilesWithoutVideoCount }}</span>
-          <span>view: {{ env.isMafiaView ? 'mafia' : env.isEatFirstView ? 'eat-first' : 'no' }}</span>
+          <span>view: {{ env.isMafiaView ? 'mafia' : env.isGameRoomView ? 'game-room' : env.isEatFirstView ? 'eat-first' : 'no' }}</span>
           <span>visible: {{ env.documentVisibilityState ?? '—' }}</span>
           <span v-if="env.hardwareConcurrency != null">cores: {{ env.hardwareConcurrency }}</span>
           <span v-if="env.deviceMemoryGb != null">mem: {{ env.deviceMemoryGb }}GB</span>

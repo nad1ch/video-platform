@@ -151,7 +151,7 @@ export function useGameRoomCallHostUi(
     const clickTarget = ev.target
     if (clickTarget instanceof Element) {
       if (
-        clickTarget.closest('button, input, textarea, a, [data-no-mafia-tile-host], [data-no-game-room-tile-host]')
+        clickTarget.closest('button, input, textarea, a, [data-no-game-room-tile-host]')
       ) {
         return
       }

@@ -584,6 +584,12 @@ export function readMediaDebugSignalingStats(): MediaDebugSignalingStats {
  */
 export type MediaDebugEnvInfo = {
   isMafiaView: boolean
+  /**
+   * `/app/game-template` view mode — neutral counterpart of `isMafiaView`.
+   * Writers (Game Template) set this directly; production Mafia continues
+   * to set `isMafiaView`. Both feed `isViewMode`.
+   */
+  isGameRoomView: boolean
   isEatFirstView: boolean
   isViewMode: boolean
   hardwareConcurrency: number | null
@@ -594,6 +600,7 @@ export type MediaDebugEnvInfo = {
 
 const envInfo: MediaDebugEnvInfo = {
   isMafiaView: false,
+  isGameRoomView: false,
   isEatFirstView: false,
   isViewMode: false,
   hardwareConcurrency: null,
@@ -602,10 +609,13 @@ const envInfo: MediaDebugEnvInfo = {
   installedAt: 0,
 }
 
-export function setMediaDebugEnvInfo(input: Partial<Pick<MediaDebugEnvInfo, 'isMafiaView' | 'isEatFirstView'>>): void {
+export function setMediaDebugEnvInfo(
+  input: Partial<Pick<MediaDebugEnvInfo, 'isMafiaView' | 'isGameRoomView' | 'isEatFirstView'>>,
+): void {
   if (typeof input.isMafiaView === 'boolean') envInfo.isMafiaView = input.isMafiaView
+  if (typeof input.isGameRoomView === 'boolean') envInfo.isGameRoomView = input.isGameRoomView
   if (typeof input.isEatFirstView === 'boolean') envInfo.isEatFirstView = input.isEatFirstView
-  envInfo.isViewMode = envInfo.isMafiaView || envInfo.isEatFirstView
+  envInfo.isViewMode = envInfo.isMafiaView || envInfo.isGameRoomView || envInfo.isEatFirstView
   if (envInfo.installedAt === 0 && typeof window !== 'undefined') {
     envInfo.installedAt = Date.now()
     const nav = (typeof navigator !== 'undefined' ? navigator : null) as
