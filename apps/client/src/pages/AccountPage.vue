@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/composables/useAuth'
+import { refreshBillingConfig, useBillingConfig } from '@/composables/useBillingConfig'
 import { useProSubscription } from '@/composables/useProSubscription'
 import { useCoinHubStore } from '@/stores/coinHub'
 import AppLandingHeader from '@/pages/app/components/AppHeader.vue'
@@ -24,7 +25,16 @@ type SettingsRow = {
 const auth = useAuth()
 const router = useRouter()
 const { locale } = useI18n()
-const { refreshSubscription, isProActive: isProActiveSubscription, expiresAt: proExpiresAt } = useProSubscription()
+const {
+  refreshSubscription,
+  isProActive: isProActiveSubscription,
+  expiresAt: proExpiresAt,
+  billingEmail: subscriptionBillingEmail,
+} = useProSubscription()
+const billingConfig = useBillingConfig()
+
+/** Strikethrough anchor for Pro marketing; must match `BillingPage.vue`. */
+const PRO_OLD_PRICE_LABEL = '599'
 const coinHub = useCoinHubStore()
 const { balance: coinBalance } = storeToRefs(coinHub)
 
@@ -39,10 +49,34 @@ const user = computed(() => auth.user.value)
 const isHeaderAuthLoading = computed(() => !auth.loaded.value)
 const isAuthenticated = computed(() => auth.isAuthenticated.value)
 const streamer = computed(() => user.value?.streamer ?? null)
-const displayName = computed(() => user.value?.displayName?.trim() || 'ramadan160')
+const displayName = computed(() => {
+  const trimmed = user.value?.displayName?.trim()
+  if (trimmed) return trimmed
+  const twitch = streamer.value?.username?.trim()
+  if (twitch) return twitch
+  return '—'
+})
 const headerUserAvatar = computed(() => user.value?.avatar ?? '')
-const userInitial = computed(() => (displayName.value.trim()[0] || 'R').toUpperCase())
-const userEmail = computed(() => user.value?.email?.trim() || 'nad1ch@streamassist.gg')
+const userInitial = computed(() => {
+  const raw = displayName.value.trim()
+  if (!raw || raw === '—') return '?'
+  return raw[0].toUpperCase()
+})
+const settingsBillingEmailLabel = computed(() => {
+  const fromApi = subscriptionBillingEmail.value?.trim()
+  if (fromApi) return fromApi
+  return 'Не вказано'
+})
+const proPriceAmount = computed(() => billingConfig.config.value?.amountUah ?? null)
+const proPriceDurationLabel = computed(() => {
+  const days = billingConfig.config.value?.durationDays
+  if (!days) return null
+  if (days === 30) return 'місяць'
+  return `${days} днів`
+})
+const isProPricingUnavailable = computed(
+  () => !billingConfig.loading.value && !billingConfig.isReady.value,
+)
 const isEmailVerified = computed(() => user.value?.emailVerified === true)
 const providerKind = computed(() => user.value?.provider ?? (user.value == null ? 'twitch' : null))
 const hasStreamerProfile = computed(
@@ -104,7 +138,7 @@ const settingsRows = computed<SettingsRow[]>(() => [
   {
     label: 'Email для рахунків',
     sub: 'сповіщення про оплати й продовження підписки',
-    value: userEmail.value,
+    value: settingsBillingEmailLabel.value,
     action: 'Змінити',
   },
   {
@@ -171,6 +205,7 @@ function onOpenStream(): void {
 
 onMounted(() => {
   void refreshSubscription()
+  void refreshBillingConfig()
   void coinHub.loadSnapshot({ background: true })
 })
 </script>
@@ -337,10 +372,16 @@ onMounted(() => {
               <path d="M4 11 14.5 22.5 27 4l12.5 18.5L50 11l-4 25H8L4 11Z" />
             </svg>
           </span>
-          <span class="plan-card__currency">₴</span>
-          <span class="plan-card__old">599</span>
-          <span class="plan-card__strike" aria-hidden="true"></span>
-          <span class="plan-card__price"><span>299</span> / місяць</span>
+          <template v-if="proPriceAmount && proPriceDurationLabel">
+            <span class="plan-card__currency">₴</span>
+            <span class="plan-card__old">{{ PRO_OLD_PRICE_LABEL }}</span>
+            <span class="plan-card__strike" aria-hidden="true"></span>
+            <span class="plan-card__price">
+              <span>{{ proPriceAmount }}</span> / {{ proPriceDurationLabel }}
+            </span>
+          </template>
+          <p v-else-if="isProPricingUnavailable" class="plan-card__price-unavailable">Ціна тимчасово недоступна</p>
+          <p v-else class="plan-card__price-loading" aria-hidden="true">…</p>
           <button type="button" class="plan-card__button" @click="onPlanCta('pro')">Покращити</button>
         </article>
 
@@ -451,10 +492,16 @@ onMounted(() => {
           <ul>
             <li v-for="feature in proFeatures" :key="feature"><span></span>{{ feature }}</li>
           </ul>
-          <span class="wide-plan__currency">₴</span>
-          <span class="wide-plan__old">599</span>
-          <span class="wide-plan__strike" aria-hidden="true"></span>
-          <span class="wide-plan__price"><strong>299</strong> / місяць</span>
+          <template v-if="proPriceAmount && proPriceDurationLabel">
+            <span class="wide-plan__currency">₴</span>
+            <span class="wide-plan__old">{{ PRO_OLD_PRICE_LABEL }}</span>
+            <span class="wide-plan__strike" aria-hidden="true"></span>
+            <span class="wide-plan__price">
+              <strong>{{ proPriceAmount }}</strong> / {{ proPriceDurationLabel }}
+            </span>
+          </template>
+          <p v-else-if="isProPricingUnavailable" class="wide-plan__price-unavailable">Ціна тимчасово недоступна</p>
+          <p v-else class="wide-plan__price-loading" aria-hidden="true">…</p>
           <button type="button" @click="onPlanCta('pro')">Покращити</button>
         </article>
       </template>
@@ -1070,6 +1117,28 @@ onMounted(() => {
   font-weight: 300;
 }
 
+.plan-card--pro .plan-card__price-unavailable,
+.plan-card--pro .plan-card__price-loading {
+  position: absolute;
+  left: 219px;
+  top: 26px;
+  margin: 0;
+  max-width: 175px;
+  color: rgb(255 255 255 / 0.78);
+  font-family: var(--account-ui);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.plan-card--pro .plan-card__price-loading {
+  left: 257px;
+  top: 29px;
+  max-width: none;
+  color: rgb(255 255 255 / 0.55);
+  font-size: 22px;
+  line-height: 32px;
+}
+
 .plan-card__button {
   position: absolute;
   left: 219px;
@@ -1597,6 +1666,28 @@ onMounted(() => {
 .wide-plan__price strong {
   font-family: 'Marhey', var(--account-ui);
   font-weight: 300;
+}
+
+.wide-plan--pro .wide-plan__price-unavailable,
+.wide-plan--pro .wide-plan__price-loading {
+  position: absolute;
+  left: 620px;
+  top: 48px;
+  margin: 0;
+  max-width: 220px;
+  color: rgb(255 255 255 / 0.78);
+  font-family: var(--account-ui);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.wide-plan--pro .wide-plan__price-loading {
+  left: 701px;
+  top: 51px;
+  max-width: none;
+  color: rgb(255 255 255 / 0.55);
+  font-size: 22px;
+  line-height: 32px;
 }
 
 .wide-plan button {
