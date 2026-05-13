@@ -91,7 +91,7 @@ import {
 import { getOrCreateDeviceId } from '@/eat-first/utils/deviceId.js'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
 import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
-import { mafiaEliminationAvatarKindForPeerId } from '@/utils/mafiaEliminationAvatarKind'
+import { mafiaEliminatedPlayerIconMapForPeerIds } from '@/utils/mafiaEliminatedPlayerIcons'
 import { EAT_FIRST_OBS_URL_TOAST_EVENT } from '@/composables/eatFirstCallStreamView'
 import { MAFIA_OBS_URL_TOAST_EVENT, MAFIA_SETTINGS_TOAST_EVENT } from '@/composables/mafiaStreamViewRoute'
 import { MafiaWs } from '@/composables/mafiaWsProtocol'
@@ -1816,6 +1816,23 @@ const mafiaNumberByPeer = computed(() => {
   return m
 })
 
+const mafiaEliminatedPlayerIconByPeer = computed(() => {
+  if (!isMafiaRoute.value) {
+    return new Map<string, string>()
+  }
+  const numberedPeerIds = [...mafiaNumberByPeer.value.entries()]
+    .sort((a, b) => a[1] - b[1])
+    .map(([peerId]) => peerId)
+  return mafiaEliminatedPlayerIconMapForPeerIds(numberedPeerIds, session.roomId)
+})
+
+function mafiaEliminatedPlayerIconForTile(peerId: string): string | undefined {
+  if (!isMafiaRoute.value) {
+    return undefined
+  }
+  return mafiaEliminatedPlayerIconByPeer.value.get(peerId)
+}
+
 /**
  * Mafia call-host UI behaviour — extracted into `useMafiaCallHostUi` (Phase 2).
  *
@@ -3129,7 +3146,7 @@ watch(joining, (j) => {
                 :eat-first-trait-owner-view="isEatFirstRoute ? eatFirstTraitOwnerView(row.tile.peerId) : false"
                 :eat-first-revealed-trait-keys="isEatFirstRoute ? eatFirstRevealedTraitsForPeer(row.tile.peerId) : []"
                 :eat-first-action-card="isEatFirstRoute ? eatFirstActionCardForPeer(row.tile.peerId) : null"
-                :mafia-elimination-kind="mafiaEliminationAvatarKindForPeerId(row.tile.peerId)"
+                :mafia-elimination-icon-src="mafiaEliminatedPlayerIconForTile(row.tile.peerId)"
                 :mafia-elimination-background="mafiaGameStore.eliminationBackgroundForPeer(row.tile.peerId)"
                 :mafia-dead-background-url="
                   isMafiaRoute || isEatFirstRoute ? mafiaGameStore.activeDeadBackgroundUrl() : null
