@@ -73,7 +73,7 @@ import {
   loadCallTileLocalDisplayOverrides,
   saveCallTileLocalDisplayOverrides,
 } from '@/utils/callTileLocalDisplayNames'
-import { pinHostPeerToEndOfOrder } from '@/utils/mafiaHostOrdering'
+import { pinHostPeerToEndOfOrder } from '@/utils/gameHostOrdering'
 import { resolveHostPeerIdForGrid, sortPeerIdsHostLast } from '@/components/call/callTileOrderRules'
 
 const callPageLog = createLogger('call-page')
