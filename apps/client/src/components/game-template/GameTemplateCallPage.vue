@@ -21,10 +21,11 @@
  *
  * Shared infrastructure deliberately kept:
  *   - `useCallOrchestrator` from call-core (mediasoup + media SSOT).
- *   - `ParticipantTile.vue` is consumed as-is — its Mafia-prefixed props
- *     (`mafia-seat-index`, `mafia-life-state`, etc.) are still wired
- *     from this fork. Renaming those props is a future phase that
- *     coordinates Mafia + Game Template + the props themselves.
+ *   - `ParticipantTile.vue` is consumed via its neutral `game-*` prop /
+ *     emit aliases (`game-seat-index`, `game-life-state`,
+ *     `@game-toggle-life`, etc.). The component still exposes its
+ *     legacy `mafia-*` API in parallel for production Mafia; the alias
+ *     pair resolves to the same internal state.
  *   - Stylesheet: `<style src="@/components/call/CallPage.css">`. Mafia
  *     and Game Template share the same class names (`call-page__*`,
  *     `mafia-vote-hud*`, `mafia-host-mode-*`); renaming those classes
@@ -122,7 +123,7 @@ import { useGameTemplateGameStore } from '@/stores/gameTemplateGame'
 import { useGameTemplatePlayersStore } from '@/stores/gameTemplatePlayers'
 // `mafiaEliminationAvatarKindForPeerId` is intentionally not imported —
 // the Mafia-specific elimination avatar variant has no generic equivalent.
-// ParticipantTile receives `undefined` for `mafia-elimination-kind` on
+// ParticipantTile receives `undefined` for `game-elimination-kind` on
 // the game-template route, which renders the default tile chrome.
 import { GAME_ROOM_OBS_URL_TOAST_EVENT, GAME_ROOM_SETTINGS_TOAST_EVENT } from '@/composables/gameRoomStreamViewRoute'
 import { GameRoomWs } from '@/composables/gameRoomWsProtocol'
@@ -2489,8 +2490,8 @@ watch(joining, (j) => {
                 :display-name="row.displayName"
                 :avatar-fallback-name="peerAvatarFallbackName(row.tile.peerId)"
                 :can-edit-display-name="canEditTileDisplayName(row.tile.peerId)"
-                :mafia-seat-index="isGameRoomRoute ? seatNumberByPeer.get(row.tile.peerId) : undefined"
-                :mafia-visible-role="undefined"
+                :game-seat-index="isGameRoomRoute ? seatNumberByPeer.get(row.tile.peerId) : undefined"
+                :game-visible-role="undefined"
                 :stream-view-mode="gameRoomViewUi"
                 :stream="row.tile.stream"
                 :is-local="row.tile.isLocal"
@@ -2505,12 +2506,12 @@ watch(joining, (j) => {
                 :raise-hand="Boolean(row.tile.handRaised)"
                 :video-presentation="row.tile.videoPresentation"
                 :avatar-url="row.tile.avatarUrl ?? ''"
-                :mafia-life-state="isGameRoomRoute ? gameStore.lifeStateForPeer(row.tile.peerId) : 'alive'"
-                :mafia-elimination-kind="undefined"
-                :mafia-elimination-background="undefined"
-                :mafia-dead-background-url="null"
-                :mafia-host-show-life-toggle="isGameRoomRoute && !gameRoomViewUi && gameStore.isGameRoomHost"
-                :mafia-layer-viewport-observe="isCallAppRoute && !row.tile.isLocal"
+                :game-life-state="isGameRoomRoute ? gameStore.lifeStateForPeer(row.tile.peerId) : 'alive'"
+                :game-elimination-kind="undefined"
+                :game-elimination-background="undefined"
+                :game-dead-background-url="null"
+                :game-host-show-life-toggle="isGameRoomRoute && !gameRoomViewUi && gameStore.isGameRoomHost"
+                :game-layer-viewport-observe="isCallAppRoute && !row.tile.isLocal"
                 :video-playback-suppressed="
                   !row.tile.isLocal && videoPlaybackSuppressedForPeer(row.tile.peerId)
                 "
@@ -2518,9 +2519,9 @@ watch(joining, (j) => {
                 @update:listen-volume="(v) => remoteListenVolumeHandler(row.tile.peerId)(v)"
                 @update:listen-muted="(v) => remoteListenMutedHandler(row.tile.peerId)(v)"
                 @commit-local-display-name="onCommitLocalTileDisplayName"
-                @mafia-toggle-life="onToggleLifeFromTile(row.tile.peerId)"
-                @mafia-force-camera-off="onForceCameraOffFromTile(row.tile.peerId)"
-                @mafia-viewport-layers="(v) => onCallTileViewportForLayers(row.tile.peerId, v)"
+                @game-toggle-life="onToggleLifeFromTile(row.tile.peerId)"
+                @game-force-camera-off="onForceCameraOffFromTile(row.tile.peerId)"
+                @game-viewport-layers="(v) => onCallTileViewportForLayers(row.tile.peerId, v)"
                 @remote-playback-stall="onRemotePlaybackStall"
                 @video-stall="onTileVideoStall"
                 @audio-stall="onTileAudioStall"
