@@ -1,27 +1,25 @@
 <script setup lang="ts">
 /**
- * GameTemplateHostActionsBar — fork of `MafiaHostActionsBar.vue` for the
- * `/app/game-template` route.
+ * GameTemplateHostActionsBar — Phase 3C.
  *
- * Adapter around the shared presentational `<GameHostActionsBar>`. Owns
- * the same Mafia-specific bits as the production adapter:
- *   - host identity gate (`isMafiaHost` v-if)
- *   - reshuffle gate logic (player-count vs `oldMafiaMode`)
- *   - swap-mode 'night' off-sentinel + `setHostInteractionMode` store call
- *   - reshuffle store dispatch (`gameStore.reshuffleGame()`)
- *   - `force-mute-all` outward emit (the call page's existing contract)
- *   - i18n key resolution (`mafiaPage.*`)
+ * Switched off the Mafia stack. Now uses the generic stores
+ * (`useGameTemplateGameStore`, `useGameTemplatePlayersStore`).
  *
- * The button surface (icons, animations, hover transforms, ConfirmDialog
- * mounting) lives in `GameHostActionsBar` under `components/game-call/`,
- * shared with Mafia.
+ * Differences vs Mafia adapter:
+ *   - `oldMafiaMode` REMOVED — the reshuffle gate is now `n >= 2` only
+ *     (the upper bound of 12 is still enforced by the server).
+ *   - The swap-mode off-state was `'night'` for Mafia; for the generic
+ *     protocol it is `'idle'` (no night phase exists).
+ *
+ * The button surface is the shared presentational `<GameHostActionsBar>`
+ * under `components/game-call/`, unchanged.
  */
 
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
-import { useMafiaGameStore } from '@/stores/mafiaGame'
-import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
+import { useGameTemplateGameStore } from '@/stores/gameTemplateGame'
+import { useGameTemplatePlayersStore } from '@/stores/gameTemplatePlayers'
 import GameHostActionsBar, {
   type GameHostActionsLabels,
 } from '@/components/game-call/GameHostActionsBar.vue'
@@ -31,27 +29,26 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const gameStore = useMafiaGameStore()
-const players = useMafiaPlayersStore()
+const gameStore = useGameTemplateGameStore()
+const players = useGameTemplatePlayersStore()
 const {
-  isMafiaHost,
-  oldMafiaMode,
+  isGameRoomHost,
   hostInteractionMode,
-  mafiaForceMuteAllActive,
+  forceMuteAllActive,
   everyNonHostEffectivelyMuted,
 } = storeToRefs(gameStore)
 
 const muteAllActive = computed(
-  () => mafiaForceMuteAllActive.value && everyNonHostEffectivelyMuted.value,
+  () => forceMuteAllActive.value && everyNonHostEffectivelyMuted.value,
 )
 
-const canReshuffle = computed(() => {
-  const n = players.joinOrder.length
-  if (oldMafiaMode.value) {
-    return n >= 2
-  }
-  return n >= 5 && n <= 12
-})
+/**
+ * Generic reshuffle gate: at least 2 players. The Mafia adapter
+ * additionally distinguished "old mode (>= 2)" vs "new mode (5–12)" via
+ * `oldMafiaMode`; that mode toggle does not exist in the generic
+ * protocol. The server still caps the upper bound at 12.
+ */
+const canReshuffle = computed(() => players.joinOrder.length >= 2)
 
 const swapModeActive = computed(() => hostInteractionMode.value === 'swap')
 
@@ -69,24 +66,25 @@ const labels = computed<GameHostActionsLabels>(() => ({
 }))
 
 function onSetMuteAll(muted: boolean): void {
-  if (!isMafiaHost.value) return
+  if (!isGameRoomHost.value) return
   emit('force-mute-all', muted)
 }
 
 function onReshuffle(): void {
-  if (!isMafiaHost.value || !canReshuffle.value) return
+  if (!isGameRoomHost.value || !canReshuffle.value) return
   gameStore.reshuffleGame()
 }
 
 function onToggleSwapMode(): void {
-  if (!isMafiaHost.value) return
-  gameStore.setHostInteractionMode(swapModeActive.value ? 'night' : 'swap')
+  if (!isGameRoomHost.value) return
+  // Mafia toggled off into 'night'; the generic protocol toggles off into 'idle'.
+  gameStore.setHostInteractionMode(swapModeActive.value ? 'idle' : 'swap')
 }
 </script>
 
 <template>
   <GameHostActionsBar
-    v-if="isMafiaHost"
+    v-if="isGameRoomHost"
     :mute-all-active="muteAllActive"
     :can-reshuffle="canReshuffle"
     :swap-active="swapModeActive"

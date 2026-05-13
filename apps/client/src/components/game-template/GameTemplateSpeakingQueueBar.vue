@@ -1,27 +1,23 @@
 <script setup lang="ts">
 /**
- * GameTemplateSpeakingQueueBar — fork of `MafiaSpeakingQueueBar.vue` for
- * `/app/game-template`.
+ * GameTemplateSpeakingQueueBar — Phase 3C.
  *
- * Adapter around the shared presentational `<GameSpeakingQueueBar>`. Owns
- * the same bits as the Mafia adapter:
- *   - reading `speakingQueue` + `hostInteractionMode` from the Mafia store
- *   - decoding the flat number queue into segments
- *   - swap-mode 'night' off-sentinel via `setHostInteractionMode`
- *   - direct store dispatch for `removeSpeakingNominationPairAt` / `clearSpeakingQueue`
- *   - i18n key resolution (`mafiaPage.*`)
+ * Switched off the Mafia stack. Now uses `useGameTemplateGameStore`.
  *
- * The HUD surface (chips, animations, transitions, layout-context-aware
- * CSS) is in `GameSpeakingQueueBar` under `components/game-call/`, shared
- * with Mafia. CSS class names stay `.mafia-vote-hud*` because `CallPage.css`
- * carries cross-component `:deep()` rules on those names (see the note in
- * `GameSpeakingQueueBar.vue`).
+ * Difference vs Mafia adapter: the speaking-mode off-state was `'night'`
+ * for Mafia; for the generic protocol it is `'idle'` (no night phase
+ * exists).
+ *
+ * The HUD surface remains the shared presentational
+ * `<GameSpeakingQueueBar>` from `components/game-call/`. CSS class names
+ * stay `.mafia-vote-hud*` because CallPage.css carries cross-component
+ * `:deep()` rules on those names — see the note in `GameSpeakingQueueBar.vue`.
  */
 
 import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useMafiaGameStore } from '@/stores/mafiaGame'
+import { useGameTemplateGameStore } from '@/stores/gameTemplateGame'
 import { decodeSpeakingNominationFlat } from '@/utils/speakingNominationQueue'
 import GameSpeakingQueueBar, {
   type GameSpeakingQueueLabels,
@@ -37,7 +33,7 @@ const props = withDefaults(
 )
 
 const { t } = useI18n()
-const gameStore = useMafiaGameStore()
+const gameStore = useGameTemplateGameStore()
 const { speakingQueue, hostInteractionMode } = storeToRefs(gameStore)
 
 const segments = computed(() => decodeSpeakingNominationFlat(speakingQueue.value))
@@ -57,7 +53,8 @@ const labels = computed<GameSpeakingQueueLabels>(() => ({
 
 function onToggleSpeakingMode(): void {
   if (!props.showTools) return
-  gameStore.setHostInteractionMode(speakingActive.value ? 'night' : 'speaking')
+  // Mafia toggled off into 'night'; the generic protocol toggles off into 'idle'.
+  gameStore.setHostInteractionMode(speakingActive.value ? 'idle' : 'speaking')
 }
 
 function onRemovePair(pairIndex: number): void {

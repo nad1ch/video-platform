@@ -19,6 +19,8 @@ import {
 import { createWebRtcTransport } from '../mediasoup/createWebRtcTransport'
 import { Peer } from '../peers/Peer'
 import type {
+  GameRoomAudioMixEntry,
+  GameRoomPlayerLifeState,
   MafiaAudioMixEntry,
   MafiaBackgroundItem,
   MafiaPageBackgroundItem,
@@ -30,15 +32,23 @@ import {
   getMafiaRoomOwnerUserId,
   setMafiaRoomOwnerUserId,
 } from './mafiaRoomOwnerStore'
+import {
+  getGameRoomOwnerUserId,
+  setGameRoomOwnerUserId,
+} from './gameRoomOwnerStore'
 import { MafiaWs } from './mafiaWsProtocol'
+import { GameRoomWs } from './gameRoomWsProtocol'
 import {
   EAT_FIRST_ROOM_PREFIX,
+  GAME_ROOM_MAX_SEAT,
   MAFIA_MAX_SEAT,
+  isGameRoomId,
   isMafiaRoomId,
   isEatFirstRoomId,
   sanitizeAvatarUrl,
   sanitizeDisplayName,
   sanitizeEatFirstSpeakingQueueList,
+  sanitizeGameRoomSpeakingQueueList,
   sanitizeMafiaSpeakingQueueList,
   sanitizeSessionId,
   sanitizeUserId,
@@ -230,6 +240,27 @@ export type ServerMessage =
   | { type: 'mafia:force-camera-off'; payload: { peerId: string; paused?: boolean } }
   | { type: 'mafia:force-mute-all'; payload: { muted?: boolean } }
   | { type: 'mafia:force-peer-mic'; payload: { peerId: string; muted: boolean } }
+  // ─── Generic game-room (Phase 3A) ───────────────────────────────────────
+  // Server → client variants. Wire format mirrors the Mafia subset minus
+  // role / mode / background-gallery fields. The generic protocol does not
+  // emit `mafia:mode-update`, `mafia:settings-update`,
+  // `mafia:page-background-settings`, and never carries a `role` inside
+  // reshuffle or `nightActions`/`clearRoles`/`oldMafiaMode` inside
+  // players-update.
+  | { type: 'gameroom:host-updated'; payload: { hostPeerId: string | null; hostUserId: string | null; hostSessionId: string | null } }
+  | { type: 'gameroom:queue-update'; payload: { speakingQueue: number[] } }
+  | { type: 'gameroom:reshuffle'; payload: { order: string[] } }
+  | { type: 'gameroom:players-update'; payload: { order: string[]; speakingQueue: number[] } }
+  | { type: 'gameroom:player-nickname-update'; payload: { peerId: string; displayName: string } }
+  | { type: 'gameroom:audio-mix-update'; payload: { entries: GameRoomAudioMixEntry[] } }
+  | { type: 'gameroom:timer-start'; payload: { startedAt: number; duration: number; isRunning: boolean } }
+  | { type: 'gameroom:timer-stop'; payload: Record<string, never> }
+  | { type: 'gameroom:player-kick'; payload: { peerId: string } }
+  | { type: 'gameroom:player-revive'; payload: { peerId: string } }
+  | { type: 'gameroom:player-life-state'; payload: { states: Record<string, GameRoomPlayerLifeState> } }
+  | { type: 'gameroom:force-camera-off'; payload: { peerId: string; paused?: boolean } }
+  | { type: 'gameroom:force-mute-all'; payload: { muted?: boolean } }
+  | { type: 'gameroom:force-peer-mic'; payload: { peerId: string; muted: boolean } }
   | { type: 'eat:host-updated'; payload: { hostPeerId: string | null } }
   | { type: 'eat:speaking-queue-update'; payload: { speakingQueue: number[] } }
   | { type: 'eat:force-mute-all'; payload: { muted?: boolean } }
@@ -698,7 +729,17 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
   if (isMafiaRoomId(room.id) && room.getMafiaHostPeerId() === peer.id) {
     room.setMafiaHostPeerId(null)
   }
+  if (isGameRoomId(room.id) && room.getGameRoomHostPeerId() === peer.id) {
+    // Generic game-room (Phase 3A): same semantics as the Mafia branch
+    // above — clear only the live `hostPeerId`, preserve `hostUserId` +
+    // `hostSessionId` so the authenticated owner can reclaim host on
+    // reconnect via `gameroom:claim-host` + `gameRoomOwnerStore`.
+    room.setGameRoomHostPeerId(null)
+  }
   broadcastMafiaHostUpdated(room)
+  if (isGameRoomId(room.id)) {
+    broadcastGameRoomHostUpdated(room)
+  }
   
   // stale after a leave. The host's next `mafia:players-update` will
   
@@ -735,6 +776,23 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
     const changed = room.pruneEatFirstSpeakingQueueToMaxSeat(11)
     if (changed) {
       broadcastEatFirstSpeakingQueueUpdate(room)
+    }
+  }
+  if (isGameRoomId(room.id)) {
+    // Generic game-room peer-left cleanup. Parallel of the Mafia branch
+    // above; touches only `gameRoom*` state. Same userId-mirror preservation
+    // semantics: peerId entry dropped (live tab is gone), userId mirror kept
+    // so a fresh-tab rejoin re-applies kill flags via the join branch.
+    room.clearGameRoomForceStateForPeer(peer.id)
+    room.clearGameRoomPlayerLifeStateForPeer(peer.id)
+    room.clearGameRoomAudioMixForPeerId(peer.id)
+    room.clearGameRoomNicknameForPeer(peer.id)
+    const changed = room.pruneGameRoomSpeakingQueueToMaxSeat(room.getPeers().length)
+    if (changed) {
+      broadcastServerMessageToRoom(room, {
+        type: GameRoomWs.queueUpdate,
+        payload: { speakingQueue: room.getGameRoomSpeakingQueue() },
+      })
     }
   }
   finalizeRoomIfEmpty(room, deps.roomManager)
@@ -777,6 +835,9 @@ function replaceDuplicatePeerId(
   room.removePeer(peerId)
   broadcastPeerLeftToRoom(room, peerId)
   broadcastMafiaHostUpdated(room)
+  if (isGameRoomId(room.id)) {
+    broadcastGameRoomHostUpdated(room)
+  }
 
   try {
     existing.socket.close(4000, 'Replaced by new connection')
@@ -856,6 +917,31 @@ export async function handleJoinRoom(
   // resets on every new socket, so the room remembers the active state and
   
   
+  if (isGameRoomId(room.id)) {
+    // Generic game-room (Phase 3A) parallel of the Mafia kill-enforcement
+    // reload-recovery block below. Independent fields, independent gates;
+    // never reaches into Mafia state. Mafia branch sits next to this one,
+    // unmodified.
+    if (room.isGameRoomForceMuteAllActive()) {
+      peer.forcedAudioMuted = true
+    }
+    const grCameraOffByPeerId = room.isGameRoomPeerForcedCameraOff(peerId)
+    const grCameraOffByUserId = room.isGameRoomUserForcedCameraOff(userId)
+    if (grCameraOffByPeerId || grCameraOffByUserId) {
+      peer.forcedCameraOff = true
+      if (!grCameraOffByPeerId) {
+        room.setGameRoomPeerForcedCameraOff(peerId, true)
+      }
+    }
+    const grMicMutedByPeerId = room.isGameRoomPeerForcedMicMuted(peerId)
+    const grMicMutedByUserId = room.isGameRoomUserForcedMicMuted(userId)
+    if (grMicMutedByPeerId || grMicMutedByUserId) {
+      peer.forcedAudioMuted = true
+      if (!grMicMutedByPeerId) {
+        room.setGameRoomPeerForcedMicMuted(peerId, true)
+      }
+    }
+  }
   if (isMafiaRoomId(room.id)) {
     if (room.isMafiaForceMuteAllActive()) {
       peer.forcedAudioMuted = true
@@ -893,6 +979,38 @@ export async function handleJoinRoom(
   
   
   
+  const isGameRoom = isGameRoomId(room.id)
+  let gameRoomHostAssignedOnJoin = false
+  if (isGameRoom && userId.length > 0) {
+    // Generic game-room (Phase 3A) host reload recovery + owner-lock auto
+    // assign on join. Parallel of the Mafia block below; never reads or
+    // writes Mafia fields. See `handleGameRoomClaimHost` for the
+    // explicit-claim path.
+    const hostUserId = room.getGameRoomHostUserId()
+    const hostPeerId = room.getGameRoomHostPeerId()
+    const hostPeerOnline = hostPeerId != null && room.getPeer(hostPeerId) != null
+    if (hostUserId == null) {
+      const ownerUserId = getGameRoomOwnerUserId(room.id)
+      if (ownerUserId != null && ownerUserId === userId) {
+        room.setGameRoomHostUserId(userId)
+        room.setGameRoomHostPeerId(peer.id)
+        setGameRoomOwnerUserId(room.id, userId)
+        gameRoomHostAssignedOnJoin = true
+      }
+    } else if (hostUserId === userId && !hostPeerOnline) {
+      room.setGameRoomHostPeerId(peer.id)
+      const sessionPeerId = room.getGameRoomHostSessionId()
+      if (sessionPeerId != null) {
+        const samePeerStillThere = room.getPeers().some((p) => p.gameRoomSessionId === sessionPeerId)
+        if (!samePeerStillThere) {
+          room.setGameRoomHostSessionId(null)
+        }
+      }
+      setGameRoomOwnerUserId(room.id, userId)
+      gameRoomHostAssignedOnJoin = true
+    }
+  }
+
   const isMafiaRoom = isMafiaRoomId(room.id)
   let mafiaHostAssignedOnJoin = false
   if (isMafiaRoom && userId.length > 0) {
@@ -984,6 +1102,9 @@ export async function handleJoinRoom(
   if (mafiaHostAssignedOnJoin) {
     broadcastMafiaHostUpdated(room)
   }
+  if (gameRoomHostAssignedOnJoin) {
+    broadcastGameRoomHostUpdated(room)
+  }
   // Rebind any prior audio-mix entry keyed by this user's stable userId to
   // the new peerId so a host page reload / participant reload keeps its mix
   // visible to OBS without the host re-clicking the slider. The rebound entry
@@ -993,6 +1114,17 @@ export async function handleJoinRoom(
     if (rebound) {
       broadcastServerMessageToRoom(room, {
         type: MafiaWs.audioMixUpdate,
+        payload: { entries: [{ ...rebound }] },
+      })
+    }
+  }
+  if (isGameRoom && userId.length > 0) {
+    // Generic game-room audio-mix rebind on reload. Parallel of the Mafia
+    // block above; touches only `gameRoom*` state.
+    const rebound = room.rebindGameRoomAudioMixEntryPeerId(peerId, userId)
+    if (rebound) {
+      broadcastServerMessageToRoom(room, {
+        type: GameRoomWs.audioMixUpdate,
         payload: { entries: [{ ...rebound }] },
       })
     }
@@ -1018,6 +1150,9 @@ export async function handleJoinRoom(
   
   if (isMafiaRoom) {
     sendMafiaSnapshotToSocket(socket, room, peer)
+  }
+  if (isGameRoom) {
+    sendGameRoomSnapshotToSocket(socket, room, peer)
   }
 }
 
@@ -3509,4 +3644,649 @@ export function handleDisconnect(socket: WsSocket, deps: SignalingDeps): void {
     return
   }
   removePeerFromNetwork(peer, deps)
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Generic game-room handlers (Phase 3A)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Parallel to the Mafia handler suite above. Each function below has a Mafia
+// counterpart with byte-equivalent semantics except for:
+//   - no role assignment (`gameroom:reshuffle` carries only `order`)
+//   - no `nightActions`/`clearRoles`/`oldMafiaMode` in players-update
+//   - no Mafia mode toggle, no background galleries (those handlers have no
+//     generic equivalent and are deliberately excluded)
+//
+// Mafia handlers are NEVER called from this section. The only shared surface
+// is `Peer` (with the new `gameRoomSessionId` field) and pure helpers
+// (`broadcastPeerOutboundVideoPaused`, `broadcastPeerEffectiveAudioMuted`,
+// `pauseAllPeerVideoProducers`, `pauseAllPeerAudioProducers`,
+// `broadcastServerMessageToRoom`, `sendServerMessage`).
+
+function broadcastGameRoomHostUpdated(room: Room): void {
+  broadcastServerMessageToRoom(room, {
+    type: GameRoomWs.hostUpdated,
+    payload: {
+      hostPeerId: room.getGameRoomHostPeerId(),
+      hostUserId: room.getGameRoomHostUserId(),
+      hostSessionId: room.getGameRoomHostSessionId(),
+    },
+  })
+}
+
+function isGameRoomHostPeer(room: Room, peer: Peer): boolean {
+  const hostUserId = room.getGameRoomHostUserId()
+  const hostSessionId = room.getGameRoomHostSessionId()
+  const hostPeerId = room.getGameRoomHostPeerId()
+  return (
+    hostUserId != null &&
+    hostSessionId != null &&
+    hostPeerId != null &&
+    peer.userId.length > 0 &&
+    peer.gameRoomSessionId.length > 0 &&
+    peer.userId === hostUserId &&
+    peer.gameRoomSessionId === hostSessionId &&
+    peer.id === hostPeerId
+  )
+}
+
+function resolveGameRoomPeerAndRoom(
+  socket: WsSocket,
+  deps: SignalingDeps,
+): { peer: Peer; room: Room } | null {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) return null
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) return null
+  if (!isGameRoomId(room.id)) return null
+  return { peer, room }
+}
+
+function broadcastGameRoomQueueUpdate(room: Room): void {
+  broadcastServerMessageToRoom(room, {
+    type: GameRoomWs.queueUpdate,
+    payload: { speakingQueue: room.getGameRoomSpeakingQueue() },
+  })
+}
+
+function broadcastGameRoomReshuffle(room: Room, payload: { order: string[] }): void {
+  broadcastServerMessageToRoom(room, { type: GameRoomWs.reshuffle, payload })
+}
+
+function broadcastGameRoomPlayersUpdate(
+  room: Room,
+  payload: { order: string[]; speakingQueue: number[] },
+): void {
+  broadcastServerMessageToRoom(room, { type: GameRoomWs.playersUpdate, payload })
+}
+
+function broadcastGameRoomPlayerKick(room: Room, payload: { peerId: string }): void {
+  broadcastServerMessageToRoom(room, { type: GameRoomWs.playerKick, payload })
+}
+
+function broadcastGameRoomPlayerRevive(room: Room, payload: { peerId: string }): void {
+  broadcastServerMessageToRoom(room, { type: GameRoomWs.playerRevive, payload })
+}
+
+function broadcastGameRoomForceCameraOff(room: Room, payload: { peerId: string }): void {
+  broadcastServerMessageToRoom(room, { type: GameRoomWs.forceCameraOff, payload })
+}
+
+function broadcastGameRoomForceMuteAll(room: Room, payload: { muted?: boolean }): void {
+  broadcastServerMessageToRoom(room, { type: GameRoomWs.forceMuteAll, payload })
+}
+
+function broadcastGameRoomForcePeerMic(room: Room, payload: { peerId: string; muted: boolean }): void {
+  broadcastServerMessageToRoom(room, { type: GameRoomWs.forcePeerMic, payload })
+}
+
+/**
+ * Mirror of {@link sendMafiaSnapshotToSocket} for `gameroom:<base>` rooms.
+ * Replays the generic state block to the requesting socket only. Read-only
+ * with respect to `room` state except for the idempotent expired-timer
+ * cleanup (mirrors the Mafia equivalent).
+ *
+ * Generic snapshot intentionally omits: mode-update, settings-update,
+ * page-background-settings (Mafia-only surfaces).
+ */
+function sendGameRoomSnapshotToSocket(socket: WsSocket, room: Room, peer: Peer): void {
+  sendServerMessage(socket, {
+    type: GameRoomWs.hostUpdated,
+    payload: {
+      hostPeerId: room.getGameRoomHostPeerId(),
+      hostUserId: room.getGameRoomHostUserId(),
+      hostSessionId: room.getGameRoomHostSessionId(),
+    },
+  })
+  sendServerMessage(socket, {
+    type: GameRoomWs.queueUpdate,
+    payload: { speakingQueue: room.getGameRoomSpeakingQueue() },
+  })
+  sendServerMessage(socket, {
+    type: GameRoomWs.playerLifeState,
+    payload: { states: room.getGameRoomPlayerLifeStateSnapshot() },
+  })
+  sendServerMessage(socket, {
+    type: GameRoomWs.forceMuteAll,
+    payload: { muted: room.isGameRoomForceMuteAllActive() },
+  })
+  // Same belt-and-suspenders as the Mafia snapshot path: re-emit effective
+  // mute and outbound-video-paused per other peer so a late joiner / OBS
+  // catches up byte-identically without waiting for a delta.
+  for (const other of room.getPeers()) {
+    if (other.id === peer.id) continue
+    const effectiveMuted = other.audioMuted || other.forcedAudioMuted
+    if (!effectiveMuted) continue
+    sendServerMessage(socket, {
+      type: 'peer-audio-muted',
+      payload: { peerId: other.id, muted: true },
+    })
+  }
+  for (const other of room.getPeers()) {
+    if (other.id === peer.id) continue
+    if (!other.forcedCameraOff) continue
+    sendServerMessage(socket, {
+      type: 'peer-outbound-video-paused',
+      payload: { peerId: other.id, paused: true },
+    })
+  }
+  const gt = room.getGameRoomTimer()
+  if (gt != null) {
+    const rem = gt.duration - (Date.now() - gt.startedAt)
+    if (rem > 0) {
+      sendServerMessage(socket, { type: GameRoomWs.timerStart, payload: { ...gt, isRunning: true } })
+    } else {
+      room.setGameRoomTimer(null)
+    }
+  }
+  const reshuffleSnap = room.getGameRoomReshuffleSnapshotIfFresh()
+  if (reshuffleSnap != null) {
+    sendServerMessage(socket, { type: GameRoomWs.reshuffle, payload: reshuffleSnap })
+  }
+  const playersUpdateSnap = room.getGameRoomPlayersUpdateSnapshotIfFresh()
+  if (playersUpdateSnap != null) {
+    sendServerMessage(socket, { type: GameRoomWs.playersUpdate, payload: playersUpdateSnap })
+  }
+  const nicks = room.getGameRoomNicknamesSnapshot()
+  for (const [peerId, displayName] of Object.entries(nicks)) {
+    sendServerMessage(socket, { type: GameRoomWs.playerNicknameUpdate, payload: { peerId, displayName } })
+  }
+  const audioMixSnap = room.getGameRoomAudioMixSnapshot()
+  if (audioMixSnap.length > 0) {
+    sendServerMessage(socket, {
+      type: GameRoomWs.audioMixUpdate,
+      payload: { entries: audioMixSnap },
+    })
+  }
+}
+
+export function handleGameRoomRequestSnapshot(socket: WsSocket, deps: SignalingDeps): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) return
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) return
+  if (!isGameRoomId(room.id)) return
+  sendGameRoomSnapshotToSocket(socket, room, peer)
+}
+
+export function handleGameRoomClaimHost(
+  socket: WsSocket,
+  payload: { sessionId?: string } | null | undefined,
+  deps: SignalingDeps,
+): void {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) {
+    return
+  }
+  const { peer, room } = rp
+  if (peer.userId.length < 1) {
+    return
+  }
+  const sessionId = sanitizeSessionId(payload?.sessionId)
+  if (sessionId.length < 1) {
+    return
+  }
+  peer.gameRoomSessionId = sessionId
+  const current = room.getGameRoomHostUserId()
+  if (current === peer.userId) {
+    const currentSession = room.getGameRoomHostSessionId()
+    const currentPeerId = room.getGameRoomHostPeerId()
+    const currentPeerOnline = currentPeerId != null && room.getPeer(currentPeerId) != null
+    if (currentSession == null || currentPeerId == null || !currentPeerOnline || currentPeerId === peer.id) {
+      if (currentSession != null && currentSession !== sessionId) {
+        return
+      }
+      room.setGameRoomHostSessionId(sessionId)
+      room.setGameRoomHostPeerId(peer.id)
+      setGameRoomOwnerUserId(room.id, peer.userId)
+      broadcastGameRoomHostUpdated(room)
+    }
+    return
+  }
+  if (current != null) {
+    return
+  }
+  const ownerUserId = getGameRoomOwnerUserId(room.id)
+  if (ownerUserId != null && ownerUserId !== peer.userId) {
+    return
+  }
+  room.setGameRoomHostUserId(peer.userId)
+  room.setGameRoomHostSessionId(sessionId)
+  room.setGameRoomHostPeerId(peer.id)
+  setGameRoomOwnerUserId(room.id, peer.userId)
+  broadcastGameRoomHostUpdated(room)
+}
+
+export function handleGameRoomTransferHost(
+  socket: WsSocket,
+  payload: { userId: string },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) {
+    return
+  }
+  const { peer, room } = rp
+  if (!isGameRoomHostPeer(room, peer)) {
+    return
+  }
+  const nextUserId = sanitizeUserId(payload.userId)
+  if (nextUserId.length < 1) {
+    return
+  }
+  const candidatePresent = room.getPeers().some((p) => p.userId === nextUserId)
+  if (!candidatePresent) {
+    return
+  }
+  room.setGameRoomHostUserId(nextUserId)
+  const nextSessionId = room.getFirstGameRoomSessionIdForUser(nextUserId)
+  room.setGameRoomHostSessionId(nextSessionId)
+  room.setGameRoomHostPeerId(room.getFirstGameRoomPeerIdForUserSession(nextUserId, nextSessionId))
+  setGameRoomOwnerUserId(room.id, nextUserId)
+  broadcastGameRoomHostUpdated(room)
+}
+
+export function handleGameRoomQueueUpdate(
+  socket: WsSocket,
+  payload: { speakingQueue: unknown } | null | undefined,
+  deps: SignalingDeps,
+): void {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) {
+    return
+  }
+  const { peer, room } = rp
+  if (!isGameRoomHostPeer(room, peer)) {
+    return
+  }
+  const list = (payload as { speakingQueue?: unknown } | null | undefined)?.speakingQueue
+  const maxSeat = room.getPeers().length > 0 ? room.getPeers().length : GAME_ROOM_MAX_SEAT
+  const sanitized = sanitizeGameRoomSpeakingQueueList(list, maxSeat)
+  room.setGameRoomSpeakingQueue(sanitized)
+  broadcastGameRoomQueueUpdate(room)
+}
+
+/**
+ * Generic reshuffle: order-only. Mirrors the Mafia reshuffle's media side
+ * effects (clear life-states, drop per-peer kill enforcement, preserve
+ * room-wide force-mute-all) but contains no role validation, no role
+ * payload, no role storage.
+ */
+export async function handleGameRoomReshuffle(
+  socket: WsSocket,
+  payload: { order: string[] },
+  deps: SignalingDeps,
+): Promise<void> {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) {
+    return
+  }
+  const { peer, room } = rp
+  if (!isGameRoomHostPeer(room, peer)) {
+    return
+  }
+  const peers = room.getPeers()
+  if (peers.length < 1) {
+    return
+  }
+  const roomIds = new Set(peers.map((p) => p.id))
+  const { order } = payload
+  if (!Array.isArray(order) || order.length < 1 || order.length > roomIds.size) {
+    return
+  }
+  const used = new Set<string>()
+  for (const peerId of order) {
+    if (!roomIds.has(peerId) || used.has(peerId)) {
+      return
+    }
+    used.add(peerId)
+  }
+  room.clearGameRoomPlayerLifeStates()
+
+  const previouslyForcedCameraOff = room.getGameRoomForcedCameraOffPeerIds()
+  const previouslyForcedMicMuted = room.getGameRoomForcedMicMutedPeerIds()
+  room.clearAllGameRoomPerPeerForceFlags()
+
+  for (const peerId of previouslyForcedCameraOff) {
+    const target = room.getPeer(peerId)
+    if (!target) continue
+    target.forcedCameraOff = false
+  }
+  for (const peerId of previouslyForcedMicMuted) {
+    const target = room.getPeer(peerId)
+    if (!target) continue
+    target.forcedAudioMuted = false
+  }
+  // Generic reshuffle preserves the room-wide force-mute-all toggle (same as
+  // Mafia): if active, every non-host must remain forced-muted so a new
+  // round does not bypass the host's silence.
+  if (room.isGameRoomForceMuteAllActive()) {
+    const hostPeerId = room.getGameRoomHostPeerId()
+    for (const target of room.getPeers()) {
+      if (target.id === hostPeerId) continue
+      target.forcedAudioMuted = true
+    }
+  }
+  room.setGameRoomReshuffleSnapshot({ order: [...order] })
+  broadcastGameRoomReshuffle(room, { order: [...order] })
+  // Notify peers life-state was cleared (parity with Mafia: clients re-render
+  // dead overlays from the snapshot, not from a derived store).
+  broadcastServerMessageToRoom(room, {
+    type: GameRoomWs.playerLifeState,
+    payload: { states: room.getGameRoomPlayerLifeStateSnapshot() },
+  })
+}
+
+export function handleGameRoomPlayersUpdate(
+  socket: WsSocket,
+  payload: { order: string[]; speakingQueue: number[] },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) {
+    return
+  }
+  const { peer, room } = rp
+  if (!isGameRoomHostPeer(room, peer)) {
+    return
+  }
+  const peers = room.getPeers()
+  const roomIds = new Set(peers.map((p) => p.id))
+  const order = Array.isArray(payload.order) ? payload.order : []
+  if (order.length < 1 || order.length > roomIds.size) {
+    return
+  }
+  const used = new Set<string>()
+  for (const peerId of order) {
+    if (!roomIds.has(peerId) || used.has(peerId)) {
+      return
+    }
+    used.add(peerId)
+  }
+  const maxSeat = order.length > 0 ? order.length : GAME_ROOM_MAX_SEAT
+  const sanitizedQueue = sanitizeGameRoomSpeakingQueueList(payload.speakingQueue, maxSeat)
+  const snapshot = { order: [...order], speakingQueue: sanitizedQueue }
+  room.setGameRoomPlayersUpdateSnapshot(snapshot)
+  room.setGameRoomSpeakingQueue(sanitizedQueue)
+  broadcastGameRoomPlayersUpdate(room, snapshot)
+}
+
+export function handleGameRoomPlayerNameUpdate(
+  socket: WsSocket,
+  payload: { targetPeerId: string; displayName: string },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isGameRoomHostPeer(room, peer)) return
+  const targetId = typeof payload.targetPeerId === 'string' ? payload.targetPeerId.trim() : ''
+  if (!targetId) return
+  const target = room.getPeer(targetId)
+  if (!target) return
+  const incoming = typeof payload.displayName === 'string' ? payload.displayName.trim() : ''
+  if (incoming.length < 1) {
+    room.setGameRoomNickname(targetId, null)
+    broadcastServerMessageToRoom(room, {
+      type: GameRoomWs.playerNicknameUpdate,
+      payload: { peerId: targetId, displayName: '' },
+    })
+    return
+  }
+  const sanitized = sanitizeDisplayName(incoming, targetId)
+  room.setGameRoomNickname(targetId, sanitized)
+  broadcastServerMessageToRoom(room, {
+    type: GameRoomWs.playerNicknameUpdate,
+    payload: { peerId: targetId, displayName: sanitized },
+  })
+}
+
+export function handleGameRoomAudioMixUpdate(
+  socket: WsSocket,
+  payload: { entries: ReadonlyArray<{ peerId: string; userId?: string | null; volume: number; muted: boolean }> },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isGameRoomHostPeer(room, peer)) return
+  const applied = room.applyGameRoomAudioMixEntries(payload.entries)
+  if (applied.length < 1) return
+  broadcastServerMessageToRoom(room, {
+    type: GameRoomWs.audioMixUpdate,
+    payload: { entries: applied },
+  })
+}
+
+export function handleGameRoomTimerStart(
+  socket: WsSocket,
+  payload: { startedAt: number; duration: number; isRunning?: boolean },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isGameRoomHostPeer(room, peer)) return
+  const { startedAt, duration } = payload
+  const serverNow = Date.now()
+  if (startedAt > serverNow + 60_000) return
+  if (startedAt < serverNow - 120_000) return
+  const elapsed = serverNow - startedAt
+  if (elapsed >= duration) return
+  room.setGameRoomTimer({ startedAt, duration })
+  broadcastServerMessageToRoom(room, {
+    type: GameRoomWs.timerStart,
+    payload: { startedAt, duration, isRunning: true },
+  })
+}
+
+export function handleGameRoomTimerStop(socket: WsSocket, deps: SignalingDeps): void {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isGameRoomHostPeer(room, peer)) return
+  room.setGameRoomTimer(null)
+  broadcastServerMessageToRoom(room, { type: GameRoomWs.timerStop, payload: {} })
+}
+
+export async function handleGameRoomPlayerKick(
+  socket: WsSocket,
+  payload: { peerId: string },
+  deps: SignalingDeps,
+): Promise<void> {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isGameRoomHostPeer(room, peer)) return
+  const targetId = payload.peerId
+  if (typeof targetId !== 'string' || targetId.length < 1) return
+  if (targetId === peer.id) return
+  const roomIds = new Set(room.getPeers().map((p) => p.id))
+  if (!roomIds.has(targetId)) return
+
+  const lifeStates = room.getGameRoomPlayerLifeStateSnapshot()
+  if (lifeStates[targetId] === 'dead') return
+
+  room.setGameRoomPlayerLifeState(targetId, 'dead')
+  broadcastGameRoomPlayerKick(room, { peerId: targetId })
+
+  const target = room.getPeer(targetId)
+  if (!target) return
+
+  if (!target.forcedCameraOff) {
+    target.forcedCameraOff = true
+    room.setGameRoomPeerForcedCameraOff(targetId, true)
+    await pauseAllPeerVideoProducers(target, 'gameroom:player-kick')
+    broadcastPeerOutboundVideoPaused(room, target.id, true)
+  } else if (!room.isGameRoomPeerForcedCameraOff(targetId)) {
+    room.setGameRoomPeerForcedCameraOff(targetId, true)
+  }
+  room.setGameRoomUserForcedCameraOff(target.userId, true)
+
+  if (!target.forcedAudioMuted) {
+    target.forcedAudioMuted = true
+    room.setGameRoomPeerForcedMicMuted(targetId, true)
+    await pauseAllPeerAudioProducers(target, 'gameroom:player-kick')
+    broadcastPeerEffectiveAudioMuted(room, target)
+  } else if (!room.isGameRoomPeerForcedMicMuted(targetId)) {
+    room.setGameRoomPeerForcedMicMuted(targetId, true)
+  }
+  room.setGameRoomUserForcedMicMuted(target.userId, true)
+
+  broadcastGameRoomForceCameraOff(room, { peerId: targetId })
+  broadcastGameRoomForcePeerMic(room, { peerId: targetId, muted: true })
+}
+
+export async function handleGameRoomPlayerRevive(
+  socket: WsSocket,
+  payload: { peerId: string },
+  deps: SignalingDeps,
+): Promise<void> {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isGameRoomHostPeer(room, peer)) return
+  const targetId = payload.peerId
+  if (typeof targetId !== 'string' || targetId.length < 1) return
+  if (targetId === peer.id) return
+
+  const lifeStates = room.getGameRoomPlayerLifeStateSnapshot()
+  if (lifeStates[targetId] !== 'dead') return
+
+  room.setGameRoomPlayerLifeState(targetId, 'ghost')
+  broadcastGameRoomPlayerRevive(room, { peerId: targetId })
+
+  const target = room.getPeer(targetId)
+  if (!target) return
+
+  if (target.forcedCameraOff) {
+    target.forcedCameraOff = false
+  }
+  room.setGameRoomPeerForcedCameraOff(targetId, false)
+  room.clearGameRoomForceStateForUser(target.userId)
+
+  if (target.forcedAudioMuted) {
+    target.forcedAudioMuted = false
+  }
+  room.setGameRoomPeerForcedMicMuted(targetId, false)
+  broadcastPeerEffectiveAudioMuted(room, target)
+  broadcastGameRoomForcePeerMic(room, { peerId: targetId, muted: false })
+}
+
+export async function handleGameRoomForceCameraOff(
+  socket: WsSocket,
+  payload: { peerId: string; paused?: boolean },
+  deps: SignalingDeps,
+): Promise<void> {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isGameRoomHostPeer(room, peer)) return
+  const targetId = payload.peerId
+  if (typeof targetId !== 'string' || targetId.length < 1 || targetId === peer.id) return
+  const target = room.getPeer(targetId)
+  if (!target) return
+
+  const paused = payload.paused !== false
+
+  target.forcedCameraOff = paused
+  room.setGameRoomPeerForcedCameraOff(targetId, paused)
+  room.setGameRoomUserForcedCameraOff(target.userId, paused)
+  for (const p of target.getProducers()) {
+    if (p.kind !== 'video' || p.closed) continue
+    try {
+      if (paused) {
+        if (!p.paused) {
+          await p.pause()
+        }
+      } else if (p.paused) {
+        await p.resume()
+      }
+    } catch (e) {
+      console.warn('[signaling] gameroom:force-camera-off pause/resume failed', {
+        peerId: target.id,
+        producerId: p.id,
+      }, e)
+    }
+  }
+
+  const videoMsg: ServerMessage = {
+    type: 'peer-outbound-video-paused',
+    payload: { peerId: target.id, paused },
+  }
+  for (const observer of room.getPeers()) {
+    observer.sendJson(videoMsg)
+  }
+
+  broadcastGameRoomForceCameraOff(room, { peerId: targetId })
+}
+
+export async function handleGameRoomForceMuteAll(
+  socket: WsSocket,
+  payload: { muted?: boolean },
+  deps: SignalingDeps,
+): Promise<void> {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer: hostPeer, room } = rp
+  if (!isGameRoomHostPeer(room, hostPeer)) return
+  const muted = payload.muted !== false
+
+  room.setGameRoomForceMuteAllActive(muted)
+
+  for (const target of room.getPeers()) {
+    if (target.id === hostPeer.id) continue
+    // Soft mute (same shape as Mafia equivalent): write `audioMuted` so a
+    // player can self-unmute through the normal `set-audio-muted: false`
+    // path. Host UI derives the "mute all" button state from
+    // `gameRoomForceMuteAllActive && everyNonHostEffectivelyMuted`.
+    target.audioMuted = muted
+    for (const p of target.getProducers()) {
+      if (p.kind !== 'audio' || p.closed) continue
+      try {
+        if (muted) {
+          if (!p.paused) {
+            await p.pause()
+          }
+        } else if (p.paused && !target.audioMuted) {
+          await p.resume()
+        }
+      } catch (e) {
+        console.warn('[signaling] gameroom:force-mute-all pause/resume failed', {
+          peerId: target.id,
+          producerId: p.id,
+        }, e)
+      }
+    }
+    const effectiveMuted = target.audioMuted || target.forcedAudioMuted
+    const audioMsg: ServerMessage = {
+      type: 'peer-audio-muted',
+      payload: { peerId: target.id, muted: effectiveMuted },
+    }
+    for (const observer of room.getPeers()) {
+      observer.sendJson(audioMsg)
+    }
+  }
+
+  broadcastGameRoomForceMuteAll(room, { muted })
 }

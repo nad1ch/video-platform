@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { MafiaWs } from './mafiaWsProtocol'
+import { GameRoomWs } from './gameRoomWsProtocol'
 
 const mafiaRoleSchema = z.enum(['mafia', 'don', 'sheriff', 'doctor', 'civilian'])
 
@@ -344,6 +345,114 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
    */
   z.object({
     type: z.literal(MafiaWs.requestSnapshot),
+    payload: z.object({}).strict().optional(),
+  }),
+  // ─── Generic game-room (Phase 3A) ───────────────────────────────────────
+  // Mirrors the GENERIC subset of the Mafia schema above. No role
+  // assignment, no Mafia mode, no background galleries. Each entry parallels
+  // the Mafia variant with `MafiaWs.X` swapped for `GameRoomWs.X` and
+  // Mafia-specific fields removed.
+  z.object({
+    type: z.literal(GameRoomWs.claimHost),
+    payload: z.object({
+      sessionId: z.string().min(1).max(128).optional(),
+    }).optional(),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.transferHost),
+    payload: z.object({
+      userId: z.string().min(1).max(128),
+    }),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.queueUpdate),
+    payload: z.object({
+      speakingQueue: z.array(z.number().int().min(1).max(12)).max(24).refine((q) => q.length % 2 === 0, {
+        message: 'speakingQueue must be pair-encoded [by,target,...]',
+      }),
+    }),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.reshuffle),
+    payload: z.object({
+      // Generic reshuffle = order shuffle only. No `role` field — that is
+      // Mafia-specific and lives in `MafiaWs.reshuffle` above.
+      order: z.array(z.string().min(1)).min(1).max(12),
+    }),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.playersUpdate),
+    payload: z.object({
+      // Generic players-update = order + speaking queue only. No
+      // `nightActions` / `clearRoles` / `oldMafiaMode` — Mafia-only fields.
+      order: z.array(z.string().min(1)).min(1).max(12),
+      speakingQueue: z.array(z.number().int().min(1).max(12)).max(24).refine((q) => q.length % 2 === 0, {
+        message: 'speakingQueue must be pair-encoded [by,target,...]',
+      }),
+    }),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.playerNameUpdate),
+    payload: z.object({
+      targetPeerId: z.string().min(1),
+      displayName: z.string().max(64),
+    }),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.audioMixUpdate),
+    payload: z.object({
+      entries: z
+        .array(
+          z.object({
+            peerId: z.string().min(1).max(128),
+            userId: z.string().min(1).max(128).nullable().optional(),
+            volume: z.number().min(0).max(2),
+            muted: z.boolean(),
+          }).strict(),
+        )
+        .min(1)
+        .max(32),
+    }).strict(),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.timerStart),
+    payload: z.object({
+      startedAt: z.number().int(),
+      duration: z.number().int().min(30_000).max(7_200_000),
+      isRunning: z.boolean().optional(),
+    }),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.timerStop),
+    payload: z.object({}).strict(),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.playerKick),
+    payload: z.object({
+      peerId: z.string().min(1),
+    }),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.playerRevive),
+    payload: z.object({
+      peerId: z.string().min(1),
+    }),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.forceCameraOff),
+    payload: z.object({
+      peerId: z.string().min(1),
+      paused: z.boolean().optional(),
+    }),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.forceMuteAll),
+    payload: z.object({
+      muted: z.boolean().optional(),
+    }).strict(),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.requestSnapshot),
     payload: z.object({}).strict().optional(),
   }),
   z.object({

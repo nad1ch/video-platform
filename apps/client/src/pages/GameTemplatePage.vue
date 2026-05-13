@@ -2,42 +2,42 @@
 /**
  * GameTemplatePage — route component for `/app/game-template`.
  *
- * Fork of `pages/MafiaPage.vue` with the same layout and behaviour but a
- * fully separate component tree:
+ * Phase 3C: switched off the Mafia client stack. Now uses the generic
+ * GameRoom client layer end-to-end:
+ *   - `<GameTemplateCallPage>` (fork of CallPage, wired to GameRoomWs)
+ *   - `<GameTemplateCallAdapter>` (speaking-hint via `useGameRoomSpeakingHint`)
+ *   - `<GameTemplateOverlay>` (timer via `useGameTemplateGameStore`)
  *
- *   - mounts `<GameTemplateCallPage>` (fork of `<CallPage>`)
- *   - mounts `<GameTemplateCallAdapter>` (fork of `<MafiaCallAdapter>`)
- *   - mounts `<GameTemplateHostPanel>` (fork of `<MafiaHostPanel>`) for hosts
- *   - mounts `<GameTemplateOverlay>` (fork of `<MafiaOverlay>`)
+ * The Mafia-only `<GameTemplateHostPanel>` (role + night-action grid) was
+ * REMOVED in Phase 3C — the generic protocol has no roles or night
+ * actions. Host actions (mute-all, reshuffle, swap-mode toggle) and the
+ * speaking-queue HUD continue to mount from the CallPage fork's
+ * bottom-cluster, unchanged.
  *
- * The Mafia store (`useMafiaGameStore`), the `useMafiaViewMode` route helper,
- * and the call-core `useCallSessionStore` are reused on purpose — the
- * initial fork keeps the existing WS protocol / signaling room prefix so
- * the production backend continues to work end-to-end. A future server-
- * side step can introduce a generic `gameroom:` namespace.
- *
- * Class names rename from `mafia-page*` to `game-template-page*` so this
- * page's scoped CSS cannot collide with `MafiaPage.vue` once either side
- * starts diverging visually.
+ * View-mode detection is now `useGameRoomViewMode` (route name
+ * `'game-template'`); the previous Phase 2 widening of
+ * `mafiaStreamViewRoute` was reverted in this PR.
  */
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useCallSessionStore } from 'call-core'
 import GameTemplateCallPage from '@/components/game-template/GameTemplateCallPage.vue'
 import GameTemplateCallAdapter from '@/components/game-template/GameTemplateCallAdapter.vue'
-import GameTemplateHostPanel from '@/components/game-template/GameTemplateHostPanel.vue'
 import GameTemplateOverlay from '@/components/game-template/GameTemplateOverlay.vue'
-import { useMafiaViewMode } from '@/composables/mafiaStreamViewRoute'
-import { useMafiaGameStore } from '@/stores/mafiaGame'
+import { useGameRoomViewMode } from '@/composables/gameRoomStreamViewRoute'
+import { useGameTemplateGameStore } from '@/stores/gameTemplateGame'
 import { useAuth } from '@/composables/useAuth'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
-const { isViewMode } = useMafiaViewMode()
-const gameStore = useMafiaGameStore()
-const { isMafiaHost, oldMafiaMode } = storeToRefs(gameStore)
-const showHostTools = computed(() => !isViewMode.value && isMafiaHost.value)
-const showGameOverlay = computed(() => !oldMafiaMode.value || isMafiaHost.value)
+const { isViewMode } = useGameRoomViewMode()
+const gameStore = useGameTemplateGameStore()
+const { isGameRoomHost } = storeToRefs(gameStore)
+/**
+ * Generic timer overlay is always visible — there's no old/new Mafia
+ * mode equivalent to gate it on. View-mode tabs still see the chip.
+ */
+const showGameOverlay = computed(() => true)
 
 const { user } = useAuth()
 const callSession = useCallSessionStore()
@@ -49,7 +49,7 @@ const showSignalingSessionWarning = computed(
     inCall.value &&
     user.value != null &&
     signalingAuthUserId.value === null &&
-    !isMafiaHost.value,
+    !isGameRoomHost.value,
 )
 </script>
 
@@ -68,9 +68,8 @@ const showSignalingSessionWarning = computed(
     >
       {{ t('mafiaPage.signalingSessionMissing') }}
     </div>
-    <GameTemplateCallPage :mafia-stream-view="isViewMode" />
+    <GameTemplateCallPage :game-room-stream-view="isViewMode" />
     <GameTemplateCallAdapter />
-    <GameTemplateHostPanel v-if="showHostTools" />
     <GameTemplateOverlay v-if="showGameOverlay" :view-mode="isViewMode" />
   </div>
 </template>

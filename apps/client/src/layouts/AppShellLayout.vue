@@ -44,6 +44,7 @@ import type { AuthMode } from '@/types/authMode'
 import { normalizeDisplayName } from 'call-core'
 import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
 import { useMafiaGameStore } from '@/stores/mafiaGame'
+import { useGameTemplateGameStore } from '@/stores/gameTemplateGame'
 import type { BackgroundItem, MafiaBackgroundItem, MafiaEliminationBackground } from '@/utils/mafiaGameTypes'
 import mafiaHeaderCopyIcon from '@/assets/mafia/ui/header-copy.svg'
 import mafiaHeaderLogo from '@/assets/mafia/ui/header-logo.svg'
@@ -93,6 +94,14 @@ const {
   appHubPageBackgrounds,
   forcedPageBackgroundId: mafiaForcedPageBackgroundId,
 } = storeToRefs(mafiaGame)
+/**
+ * Phase 3C: parallel host detection for the Game Template generic stack.
+ * The generic store is fully independent of the Mafia store, so the user
+ * can be a host on `/app/game-template` while being a non-host on
+ * `/app/mafia` (and vice versa).
+ */
+const gameTemplateGame = useGameTemplateGameStore()
+const { isGameRoomHost: isCurrentGameTemplateHost } = storeToRefs(gameTemplateGame)
 const canEatFirstHost = computed(() => {
   return auth.user.value?.role === 'admin' || auth.user.value?.permissions?.includes('EAT_FIRST_OPERATOR') === true
 })
@@ -102,17 +111,18 @@ const isEatRoute = computed(() => route.path.startsWith('/app/eat'))
 const isHomeRoute = computed(() => route.name === 'home')
 const isCallRoute = computed(() => route.name === 'call')
 /**
- * `isMafiaRoute` was historically a literal `route.name === 'mafia'` check;
- * the Game Template fork introduces `/app/game-template` which mounts the
- * same Mafia-style page tree (host panel, OBS view mode, room chip, copy-
- * OBS button, old/new toggle, page-background popover). Widening this
- * computed lets the header chrome appear on both routes byte-identically.
- * Production Mafia behaviour is unchanged: when `route.name === 'mafia'`
- * the predicate still returns true. The Game Template route only adds a
- * second route name to the same OR.
+ * Phase 3C: `isMafiaRoute` reverted to STRICT `route.name === 'mafia'`.
+ * `/app/game-template` now has its own generic GameRoom stack — Mafia-
+ * specific surfaces (background galleries, old/new mode toggle, Mafia
+ * settings popover content) must NOT appear there. A separate
+ * `isGameTemplateRoute` predicate gates the surfaces that should appear
+ * on either route (room chip, logo, OBS copy button); a combined
+ * `isMafiaLikeShellRoute` is exposed for that shared chrome.
  */
-const isMafiaRoute = computed(
-  () => route.name === 'mafia' || route.name === 'game-template',
+const isMafiaRoute = computed(() => route.name === 'mafia')
+const isGameTemplateRoute = computed(() => route.name === 'game-template')
+const isMafiaLikeShellRoute = computed(
+  () => isMafiaRoute.value || isGameTemplateRoute.value,
 )
 const isCoinHubRoute = computed(() => route.name === 'coin-hub')
 const isNadrawRoute = computed(() => route.name === 'nadraw-show')
@@ -193,6 +203,7 @@ const appLandingHeaderBrand = computed(() =>
   isAdminRoute.value ||
   isCallRoute.value ||
   isMafiaRoute.value ||
+  isGameTemplateRoute.value ||
   isCoinHubRoute.value ||
   isNadrawRoute.value ||
   isBetaAccessRoute.value ||
@@ -303,8 +314,8 @@ watch(
 
 watch(() => route.fullPath, tryAutoOnboarding, { immediate: true })
 
-watch([isMafiaRoute, isEatFirstCallGameView], ([onMafia, eatCall]) => {
-  if (!onMafia && !eatCall) {
+watch([isMafiaLikeShellRoute, isEatFirstCallGameView], ([onMafiaLike, eatCall]) => {
+  if (!onMafiaLike && !eatCall) {
     mafiaSettingsOpen.value = false
   }
 })
@@ -342,7 +353,15 @@ onBeforeUnmount(() => {
 
 
 const isMafiaViewMode = computed(() => mafiaViewQueryIsView(route.query.mode))
-const hideMafiaObsHeaderControls = computed(() => isMafiaRoute.value && isMafiaViewMode.value)
+/**
+ * Phase 3C: widened to cover `/app/game-template?mode=view` too. The
+ * underlying `isMafiaViewMode` predicate is purely `route.query.mode === 'view'`,
+ * so the only change is the route gate. Mafia OBS view behaviour is
+ * unchanged when `route.name === 'mafia'`.
+ */
+const hideMafiaObsHeaderControls = computed(
+  () => isMafiaLikeShellRoute.value && isMafiaViewMode.value,
+)
 
 function mafiaQueryAsStringRecord(
   q: (typeof route)['query'],
@@ -367,6 +386,18 @@ const mafiaHeaderHasRoom = computed(() => {
 })
 
 const mafiaHeaderShowHostControls = computed(() => isMafiaRoute.value && isCurrentMafiaHost.value)
+/**
+ * Phase 3C: parallel host-controls predicate for the Game Template
+ * generic stack. Used to gate the OBS-copy button so it remains visible
+ * on `/app/game-template` when the user is the generic game-room host.
+ * The Mafia-only "old/new" mode toggle is intentionally NOT shared.
+ */
+const gameTemplateHeaderShowHostControls = computed(
+  () => isGameTemplateRoute.value && isCurrentGameTemplateHost.value,
+)
+const mafiaLikeHeaderShowHostControls = computed(
+  () => mafiaHeaderShowHostControls.value || gameTemplateHeaderShowHostControls.value,
+)
 const eatFirstHeaderStreamView = computed(() => eatFirstStreamViewFromRoute(route))
 const eatFirstHeaderShowHostControls = computed(
   () =>
@@ -874,10 +905,10 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
         :is-pro-active="isProActiveSubscription"
         :pro-link-to="proHeaderLinkTo"
         :pro-label="proHeaderLabel"
-        :logo-src="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderLogo : BRAND_LOGO_LIGHT_SVG"
-        :mafia-mode="isMafiaRoute || isEatFirstCallGameView"
+        :logo-src="isMafiaLikeShellRoute || isEatFirstCallGameView ? mafiaHeaderLogo : BRAND_LOGO_LIGHT_SVG"
+        :mafia-mode="isMafiaLikeShellRoute || isEatFirstCallGameView"
         :profile-to="appLandingProfileTo"
-        :room-center-mode="isCallRoute || isMafiaRoute || isEatFirstCallGameView"
+        :room-center-mode="isCallRoute || isMafiaLikeShellRoute || isEatFirstCallGameView"
         :show-help-button="isEatRoute && !isEatFirstCallGameView && Boolean(onboardingForRoute)"
         :show-coin="appLandingHeaderShowCoin"
         :show-auth="!hideMafiaObsHeaderControls"
@@ -1032,29 +1063,34 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
             </Teleport>
           </div>
         </template>
-        <template v-if="(isCallRoute || isMafiaRoute || isEatFirstCallGameView) && !hideMafiaObsHeaderControls" #center>
+        <template v-if="(isCallRoute || isMafiaLikeShellRoute || isEatFirstCallGameView) && !hideMafiaObsHeaderControls" #center>
           <div
             :id="CALL_ROOM_DROPDOWN_HOST_ID"
             class="app-shell-call-room-anchor"
-            :class="{ 'app-shell-call-room-anchor--mafia': isMafiaRoute || isEatFirstCallGameView }"
+            :class="{ 'app-shell-call-room-anchor--mafia': isMafiaLikeShellRoute || isEatFirstCallGameView }"
           >
             <button
               type="button"
               class="app-shell-call-join-room"
-              :class="{ 'app-shell-call-join-room--mafia': isMafiaRoute || isEatFirstCallGameView }"
+              :class="{ 'app-shell-call-join-room--mafia': isMafiaLikeShellRoute || isEatFirstCallGameView }"
               :aria-expanded="callRoomHeaderJoin.roomPopoverOpen"
               aria-haspopup="dialog"
               :aria-controls="CALL_ROOM_POPOVER_PANEL_ID"
-              :title="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : 'room'"
-              :aria-label="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : 'room'"
+              :title="isMafiaLikeShellRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : 'room'"
+              :aria-label="isMafiaLikeShellRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : 'room'"
               @click.stop="callRoomHeaderJoin.toggleRoomPopover()"
             >
-              {{ isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : 'room' }}
+              {{ isMafiaLikeShellRoute || isEatFirstCallGameView ? mafiaHeaderRoomLabel : 'room' }}
             </button>
           </div>
         </template>
-        <template v-if="mafiaHeaderShowHostControls || eatFirstHeaderShowHostControls" #actions-start>
+        <template v-if="mafiaLikeHeaderShowHostControls || eatFirstHeaderShowHostControls" #actions-start>
           <div v-if="mafiaHeaderShowHostControls" class="app-shell-mafia-host-controls">
+            <!--
+              Mafia-only `old / new` mode toggle. Phase 3C: stays strictly
+              gated on `mafiaHeaderShowHostControls`; the generic game-room
+              protocol has no mode toggle.
+            -->
             <button
               type="button"
               class="app-shell-mafia-toggle"
@@ -1066,19 +1102,26 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
             >
               <span>{{ mafiaHeaderOldMode ? 'old' : 'new' }}</span>
             </button>
-            <button
-              v-if="mafiaHeaderHasRoom"
-              type="button"
-              class="app-shell-mafia-copy"
-              :class="{ 'stream-nav__link--active': isMafiaViewMode }"
-              :title="mafiaHeaderObsCopyLabel"
-              :aria-label="mafiaHeaderObsCopyLabel"
-              @click="copyMafiaObsViewUrl"
-            >
-              <img class="app-shell-mafia-copy__icon" :src="mafiaHeaderCopyIcon" alt="" aria-hidden="true" />
-              <span>{{ mafiaHeaderObsCopyLabel }}</span>
-            </button>
           </div>
+          <!--
+            OBS-copy button: visible on both `/app/mafia` and
+            `/app/game-template` when the local user is host of that
+            namespace. Phase 3C lifted it out of the Mafia-only wrapper.
+            `copyMafiaObsViewUrl` already builds the correct URL per
+            `route.name === 'game-template' ? '/app/game-template' : '/app/mafia'`.
+          -->
+          <button
+            v-if="mafiaLikeHeaderShowHostControls && mafiaHeaderHasRoom"
+            type="button"
+            class="app-shell-mafia-copy"
+            :class="{ 'stream-nav__link--active': isMafiaViewMode }"
+            :title="mafiaHeaderObsCopyLabel"
+            :aria-label="mafiaHeaderObsCopyLabel"
+            @click="copyMafiaObsViewUrl"
+          >
+            <img class="app-shell-mafia-copy__icon" :src="mafiaHeaderCopyIcon" alt="" aria-hidden="true" />
+            <span>{{ mafiaHeaderObsCopyLabel }}</span>
+          </button>
           <button
             v-if="eatFirstHeaderShowHostControls && eatFirstHeaderHasGame"
             type="button"

@@ -13,7 +13,7 @@
  *
  * What changed vs CallPage.vue, intentionally and minimally:
  *   1. The route-name predicate is rewritten as `route.name === 'game-template'`.
- *      The local variable name `isMafiaRoute` is preserved everywhere so the
+ *      The local variable name `isGameRoomRoute` is preserved everywhere so the
  *      ~40 downstream branches keep their identity verbatim; the predicate
  *      is the only behavioural switch.
  *   2. `MafiaHostActionsBar` / `MafiaSpeakingQueueBar` mounts are swapped for
@@ -102,14 +102,14 @@ import {
   CALL_ROOM_POPOVER_PANEL_ID,
   useCallRoomHeaderJoinStore,
 } from '@/stores/callRoomHeaderJoin'
-import { useMafiaHostSignaling } from '@/composables/useMafiaHostSignaling'
-import { useMafiaCallHostUi } from '@/composables/useMafiaCallHostUi'
+import { useGameRoomHostSignaling } from '@/composables/useGameRoomHostSignaling'
+import { useGameRoomCallHostUi } from '@/composables/useGameRoomCallHostUi'
 import { useEatFirstCallSignaling } from '@/composables/useEatFirstCallSignaling'
 import {
-  mafiaBaseRoomIdFromSignaling,
-  mafiaSignalingRoomId,
-  MAFIA_SIGNALING_ROOM_PREFIX,
-} from '@/composables/useMafiaMediaRoom'
+  gameRoomBaseRoomIdFromSignaling,
+  gameRoomSignalingRoomId,
+  GAME_ROOM_SIGNALING_ROOM_PREFIX,
+} from '@/composables/useGameRoomMediaRoom'
 import {
   eatFirstBaseRoomIdFromSignaling,
   eatFirstSignalingRoomId,
@@ -129,13 +129,16 @@ import {
   pickPrimaryEatFirstJoinTokenForGame,
 } from '@/eat-first/utils/joinTokenStore.js'
 import { getOrCreateDeviceId } from '@/eat-first/utils/deviceId.js'
-import { useMafiaGameStore } from '@/stores/mafiaGame'
-import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
-import { mafiaEliminationAvatarKindForPeerId } from '@/utils/mafiaEliminationAvatarKind'
+import { useGameTemplateGameStore } from '@/stores/gameTemplateGame'
+import { useGameTemplatePlayersStore } from '@/stores/gameTemplatePlayers'
+// Phase 3C: `mafiaEliminationAvatarKindForPeerId` was dropped — the
+// Mafia-specific elimination avatar variant has no generic equivalent.
+// ParticipantTile receives `undefined` for `mafia-elimination-kind` on
+// the game-template route, which renders the default tile chrome.
 import { EAT_FIRST_OBS_URL_TOAST_EVENT } from '@/composables/eatFirstCallStreamView'
-import { MAFIA_OBS_URL_TOAST_EVENT, MAFIA_SETTINGS_TOAST_EVENT } from '@/composables/mafiaStreamViewRoute'
-import { MafiaWs } from '@/composables/mafiaWsProtocol'
-import { useMafiaAudioMixSignaling } from '@/composables/useMafiaAudioMixSignaling'
+import { GAME_ROOM_OBS_URL_TOAST_EVENT, GAME_ROOM_SETTINGS_TOAST_EVENT } from '@/composables/gameRoomStreamViewRoute'
+import { GameRoomWs } from '@/composables/gameRoomWsProtocol'
+import { useGameRoomAudioMixSignaling } from '@/composables/useGameRoomAudioMixSignaling'
 import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
 import { nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
 import {
@@ -156,9 +159,9 @@ const CALL_ROUTE_HTML_CLASS = 'sa-call-route'
 
 /**
  * GameTemplate fork: this file is only mounted on `/app/game-template`.
- * The local variable name `isMafiaRoute` is preserved verbatim from the
- * Mafia source of truth so every downstream `if (isMafiaRoute.value)` /
- * `isMafiaRoute: isMafiaRoute` composable wiring keeps its identity; the
+ * The local variable name `isGameRoomRoute` is preserved verbatim from the
+ * Mafia source of truth so every downstream `if (isGameRoomRoute.value)` /
+ * `isGameRoomRoute: isGameRoomRoute` composable wiring keeps its identity; the
  * predicate itself is route-name agnostic. The WS protocol and signaling
  * room prefix (`mafia:<base>`) are still shared with the production Mafia
  * backend — see this file's top-of-script docblock.
@@ -170,18 +173,18 @@ const isCallAppRoute = computed(
     route.name === 'game-template' ||
     route.name === 'eat',
 )
-const isMafiaRoute = computed(() => route.name === 'game-template')
+const isGameRoomRoute = computed(() => route.name === 'game-template')
 const isEatFirstRoute = computed(() => route.name === 'eat')
 
 const props = withDefaults(
   defineProps<{
-    mafiaStreamView?: boolean
+    gameRoomStreamView?: boolean
     eatFirstStreamView?: boolean
   }>(),
-  { mafiaStreamView: false, eatFirstStreamView: false },
+  { gameRoomStreamView: false, eatFirstStreamView: false },
 )
 
-const mafiaViewUi = computed(() => isMafiaRoute.value && props.mafiaStreamView)
+const gameRoomViewUi = computed(() => isGameRoomRoute.value && props.gameRoomStreamView)
 const eatFirstViewUi = computed(() => isEatFirstRoute.value && props.eatFirstStreamView)
 
 /**
@@ -189,7 +192,7 @@ const eatFirstViewUi = computed(() => isEatFirstRoute.value && props.eatFirstStr
  * (`wireCallMediaAfterRoomState` skips send transport for `viewer`). `/app/call` stays `participant`.
  */
 const callEngineRole = computed((): CallEngineRole =>
-  mafiaViewUi.value || eatFirstViewUi.value ? 'viewer' : 'participant',
+  gameRoomViewUi.value || eatFirstViewUi.value ? 'viewer' : 'participant',
 )
 
 watch(
@@ -274,7 +277,7 @@ const mediaDebugPanelEnabled = isMediaDebugEnabled()
  * normal participant.
  */
 function isOperatingAsObsViewSource(): boolean {
-  return mafiaViewUi.value || eatFirstViewUi.value
+  return gameRoomViewUi.value || eatFirstViewUi.value
 }
 
 const {
@@ -353,10 +356,10 @@ if (import.meta.env.DEV) {
     (role) => {
       callPageLog.info('[call-qa:role] callEngineRole', {
         role,
-        mafiaViewUi: mafiaViewUi.value,
+        gameRoomViewUi: gameRoomViewUi.value,
         eatFirstViewUi: eatFirstViewUi.value,
         routeName: route.name,
-        isMafiaRoute: isMafiaRoute.value,
+        isGameRoomRoute: isGameRoomRoute.value,
         isEatFirstRoute: isEatFirstRoute.value,
       })
     },
@@ -364,7 +367,7 @@ if (import.meta.env.DEV) {
   )
 }
 
-useMafiaHostSignaling(sendSignalingMessage, subscribeSignalingMessage, wsStatus)
+useGameRoomHostSignaling(sendSignalingMessage, subscribeSignalingMessage, wsStatus)
 
 // Diagnostics-only WS lifecycle counter. Reads the existing `wsStatus` ref;
 // no call-core change required. Records open/close/error counts and
@@ -405,8 +408,8 @@ onBeforeUnmount(offMediaDebugSignalingCounter)
 
 const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
 
-const MAFIA_FORCE_CAMERA_OFF_SIGNAL = MafiaWs.forceCameraOff
-const MAFIA_FORCE_MUTE_ALL_SIGNAL = MafiaWs.forceMuteAll
+const GAME_ROOM_FORCE_CAMERA_OFF_SIGNAL = GameRoomWs.forceCameraOff
+const GAME_ROOM_FORCE_MUTE_ALL_SIGNAL = GameRoomWs.forceMuteAll
 const EAT_FIRST_FORCE_MUTE_ALL_SIGNAL = EatFirstWs.forceMuteAll
 const EAT_FIRST_TRAIT_REVEAL_REQUEST_SIGNAL = EatFirstWs.traitRevealRequest
 const EAT_FIRST_TRAIT_REGENERATE_REQUEST_SIGNAL = EatFirstWs.traitRegenerateRequest
@@ -428,7 +431,7 @@ type EatFirstTraitKey =
   | 'fact'
   | 'baggage'
 
-function mafiaSignalPayload(data: unknown, type: string): Record<string, unknown> | null {
+function gameRoomSignalPayload(data: unknown, type: string): Record<string, unknown> | null {
   if (data == null || typeof data !== 'object') {
     return null
   }
@@ -439,24 +442,24 @@ function mafiaSignalPayload(data: unknown, type: string): Record<string, unknown
   return rec.payload as Record<string, unknown>
 }
 
-const offMafiaForceControls = subscribeSignalingMessage((data) => {
-  if (!isMafiaRoute.value) {
+const offGameRoomForceControls = subscribeSignalingMessage((data) => {
+  if (!isGameRoomRoute.value) {
     return
   }
-  const nickPayload = mafiaSignalPayload(data, MafiaWs.playerNicknameUpdate)
+  const nickPayload = gameRoomSignalPayload(data, GameRoomWs.playerNicknameUpdate)
   if (nickPayload != null) {
     const peerId = typeof nickPayload.peerId === 'string' ? nickPayload.peerId.trim() : ''
     if (!peerId) {
       return
     }
     const displayName = typeof nickPayload.displayName === 'string' ? nickPayload.displayName.trim().slice(0, 64) : ''
-    const next = { ...mafiaNicknameOverrideByPeerId.value }
+    const next = { ...nicknameOverrideByPeerId.value }
     if (!displayName) {
       delete next[peerId]
     } else {
       next[peerId] = displayName
     }
-    mafiaNicknameOverrideByPeerId.value = next
+    nicknameOverrideByPeerId.value = next
     // Ensure an older local-only rename doesn't shadow the Mafia-synced nickname.
     if (Object.prototype.hasOwnProperty.call(localTileDisplayOverrides.value, peerId)) {
       const cleaned = { ...localTileDisplayOverrides.value }
@@ -466,9 +469,9 @@ const offMafiaForceControls = subscribeSignalingMessage((data) => {
     }
     return
   }
-  const mutePayload = mafiaSignalPayload(data, MAFIA_FORCE_MUTE_ALL_SIGNAL)
+  const mutePayload = gameRoomSignalPayload(data, GAME_ROOM_FORCE_MUTE_ALL_SIGNAL)
   if (mutePayload != null) {
-    if (mafiaGameStore.isMafiaHost) {
+    if (gameStore.isGameRoomHost) {
       return
     }
     const muted = mutePayload.muted !== false
@@ -479,7 +482,7 @@ const offMafiaForceControls = subscribeSignalingMessage((data) => {
     }
     return
   }
-  const cameraPayload = mafiaSignalPayload(data, MAFIA_FORCE_CAMERA_OFF_SIGNAL)
+  const cameraPayload = gameRoomSignalPayload(data, GAME_ROOM_FORCE_CAMERA_OFF_SIGNAL)
   const peerId = cameraPayload?.peerId
   if (typeof peerId === 'string' && peerId === selfPeerId.value && camEnabled.value) {
     void toggleCam()
@@ -489,7 +492,7 @@ const offMafiaForceControls = subscribeSignalingMessage((data) => {
   // `toggleMic` action so the killed peer stops trying to talk into a
   // server-paused producer. `muted: false` is a UI hint clear only — we
   // do NOT auto-unmute the user; they unmute manually after revive.
-  const forcePeerMicPayload = mafiaSignalPayload(data, MafiaWs.forcePeerMic)
+  const forcePeerMicPayload = gameRoomSignalPayload(data, GameRoomWs.forcePeerMic)
   if (forcePeerMicPayload != null) {
     const targetPeerId = forcePeerMicPayload.peerId
     const muted = forcePeerMicPayload.muted === true
@@ -504,7 +507,7 @@ const offMafiaForceControls = subscribeSignalingMessage((data) => {
   }
 })
 
-onBeforeUnmount(offMafiaForceControls)
+onBeforeUnmount(offGameRoomForceControls)
 
 /**
  * Mafia P1 Bug 1+2: per-peer effective audio-muted tracking for the host's
@@ -514,10 +517,10 @@ onBeforeUnmount(offMafiaForceControls)
  * store's `peerEffectiveMutedByPeerId`, which `MafiaHostActionsBar`
  * reduces against `nonHostPeerIds` for the visual.
  *
- * Gated on `isMafiaRoute` so non-Mafia rooms never write to the Mafia store.
+ * Gated on `isGameRoomRoute` so non-Mafia rooms never write to the Mafia store.
  */
-const offMafiaPeerAudioMuted = subscribeSignalingMessage((data) => {
-  if (!isMafiaRoute.value) {
+const offGameRoomPeerAudioMuted = subscribeSignalingMessage((data) => {
+  if (!isGameRoomRoute.value) {
     return
   }
   if (data == null || typeof data !== 'object') {
@@ -538,7 +541,7 @@ const offMafiaPeerAudioMuted = subscribeSignalingMessage((data) => {
         snapshot[pid] = true
       }
     }
-    mafiaGameStore.replacePeerEffectiveMutedSnapshot(snapshot)
+    gameStore.replacePeerEffectiveMutedSnapshot(snapshot)
     return
   }
   if (rec.type === 'peer-audio-muted') {
@@ -547,7 +550,7 @@ const offMafiaPeerAudioMuted = subscribeSignalingMessage((data) => {
     const pid = (p as { peerId?: unknown }).peerId
     const muted = (p as { muted?: unknown }).muted
     if (typeof pid !== 'string' || pid.length === 0) return
-    mafiaGameStore.setPeerEffectiveMuted(pid, muted === true)
+    gameStore.setPeerEffectiveMuted(pid, muted === true)
     return
   }
   if (rec.type === 'peer-left') {
@@ -555,20 +558,20 @@ const offMafiaPeerAudioMuted = subscribeSignalingMessage((data) => {
     if (p == null || typeof p !== 'object') return
     const pid = (p as { peerId?: unknown }).peerId
     if (typeof pid !== 'string' || pid.length === 0) return
-    mafiaGameStore.clearPeerEffectiveMuted(pid)
+    gameStore.clearPeerEffectiveMuted(pid)
   }
 })
 
-onBeforeUnmount(offMafiaPeerAudioMuted)
+onBeforeUnmount(offGameRoomPeerAudioMuted)
 
 /**
  * Toggling Mafia `?mode=view` (header / router) flips `callEngineRole` only after a new wire; re-join
  * so OBS drops any existing send transport from a prior participant session in the same tab.
  */
 watch(
-  mafiaViewUi,
+  gameRoomViewUi,
   (v, oldV) => {
-    if (!isMafiaRoute.value) {
+    if (!isGameRoomRoute.value) {
       return
     }
     if (v === oldV) {
@@ -622,7 +625,7 @@ const displayNameUiByPeerId = computed(() =>
   }),
 )
 
-const mafiaNicknameOverrideByPeerId = shallowRef<Record<string, string>>({})
+const nicknameOverrideByPeerId = shallowRef<Record<string, string>>({})
 
 
 const localTileDisplayOverrides = shallowRef<Record<string, string>>(loadCallTileLocalDisplayOverrides())
@@ -634,8 +637,8 @@ function canEditTileDisplayName(peerId: string): boolean {
   }
   const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
   const isLocalTile = tiles.value.some((x) => x.peerId === id && x.isLocal)
-  if (isMafiaRoute.value) {
-    return mafiaGameStore.isMafiaHost || (selfId.length > 0 && id === selfId) || isLocalTile
+  if (isGameRoomRoute.value) {
+    return gameStore.isGameRoomHost || (selfId.length > 0 && id === selfId) || isLocalTile
   }
   return (selfId.length > 0 && id === selfId) || isLocalTile
 }
@@ -649,17 +652,17 @@ function onCommitLocalTileDisplayName(payload: { peerId: string; name: string | 
     return
   }
   const t = payload.name != null ? normalizeDisplayName(payload.name).slice(0, 64) : ''
-  if (isMafiaRoute.value) {
-    sendSignalingMessage({ type: MafiaWs.playerNameUpdate, payload: { targetPeerId: id, displayName: t } })
+  if (isGameRoomRoute.value) {
+    sendSignalingMessage({ type: GameRoomWs.playerNameUpdate, payload: { targetPeerId: id, displayName: t } })
     // Optimistic UI update: server will broadcast the same value (or clear) back.
     // Without this, the label snaps back to the old value until the WS roundtrip completes.
-    const next = { ...mafiaNicknameOverrideByPeerId.value }
+    const next = { ...nicknameOverrideByPeerId.value }
     if (!t) {
       delete next[id]
     } else {
       next[id] = t
     }
-    mafiaNicknameOverrideByPeerId.value = next
+    nicknameOverrideByPeerId.value = next
     // Mafia nickname overrides are server-authoritative; avoid a stale local override
     // shadowing the optimistic / server nickname.
     if (Object.prototype.hasOwnProperty.call(localTileDisplayOverrides.value, id)) {
@@ -686,8 +689,8 @@ function peerDisplayName(peerId: string): string {
   if (typeof o === 'string' && normalizeDisplayName(o)) {
     return normalizeDisplayName(o).slice(0, 64)
   }
-  if (isMafiaRoute.value) {
-    const n = mafiaNicknameOverrideByPeerId.value[peerId]
+  if (isGameRoomRoute.value) {
+    const n = nicknameOverrideByPeerId.value[peerId]
     if (typeof n === 'string' && normalizeDisplayName(n)) {
       return normalizeDisplayName(n).slice(0, 64)
     }
@@ -722,18 +725,18 @@ const remoteListenVolumeByPeer = new Map<string, (v: number) => void>()
 const remoteListenMutedByPeer = new Map<string, (v: boolean) => void>()
 
 /**
- * Deferred slot: assigned by `useMafiaAudioMixSignaling` further down the
- * setup script (it depends on `mafiaGameStore` which is initialized later).
+ * Deferred slot: assigned by `useGameRoomAudioMixSignaling` further down the
+ * setup script (it depends on `gameStore` which is initialized later).
  * Handlers below reference the slot lazily so the host's slider/mute toggle
  * also fans out a `mafia:audio-mix-update` to the room (OBS view applies it).
  * No-op for non-host or non-Mafia routes.
  */
-const mafiaAudioMixBroadcasterSlot: { broadcast: ((delta: { peerId: string; volume: number; muted: boolean }) => void) | null } = {
+const audioMixBroadcasterSlot: { broadcast: ((delta: { peerId: string; volume: number; muted: boolean }) => void) | null } = {
   broadcast: null,
 }
 
-function broadcastMafiaAudioMixDeltaForTile(peerId: string, volume: number, muted: boolean): void {
-  mafiaAudioMixBroadcasterSlot.broadcast?.({ peerId, volume, muted })
+function broadcastGameRoomAudioMixDeltaForTile(peerId: string, volume: number, muted: boolean): void {
+  audioMixBroadcasterSlot.broadcast?.({ peerId, volume, muted })
 }
 
 function readTileMutedForPeer(peerId: string): boolean {
@@ -754,7 +757,7 @@ function remoteListenVolumeHandler(peerId: string) {
       setRemoteListenVolume(peerId, v)
       // Read companion (muted) AFTER apply so the broadcast carries the
       // engine-resolved entry — `setRemoteListenVolume` does not change muted.
-      broadcastMafiaAudioMixDeltaForTile(peerId, readTileVolumeForPeer(peerId), readTileMutedForPeer(peerId))
+      broadcastGameRoomAudioMixDeltaForTile(peerId, readTileVolumeForPeer(peerId), readTileMutedForPeer(peerId))
     }
     remoteListenVolumeByPeer.set(peerId, h)
   }
@@ -768,7 +771,7 @@ function remoteListenMutedHandler(peerId: string) {
       setRemoteListenMuted(peerId, v)
       // Engine may bump volume from 0 → nz on unmute; reading after apply
       // mirrors what the host's UI now shows so OBS sees the same state.
-      broadcastMafiaAudioMixDeltaForTile(peerId, readTileVolumeForPeer(peerId), readTileMutedForPeer(peerId))
+      broadcastGameRoomAudioMixDeltaForTile(peerId, readTileVolumeForPeer(peerId), readTileMutedForPeer(peerId))
     }
     remoteListenMutedByPeer.set(peerId, h)
   }
@@ -1295,7 +1298,7 @@ if (typeof window !== 'undefined') {
   })
 }
 
-function onMafiaObsUrlCopiedToast(): void {
+function onGameRoomObsUrlCopiedToast(): void {
   const id = `mafia-obs-${Date.now()}`
   callToasts.value = [
     ...callToasts.value,
@@ -1320,7 +1323,7 @@ function onEatFirstObsUrlCopiedToast(): void {
   }, 4200)
 }
 
-function onMafiaSettingsToast(ev: Event): void {
+function onGameRoomSettingsToast(ev: Event): void {
   const text = ev instanceof CustomEvent && typeof ev.detail?.text === 'string'
     ? ev.detail.text
     : t('mafiaPage.backgroundUploadFailed')
@@ -1398,7 +1401,7 @@ watch(
     if (
       !session.inCall ||
       joining.value ||
-      mafiaViewUi.value ||
+      gameRoomViewUi.value ||
       eatFirstViewUi.value ||
       msgs.length === 0
     ) {
@@ -1488,35 +1491,35 @@ const callAuthReady = ref(false)
 
 const callRoomHeaderJoin = useCallRoomHeaderJoinStore()
 const { roomPopoverOpen } = storeToRefs(callRoomHeaderJoin)
-const mafiaPlayersStore = useMafiaPlayersStore()
-const mafiaGameStore = useMafiaGameStore()
+const playersStore = useGameTemplatePlayersStore()
+const gameStore = useGameTemplateGameStore()
 watch(
   joinUserId,
   (id) => {
-    mafiaGameStore.setLocalMafiaUserId(id ?? null)
+    gameStore.setLocalUserId(id ?? null)
   },
   { immediate: true },
 )
 
-const { mafiaHostPeerId: mafiaHostPeerIdRef, isMafiaHost: isMafiaHostRef } = storeToRefs(mafiaGameStore)
-const { broadcastMafiaAudioMixDelta } = useMafiaAudioMixSignaling({
+const { hostPeerId: hostPeerIdRef, isGameRoomHost: isGameRoomHostRef } = storeToRefs(gameStore)
+const { broadcastGameRoomAudioMixDelta } = useGameRoomAudioMixSignaling({
   sendSignalingMessage,
   subscribeSignalingMessage,
   wsStatus,
-  isMafiaRoute,
-  isViewMode: mafiaViewUi,
-  isMafiaHost: isMafiaHostRef,
-  hostPeerId: mafiaHostPeerIdRef,
+  isGameRoomRoute,
+  isViewMode: gameRoomViewUi,
+  isGameRoomHost: isGameRoomHostRef,
+  hostPeerId: hostPeerIdRef,
   setRemoteListenVolume,
   setRemoteListenMuted,
 })
-mafiaAudioMixBroadcasterSlot.broadcast = broadcastMafiaAudioMixDelta
+audioMixBroadcasterSlot.broadcast = broadcastGameRoomAudioMixDelta
 
 
-function displayCallOrMafiaRoomCode(): string {
+function displayCallOrGameRoomCode(): string {
   const raw = normalizeDisplayName(session.roomId) || 'demo'
-  if (isMafiaRoute.value) {
-    return mafiaBaseRoomIdFromSignaling(raw)
+  if (isGameRoomRoute.value) {
+    return gameRoomBaseRoomIdFromSignaling(raw)
   }
   if (isEatFirstRoute.value) {
     return eatFirstBaseRoomIdFromSignaling(raw)
@@ -1540,15 +1543,15 @@ function normalizeSessionRoomIdForStreamRoute(): void {
     }
     return
   }
-  if (isMafiaRoute.value) {
-    const desired = mafiaSignalingRoomId(mafiaBaseRoomIdFromSignaling(s))
+  if (isGameRoomRoute.value) {
+    const desired = gameRoomSignalingRoomId(gameRoomBaseRoomIdFromSignaling(s))
     if (s !== desired) {
       session.roomId = desired
     }
     return
   }
-  if (s.startsWith(MAFIA_SIGNALING_ROOM_PREFIX)) {
-    session.roomId = mafiaBaseRoomIdFromSignaling(s)
+  if (s.startsWith(GAME_ROOM_SIGNALING_ROOM_PREFIX)) {
+    session.roomId = gameRoomBaseRoomIdFromSignaling(s)
   }
   if (s.startsWith(EAT_FIRST_SIGNALING_ROOM_PREFIX)) {
     session.roomId = eatFirstBaseRoomIdFromSignaling(s)
@@ -1557,8 +1560,8 @@ function normalizeSessionRoomIdForStreamRoute(): void {
 
 async function switchToRoom(nextRaw: string, opts?: { fromRoute?: boolean }): Promise<void> {
   const base = normalizeDisplayName(nextRaw) || 'demo'
-  const signalingId = isMafiaRoute.value
-    ? mafiaSignalingRoomId(base)
+  const signalingId = isGameRoomRoute.value
+    ? gameRoomSignalingRoomId(base)
     : isEatFirstRoute.value
       ? eatFirstSignalingRoomId(base)
       : base
@@ -1640,7 +1643,7 @@ watch(
     const currentSignaling = normalizeDisplayName(session.roomId) || 'demo'
     const qSignaling =
       route.name === 'mafia' || route.name === 'game-template'
-        ? mafiaSignalingRoomId(q)
+        ? gameRoomSignalingRoomId(q)
         : route.name === 'eat'
           ? eatFirstSignalingRoomId(q)
           : q
@@ -1657,12 +1660,12 @@ watch(
 
 watch(roomPopoverOpen, (open) => {
   if (open) {
-    roomJoinDraft.value = displayCallOrMafiaRoomCode()
+    roomJoinDraft.value = displayCallOrGameRoomCode()
   }
 })
 
 async function copyRoomToClipboard(): Promise<void> {
-  const text = normalizeDisplayName(roomJoinDraft.value) || displayCallOrMafiaRoomCode()
+  const text = normalizeDisplayName(roomJoinDraft.value) || displayCallOrGameRoomCode()
   try {
     await navigator.clipboard.writeText(text)
   } catch {
@@ -1804,9 +1807,9 @@ watch(
       const hostId = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId : ''
       ids = sortPeerIdsHostLast(ids, hostId)
     }
-    if (isMafiaRoute.value) {
-      const explicitHostId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
-      const prevDisplayOrder = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
+    if (isGameRoomRoute.value) {
+      const explicitHostId = typeof gameStore.hostPeerId === 'string' ? gameStore.hostPeerId.trim() : ''
+      const prevDisplayOrder = gameStore.getDisplayNumberingOrder(tileOrder.value)
       const hostId = resolveHostPeerIdForGrid(explicitHostId, prevDisplayOrder)
       ids = sortPeerIdsHostLast(ids, hostId)
       tileOrder.value = ids
@@ -1846,30 +1849,30 @@ watch(
  */
 watch(
   () => [
-    isMafiaRoute.value,
-    mafiaGameStore.mafiaHostPeerId,
+    isGameRoomRoute.value,
+    gameStore.hostPeerId,
     tiles.value.map((t) => t.peerId).join('|'),
   ],
   () => {
-    if (!isMafiaRoute.value) {
-      mafiaGameStore.setNonHostPeerIds([])
+    if (!isGameRoomRoute.value) {
+      gameStore.setNonHostPeerIds([])
       return
     }
     // Pass every tile peerId; the store filters the host peer internally.
     // This keeps the membership stable when host changes via transfer.
-    mafiaGameStore.setNonHostPeerIds(tiles.value.map((t) => t.peerId))
+    gameStore.setNonHostPeerIds(tiles.value.map((t) => t.peerId))
   },
   { immediate: true, flush: 'post' },
 )
 
 
-const mafiaNumberByPeer = computed(() => {
-  if (!isMafiaRoute.value) {
+const seatNumberByPeer = computed(() => {
+  if (!isGameRoomRoute.value) {
     return new Map<string, number>()
   }
   const m = new Map<string, number>()
-  const order = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
-  const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
+  const order = gameStore.getDisplayNumberingOrder(tileOrder.value)
+  const explicitHostPeerId = typeof gameStore.hostPeerId === 'string' ? gameStore.hostPeerId.trim() : ''
   const hostPeerId = resolveHostPeerIdForGrid(explicitHostPeerId, order)
   const numbered = hostPeerId.length > 0 ? order.filter((id) => id !== hostPeerId) : order
   numbered.forEach((id, i) => {
@@ -1879,32 +1882,31 @@ const mafiaNumberByPeer = computed(() => {
 })
 
 /**
- * Mafia call-host UI behaviour — extracted into `useMafiaCallHostUi` (Phase 2).
+ * Generic game-room call-host UI behaviour (Phase 3C: switched from
+ * Mafia composable to `useGameRoomCallHostUi`).
  *
- * Owns the host-side handlers, the night-action/speaking seat-highlight
- * computeds, the speak-hint visibility ref + lifecycle, and the Mafia branch
- * of the tile-click router. CallPage's template binds the destructured names
- * unchanged, so no template edits are required.
+ * Owns the host-side handlers and the speaking-mode seat-highlight
+ * computed, plus the generic tile-click router (swap + speaking branches
+ * only — the Mafia night-action branch has no equivalent in the generic
+ * protocol and is intentionally absent).
  *
- * The Mafia OBS/host-claim flow, audio-mix host broadcast, and inbound
- * Mafia signaling continue to live in `useMafiaHostSignaling` and
- * `useMafiaAudioMixSignaling`; this composable is strictly the CallPage-level
- * host-UI surface.
+ * The OBS/host-claim flow, audio-mix host broadcast, and inbound
+ * `gameroom:*` signaling live in `useGameRoomHostSignaling` and
+ * `useGameRoomAudioMixSignaling`; this composable is strictly the
+ * CallPage-level host-UI surface.
  */
 const {
-  isMafiaHostNightActionSeat,
-  isMafiaHostSpeakingNominationUiSeat,
-  onMafiaToggleLifeFromTile,
-  onMafiaForceCameraOffFromTile,
-  onMafiaForceMuteAll,
-  onMafiaSetEliminationBackground,
-  handleMafiaHostTileClick,
-} = useMafiaCallHostUi({
-  isMafiaRoute,
-  mafiaViewUi,
+  isHostSpeakingNominationUiSeat,
+  onToggleLifeFromTile,
+  onForceCameraOffFromTile,
+  onForceMuteAll,
+  handleHostTileClick,
+} = useGameRoomCallHostUi({
+  isGameRoomRoute,
+  viewUi: gameRoomViewUi,
   selfPeerId,
-  mafiaGameStore,
-  mafiaNumberByPeer,
+  gameStore,
+  seatNumberByPeer,
   sendSignalingMessage,
   pushCallToast,
   t,
@@ -2120,9 +2122,9 @@ function onEatFirstPlayerUseActionCard(payload: { peerId: string }): void {
 
 const orderedTiles = computed(() => {
   const list = tiles.value.slice()
-  if (isMafiaRoute.value && list.length > 0) {
-    const base = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
-    const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
+  if (isGameRoomRoute.value && list.length > 0) {
+    const base = gameStore.getDisplayNumberingOrder(tileOrder.value)
+    const explicitHostPeerId = typeof gameStore.hostPeerId === 'string' ? gameStore.hostPeerId.trim() : ''
     const hostPidForGrid = resolveHostPeerIdForGrid(explicitHostPeerId, base)
     const order = hostPidForGrid.length > 0 ? pinHostPeerToEndOfOrder(base, hostPidForGrid) : base.slice()
 
@@ -2512,13 +2514,13 @@ const orderedGridRows = computed(() => {
   }
   const names = displayNameUiByPeerId.value
   const overrides = localTileDisplayOverrides.value
-  const mafiaNicknames = mafiaNicknameOverrideByPeerId.value
+  const mafiaNicknames = nicknameOverrideByPeerId.value
   return orderedTiles.value.map((tile) => {
     const ov = overrides[tile.peerId]
     if (typeof ov === 'string' && normalizeDisplayName(ov)) {
       return { tile, displayName: normalizeDisplayName(ov).slice(0, 64) }
     }
-    if (isMafiaRoute.value) {
+    if (isGameRoomRoute.value) {
       const n = mafiaNicknames[tile.peerId]
       if (typeof n === 'string' && normalizeDisplayName(n)) {
         return { tile, displayName: normalizeDisplayName(n).slice(0, 64) }
@@ -2572,12 +2574,12 @@ function isEatFirstHostSpeakingNominationSeat(seat: number | undefined): boolean
  * The EatFirst speaking-mode branch (host-only nomination toggle) remains
  * inline here because it reads `eatFirstShell` state owned by the EatFirst
  * domain in CallPage's setup. The Mafia branch (swap / speaking / night
- * action) is delegated to `useMafiaCallHostUi.handleMafiaHostTileClick`.
+ * action) is delegated to `useGameRoomCallHostUi.handleHostTileClick`.
  *
  * Behaviour preserved 1:1: same guards, same `ev.stopPropagation()`
  * semantics, same toast keys, same store dispatch order.
  */
-function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value)[number]): void {
+function onGameRoomHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value)[number]): void {
   if (isEatFirstRoute.value && !eatFirstViewUi.value && eatFirstShell.isEatFirstRoomHost) {
     if (!eatFirstShell.speakingMode) {
       return
@@ -2606,23 +2608,23 @@ function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value
     ev.stopPropagation()
     return
   }
-  handleMafiaHostTileClick(ev, row)
+  handleHostTileClick(ev, row)
 }
 
-function refreshMafiaPlayersState(): void {
-  if (!isMafiaRoute.value) {
-    mafiaPlayersStore.clearPlayerRowsForUi()
-    if (isEatFirstRoute.value) {
-      mafiaGameStore.prunePlayerOverlayStateToPeerIds(tiles.value.map((t) => t.peerId))
-    } else {
-      mafiaGameStore.clearWhenLeavingMafiaRoute()
-    }
+function refreshGameRoomPlayersState(): void {
+  if (!isGameRoomRoute.value) {
+    playersStore.clearPlayerRowsForUi()
+    // Phase 3C: the original Mafia branch also pruned `playerOverlayStateByPeerId`
+    // for Eat First rooms — that bridge belonged to the Mafia store and has
+    // no equivalent on the generic `useGameTemplateGameStore`. When the route
+    // is not game-template we simply clear our own state.
+    gameStore.clearWhenLeavingGameRoomRoute()
     return
   }
-  if (mafiaGameStore.isApplyingMafiaReshuffle) {
+  if (gameStore.isApplyingGameRoomReshuffle) {
     const engine = tileOrder.value
-    const order = mafiaGameStore.getDisplayNumberingOrder(engine)
-    const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
+    const order = gameStore.getDisplayNumberingOrder(engine)
+    const explicitHostPeerId = typeof gameStore.hostPeerId === 'string' ? gameStore.hostPeerId.trim() : ''
     const hostPeerId =
       explicitHostPeerId.length > 0
         ? explicitHostPeerId
@@ -2630,7 +2632,7 @@ function refreshMafiaPlayersState(): void {
           ? order[order.length - 1] ?? ''
           : ''
     const playersOnly = hostPeerId.length > 0 ? order.filter((peerId) => peerId !== hostPeerId) : order
-    mafiaPlayersStore.setPlayerRowsDisplay(
+    playersStore.setPlayerRowsDisplay(
       playersOnly.map((peerId, i) => ({
         peerId,
         number: i + 1,
@@ -2639,12 +2641,12 @@ function refreshMafiaPlayersState(): void {
     )
     return
   }
-  mafiaPlayersStore.syncWithPeers(session.roomId, tiles.value.map((t) => t.peerId))
+  playersStore.syncWithPeers(session.roomId, tiles.value.map((t) => t.peerId))
   const engine = tileOrder.value
-  mafiaGameStore.reconcileNumberingWithEngine(engine)
-  mafiaGameStore.pruneGameStateToPeers(engine)
-  const order = mafiaGameStore.getDisplayNumberingOrder(engine)
-  const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
+  gameStore.reconcileNumberingWithEngine(engine)
+  gameStore.pruneGameStateToPeers(engine)
+  const order = gameStore.getDisplayNumberingOrder(engine)
+  const explicitHostPeerId = typeof gameStore.hostPeerId === 'string' ? gameStore.hostPeerId.trim() : ''
   const hostPeerId =
     explicitHostPeerId.length > 0
       ? explicitHostPeerId
@@ -2652,12 +2654,13 @@ function refreshMafiaPlayersState(): void {
         ? order[order.length - 1] ?? ''
         : ''
   const seatCount = hostPeerId.length > 0 && order.includes(hostPeerId) ? order.length - 1 : order.length
-  mafiaGameStore.pruneNightActionsToMaxSeat(seatCount)
-  if (mafiaGameStore.isMafiaHost) {
-    mafiaGameStore.pruneSpeakingQueueToMaxSeat(seatCount)
+  // Phase 3C: `pruneNightActionsToMaxSeat` was Mafia-only (night-action
+  // role grid) — dropped because the generic protocol has no roles.
+  if (gameStore.isGameRoomHost) {
+    gameStore.pruneSpeakingQueueToMaxSeat(seatCount)
   }
   const playersOnly = hostPeerId.length > 0 ? order.filter((peerId) => peerId !== hostPeerId) : order
-  mafiaPlayersStore.setPlayerRowsDisplay(
+  playersStore.setPlayerRowsDisplay(
     playersOnly.map((peerId, i) => ({
       peerId,
       number: i + 1,
@@ -2667,62 +2670,55 @@ function refreshMafiaPlayersState(): void {
 }
 
 /**
- * Stable scalar key for `refreshMafiaPlayersState`. Replaces the previous
+ * Stable scalar key for `refreshGameRoomPlayersState`. Replaces the previous
  * `deep: true` watcher over `[tiles, orderedGridRows, nightActions, speakingQueue]`
  * which fired on every audio-level / tile-reorder / speaker-change tick (3-5/s
  * in active mafia discussion at 8-12 cameras) and re-ran the full reconcile
  * pass even when no peer-set / numbering / queue change had actually occurred.
  *
- * `refreshMafiaPlayersState` only consumes:
+ * `refreshGameRoomPlayersState` only consumes:
  *   - peerIds from `tiles.value` (set membership)
- *   - `mafiaGameStore.numberingKey` (engine ordering)
- *   - `mafiaGameStore.speakingQueue` (length / contents)
+ *   - `gameStore.numberingKey` (engine ordering)
+ *   - `gameStore.speakingQueue` (length / contents)
  *   - `isApplyingMafiaReshuffle` (branch selector)
- * It does NOT read `orderedGridRows.value` or `mafiaGameStore.nightActions`
+ * It does NOT read `orderedGridRows.value` or `gameStore.nightActions`
  * content; nightActions are pruned by max-seat which is derived from peer count.
  *
  * The function itself is idempotent so an extra run on an unrelated mafia state
  * change would only waste CPU, not produce a wrong result.
  */
-const mafiaPlayersWatcherKey = computed(() => {
-  if (!isMafiaRoute.value) {
+const playersWatcherKey = computed(() => {
+  if (!isGameRoomRoute.value) {
     return `off|${session.roomId}`
   }
   const peerIds: string[] = []
   for (const t of tiles.value) {
     peerIds.push(t.peerId)
   }
-  const queue = mafiaGameStore.speakingQueue.join(',')
+  const queue = gameStore.speakingQueue.join(',')
   return [
     'on',
     session.roomId,
     peerIds.join('|'),
-    mafiaGameStore.numberingKey,
+    gameStore.numberingKey,
     queue,
-    mafiaGameStore.isApplyingMafiaReshuffle ? '1' : '0',
+    gameStore.isApplyingGameRoomReshuffle ? '1' : '0',
   ].join('::')
 })
 
 watch(
-  mafiaPlayersWatcherKey,
+  playersWatcherKey,
   () => {
-    void refreshMafiaPlayersState()
+    void refreshGameRoomPlayersState()
   },
   { immediate: true },
 )
 
-watch(
-  () =>
-    [
-      isEatFirstRoute.value,
-      eatFirstShell.isEatFirstRoomHost,
-      eatFirstViewUi.value,
-    ] as const,
-  ([eat, host, view]) => {
-    mafiaGameStore.setEatFirstCallEliminationHost(eat && host && !view)
-  },
-  { immediate: true },
-)
+// Phase 3C: the Mafia<->EatFirst elimination-host binding was a
+// Mafia-store side-effect (`setEatFirstCallEliminationHost`) used to
+// let Eat First hosts share the Mafia kill flow. The generic
+// `useGameTemplateGameStore` has no such binding because the generic
+// protocol does not expose Eat First's host identity. Dropped.
 
 const gridStyle = computed(() => {
   const n = orderedTiles.value.length
@@ -2866,8 +2862,8 @@ onBeforeUnmount(() => {
   }
   remoteVideoPlaybackSuppressed.value = new Map()
   callRoomHeaderJoin.reset()
-  mafiaPlayersStore.reset()
-  mafiaGameStore.fullReset()
+  playersStore.reset()
+  gameStore.fullReset()
   // Leaving /call must teardown media; otherwise Pinia session stays inCall.
   leaveCall()
 })
@@ -2903,9 +2899,9 @@ onMounted(() => {
       orderedTiles,
     }
   }
-  window.addEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
+  window.addEventListener(GAME_ROOM_OBS_URL_TOAST_EVENT, onGameRoomObsUrlCopiedToast)
   window.addEventListener(EAT_FIRST_OBS_URL_TOAST_EVENT, onEatFirstObsUrlCopiedToast)
-  window.addEventListener(MAFIA_SETTINGS_TOAST_EVENT, onMafiaSettingsToast)
+  window.addEventListener(GAME_ROOM_SETTINGS_TOAST_EVENT, onGameRoomSettingsToast)
   // Always-on timer-drift probe — diagnostic only, no media side effects.
   // Surfaces OBS browser-source / hidden-tab throttling that would otherwise
   // silently break the StreamVideo currentTime stall watchdog and the
@@ -2921,7 +2917,7 @@ onMounted(() => {
   // Stamp env info ONCE at mount. Read live `documentVisibilityState`
   // is included by the reader, so no need to track it reactively.
   setMediaDebugEnvInfo({
-    isMafiaView: mafiaViewUi.value,
+    isMafiaView: gameRoomViewUi.value,
     isEatFirstView: eatFirstViewUi.value,
   })
   if (isMediaDebugEnabled()) {
@@ -2945,9 +2941,9 @@ onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
   window.removeEventListener('resize', syncChatPanelToViewport)
   stopChatPanelGesture()
-  window.removeEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
+  window.removeEventListener(GAME_ROOM_OBS_URL_TOAST_EVENT, onGameRoomObsUrlCopiedToast)
   window.removeEventListener(EAT_FIRST_OBS_URL_TOAST_EVENT, onEatFirstObsUrlCopiedToast)
-  window.removeEventListener(MAFIA_SETTINGS_TOAST_EVENT, onMafiaSettingsToast)
+  window.removeEventListener(GAME_ROOM_SETTINGS_TOAST_EVENT, onGameRoomSettingsToast)
   document.documentElement.classList.remove(CALL_ROUTE_HTML_CLASS)
   for (const id of [...setPeerVisibleHideTimerByPeer.keys()]) {
     cancelSetPeerVisibleHideTimer(id)
@@ -3008,8 +3004,8 @@ watch(joining, (j) => {
       <section
         class="call-page__active"
         :class="{
-          'call-page__active--with-dock': (session.inCall || joining) && !mafiaViewUi && !eatFirstViewUi,
-          'call-page__active--with-mafia-bottom': isMafiaRoute && (session.inCall || joining) && !mafiaViewUi,
+          'call-page__active--with-dock': (session.inCall || joining) && !gameRoomViewUi && !eatFirstViewUi,
+          'call-page__active--with-mafia-bottom': isGameRoomRoute && (session.inCall || joining) && !gameRoomViewUi,
         }"
       >
         <div
@@ -3043,7 +3039,7 @@ watch(joining, (j) => {
         -->
 
         <div
-          v-if="session.inCall && !mafiaViewUi && !eatFirstViewUi && callChatInboundToasts.length > 0"
+          v-if="session.inCall && !gameRoomViewUi && !eatFirstViewUi && callChatInboundToasts.length > 0"
           class="call-page__chat-toasts"
           role="region"
           :aria-label="t('callPage.chatInboundToastAria')"
@@ -3098,7 +3094,7 @@ watch(joining, (j) => {
               :ref="(el) => setTileWrapRef(row.tile.peerId, el)"
               class="call-page__tile-wrap"
               :style="tileLayoutStyle(row)"
-              :draggable="!mafiaViewUi && !isMafiaRoute && !isEatFirstRoute"
+              :draggable="!gameRoomViewUi && !isGameRoomRoute && !isEatFirstRoute"
               :title="t('callPage.dragReorder')"
               :aria-label="t('callPage.dragReorder')"
               :class="{
@@ -3110,42 +3106,38 @@ watch(joining, (j) => {
                 'call-page__tile-wrap--pinned': pinnedPeerId === row.tile.peerId,
                 'call-page__tile-wrap--over': dragOverPeerId === row.tile.peerId,
                 'call-page__tile-wrap--dragging': dragPeerId === row.tile.peerId,
-                'call-page__tile-wrap--mafia-host-target':
-                  isMafiaRoute &&
-                  !mafiaViewUi &&
-                  mafiaGameStore.isMafiaHost &&
-                  mafiaGameStore.hostInteractionMode === 'night' &&
-                  isMafiaHostNightActionSeat(mafiaNumberByPeer.get(row.tile.peerId)),
+                // Phase 3C: Mafia night-action-target highlight removed
+                // (no `'night'` interaction mode in the generic protocol).
                 'call-page__tile-wrap--mafia-host-speaking-queued':
-                  isMafiaRoute &&
-                  isMafiaHostSpeakingNominationUiSeat(mafiaNumberByPeer.get(row.tile.peerId)),
+                  isGameRoomRoute &&
+                  isHostSpeakingNominationUiSeat(seatNumberByPeer.get(row.tile.peerId)),
                 'call-page__tile-wrap--eat-first-host-speaking-seat':
                   isEatFirstRoute &&
                   !eatFirstViewUi &&
                   isEatFirstHostSpeakingNominationSeat(eatFirstNominationNumberForPeer(row.tile.peerId)),
-                'call-page__tile-wrap--mafia-host-mode': isMafiaRoute && !mafiaViewUi && mafiaGameStore.isMafiaHost,
+                'call-page__tile-wrap--mafia-host-mode': isGameRoomRoute && !gameRoomViewUi && gameStore.isGameRoomHost,
                 'call-page__tile-wrap--mafia-host-mode-speaking':
-                  isMafiaRoute &&
-                  !mafiaViewUi &&
-                  mafiaGameStore.isMafiaHost &&
-                  mafiaGameStore.hostInteractionMode === 'speaking',
+                  isGameRoomRoute &&
+                  !gameRoomViewUi &&
+                  gameStore.isGameRoomHost &&
+                  gameStore.hostInteractionMode === 'speaking',
                 'call-page__tile-wrap--mafia-host-mode-swap':
-                  isMafiaRoute &&
-                  !mafiaViewUi &&
-                  mafiaGameStore.isMafiaHost &&
-                  mafiaGameStore.hostInteractionMode === 'swap',
+                  isGameRoomRoute &&
+                  !gameRoomViewUi &&
+                  gameStore.isGameRoomHost &&
+                  gameStore.hostInteractionMode === 'swap',
                 'call-page__tile-wrap--mafia-swap-selected':
-                  isMafiaRoute &&
-                  !mafiaViewUi &&
-                  mafiaGameStore.isMafiaHost &&
-                  mafiaGameStore.hostInteractionMode === 'swap' &&
-                  mafiaGameStore.hostSeatSwapSelectionPeerId === row.tile.peerId,
+                  isGameRoomRoute &&
+                  !gameRoomViewUi &&
+                  gameStore.isGameRoomHost &&
+                  gameStore.hostInteractionMode === 'swap' &&
+                  gameStore.hostSeatSwapSelectionPeerId === row.tile.peerId,
                 'call-page__tile-wrap--mafia-cursor-default':
-                  isMafiaRoute && (mafiaViewUi || !mafiaGameStore.isMafiaHost),
+                  isGameRoomRoute && (gameRoomViewUi || !gameStore.isGameRoomHost),
                 'call-page__tile-wrap--speaking': isTileRowSpeaking(row),
               }"
               @pointerdown.capture="onTilePointerDownForDrag"
-              @click="onMafiaHostTileClick($event, row)"
+              @click="onGameRoomHostTileClick($event, row)"
               @dragstart="onTileDragStart($event, row.tile.peerId)"
               @dragover.prevent="onTileDragOver($event, row.tile.peerId)"
               @dragleave="onTileDragLeave(row.tile.peerId)"
@@ -3160,16 +3152,14 @@ watch(joining, (j) => {
                 :avatar-fallback-name="peerAvatarFallbackName(row.tile.peerId)"
                 :can-edit-display-name="canEditTileDisplayName(row.tile.peerId)"
                 :mafia-seat-index="
-                  isMafiaRoute
-                    ? mafiaNumberByPeer.get(row.tile.peerId)
+                  isGameRoomRoute
+                    ? seatNumberByPeer.get(row.tile.peerId)
                     : isEatFirstRoute
                       ? eatFirstDisplayOrderByPeer.get(row.tile.peerId)
                       : undefined
                 "
-                :mafia-visible-role="
-                  isMafiaRoute && !mafiaViewUi ? mafiaGameStore.getMafiaRoleVisibleForTile(row.tile.peerId) : undefined
-                "
-                :stream-view-mode="mafiaViewUi || eatFirstViewUi"
+                :mafia-visible-role="undefined"
+                :stream-view-mode="gameRoomViewUi || eatFirstViewUi"
                 :stream="row.tile.stream"
                 :is-local="row.tile.isLocal"
                 :video-enabled="row.tile.videoEnabled"
@@ -3184,20 +3174,18 @@ watch(joining, (j) => {
                 :video-presentation="row.tile.videoPresentation"
                 :avatar-url="row.tile.avatarUrl ?? ''"
                 :mafia-life-state="
-                  isMafiaRoute || isEatFirstRoute ? mafiaGameStore.lifeStateForPeer(row.tile.peerId) : 'alive'
+                  isGameRoomRoute || isEatFirstRoute ? gameStore.lifeStateForPeer(row.tile.peerId) : 'alive'
                 "
                 :eat-first-traits="isEatFirstRoute ? eatFirstTraitsForPeer(row.tile.peerId) : undefined"
                 :eat-first-trait-host-view="isEatFirstRoute ? eatFirstTraitHostView() : false"
                 :eat-first-trait-owner-view="isEatFirstRoute ? eatFirstTraitOwnerView(row.tile.peerId) : false"
                 :eat-first-revealed-trait-keys="isEatFirstRoute ? eatFirstRevealedTraitsForPeer(row.tile.peerId) : []"
                 :eat-first-action-card="isEatFirstRoute ? eatFirstActionCardForPeer(row.tile.peerId) : null"
-                :mafia-elimination-kind="mafiaEliminationAvatarKindForPeerId(row.tile.peerId)"
-                :mafia-elimination-background="mafiaGameStore.eliminationBackgroundForPeer(row.tile.peerId)"
-                :mafia-dead-background-url="
-                  isMafiaRoute || isEatFirstRoute ? mafiaGameStore.activeDeadBackgroundUrl() : null
-                "
+                :mafia-elimination-kind="undefined"
+                :mafia-elimination-background="undefined"
+                :mafia-dead-background-url="null"
                 :mafia-host-show-life-toggle="
-                  (isMafiaRoute && !mafiaViewUi && mafiaGameStore.isMafiaHost) ||
+                  (isGameRoomRoute && !gameRoomViewUi && gameStore.isGameRoomHost) ||
                   (isEatFirstRoute && !eatFirstViewUi && eatFirstShell.isEatFirstRoomHost)
                 "
                 :mafia-layer-viewport-observe="isCallAppRoute && !row.tile.isLocal"
@@ -3208,9 +3196,8 @@ watch(joining, (j) => {
                 @update:listen-volume="(v) => remoteListenVolumeHandler(row.tile.peerId)(v)"
                 @update:listen-muted="(v) => remoteListenMutedHandler(row.tile.peerId)(v)"
                 @commit-local-display-name="onCommitLocalTileDisplayName"
-                @mafia-toggle-life="onMafiaToggleLifeFromTile(row.tile.peerId)"
-                @mafia-force-camera-off="onMafiaForceCameraOffFromTile(row.tile.peerId)"
-                @mafia-set-elimination-background="onMafiaSetEliminationBackground"
+                @mafia-toggle-life="onToggleLifeFromTile(row.tile.peerId)"
+                @mafia-force-camera-off="onForceCameraOffFromTile(row.tile.peerId)"
                 @mafia-viewport-layers="(v) => onCallTileViewportForLayers(row.tile.peerId, v)"
                 @remote-playback-stall="onRemotePlaybackStall"
                 @video-stall="onTileVideoStall"
@@ -3221,7 +3208,7 @@ watch(joining, (j) => {
                 @eat-first-use-action-card="onEatFirstPlayerUseActionCard"
               />
               <button
-                v-if="!mafiaViewUi && !eatFirstViewUi"
+                v-if="!gameRoomViewUi && !eatFirstViewUi"
                 type="button"
                 class="call-page__pin-btn"
                 :class="{ 'call-page__pin-btn--active': pinnedPeerId === row.tile.peerId }"
@@ -3252,7 +3239,7 @@ watch(joining, (j) => {
         </div>
 
         <div
-          v-if="(session.inCall || joining) && !mafiaViewUi && !eatFirstViewUi"
+          v-if="(session.inCall || joining) && !gameRoomViewUi && !eatFirstViewUi"
           class="call-page__bottom-cluster"
         >
           <div
@@ -3263,8 +3250,8 @@ watch(joining, (j) => {
             class="call-page__bottom-cluster__center call-page__bottom-cluster__center--speak-dock"
           >
             <MafiaHostActionsBar
-              v-if="isMafiaRoute && mafiaGameStore.isMafiaHost"
-              @force-mute-all="onMafiaForceMuteAll"
+              v-if="isGameRoomRoute && gameStore.isGameRoomHost"
+              @force-mute-all="onForceMuteAll"
             />
             <EatFirstHostActionsBar
               v-if="isEatFirstRoute && eatFirstShell.isEatFirstRoomHost"
@@ -3300,19 +3287,19 @@ watch(joining, (j) => {
               @pick-video-input="pickVideoInput"
               @pick-audio-output="pickAudioOutput"
             />
-            <MafiaSpeakingQueueBar v-if="isMafiaRoute" :show-tools="mafiaGameStore.isMafiaHost" />
+            <MafiaSpeakingQueueBar v-if="isGameRoomRoute" :show-tools="gameStore.isGameRoomHost" />
             <EatFirstSpeakingQueueBar v-if="isEatFirstRoute" :show-tools="eatFirstShell.isEatFirstRoomHost" />
           </div>
         </div>
         <div
-          v-if="(session.inCall || joining) && mafiaViewUi && isMafiaRoute"
+          v-if="(session.inCall || joining) && gameRoomViewUi && isGameRoomRoute"
           class="call-page__mafia-view-bottom"
         >
           <MafiaSpeakingQueueBar :show-tools="false" />
         </div>
 
         <CallChatPanel
-          v-if="session.inCall && !mafiaViewUi && !eatFirstViewUi"
+          v-if="session.inCall && !gameRoomViewUi && !eatFirstViewUi"
           v-model:open="chatOpen"
           :messages="callChatMessages"
           :self-peer-id="selfPeerId"
@@ -3325,7 +3312,7 @@ watch(joining, (j) => {
         />
 
         <aside
-          v-if="session.callDebugOverlay && showCallDebugControls && !mafiaViewUi && !eatFirstViewUi"
+          v-if="session.callDebugOverlay && showCallDebugControls && !gameRoomViewUi && !eatFirstViewUi"
           class="call-page__debug"
           :aria-label="t('callPage.debugAria')"
         >

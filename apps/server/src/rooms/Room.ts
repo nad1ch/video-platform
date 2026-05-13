@@ -53,6 +53,36 @@ export type MafiaAudioMixEntry = {
   muted: boolean
 }
 
+/**
+ * Generic game-room (Phase 3A) audio mix entry. Same shape as
+ * {@link MafiaAudioMixEntry} but kept as a distinct alias so future generic
+ * evolution does not entangle with Mafia. The wire format is identical
+ * because the client applies via the same call-core listening prefs.
+ */
+export type GameRoomAudioMixEntry = {
+  peerId: string
+  userId: string | null
+  volume: number
+  muted: boolean
+}
+
+/** Generic game-room player life-state (Phase 3A). Mirrors Mafia’s subset
+ * without the role-based `civilian` / `mafia` / `don` / `sheriff` / `doctor`
+ * vocabulary, which is intentionally not part of the generic protocol. */
+export type GameRoomPlayerLifeState = 'alive' | 'dead' | 'ghost'
+
+/** Generic game-room players-update snapshot (Phase 3A). No nightActions,
+ * clearRoles, or oldMafiaMode — those are Mafia-only. */
+export type GameRoomPlayersUpdateSnapshot = {
+  order: string[]
+  speakingQueue: number[]
+}
+
+/** Generic game-room reshuffle snapshot (Phase 3A). No role assignment. */
+export type GameRoomReshuffleSnapshot = {
+  order: string[]
+}
+
 const MAFIA_PRESET_BACKGROUND_ITEMS: MafiaBackgroundItem[] = ['dark', 'red', 'violet', 'gray'].map((background) => ({
   id: `preset-${background}`,
   url: `preset:${background}`,
@@ -157,6 +187,28 @@ export class Room {
    */
   private mafiaAudioMixByUserId = new Map<string, MafiaAudioMixEntry>()
   private mafiaAudioMixByPeerId = new Map<string, MafiaAudioMixEntry>()
+
+  // --- Generic game-room state (Phase 3A) ----------------------------------
+  // Mirror of the GENERIC subset of Mafia state. Deliberately omits role
+  // assignment, Mafia mode, dead-/page-background galleries. Only mutated by
+  // `handleGameRoom*` handlers; Mafia handlers never touch these fields, and
+  // vice versa. This protects both protocols from accidental coupling.
+  private gameRoomHostUserId: string | null = null
+  private gameRoomHostSessionId: string | null = null
+  private gameRoomHostPeerId: string | null = null
+  private gameRoomSpeakingQueue: number[] = []
+  private gameRoomTimer: { startedAt: number; duration: number } | null = null
+  private gameRoomNicknameByPeerId = new Map<string, string>()
+  private gameRoomForceMuteAllActive = false
+  private gameRoomForcedCameraOffPeerIds = new Set<string>()
+  private gameRoomForcedMicMutedPeerIds = new Set<string>()
+  private gameRoomForcedCameraOffUserIds = new Set<string>()
+  private gameRoomForcedMicMutedUserIds = new Set<string>()
+  private gameRoomPlayerLifeStateByPeerId = new Map<string, Exclude<GameRoomPlayerLifeState, 'alive'>>()
+  private gameRoomReshuffleSnapshot: GameRoomReshuffleSnapshot | null = null
+  private gameRoomPlayersUpdateSnapshot: GameRoomPlayersUpdateSnapshot | null = null
+  private gameRoomAudioMixByUserId = new Map<string, GameRoomAudioMixEntry>()
+  private gameRoomAudioMixByPeerId = new Map<string, GameRoomAudioMixEntry>()
 
   private constructor(id: string, router: Router, pooledWorker: PooledWorker) {
     this.id = id
@@ -825,5 +877,353 @@ export class Room {
     const id = peerId.trim()
     if (!id) return
     this.mafiaNicknameByPeerId.delete(id)
+  }
+
+  // ─── Generic game-room (Phase 3A) accessors ───────────────────────────────
+  // Parallel of every Mafia getter/setter that the generic protocol needs.
+  // Methods named `getGameRoom*` / `setGameRoom*` / `isGameRoom*` strictly
+  // mirror the Mafia equivalents; the only diffs are: no role / mode /
+  // background fields, no Mafia-specific snapshot fields inside
+  // players-update / reshuffle, no MAFIA_PRESET_BACKGROUND seeding. Mafia
+  // accessors above are unmodified.
+
+  getGameRoomHostUserId(): string | null {
+    return this.gameRoomHostUserId
+  }
+
+  setGameRoomHostUserId(id: string | null): void {
+    this.gameRoomHostUserId = id
+  }
+
+  getGameRoomHostSessionId(): string | null {
+    return this.gameRoomHostSessionId
+  }
+
+  setGameRoomHostSessionId(id: string | null): void {
+    this.gameRoomHostSessionId = id
+  }
+
+  getGameRoomHostPeerId(): string | null {
+    return this.gameRoomHostPeerId
+  }
+
+  setGameRoomHostPeerId(id: string | null): void {
+    this.gameRoomHostPeerId = id
+  }
+
+  getFirstGameRoomSessionIdForUser(userId: string): string | null {
+    return (
+      this.getPeers().find(
+        (peer) => peer.userId === userId && peer.gameRoomSessionId.length > 0,
+      )?.gameRoomSessionId ?? null
+    )
+  }
+
+  getFirstGameRoomPeerIdForUserSession(userId: string, sessionId: string | null): string | null {
+    if (sessionId == null) {
+      return null
+    }
+    return (
+      this.getPeers().find(
+        (peer) => peer.userId === userId && peer.gameRoomSessionId === sessionId,
+      )?.id ?? null
+    )
+  }
+
+  getGameRoomSpeakingQueue(): number[] {
+    return [...this.gameRoomSpeakingQueue]
+  }
+
+  setGameRoomSpeakingQueue(seats: number[]): void {
+    this.gameRoomSpeakingQueue = [...seats]
+  }
+
+  /**
+   * Drop seat indices greater than `maxSeat`. Mirrors
+   * {@link pruneMafiaSpeakingQueueToMaxSeat} semantics 1:1. Returns true
+   * when the queue changed.
+   */
+  pruneGameRoomSpeakingQueueToMaxSeat(maxSeat: number): boolean {
+    const cap = Math.max(0, Math.floor(maxSeat))
+    const before = this.gameRoomSpeakingQueue
+    const next = before.filter((seat) => seat >= 1 && seat <= cap)
+    if (next.length === before.length) {
+      return false
+    }
+    this.gameRoomSpeakingQueue = next
+    return true
+  }
+
+  getGameRoomTimer(): { startedAt: number; duration: number; isRunning: true } | null {
+    if (this.gameRoomTimer == null) {
+      return null
+    }
+    return { ...this.gameRoomTimer, isRunning: true as const }
+  }
+
+  setGameRoomTimer(t: { startedAt: number; duration: number } | null): void {
+    this.gameRoomTimer = t
+  }
+
+  getGameRoomPlayerLifeStateSnapshot(): Record<string, GameRoomPlayerLifeState> {
+    return Object.fromEntries(this.gameRoomPlayerLifeStateByPeerId.entries())
+  }
+
+  setGameRoomPlayerLifeState(peerId: string, lifeState: GameRoomPlayerLifeState): void {
+    if (lifeState === 'alive') {
+      this.gameRoomPlayerLifeStateByPeerId.delete(peerId)
+      return
+    }
+    this.gameRoomPlayerLifeStateByPeerId.set(peerId, lifeState)
+  }
+
+  clearGameRoomPlayerLifeStates(): void {
+    this.gameRoomPlayerLifeStateByPeerId.clear()
+  }
+
+  clearGameRoomPlayerLifeStateForPeer(peerId: string): void {
+    this.gameRoomPlayerLifeStateByPeerId.delete(peerId)
+  }
+
+  setGameRoomReshuffleSnapshot(snapshot: GameRoomReshuffleSnapshot | null): void {
+    if (snapshot == null) {
+      this.gameRoomReshuffleSnapshot = null
+      return
+    }
+    this.gameRoomReshuffleSnapshot = {
+      order: [...snapshot.order],
+    }
+  }
+
+  setGameRoomPlayersUpdateSnapshot(snapshot: GameRoomPlayersUpdateSnapshot | null): void {
+    if (snapshot == null) {
+      this.gameRoomPlayersUpdateSnapshot = null
+      return
+    }
+    this.gameRoomPlayersUpdateSnapshot = {
+      order: [...snapshot.order],
+      speakingQueue: [...snapshot.speakingQueue],
+    }
+  }
+
+  /**
+   * Returns the stored game-room players-update snapshot when every snapshot
+   * peerId is still live. Extra live peers are tolerated (viewer-role / OBS
+   * view never enter the host's seat list). Same single-peer-reconnect
+   * remap behaviour as {@link getMafiaPlayersUpdateSnapshotIfFresh}.
+   */
+  getGameRoomPlayersUpdateSnapshotIfFresh(): GameRoomPlayersUpdateSnapshot | null {
+    const snap = this.gameRoomPlayersUpdateSnapshot
+    if (snap == null) return null
+    const live = new Set(this.getPeers().map((p) => p.id))
+    const snapIds = new Set(snap.order)
+    const missingFromLive = snap.order.filter((id) => !live.has(id))
+    if (missingFromLive.length === 0) {
+      return {
+        order: [...snap.order],
+        speakingQueue: [...snap.speakingQueue],
+      }
+    }
+    if (missingFromLive.length !== 1) {
+      return null
+    }
+    const extraInLive = [...live].filter((id) => !snapIds.has(id))
+    if (extraInLive.length !== 1) {
+      return null
+    }
+    const staleId = missingFromLive[0]!
+    const replacementId = extraInLive[0]!
+    const remappedOrder = snap.order.map((id) => (id === staleId ? replacementId : id))
+    return {
+      order: remappedOrder,
+      speakingQueue: [...snap.speakingQueue],
+    }
+  }
+
+  getGameRoomReshuffleSnapshotIfFresh(): GameRoomReshuffleSnapshot | null {
+    const snap = this.gameRoomReshuffleSnapshot
+    if (snap == null) return null
+    const live = new Set(this.getPeers().map((p) => p.id))
+    const snapIds = new Set(snap.order)
+    const missingFromLive = snap.order.filter((id) => !live.has(id))
+    if (missingFromLive.length === 0) {
+      return { order: [...snap.order] }
+    }
+    if (missingFromLive.length !== 1) {
+      return null
+    }
+    const extraInLive = [...live].filter((id) => !snapIds.has(id))
+    if (extraInLive.length !== 1) {
+      return null
+    }
+    const staleId = missingFromLive[0]!
+    const replacementId = extraInLive[0]!
+    return {
+      order: snap.order.map((id) => (id === staleId ? replacementId : id)),
+    }
+  }
+
+  setGameRoomNickname(peerId: string, nickname: string | null): void {
+    const id = peerId.trim()
+    if (!id) return
+    if (nickname == null || nickname.trim().length < 1) {
+      this.gameRoomNicknameByPeerId.delete(id)
+      return
+    }
+    this.gameRoomNicknameByPeerId.set(id, nickname.trim().slice(0, 64))
+  }
+
+  getGameRoomNicknamesSnapshot(): Record<string, string> {
+    const live = new Set(this.getPeers().map((p) => p.id))
+    const out: Record<string, string> = {}
+    for (const [peerId, name] of this.gameRoomNicknameByPeerId.entries()) {
+      if (live.has(peerId) && name.trim().length > 0) {
+        out[peerId] = name
+      }
+    }
+    return out
+  }
+
+  clearGameRoomNicknameForPeer(peerId: string): void {
+    const id = peerId.trim()
+    if (!id) return
+    this.gameRoomNicknameByPeerId.delete(id)
+  }
+
+  isGameRoomForceMuteAllActive(): boolean {
+    return this.gameRoomForceMuteAllActive
+  }
+
+  setGameRoomForceMuteAllActive(active: boolean): void {
+    this.gameRoomForceMuteAllActive = active
+  }
+
+  isGameRoomPeerForcedCameraOff(peerId: string): boolean {
+    return this.gameRoomForcedCameraOffPeerIds.has(peerId)
+  }
+
+  setGameRoomPeerForcedCameraOff(peerId: string, forced: boolean): void {
+    if (forced) {
+      this.gameRoomForcedCameraOffPeerIds.add(peerId)
+    } else {
+      this.gameRoomForcedCameraOffPeerIds.delete(peerId)
+    }
+  }
+
+  isGameRoomPeerForcedMicMuted(peerId: string): boolean {
+    return this.gameRoomForcedMicMutedPeerIds.has(peerId)
+  }
+
+  setGameRoomPeerForcedMicMuted(peerId: string, forced: boolean): void {
+    if (forced) {
+      this.gameRoomForcedMicMutedPeerIds.add(peerId)
+    } else {
+      this.gameRoomForcedMicMutedPeerIds.delete(peerId)
+    }
+  }
+
+  isGameRoomUserForcedCameraOff(userId: string): boolean {
+    return userId.length > 0 && this.gameRoomForcedCameraOffUserIds.has(userId)
+  }
+
+  setGameRoomUserForcedCameraOff(userId: string, forced: boolean): void {
+    if (userId.length === 0) return
+    if (forced) {
+      this.gameRoomForcedCameraOffUserIds.add(userId)
+    } else {
+      this.gameRoomForcedCameraOffUserIds.delete(userId)
+    }
+  }
+
+  isGameRoomUserForcedMicMuted(userId: string): boolean {
+    return userId.length > 0 && this.gameRoomForcedMicMutedUserIds.has(userId)
+  }
+
+  setGameRoomUserForcedMicMuted(userId: string, forced: boolean): void {
+    if (userId.length === 0) return
+    if (forced) {
+      this.gameRoomForcedMicMutedUserIds.add(userId)
+    } else {
+      this.gameRoomForcedMicMutedUserIds.delete(userId)
+    }
+  }
+
+  getGameRoomForcedCameraOffPeerIds(): string[] {
+    return [...this.gameRoomForcedCameraOffPeerIds]
+  }
+
+  getGameRoomForcedMicMutedPeerIds(): string[] {
+    return [...this.gameRoomForcedMicMutedPeerIds]
+  }
+
+  clearAllGameRoomPerPeerForceFlags(): void {
+    this.gameRoomForcedCameraOffPeerIds.clear()
+    this.gameRoomForcedMicMutedPeerIds.clear()
+    this.gameRoomForcedCameraOffUserIds.clear()
+    this.gameRoomForcedMicMutedUserIds.clear()
+  }
+
+  clearGameRoomForceStateForPeer(peerId: string): void {
+    this.gameRoomForcedCameraOffPeerIds.delete(peerId)
+    this.gameRoomForcedMicMutedPeerIds.delete(peerId)
+  }
+
+  clearGameRoomForceStateForUser(userId: string): void {
+    if (userId.length === 0) return
+    this.gameRoomForcedCameraOffUserIds.delete(userId)
+    this.gameRoomForcedMicMutedUserIds.delete(userId)
+  }
+
+  applyGameRoomAudioMixEntries(
+    entries: ReadonlyArray<{ peerId: string; userId?: string | null; volume: number; muted: boolean }>,
+  ): GameRoomAudioMixEntry[] {
+    const out: GameRoomAudioMixEntry[] = []
+    for (const raw of entries) {
+      const peerId = typeof raw.peerId === 'string' ? raw.peerId.trim() : ''
+      if (!peerId) continue
+      const userIdRaw = typeof raw.userId === 'string' ? raw.userId.trim() : ''
+      const userId = userIdRaw.length > 0 ? userIdRaw : null
+      const volumeRaw = typeof raw.volume === 'number' && Number.isFinite(raw.volume) ? raw.volume : 1
+      const volume = Math.min(2, Math.max(0, volumeRaw))
+      const muted = raw.muted === true
+      const entry: GameRoomAudioMixEntry = { peerId, userId, volume, muted }
+      if (userId != null) {
+        this.gameRoomAudioMixByUserId.set(userId, entry)
+        this.gameRoomAudioMixByPeerId.delete(peerId)
+      } else {
+        this.gameRoomAudioMixByPeerId.set(peerId, entry)
+      }
+      out.push(entry)
+    }
+    return out
+  }
+
+  rebindGameRoomAudioMixEntryPeerId(peerId: string, userId: string): GameRoomAudioMixEntry | null {
+    const trimmedPeer = peerId.trim()
+    const trimmedUser = userId.trim()
+    if (!trimmedPeer || !trimmedUser) return null
+    const prev = this.gameRoomAudioMixByUserId.get(trimmedUser)
+    if (!prev) return null
+    if (prev.peerId === trimmedPeer) return prev
+    const next: GameRoomAudioMixEntry = { ...prev, peerId: trimmedPeer }
+    this.gameRoomAudioMixByUserId.set(trimmedUser, next)
+    return next
+  }
+
+  getGameRoomAudioMixSnapshot(): GameRoomAudioMixEntry[] {
+    const out: GameRoomAudioMixEntry[] = []
+    for (const e of this.gameRoomAudioMixByUserId.values()) {
+      out.push({ ...e })
+    }
+    for (const e of this.gameRoomAudioMixByPeerId.values()) {
+      out.push({ ...e })
+    }
+    return out
+  }
+
+  clearGameRoomAudioMixForPeerId(peerId: string): void {
+    const id = peerId.trim()
+    if (!id) return
+    this.gameRoomAudioMixByPeerId.delete(id)
   }
 }

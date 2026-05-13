@@ -24,7 +24,31 @@ export function isEatFirstRoomId(roomId: string): boolean {
   return roomId.startsWith(EAT_FIRST_ROOM_PREFIX)
 }
 
+/**
+ * Generic game-room namespace (Phase 3A). Mirrors only the generic subset of
+ * Mafia behaviour — host claim, host reload recovery, players-update / order,
+ * speaking queue, timer, force-mute-all, force-camera-off, kick/revive,
+ * life-state, nickname, audio-mix, snapshot replay. Excludes Mafia role
+ * assignment, mode, and background galleries.
+ *
+ * The client wraps generic calls via
+ * `apps/client/src/composables/useGameRoomMediaRoom.ts` (added in Phase 3B).
+ */
+export const GAME_ROOM_PREFIX = 'gameroom:'
+
+export function isGameRoomId(roomId: string): boolean {
+  return roomId.startsWith(GAME_ROOM_PREFIX)
+}
+
 export const MAFIA_MAX_SEAT = 12
+
+/**
+ * Default upper bound for generic game-room seat numbering. Inherited from
+ * Mafia (12) as a conservative cap; per-call sanitisation should still pass
+ * the live peer count via `liveSeatCap` so a queue cannot reference a seat
+ * that no longer has a player.
+ */
+export const GAME_ROOM_MAX_SEAT = MAFIA_MAX_SEAT
 
 /** Max 1-based display seat index on Eat First call tiles (`playerOrder` length ≤ 11). */
 export const EAT_FIRST_MAX_SPEAKING_QUEUE_SEAT = 11
@@ -111,6 +135,41 @@ export function sanitizeMafiaSpeakingQueueList(raw: unknown, maxSeat: number): n
  * static `EAT_FIRST_MAX_SPEAKING_QUEUE_SEAT` (11) when no live count is given
  * or when the value is invalid.
  */
+/**
+ * Generic game-room speaking-queue sanitiser. Shares the Mafia sanitisation
+ * shape (pair-encoded 1-based seat indices, drop non-integers, drop
+ * out-of-range, drop odd trailing entries) but lets the caller pass the live
+ * peer count via `liveSeatCap` so a queue can never reference a seat that no
+ * longer has a player.
+ */
+export function sanitizeGameRoomSpeakingQueueList(raw: unknown, liveSeatCap?: number): number[] {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  let cap: number = GAME_ROOM_MAX_SEAT
+  if (typeof liveSeatCap === 'number' && Number.isInteger(liveSeatCap) && liveSeatCap >= 1) {
+    cap = Math.min(GAME_ROOM_MAX_SEAT, liveSeatCap)
+  }
+  const out: number[] = []
+  const maxLen = cap * 2
+  for (const x of raw) {
+    if (typeof x !== 'number' || !Number.isInteger(x)) {
+      continue
+    }
+    if (x < 1 || x > cap) {
+      continue
+    }
+    out.push(x)
+    if (out.length >= maxLen) {
+      break
+    }
+  }
+  if (out.length % 2 === 1) {
+    out.pop()
+  }
+  return out
+}
+
 export function sanitizeEatFirstSpeakingQueueList(raw: unknown, liveSeatCap?: number): number[] {
   if (!Array.isArray(raw)) {
     return []

@@ -32,6 +32,23 @@ import {
   handleMafiaForceCameraOff,
   handleMafiaForceMuteAll,
   handleMafiaRequestSnapshot,
+  // Generic game-room (Phase 3A). Parallel of the Mafia handlers above —
+  // each function is gated by `isGameRoomId(room.id)` and never reaches
+  // into Mafia state.
+  handleGameRoomClaimHost,
+  handleGameRoomTransferHost,
+  handleGameRoomQueueUpdate,
+  handleGameRoomReshuffle,
+  handleGameRoomPlayersUpdate,
+  handleGameRoomPlayerNameUpdate,
+  handleGameRoomAudioMixUpdate,
+  handleGameRoomTimerStart,
+  handleGameRoomTimerStop,
+  handleGameRoomPlayerKick,
+  handleGameRoomPlayerRevive,
+  handleGameRoomForceCameraOff,
+  handleGameRoomForceMuteAll,
+  handleGameRoomRequestSnapshot,
   handleEatFirstForceMuteAll,
   handleEatFirstSlotClaim,
   handleEatFirstTraitRevealRequest,
@@ -329,6 +346,64 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'mafia:request-snapshot': {
               handleMafiaRequestSnapshot(socket, deps)
+              break
+            }
+            // Generic game-room (Phase 3A) — parallel of the Mafia arms above.
+            // Mafia arms are unmodified.
+            case 'gameroom:claim-host': {
+              handleGameRoomClaimHost(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:transfer-host': {
+              handleGameRoomTransferHost(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:queue-update': {
+              handleGameRoomQueueUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:reshuffle': {
+              await handleGameRoomReshuffle(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:players-update': {
+              handleGameRoomPlayersUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:player-name-update': {
+              handleGameRoomPlayerNameUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:audio-mix-update': {
+              handleGameRoomAudioMixUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:timer-start': {
+              handleGameRoomTimerStart(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:timer-stop': {
+              handleGameRoomTimerStop(socket, deps)
+              break
+            }
+            case 'gameroom:player-kick': {
+              await handleGameRoomPlayerKick(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:player-revive': {
+              await handleGameRoomPlayerRevive(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:force-camera-off': {
+              await handleGameRoomForceCameraOff(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:force-mute-all': {
+              await handleGameRoomForceMuteAll(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:request-snapshot': {
+              handleGameRoomRequestSnapshot(socket, deps)
               break
             }
             case 'eat:force-mute-all': {
