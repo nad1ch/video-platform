@@ -296,7 +296,7 @@ function onToggleTimer(): void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 297px;
+  width: 343px;
   max-width: calc(100vw - 16px);
   min-height: 42px;
   padding: 0;

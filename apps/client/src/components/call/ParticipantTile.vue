@@ -12,11 +12,15 @@ import {
 import { useI18n } from 'vue-i18n'
 import { normalizeDisplayName } from 'call-core'
 import { createLogger } from '@/utils/logger'
-import type { MafiaEliminationBackground, MafiaPlayerLifeState, MafiaRole } from '@/utils/mafiaGameTypes'
-import MafiaEliminationMark from '../mafia/MafiaEliminationMark.vue'
+import type { MafiaRole } from '@/utils/mafiaGameTypes'
+import type {
+  GameEliminationAvatarKind,
+  GameEliminationBackground,
+  GamePlayerLifeState,
+} from '@/utils/gameTileTypes'
+import GameEliminationMark from '../game-call/GameEliminationMark.vue'
 import StreamAudio from '../StreamAudio.vue'
 import StreamVideo from '../StreamVideo.vue'
-import type { MafiaEliminationAvatarKind } from '@/utils/mafiaEliminationAvatarKind'
 
 const tileLog = createLogger('participant-tile')
 
@@ -48,9 +52,9 @@ const emit = defineEmits<{
   /** Neutral alias of `mafia-force-camera-off`; fired in parallel for Game Template. */
   'game-force-camera-off': [peerId: string]
 
-  'mafia-set-elimination-background': [payload: { peerId: string; background: MafiaEliminationBackground }]
+  'mafia-set-elimination-background': [payload: { peerId: string; background: GameEliminationBackground }]
   /** Neutral alias of `mafia-set-elimination-background`; fired in parallel for Game Template. */
-  'game-set-elimination-background': [payload: { peerId: string; background: MafiaEliminationBackground }]
+  'game-set-elimination-background': [payload: { peerId: string; background: GameEliminationBackground }]
 
   'mafia-viewport-layers': [visible: boolean]
   /** Neutral alias of `mafia-viewport-layers`; fired in parallel for Game Template. */
@@ -135,15 +139,15 @@ const props = withDefaults(
 
     streamViewMode?: boolean
 
-    mafiaLifeState?: MafiaPlayerLifeState
+    mafiaLifeState?: GamePlayerLifeState
     /** Neutral alias of `mafiaLifeState`; takes precedence when defined. */
-    gameLifeState?: MafiaPlayerLifeState
-    mafiaEliminationKind?: MafiaEliminationAvatarKind
+    gameLifeState?: GamePlayerLifeState
+    mafiaEliminationKind?: GameEliminationAvatarKind
     /** Neutral alias of `mafiaEliminationKind`; takes precedence when defined. */
-    gameEliminationKind?: MafiaEliminationAvatarKind
-    mafiaEliminationBackground?: MafiaEliminationBackground
+    gameEliminationKind?: GameEliminationAvatarKind
+    mafiaEliminationBackground?: GameEliminationBackground
     /** Neutral alias of `mafiaEliminationBackground`; takes precedence when defined. */
-    gameEliminationBackground?: MafiaEliminationBackground
+    gameEliminationBackground?: GameEliminationBackground
     mafiaDeadBackgroundUrl?: string | null
     /** Neutral alias of `mafiaDeadBackgroundUrl`; takes precedence when defined. */
     gameDeadBackgroundUrl?: string | null
@@ -183,16 +187,16 @@ const props = withDefaults(
   },
 )
 
-const MAFIA_ELIMINATION_BACKGROUND_OPTIONS = Object.freeze([
+const ELIMINATION_BACKGROUND_OPTIONS = Object.freeze([
   'dark',
   'red',
   'violet',
   'gray',
-] as const satisfies readonly MafiaEliminationBackground[])
+] as const satisfies readonly GameEliminationBackground[])
 
 const tileRootRef = ref<HTMLElement | null>(null)
-let mafiaLayerObserver: IntersectionObserver | null = null
-let mafiaLayerLastEmitted: boolean | null = null
+let tileLayerObserver: IntersectionObserver | null = null
+let tileLayerLastEmitted: boolean | null = null
 
 const editingName = ref(false)
 const nameDraft = ref('')
@@ -342,13 +346,13 @@ const resolvedDeadBackgroundUrl = computed(
   () => props.gameDeadBackgroundUrl ?? props.mafiaDeadBackgroundUrl,
 )
 const resolvedHostShowLifeToggle = computed(
-  () => props.gameHostShowLifeToggle ?? props.mafiaHostShowLifeToggle,
+  () => props.gameHostShowLifeToggle || props.mafiaHostShowLifeToggle,
 )
 const resolvedLayerViewportObserve = computed(
-  () => props.gameLayerViewportObserve ?? props.mafiaLayerViewportObserve,
+  () => props.gameLayerViewportObserve || props.mafiaLayerViewportObserve,
 )
 
-const showMafiaSeat = computed(
+const showSeatBadge = computed(
   () => typeof resolvedSeatIndex.value === 'number' && resolvedSeatIndex.value > 0,
 )
 
@@ -612,16 +616,16 @@ function onEatFirstPlayerUseActionCard(): void {
 }
 
 
-const mafiaCallPrimaryLine = computed(() => {
-  if (!showMafiaSeat.value || typeof resolvedSeatIndex.value !== 'number') {
+const tilePrimaryLine = computed(() => {
+  if (!showSeatBadge.value || typeof resolvedSeatIndex.value !== 'number') {
     return props.displayName
   }
   return normalizeDisplayName(props.displayName)
 })
 
-const showMafiaRole = computed(() => !props.streamViewMode && resolvedVisibleRole.value != null)
+const showRoleBadge = computed(() => !props.streamViewMode && resolvedVisibleRole.value != null)
 
-const mafiaRoleLabel = computed(() => {
+const roleBadgeLabel = computed(() => {
   const r = resolvedVisibleRole.value
   if (r == null) {
     return ''
@@ -659,29 +663,64 @@ const showVideo = computed(() => {
   return props.videoEnabled && hasLiveVideoTrack.value
 })
 
-const mafiaIsDead = computed(() => resolvedLifeState.value === 'dead')
-const mafiaDeadBackgroundUrlText = computed(() => {
+const isDead = computed(() => resolvedLifeState.value === 'dead')
+const deadBackgroundUrlText = computed(() => {
   const value = resolvedDeadBackgroundUrl.value
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : ''
 })
-const mafiaHasCustomDeadBackground = computed(() => mafiaIsDead.value && mafiaDeadBackgroundUrlText.value.length > 0)
+const hasCustomDeadBackground = computed(() => isDead.value && deadBackgroundUrlText.value.length > 0)
 
 
-const mafiaDeadShade = computed(
-  () => !props.isLocal && !props.streamViewMode && mafiaIsDead.value,
+const deadShade = computed(
+  () => !props.isLocal && !props.streamViewMode && isDead.value,
 )
 
-const mafiaEliminationBackgroundClass = computed(() =>
-  mafiaIsDead.value
-    ? mafiaHasCustomDeadBackground.value
+const eliminationBackgroundClass = computed(() =>
+  isDead.value
+    ? hasCustomDeadBackground.value
       ? 'tile--mafia-elim-bg-custom'
       : `tile--mafia-elim-bg-${resolvedEliminationBackground.value}`
     : '',
 )
 
-const mafiaDeadBackgroundStyle = computed(() =>
-  mafiaHasCustomDeadBackground.value
-    ? { '--mafia-dead-background-image': `url(${JSON.stringify(mafiaDeadBackgroundUrlText.value)})` }
+/**
+ * Per-tile signal that the consumer opted into the neutral `game-*`
+ * API (i.e. rendered from the Game Template / GameRoom path):
+ * `gameLifeState` is the one `game*` prop the GT call site always binds
+ * to a defined value; Mafia never binds it. Used to route user-visible
+ * i18n labels (host life toggle title, elimination-background labels)
+ * through `gameRoom.*` keys instead of legacy `mafiaPage.*` ones.
+ * No route-name coupling: ParticipantTile stays a pure presentational
+ * component.
+ */
+const usesNeutralApi = computed(() => props.gameLifeState !== undefined)
+
+const hostLifeToggleTitle = computed(() => {
+  if (usesNeutralApi.value) {
+    return isDead.value
+      ? t('gameRoom.hostTileReviveTitle')
+      : t('gameRoom.hostTileEliminateTitle')
+  }
+  return isDead.value
+    ? t('mafiaPage.hostTileReviveTitle')
+    : t('mafiaPage.hostTileEliminateTitle')
+})
+
+const eliminationBackgroundGroupLabel = computed(() =>
+  usesNeutralApi.value
+    ? t('gameRoom.eliminationBackgroundLabel')
+    : t('mafiaPage.eliminationBackgroundLabel'),
+)
+
+function eliminationBackgroundSwatchLabel(bg: GameEliminationBackground): string {
+  return usesNeutralApi.value
+    ? t(`gameRoom.eliminationBackground.${bg}`)
+    : t(`mafiaPage.eliminationBackground.${bg}`)
+}
+
+const deadBackgroundStyle = computed(() =>
+  hasCustomDeadBackground.value
+    ? { '--mafia-dead-background-image': `url(${JSON.stringify(deadBackgroundUrlText.value)})` }
     : undefined,
 )
 
@@ -691,23 +730,23 @@ const resolvedAvatarUrl = computed(() => {
 })
 
 
-const showCustomMafiaDeadBackgroundOnly = computed(() =>
-  mafiaHasCustomDeadBackground.value && !showVideo.value,
+const showCustomDeadBackgroundOnly = computed(() =>
+  hasCustomDeadBackground.value && !showVideo.value,
 )
-const showMafiaElimination = computed(
-  () => mafiaIsDead.value && !showCustomMafiaDeadBackgroundOnly.value && !showVideo.value,
+const showEliminationMark = computed(
+  () => isDead.value && !showCustomDeadBackgroundOnly.value && !showVideo.value,
 )
 const showAvatar = computed(
   () =>
-    !showCustomMafiaDeadBackgroundOnly.value &&
-    !showMafiaElimination.value &&
+    !showCustomDeadBackgroundOnly.value &&
+    !showEliminationMark.value &&
     !showVideo.value &&
     resolvedAvatarUrl.value !== '',
 )
 const showInitialsFallback = computed(
   () =>
-    !showCustomMafiaDeadBackgroundOnly.value &&
-    !showMafiaElimination.value &&
+    !showCustomDeadBackgroundOnly.value &&
+    !showEliminationMark.value &&
     !showVideo.value &&
     resolvedAvatarUrl.value === '',
 )
@@ -770,13 +809,13 @@ function onLocalListenIconClick(): void {
   emit('update:listenMuted', false)
 }
 
-const mafiaKillAnim = ref(false)
-const mafiaReviveAnim = ref(false)
-let mafiaKillAnimTimer: ReturnType<typeof setTimeout> | undefined
-let mafiaReviveAnimTimer: ReturnType<typeof setTimeout> | undefined
+const killAnim = ref(false)
+const reviveAnim = ref(false)
+let killAnimTimer: ReturnType<typeof setTimeout> | undefined
+let reviveAnimTimer: ReturnType<typeof setTimeout> | undefined
 
 watch(
-  () => mafiaIsDead.value,
+  () => isDead.value,
   (next, prev) => {
     if (props.isLocal || props.streamViewMode) {
       return
@@ -785,41 +824,41 @@ watch(
       return
     }
     if (prev === true && next === false) {
-      mafiaReviveAnim.value = true
-      if (mafiaReviveAnimTimer != null) {
-        clearTimeout(mafiaReviveAnimTimer)
+      reviveAnim.value = true
+      if (reviveAnimTimer != null) {
+        clearTimeout(reviveAnimTimer)
       }
-      mafiaReviveAnimTimer = setTimeout(() => {
-        mafiaReviveAnim.value = false
-        mafiaReviveAnimTimer = undefined
+      reviveAnimTimer = setTimeout(() => {
+        reviveAnim.value = false
+        reviveAnimTimer = undefined
       }, 700)
     } else if (prev === false && next === true) {
-      mafiaKillAnim.value = true
-      if (mafiaKillAnimTimer != null) {
-        clearTimeout(mafiaKillAnimTimer)
+      killAnim.value = true
+      if (killAnimTimer != null) {
+        clearTimeout(killAnimTimer)
       }
-      mafiaKillAnimTimer = setTimeout(() => {
-        mafiaKillAnim.value = false
-        mafiaKillAnimTimer = undefined
+      killAnimTimer = setTimeout(() => {
+        killAnim.value = false
+        killAnimTimer = undefined
       }, 420)
     }
   },
 )
 
-function onMafiaHostLifeClick(): void {
+function onHostLifeClick(): void {
   const id = typeof props.peerId === 'string' ? props.peerId.trim() : ''
   if (id.length < 1) {
     return
   }
   emit('mafia-toggle-life', id)
   emit('game-toggle-life', id)
-  if (!mafiaIsDead.value) {
+  if (!isDead.value) {
     emit('mafia-force-camera-off', id)
     emit('game-force-camera-off', id)
   }
 }
 
-function setMafiaEliminationBackground(background: MafiaEliminationBackground): void {
+function setEliminationBackground(background: GameEliminationBackground): void {
   const id = typeof props.peerId === 'string' ? props.peerId.trim() : ''
   if (id.length < 1) {
     return
@@ -829,39 +868,39 @@ function setMafiaEliminationBackground(background: MafiaEliminationBackground): 
 }
 
 onBeforeUnmount(() => {
-  if (mafiaKillAnimTimer != null) {
-    clearTimeout(mafiaKillAnimTimer)
+  if (killAnimTimer != null) {
+    clearTimeout(killAnimTimer)
   }
-  if (mafiaReviveAnimTimer != null) {
-    clearTimeout(mafiaReviveAnimTimer)
+  if (reviveAnimTimer != null) {
+    clearTimeout(reviveAnimTimer)
   }
-  disconnectMafiaLayerObserver()
-  mafiaLayerLastEmitted = null
+  disconnectTileLayerObserver()
+  tileLayerLastEmitted = null
   if (resolvedLayerViewportObserve.value && !props.isLocal) {
     emit('mafia-viewport-layers', true)
     emit('game-viewport-layers', true)
   }
 })
 
-function disconnectMafiaLayerObserver(): void {
-  if (mafiaLayerObserver) {
-    mafiaLayerObserver.disconnect()
-    mafiaLayerObserver = null
+function disconnectTileLayerObserver(): void {
+  if (tileLayerObserver) {
+    tileLayerObserver.disconnect()
+    tileLayerObserver = null
   }
 }
 
-function emitMafiaLayerViewport(visible: boolean): void {
-  if (mafiaLayerLastEmitted === visible) {
+function emitTileLayerViewport(visible: boolean): void {
+  if (tileLayerLastEmitted === visible) {
     return
   }
-  mafiaLayerLastEmitted = visible
+  tileLayerLastEmitted = visible
   emit('mafia-viewport-layers', visible)
   emit('game-viewport-layers', visible)
 }
 
-function connectMafiaLayerObserver(): void {
-  disconnectMafiaLayerObserver()
-  mafiaLayerLastEmitted = null
+function connectTileLayerObserver(): void {
+  disconnectTileLayerObserver()
+  tileLayerLastEmitted = null
   if (typeof window === 'undefined' || !resolvedLayerViewportObserve.value || props.isLocal) {
     return
   }
@@ -873,40 +912,40 @@ function connectMafiaLayerObserver(): void {
   if (!el) {
     return
   }
-  mafiaLayerObserver = new IntersectionObserver(
+  tileLayerObserver = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
         if (entry.target === el) {
-          emitMafiaLayerViewport(entry.isIntersecting)
+          emitTileLayerViewport(entry.isIntersecting)
         }
       }
     },
     { root: null, rootMargin: '10% 10% 10% 10%', threshold: 0 },
   )
-  mafiaLayerObserver.observe(el)
+  tileLayerObserver.observe(el)
 }
 
-function scheduleMafiaLayerObserverConnect(): void {
+function scheduleTileLayerObserverConnect(): void {
   void nextTick(() => {
     if (!resolvedLayerViewportObserve.value || props.isLocal) {
-      disconnectMafiaLayerObserver()
-      mafiaLayerLastEmitted = null
+      disconnectTileLayerObserver()
+      tileLayerLastEmitted = null
       return
     }
-    connectMafiaLayerObserver()
+    connectTileLayerObserver()
   })
 }
 
 watch(
   () => [resolvedLayerViewportObserve.value, props.isLocal, props.peerId] as const,
   () => {
-    scheduleMafiaLayerObserverConnect()
+    scheduleTileLayerObserverConnect()
   },
   { flush: 'post' },
 )
 
 onMounted(() => {
-  scheduleMafiaLayerObserverConnect()
+  scheduleTileLayerObserverConnect()
 })
 
 if (import.meta.env.DEV) {
@@ -956,15 +995,15 @@ if (import.meta.env.DEV) {
     :data-video-presentation="videoPresentation"
     :class="[
       `tile--${sizeTier}`,
-      mafiaEliminationBackgroundClass,
+      eliminationBackgroundClass,
       {
         'is-speaking': isSpeaking,
         'tile--speaking': isSpeaking,
-        'tile--mafia-kill-anim': mafiaKillAnim,
-        'tile--mafia-revive-glow': mafiaReviveAnim,
+        'tile--mafia-kill-anim': killAnim,
+        'tile--mafia-revive-glow': reviveAnim,
       },
     ]"
-    :style="mafiaDeadBackgroundStyle"
+    :style="deadBackgroundStyle"
   >
     <div class="tile-media">
       <div
@@ -1441,7 +1480,7 @@ if (import.meta.env.DEV) {
       <div
         v-if="showVideo"
         class="tile-video-wrap"
-        :class="{ 'tile-video-wrap--mafia-dead': mafiaDeadShade }"
+        :class="{ 'tile-video-wrap--mafia-dead': deadShade }"
       >
         <div class="tile-video-clip" v-memo="streamVideoMemoDeps">
           <StreamVideo
@@ -1463,7 +1502,7 @@ if (import.meta.env.DEV) {
             @video-stall="(p) => emit('video-stall', p)"
           />
         </div>
-        <div v-if="mafiaDeadShade" class="tile-dead-veneer" aria-hidden="true" />
+        <div v-if="deadShade" class="tile-dead-veneer" aria-hidden="true" />
         <div class="tile-overlay" aria-hidden="false">
           <div
             v-if="!editingName"
@@ -1473,33 +1512,33 @@ if (import.meta.env.DEV) {
             @dblclick.stop="startNameEdit"
           >
             <span
-              v-if="showMafiaSeat"
+              v-if="showSeatBadge"
               class="tile-overlay__seat-badge"
               aria-hidden="true"
               >{{ resolvedSeatIndex }}</span
             >
             <span
-              v-if="showMafiaRole"
+              v-if="showRoleBadge"
               class="tile-overlay__role-badge"
-              :title="mafiaRoleLabel"
+              :title="roleBadgeLabel"
               aria-hidden="true"
-              >{{ mafiaRoleLabel }}</span
+              >{{ roleBadgeLabel }}</span
             >
             <span class="tile-overlay__identity">
               <span
                 class="tile-overlay__display-name"
                 :class="{ 'tile-overlay__display-name--editable': !streamViewMode }"
-              >{{ mafiaCallPrimaryLine }}</span>
+              >{{ tilePrimaryLine }}</span>
             </span>
           </div>
           <div v-else class="tile-overlay__name-edit">
-            <span v-if="showMafiaSeat" class="tile-overlay__seat-badge" aria-hidden="true">{{ resolvedSeatIndex }}</span>
+            <span v-if="showSeatBadge" class="tile-overlay__seat-badge" aria-hidden="true">{{ resolvedSeatIndex }}</span>
             <span
-              v-if="showMafiaRole"
+              v-if="showRoleBadge"
               class="tile-overlay__role-badge"
-              :title="mafiaRoleLabel"
+              :title="roleBadgeLabel"
               aria-hidden="true"
-              >{{ mafiaRoleLabel }}</span
+              >{{ roleBadgeLabel }}</span
             >
             <input
               ref="nameInputRef"
@@ -1558,8 +1597,8 @@ if (import.meta.env.DEV) {
       </div>
       <div v-if="!showVideo" class="tile-placeholder">
         <div class="tile-placeholder__main">
-          <MafiaEliminationMark
-            v-if="showMafiaElimination"
+          <GameEliminationMark
+            v-if="showEliminationMark"
             class="tile-placeholder-elimination"
             :kind="resolvedEliminationKind"
           />
@@ -1584,33 +1623,33 @@ if (import.meta.env.DEV) {
             @dblclick.stop="startNameEdit"
           >
             <span
-              v-if="showMafiaSeat"
+              v-if="showSeatBadge"
               class="tile-overlay__seat-badge"
               aria-hidden="true"
               >{{ resolvedSeatIndex }}</span
             >
             <span
-              v-if="showMafiaRole"
+              v-if="showRoleBadge"
               class="tile-overlay__role-badge"
-              :title="mafiaRoleLabel"
+              :title="roleBadgeLabel"
               aria-hidden="true"
-              >{{ mafiaRoleLabel }}</span
+              >{{ roleBadgeLabel }}</span
             >
             <span class="tile-overlay__identity">
               <span
                 class="tile-overlay__display-name"
                 :class="{ 'tile-overlay__display-name--editable': !streamViewMode }"
-              >{{ mafiaCallPrimaryLine }}</span>
+              >{{ tilePrimaryLine }}</span>
             </span>
           </div>
           <div v-else class="tile-overlay__name-edit">
-            <span v-if="showMafiaSeat" class="tile-overlay__seat-badge" aria-hidden="true">{{ resolvedSeatIndex }}</span>
+            <span v-if="showSeatBadge" class="tile-overlay__seat-badge" aria-hidden="true">{{ resolvedSeatIndex }}</span>
             <span
-              v-if="showMafiaRole"
+              v-if="showRoleBadge"
               class="tile-overlay__role-badge"
-              :title="mafiaRoleLabel"
+              :title="roleBadgeLabel"
               aria-hidden="true"
-              >{{ mafiaRoleLabel }}</span
+              >{{ roleBadgeLabel }}</span
             >
             <input
               ref="nameInputRef"
@@ -1672,14 +1711,15 @@ if (import.meta.env.DEV) {
           v-if="resolvedHostShowLifeToggle"
           type="button"
           class="tile-menu__life"
-          :class="{ 'tile-menu__life--revive': mafiaIsDead }"
+          :class="{ 'tile-menu__life--revive': isDead }"
           data-no-mafia-tile-host
-          :title="mafiaIsDead ? t('mafiaPage.hostTileReviveTitle') : t('mafiaPage.hostTileEliminateTitle')"
-          :aria-label="mafiaIsDead ? t('mafiaPage.hostTileReviveTitle') : t('mafiaPage.hostTileEliminateTitle')"
-          @click.stop="onMafiaHostLifeClick"
+          data-no-game-room-tile-host
+          :title="hostLifeToggleTitle"
+          :aria-label="hostLifeToggleTitle"
+          @click.stop="onHostLifeClick"
         >
           <span class="tile-menu__life-ico" aria-hidden="true">{{
-            mafiaIsDead ? '👤' : '💀'
+            isDead ? '👤' : '💀'
           }}</span>
         </button>
         <div class="tile-remote-volume tile-menu-hoverable tile-menu-hoverable--remote">
@@ -1757,18 +1797,18 @@ if (import.meta.env.DEV) {
                 @pointerdown.stop
                 @touchstart.stop
               />
-              <div v-if="mafiaIsDead" class="tile-menu__row tile-menu__row--mafia-bg">
-                <span class="tile-menu__label">{{ t('mafiaPage.eliminationBackgroundLabel') }}</span>
-                <div class="tile-menu__swatches" role="group" :aria-label="t('mafiaPage.eliminationBackgroundLabel')">
+              <div v-if="isDead" class="tile-menu__row tile-menu__row--mafia-bg">
+                <span class="tile-menu__label">{{ eliminationBackgroundGroupLabel }}</span>
+                <div class="tile-menu__swatches" role="group" :aria-label="eliminationBackgroundGroupLabel">
                   <button
-                    v-for="bg in MAFIA_ELIMINATION_BACKGROUND_OPTIONS"
+                    v-for="bg in ELIMINATION_BACKGROUND_OPTIONS"
                     :key="bg"
                     type="button"
                     class="tile-menu__swatch"
                     :class="[`tile-menu__swatch--${bg}`, { 'tile-menu__swatch--active': resolvedEliminationBackground === bg }]"
-                    :aria-label="t(`mafiaPage.eliminationBackground.${bg}`)"
+                    :aria-label="eliminationBackgroundSwatchLabel(bg)"
                     :aria-pressed="resolvedEliminationBackground === bg"
-                    @click="setMafiaEliminationBackground(bg)"
+                    @click="setEliminationBackground(bg)"
                   />
                 </div>
               </div>

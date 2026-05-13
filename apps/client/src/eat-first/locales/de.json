@@ -653,7 +653,16 @@
     "speakingByAlreadyNominatedToast": "Platz #{by} hat bereits Platz #{target} nominiert.",
     "speakingTargetAlreadyNominatedToast": "Platz #{target} ist bereits nominiert (von Platz #{by}).",
     "obsViewUrlCopiedToast": "Link kopiert — in OBS einfügen",
-    "backgroundUploadFailed": "Upload failed."
+    "backgroundUploadFailed": "Upload failed.",
+    "hostTileReviveTitle": "Wieder an den Tisch",
+    "hostTileEliminateTitle": "Als draußen markieren",
+    "eliminationBackgroundLabel": "Eliminated background",
+    "eliminationBackground": {
+      "dark": "Dark",
+      "red": "Red",
+      "violet": "Violet",
+      "gray": "Gray"
+    }
   },
   "callPage": {
     "title": "Videoanruf",
