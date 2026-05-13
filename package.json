@@ -30,6 +30,7 @@
     "docker:db:up": "docker compose -f docker/docker-compose.local.yml up -d db",
     "docker:db:down": "docker compose -f docker/docker-compose.local.yml stop db",
     "dev:local": "concurrently -k -n server,client -c green,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
+    "dev:host-db": "wait-on tcp:127.0.0.1:5432 && concurrently -k -n server,client -c green,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
     "dev:all": "docker compose -f docker/docker-compose.local.yml up -d db && wait-on tcp:127.0.0.1:5432 && concurrently -k -n server,client -c green,magenta \"npm run dev -w server\" \"npm run dev -w client\""
   },
   "devDependencies": {

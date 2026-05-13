@@ -862,7 +862,8 @@
     "openProfileMenuFor": "Відкрити меню профілю для {name}",
     "mediaMuted": "Вимкнений звук",
     "mediaVolume": "Гучність",
-    "openAdminPanel": "Відкрити адмінпанель"
+    "openAdminPanel": "Відкрити адмінпанель",
+    "openAccount": "Мій акаунт"
   },
   "onboarding": {
     "openGuide": "Як користуватись",

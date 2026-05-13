@@ -105,8 +105,9 @@ const isMafiaRoute = computed(() => route.name === 'mafia')
 const isCoinHubRoute = computed(() => route.name === 'coin-hub')
 const isNadrawRoute = computed(() => route.name === 'nadraw-show')
 const isBetaAccessRoute = computed(() => route.name === 'beta-access')
+const isBillingRoute = computed(() => route.name === 'billing')
 const isAdminRoute = computed(() => String(route.name ?? '').startsWith('admin-'))
-const isHeavyVisualRoute = computed(() => isHomeRoute.value)
+const isHeavyVisualRoute = computed(() => isHomeRoute.value || isBillingRoute.value)
 const shellShowsCoinBalance = computed(() => showChrome.value)
 
 /** Hide header coin chip on interactive game routes (Coin Hub page keeps its own balance UI). */
@@ -139,7 +140,9 @@ const currentEatView = computed(() => (isEatRoute.value ? eatViewFromRoute(route
 
 const isEatFirstCallGameView = computed(() => route.name === 'eat' && currentEatView.value === 'call')
 
-const showChrome = computed(() => !isEatRoute.value || currentEatView.value !== 'overlay')
+const showChrome = computed(
+  () => (!isEatRoute.value || currentEatView.value !== 'overlay') && route.meta.chromeless !== true,
+)
 const showFooter = computed(
   () =>
     showChrome.value &&
@@ -218,6 +221,9 @@ const appLandingHeaderUserName = computed(() => auth.user.value?.displayName ?? 
 const appLandingHeaderUserAvatar = computed(() => auth.user.value?.avatar ?? '')
 const appLandingProfileTo = computed<RouteLocationRaw | undefined>(() =>
   auth.user.value?.role === 'admin' ? { name: 'admin-users' } : undefined,
+)
+const appLandingAccountTo = computed<RouteLocationRaw | undefined>(() =>
+  auth.isAuthenticated.value ? { name: 'account' } : undefined,
 )
 const emailVerificationSuccessFromRoute = computed(() => firstQueryValue(route.query.emailVerified) === '1')
 const footerYear = new Date().getFullYear()
@@ -852,6 +858,7 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
         :logo-src="isMafiaRoute || isEatFirstCallGameView ? mafiaHeaderLogo : BRAND_LOGO_LIGHT_SVG"
         :mafia-mode="isMafiaRoute || isEatFirstCallGameView"
         :profile-to="appLandingProfileTo"
+        :account-to="appLandingAccountTo"
         :room-center-mode="isCallRoute || isMafiaRoute || isEatFirstCallGameView"
         :show-help-button="isEatRoute && !isEatFirstCallGameView && Boolean(onboardingForRoute)"
         :show-coin="appLandingHeaderShowCoin"

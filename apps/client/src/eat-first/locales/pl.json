@@ -862,7 +862,8 @@
     "openProfileMenuFor": "Otwórz menu profilu użytkownika {name}",
     "mediaMuted": "Wyciszony",
     "mediaVolume": "Głośność",
-    "openAdminPanel": "Otwórz panel admina"
+    "openAdminPanel": "Otwórz panel admina",
+    "openAccount": "Moje konto"
   },
   "onboarding": {
     "openGuide": "Jak korzystać",

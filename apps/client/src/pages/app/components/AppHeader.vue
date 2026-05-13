@@ -17,6 +17,7 @@ const props = withDefaults(
     userName?: string
     userAvatar?: string
     profileTo?: RouteLocationRaw
+    accountTo?: RouteLocationRaw
     showHelpButton?: boolean
     helpLabel?: string
     compact?: boolean
@@ -41,6 +42,7 @@ const props = withDefaults(
     userName: '',
     userAvatar: '',
     profileTo: undefined,
+    accountTo: undefined,
     showHelpButton: false,
     helpLabel: '',
     compact: false,
@@ -302,6 +304,15 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
                 class="app-landing-header__profile-menu"
                 role="menu"
               >
+                <RouterLink
+                  v-if="accountTo"
+                  class="app-landing-header__profile-menu-item"
+                  :to="accountTo"
+                  role="menuitem"
+                  @click="closeProfileMenu"
+                >
+                  {{ t('app.openAccount') }}
+                </RouterLink>
                 <RouterLink
                   v-if="profileTo"
                   class="app-landing-header__profile-menu-item"
