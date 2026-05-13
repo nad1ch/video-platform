@@ -145,6 +145,9 @@ const props = withDefaults(
     mafiaEliminationKind?: GameEliminationAvatarKind
     /** Neutral alias of `mafiaEliminationKind`; takes precedence when defined. */
     gameEliminationKind?: GameEliminationAvatarKind
+    mafiaEliminationIconSrc?: string
+    /** Neutral alias of `mafiaEliminationIconSrc`; takes precedence when defined. */
+    gameEliminationIconSrc?: string
     mafiaEliminationBackground?: GameEliminationBackground
     /** Neutral alias of `mafiaEliminationBackground`; takes precedence when defined. */
     gameEliminationBackground?: GameEliminationBackground
@@ -339,6 +342,10 @@ const resolvedLifeState = computed(() => props.gameLifeState ?? props.mafiaLifeS
 const resolvedEliminationKind = computed(
   () => props.gameEliminationKind ?? props.mafiaEliminationKind,
 )
+const resolvedEliminationIconSrc = computed(() => {
+  const value = props.gameEliminationIconSrc ?? props.mafiaEliminationIconSrc
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : ''
+})
 const resolvedEliminationBackground = computed(
   () => props.gameEliminationBackground ?? props.mafiaEliminationBackground,
 )
@@ -1601,6 +1608,7 @@ if (import.meta.env.DEV) {
             v-if="showEliminationMark"
             class="tile-placeholder-elimination"
             :kind="resolvedEliminationKind"
+            :icon-src="resolvedEliminationIconSrc"
           />
           <img
             v-else-if="showAvatar"
@@ -1969,6 +1977,16 @@ if (import.meta.env.DEV) {
 .tile-video-wrap--mafia-dead .tile-video-clip {
   filter: grayscale(0.9) brightness(0.5);
   transition: filter 0.32s ease;
+}
+
+.tile--mafia-elim-bg-dark .tile-media {
+  background: transparent;
+}
+
+.tile--mafia-elim-bg-dark .tile-video-wrap,
+.tile--mafia-elim-bg-dark .tile-placeholder {
+  background: linear-gradient(135deg, rgb(3 7 18 / 0.6), rgb(43 45 49 / 0.6));
+  animation: mafia-dead-background-in 0.22s ease-out both;
 }
 
 .tile--mafia-elim-bg-red .tile-video-wrap,

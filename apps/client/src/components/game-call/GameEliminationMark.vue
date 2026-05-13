@@ -9,19 +9,36 @@
  * production Mafia compatibility; this file is a verbatim presentational
  * copy with neutral identifier naming and scoped class names.
  */
+import { computed } from 'vue'
 import type { GameEliminationAvatarKind } from '@/utils/gameTileTypes'
 
 const props = withDefaults(
   defineProps<{
     kind: GameEliminationAvatarKind
+    iconSrc?: string
   }>(),
   {},
 )
+
+const iconSrc = computed(() => {
+  const value = props.iconSrc
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : ''
+})
 </script>
 
 <template>
+  <img
+    v-if="iconSrc"
+    class="game-elimination-mark game-elimination-mark--asset"
+    :src="iconSrc"
+    alt=""
+    aria-hidden="true"
+    decoding="async"
+    loading="lazy"
+    draggable="false"
+  />
   <svg
-    v-if="props.kind === 'skull'"
+    v-else-if="props.kind === 'skull'"
     class="game-elimination-mark"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 64 64"
@@ -75,6 +92,10 @@ const props = withDefaults(
   flex-shrink: 0;
   color: var(--m-dead-fg);
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
+}
+
+.game-elimination-mark--asset {
+  object-fit: contain;
 }
 
 .m-bg {
