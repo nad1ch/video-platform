@@ -166,7 +166,7 @@ const {
   wordGraphemeCount,
 } = useNadleState({ storageScope: nadleStorageScope, lastError })
 
-const { topBanner, wsStatusLabel, ircRelayBanner } = useNadleStatusBanners({
+const { topBanner } = useNadleStatusBanners({
   streamerLoadError,
   lastError,
   wsStatus,
@@ -684,14 +684,15 @@ onBeforeUnmount(() => {
           <TwitchRelayChatPanel
             ref="chatPanelRef"
             flex-rail
+            :show-guess-hints="false"
             :ws-status="wsStatus"
-            :ws-status-label="wsStatusLabel"
-            :chat-title="t('nadleUi.chatTitle')"
+            ws-status-label="live"
+            chat-title="Stream chat;"
             :guess-len-hint="t('nadleUi.chatGuessLenHint', { n: chatTargetWordLength })"
             :channel-display="effectiveTwitchChannel"
             :twitch-watch-url="twitchWatchUrl"
-            :open-twitch-label="t('nadleUi.chatOpenTwitch')"
-            :irc-relay-banner="ircRelayBanner"
+            open-twitch-label="open twitch"
+            irc-relay-banner=""
             :relay-aria-label="t('nadleUi.chatRelayAria')"
             :chat-empty-text="t('nadleUi.chatEmpty', { channel: effectiveTwitchChannel })"
             :guess-badge-label="t('nadleUi.chatGuessBadge')"
@@ -727,6 +728,14 @@ onBeforeUnmount(() => {
   --nadle-gap: 11px;
   --nadle-len-css: 5;
   --nadle-panel-radius: 29px;
+  --nadle-header-glass-bg: rgba(18, 8, 34, 0.015);
+  --nadle-header-glass-border: rgba(255, 255, 255, 0.11);
+  --nadle-header-glass-shine: linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 34%),
+    rgba(18, 8, 34, 0.015);
+  --nadle-header-glass-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 14px 36px rgba(11, 3, 23, 0.34);
   --nadle-panel-bg: linear-gradient(105deg, rgba(124, 77, 219, 0.173) 0%, rgba(60, 36, 99, 0.169) 73.21%);
   --nadle-panel-border: rgba(255, 255, 255, 0.22);
   --nadle-control-bg: rgba(102, 56, 143, 0.47);
@@ -1469,14 +1478,6 @@ onBeforeUnmount(() => {
     var(--nadle-panel-bg);
 }
 
-.nadle-page__stack--leader {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
 .nadle-page__grid :deep(.nadle-page__stack--game > p) {
   flex-shrink: 0;
 }
@@ -1961,6 +1962,308 @@ onBeforeUnmount(() => {
     max-height: none;
     overflow-y: auto;
   }
+}
+
+.nadle-page__stack--leader {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--nadle-header-glass-border);
+  border-radius: 29.143px;
+  background: var(--nadle-header-glass-bg);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.nadle-page__stack--leader::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--nadle-header-glass-shine);
+  box-shadow: var(--nadle-header-glass-shadow);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  transform: translateZ(0);
+}
+
+.nadle-page__stack--leader > .nadle-page__leader-stack,
+.nadle-page__stack--leader > .nadle-page__side-tools {
+  position: relative;
+  z-index: 1;
+}
+
+.nadle-page__stack--chat {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 29.143px;
+  border: 1px solid var(--nadle-header-glass-border);
+  background: var(--nadle-header-glass-bg);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.nadle-page__stack--chat::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--nadle-header-glass-shine);
+  box-shadow: var(--nadle-header-glass-shadow);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  transform: translateZ(0);
+}
+
+.nadle-page__stack--chat::after {
+  display: none;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__shell) {
+  position: relative;
+  z-index: 1;
+  gap: 0;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__head) {
+  position: absolute;
+  left: 0;
+  top: -2px;
+  z-index: 2;
+  box-sizing: border-box;
+  width: 100%;
+  height: 82px;
+  border-radius: 29.143px;
+  border: 1px solid var(--nadle-header-glass-border);
+  background: var(--nadle-header-glass-bg);
+  box-shadow: none;
+  overflow: visible;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__head::before) {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--nadle-header-glass-shine);
+  box-shadow: var(--nadle-header-glass-shadow);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  transform: translateZ(0);
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__head-row) {
+  position: relative;
+  display: block;
+  height: 46px;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__title) {
+  position: absolute;
+  left: 21px;
+  right: 70px;
+  top: 0;
+  height: 51px;
+  overflow: hidden;
+  font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
+  font-size: 16px;
+  font-variation-settings: 'YEAR' 1979;
+  line-height: 50.526px;
+  letter-spacing: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__ws-pill) {
+  position: absolute;
+  right: 16.756px;
+  top: 18px;
+  min-width: 42px;
+  width: 42px;
+  height: 23px;
+  padding: 0;
+  border-radius: 11.362px;
+  background: rgba(255, 59, 48, 0.44);
+  font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
+  font-size: 9px;
+  font-variation-settings: 'YEAR' 1979;
+  line-height: 1;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__toolbar) {
+  position: absolute;
+  left: 11px;
+  right: 17.143px;
+  top: 46px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0;
+  width: auto;
+  height: 20px;
+  margin: 0;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__channel-pill) {
+  margin-left: 14px;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 15px;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__external) {
+  margin-left: auto;
+  min-width: 92px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 11.362px;
+  background: rgba(102, 56, 143, 0.33);
+  font-family: "Climate Crisis", var(--sa-font-display, system-ui, sans-serif);
+  font-size: 9px;
+  font-variation-settings: 'YEAR' 1979;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__feed) {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 82px;
+  bottom: 10px;
+  z-index: 1;
+  flex: none;
+  width: auto;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  overflow: hidden auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__lines) {
+  gap: 5px;
+  padding: 0 0 2px;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__line) {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__line:hover) {
+  background: transparent;
+  box-shadow: none;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__avatar),
+.nadle-page__stack--chat :deep(.twitch-relay-chat__badge) {
+  display: none;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__line-body),
+.nadle-page__stack--chat :deep(.twitch-relay-chat__line-meta),
+.nadle-page__stack--chat :deep(.twitch-relay-chat__text) {
+  display: inline;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__name) {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: #ff0000;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__line:nth-child(3n + 1) .twitch-relay-chat__name) {
+  color: #00bbff;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__line:nth-child(3n + 2) .twitch-relay-chat__name) {
+  color: #15ff00;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__line:nth-child(4n) .twitch-relay-chat__name) {
+  color: #ff00b2;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__name::after) {
+  content: ': ';
+  color: #ffffff;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__text) {
+  margin: 0;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.nadle-page__stack--chat :deep(.twitch-relay-chat__empty) {
+  padding: 32px 10px;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 14px;
+}
+
+@media (max-width: 1200px) {
+  .nadle-page__stack--chat {
+    height: min(560px, 58dvh);
+    min-height: 320px;
+  }
+}
+
+.nadle-page__stack--game {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--nadle-header-glass-border);
+  background: var(--nadle-header-glass-bg);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.nadle-page__stack--game::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--nadle-header-glass-shine);
+  box-shadow: var(--nadle-header-glass-shadow);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  transform: translateZ(0);
+}
+
+.nadle-page__stack--game > .nadle-page__game,
+.nadle-page__grid :deep(.nadle-page__stack--game > .nadle-page__game) {
+  position: relative;
+  z-index: 1;
 }
 
 
