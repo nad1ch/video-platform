@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import AppContainer from '@/components/ui/AppContainer.vue'
@@ -8,7 +8,11 @@ import CoinHubHero from '@/components/coinhub/CoinHubHero.vue'
 import DailyCard from '@/components/coinhub/DailyCard.vue'
 import SpinModule from '@/components/coinhub/SpinModule.vue'
 import CaseCard from '@/components/coinhub/CaseCard.vue'
-import CaseOpeningModal from '@/components/coinhub/CaseOpeningModal.vue'
+// Case-opening modal renders only after a case is opened; lazy so the
+// /app/coin-hub first paint is not blocked on the modal chunk.
+const CaseOpeningModal = defineAsyncComponent(
+  () => import('@/components/coinhub/CaseOpeningModal.vue'),
+)
 import BoostCard from '@/components/coinhub/BoostCard.vue'
 import StreamerCard from '@/components/coinhub/StreamerCard.vue'
 import CoinHubUpgradePanel from '@/components/coinhub/CoinHubUpgradePanel.vue'
@@ -505,6 +509,7 @@ function luckCaseTitle(index: number): string {
     />
 
     <CaseOpeningModal
+      v-if="caseModalOpen"
       :open="caseModalOpen"
       :title="caseModalTitle || t('coinHub.casePlaceholder')"
       :resolving="caseModalResolving"

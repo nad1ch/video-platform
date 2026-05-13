@@ -1,15 +1,40 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+/**
+ * MafiaOverlay — Mafia adapter around the shared `<GameTimerOverlay>` chip.
+ *
+ * Owns the Mafia-specific bits (Phase 5a extraction):
+ *   - host identity gate (`isMafiaHost`)
+ *   - "old Mafia mode" panel-visibility rule (`!oldMafiaMode || isMafiaHost`)
+ *   - the timer store contract (`mafiaGame.startTimer(ms)` / `stopTimer()`)
+ *   - `MAFIA_TIMER_PRESET_MS` preset list
+ *   - i18n key resolution (`mafiaPage.timer*`)
+ *   - the absolute-positioning wrapper that frames the chip on the call stage
+ *
+ * The chip itself (countdown text, preset chips, Start/Stop button, 1 s tick,
+ * compact layout) is now owned by `GameTimerOverlay` in `components/game-call`.
+ * That component is store-free and consumed only via this adapter today;
+ * future games can mount it directly with their own labels + adapter.
+ */
+
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { MAFIA_TIMER_PRESET_MS, useMafiaGameStore } from '@/stores/mafiaGame'
-import mafiaTimerClock from '@/assets/mafia/ui/timer-clock.svg'
+import GameTimerOverlay, {
+  type GameTimerLabels,
+  type GameTimerState,
+} from '@/components/game-call/GameTimerOverlay.vue'
+
+/**
+ * Mafia's historical default Start duration (third preset = 90 s). Pinned
+ * explicitly here so adding 120 s to the shared preset list does not silently
+ * shift Mafia's default to the new largest value.
+ */
+const MAFIA_DEFAULT_TIMER_MS = 90_000
 
 const props = withDefaults(
   defineProps<{
-    
     streamView?: boolean
-    
     viewMode?: boolean
   }>(),
   { streamView: false, viewMode: undefined },
@@ -21,345 +46,64 @@ const { t } = useI18n()
 const mafiaGame = useMafiaGameStore()
 const { isMafiaHost, mafiaTimer, oldMafiaMode } = storeToRefs(mafiaGame)
 
-const nowMs = ref(Date.now())
-let nowTick: ReturnType<typeof setInterval> | undefined
-
-const selectedDurationMs = ref<(typeof MAFIA_TIMER_PRESET_MS)[number]>(MAFIA_TIMER_PRESET_MS[2]!)
-
-function startTickIfNeeded(): void {
-  if (nowTick != null) {
-    return
-  }
-  nowMs.value = Date.now()
-  nowTick = setInterval(() => {
-    nowMs.value = Date.now()
-  }, 1000)
-}
-
-function stopTick(): void {
-  if (nowTick != null) {
-    clearInterval(nowTick)
-    nowTick = undefined
-  }
-}
-
-const remainingMs = computed(() => {
-  const t = mafiaTimer.value
-  if (t == null || !t.isRunning) {
-    return 0
-  }
-  return Math.max(0, t.duration - (nowMs.value - t.startedAt))
-})
-
-const timerDisplay = computed(() => {
-  if (mafiaTimer.value == null || !mafiaTimer.value.isRunning) {
-    return null
-  }
-  const totalSec = Math.floor(remainingMs.value / 1000)
-  const m = Math.floor(totalSec / 60)
-  const s = totalSec % 60
-  return `${m}:${String(s).padStart(2, '0')}`
-})
-
-const showTimerControls = computed(() => isMafiaHost.value && !isViewLayout.value)
 const showTimerPanel = computed(() => !oldMafiaMode.value || isMafiaHost.value)
-
-const timerIdleDisplay = computed(() => {
-  const totalSec = Math.floor(selectedDurationMs.value / 1000)
-  const m = Math.floor(totalSec / 60)
-  const s = totalSec % 60
-  return `${m}:${String(s).padStart(2, '0')}`
-})
-
-const timerText = computed(() => timerDisplay.value ?? timerIdleDisplay.value)
+const showTimerControls = computed(() => isMafiaHost.value && !isViewLayout.value)
 const useCompactTimer = computed(() => !showTimerControls.value)
 
 /**
- * The 1 s tick previously ran for the whole life of `MafiaPage` even when no timer was
- * running, idly waking the JS loop every second. We start/stop it strictly around the
- * `mafiaTimer.isRunning` transition so an idle Mafia room is fully quiet.
+ * Map the Mafia store's `MafiaTimerState` (`{ startedAt, duration, isRunning }`)
+ * to the shared component's `GameTimerState` (`{ startedAt, durationMs }`).
+ * The shared component derives `isRunning` from the remaining ms — pass `null`
+ * whenever the Mafia store says it isn't running, so the shared component
+ * never inspects the store-specific `isRunning` flag.
  */
-watch(
-  () => mafiaTimer.value?.isRunning === true,
-  (running) => {
-    if (running) {
-      startTickIfNeeded()
-    } else {
-      stopTick()
-    }
-  },
-  { immediate: true },
-)
-
-onUnmounted(() => {
-  stopTick()
+const sharedTimer = computed<GameTimerState | null>(() => {
+  const t = mafiaTimer.value
+  if (t == null || !t.isRunning) return null
+  return { startedAt: t.startedAt, durationMs: t.duration }
 })
 
-function onSelectDuration(ms: (typeof MAFIA_TIMER_PRESET_MS)[number]): void {
-  selectedDurationMs.value = ms
+const timerLabels = computed<GameTimerLabels>(() => ({
+  countdown: (time) => t('mafiaPage.timerCountdown', { time }),
+  durationSec: (n) => t('mafiaPage.timerSecTitle', { n }),
+  start: t('mafiaPage.timerStartButton'),
+  stop: t('mafiaPage.timerStopButton'),
+  controlsAria: t('mafiaPage.timerControlsAria'),
+  durationsAria: t('mafiaPage.timerDurationsAria'),
+}))
+
+function onStart(durationMs: number): void {
+  mafiaGame.startTimer(durationMs)
 }
 
-function onToggleTimer(): void {
-  if (mafiaTimer.value?.isRunning) {
-    mafiaGame.stopTimer()
-    return
-  }
-  mafiaGame.startTimer(selectedDurationMs.value)
+function onStop(): void {
+  mafiaGame.stopTimer()
 }
 </script>
 
 <template>
   <div class="mafia-overlay" role="presentation">
-    <div
+    <GameTimerOverlay
       v-if="showTimerPanel"
-      class="mafia-overlay__header call-floating-surface"
-      :class="{ 'mafia-overlay__header--compact': useCompactTimer }"
-    >
-      <div
-        class="mafia-overlay__header-main"
-        :class="{ 'mafia-overlay__header-main--compact': useCompactTimer }"
-      >
-        <img class="mafia-overlay__timer-stopwatch" :src="mafiaTimerClock" alt="" aria-hidden="true" />
-        <span
-          class="mafia-overlay__timer-text mafia-overlay__timer-text--mono"
-          role="timer"
-          :aria-label="t('mafiaPage.timerCountdown', { time: timerText })"
-        >
-          {{ timerText }}
-        </span>
-        <div
-          v-if="showTimerControls"
-          class="mafia-overlay__timer-ctrls"
-          role="group"
-          :aria-label="t('mafiaPage.timerControlsAria')"
-        >
-          <div
-            class="mafia-overlay__timer-presets"
-            role="group"
-            :aria-label="t('mafiaPage.timerDurationsAria')"
-          >
-            <button
-              v-for="ms in MAFIA_TIMER_PRESET_MS"
-              :key="ms"
-              type="button"
-              class="sa-chip-btn mafia-overlay__timer-preset"
-              :class="{ 'mafia-overlay__timer-preset--active': selectedDurationMs === ms }"
-              :title="t('mafiaPage.timerSecTitle', { n: ms / 1000 })"
-              :aria-label="t('mafiaPage.timerSecTitle', { n: ms / 1000 })"
-              :aria-pressed="selectedDurationMs === ms"
-              @click="onSelectDuration(ms)"
-            >
-              {{ ms / 1000 }}
-            </button>
-          </div>
-          <button
-            type="button"
-            class="sa-chip-btn mafia-overlay__timer-action mafia-overlay__timer-action--start"
-            :title="mafiaTimer?.isRunning ? t('mafiaPage.timerStopButton') : t('mafiaPage.timerStartButton')"
-            :aria-label="mafiaTimer?.isRunning ? t('mafiaPage.timerStopButton') : t('mafiaPage.timerStartButton')"
-            @click="onToggleTimer"
-          >
-            {{ mafiaTimer?.isRunning ? 'Stop' : 'Start' }}
-          </button>
-        </div>
-      </div>
-    </div>
+      :timer="sharedTimer"
+      :is-host="isMafiaHost"
+      :stream-view="isViewLayout"
+      :compact="useCompactTimer"
+      :preset-ms-list="MAFIA_TIMER_PRESET_MS"
+      :default-duration-ms="MAFIA_DEFAULT_TIMER_MS"
+      :labels="timerLabels"
+      @start="onStart"
+      @stop="onStop"
+    />
   </div>
 </template>
 
-<style scoped src="@/components/call/callFloatingSurface.css"></style>
-
 <style scoped>
-
 .mafia-overlay {
   position: absolute;
   inset: 0;
   /* Above `.call-page__tile-wrap` elevated states (z-index 35); see `MafiaPage` hover override. */
   z-index: 42;
   pointer-events: none;
-}
-
-
-.mafia-overlay__header {
-  position: absolute;
-  top: calc(max(0px, env(safe-area-inset-top, 0px)) + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 297px;
-  max-width: calc(100vw - 16px);
-  min-height: 42px;
-  padding: 0;
-  border: 0;
-  border-radius: 27px;
-  background: rgb(60 36 99 / 0.68);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  pointer-events: auto;
-}
-
-.mafia-overlay__header--compact {
-  width: 112px;
-}
-
-.mafia-overlay__header-main {
-  display: grid;
-  grid-template-columns: 24px 54px minmax(0, 1fr);
-  align-items: center;
-  column-gap: 8px;
-  width: 100%;
-  height: 42px;
-  padding: 0 12px;
-  box-sizing: border-box;
-  min-width: 0;
-}
-
-.mafia-overlay__header-main--compact {
-  grid-template-columns: 24px 54px;
-  column-gap: 8px;
-}
-
-.mafia-overlay__timer-ctrls {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  margin-left: 4px;
-}
-
-.mafia-overlay__timer-presets {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.mafia-overlay__timer-preset {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  min-width: 38px;
-  min-height: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: 21px;
-  background: rgb(102 56 143 / 0.34);
-  color: rgb(255 255 255 / 0.94);
-  font-family: var(--app-timer-digits);
-  font-size: 12px;
-  font-weight: 800;
-  font-variant-numeric: lining-nums tabular-nums;
-  font-feature-settings: 'lnum' 1, 'tnum' 1;
-  line-height: 1;
-  letter-spacing: 0.01em;
-  text-align: center;
-}
-
-.mafia-overlay__timer-preset--active {
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
-}
-
-.mafia-overlay__timer-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 53px;
-  min-width: 53px;
-  min-height: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: 21px;
-  background: rgb(102 56 143 / 0.34);
-  color: rgb(255 255 255 / 0.94);
-  font-family: var(--app-timer-digits);
-  font-size: 12px;
-  font-weight: 800;
-  font-variant-numeric: lining-nums tabular-nums;
-  font-feature-settings: 'lnum' 1, 'tnum' 1;
-  line-height: 1;
-  letter-spacing: 0.01em;
-  text-align: center;
-}
-
-.mafia-overlay__timer-stopwatch {
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  display: block;
-  object-fit: contain;
-  align-self: center;
-}
-
-
-.mafia-overlay__timer-text {
-  font-family: var(--app-timer-digits);
-  font-size: 21px;
-  font-weight: 800;
-  line-height: 1;
-  color: rgb(255 255 255 / 0.94);
-  transform: translateY(-1px);
-}
-
-.mafia-overlay__timer-text--mono {
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1;
-  letter-spacing: 0.01em;
-}
-
-.mafia-overlay__round-tools {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.3rem;
-  margin-left: 0.1rem;
-  padding-left: 0.4rem;
-  border-left: 1px solid color-mix(in srgb, var(--sa-color-border) 80%, transparent);
-}
-
-.mafia-overlay__icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.05rem;
-  height: 2.05rem;
-  margin: 0;
-  padding: 0;
-  border: 1px solid color-mix(in srgb, var(--sa-color-border) 90%, #fff);
-  border-radius: var(--sa-radius-sm, 8px);
-  background: color-mix(in srgb, var(--sa-color-surface) 50%, #000);
-  color: var(--sa-color-text-main, #e8e8f0);
-  cursor: pointer;
-  box-shadow: 0 0 0 1px color-mix(in srgb, #fff 4%, transparent);
-  transition:
-    background 0.12s ease,
-    border-color 0.12s ease,
-    box-shadow 0.12s ease;
-}
-
-.mafia-overlay__icon-btn:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--sa-color-primary, #a78bfa) 45%, var(--sa-color-border));
-  background: color-mix(in srgb, var(--sa-color-primary, #a78bfa) 10%, var(--sa-color-surface-raised, #1a1a24));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sa-color-primary) 22%, transparent);
-}
-
-.mafia-overlay__icon-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--sa-color-primary) 55%, var(--sa-color-border));
-  outline-offset: 2px;
-}
-
-.mafia-overlay__icon-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-  box-shadow: none;
-}
-
-.mafia-overlay__icon-svg {
-  width: 1.15rem;
-  height: 1.15rem;
 }
 </style>

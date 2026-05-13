@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { LOCAL_DEV_API_PORT } from '../server/src/config/localDevApiPort'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -10,7 +11,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
  * Dev proxy target for API + WebSocket upgrade. Use `127.0.0.1` (not `localhost`) so Windows does not
  * resolve `localhost` → `::1` while Node listens on IPv4 only — otherwise Vite returns HTTP 502 for `/api/*`.
  */
-const devApiProxyTarget = (process.env.VITE_DEV_API_PROXY ?? 'http://127.0.0.1:3000').replace(/\/$/, '')
+const devApiProxyTarget = (
+  process.env.VITE_DEV_API_PROXY ?? `http://127.0.0.1:${LOCAL_DEV_API_PORT}`
+).replace(/\/$/, '')
 const devWsProxyTarget = devApiProxyTarget.startsWith('https://')
   ? devApiProxyTarget.replace(/^https:\/\//, 'wss://')
   : devApiProxyTarget.replace(/^http:\/\//, 'ws://')

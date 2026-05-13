@@ -41,6 +41,15 @@ export const MafiaWs = {
   settingsUpdate: 'mafia:settings-update',
   
   pageBackgroundSettings: 'mafia:page-background-settings',
+  /**
+   * Host-only per-participant audio mix (volume + mute). Server validates host
+   * authority via `isMafiaHostPeer`, stores the latest snapshot keyed by stable
+   * `userId` when present (peerId fallback), and replays it to late joiners
+   * (notably `?mode=view` OBS clients). Listening only — does not touch
+   * mediasoup producer/consumer lifecycle; clients map this to the existing
+   * `setRemoteListenVolume` / `setRemoteListenMuted` (call-core).
+   */
+  audioMixUpdate: 'mafia:audio-mix-update',
   
   timerStart: 'mafia:timer-start',
   
@@ -55,4 +64,20 @@ export const MafiaWs = {
   forceCameraOff: 'mafia:force-camera-off',
   
   forceMuteAll: 'mafia:force-mute-all',
+  /**
+   * Per-peer Mafia mic-force signal. Server-emitted only (no client→server
+   * variant) as a side effect of `mafia:player-kick` / `mafia:player-revive`.
+   * The target peer flips its local mic UI off when `muted: true` arrives;
+   * `muted: false` clears any local "forced" hint but does NOT auto-unmute
+   * the user's mic — the player must unmute manually after revive.
+   */
+  forcePeerMic: 'mafia:force-peer-mic',
+  /**
+   * Client → server: request the full Mafia state snapshot. Re-emits the
+   * same snapshot block as `handleJoinRoom` to the requesting socket only.
+   * Used by OBS / `?mode=view` clients on WS reconnect to recover state
+   * without forcing a full reload. No host authority required: the snapshot
+   * is read-only state already broadcast to the room.
+   */
+  requestSnapshot: 'mafia:request-snapshot',
 } as const

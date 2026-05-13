@@ -25,6 +25,8 @@ const props = withDefaults(
     roomCenterMode?: boolean
     showCoin?: boolean
     showAuth?: boolean
+    /** Mafia OBS browser source: hide header chrome and title; keep the left logo. */
+    mafiaObsMinimalChrome?: boolean
     /**
      * Show the gold "PRO" pill linking to billing. Driven by
      * `useProSubscription().isProActive` from the layout. Hidden when
@@ -50,6 +52,7 @@ const props = withDefaults(
     roomCenterMode: false,
     showCoin: true,
     showAuth: true,
+    mafiaObsMinimalChrome: false,
     isProActive: false,
     proLinkTo: undefined,
     proLabel: '',
@@ -194,6 +197,7 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
       'app-landing-header--compact': compact,
       'app-landing-header--mafia': mafiaMode,
       'app-landing-header--room-center': roomCenterMode,
+      'app-landing-header--mafia-obs': mafiaObsMinimalChrome,
     }"
     :aria-label="t('app.headerAria')"
   >
@@ -456,6 +460,28 @@ function avatarSizedUrl(rawUrl: string, size: number): string {
 /* Games (mafia / eat-first call): tuck gear closer to the logo only here. */
 .app-landing-header--mafia .app-landing-header__brand-extra {
   margin-left: calc(3rem - 10px);
+}
+
+/* Mafia OBS (`mode=view`): no pill chrome or title; logo stays in the same horizontal inset. */
+.app-landing-header--mafia-obs .app-landing-header__bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-landing-header--mafia-obs .app-landing-header__bar::before {
+  display: none;
+}
+
+.app-landing-header--mafia-obs .app-landing-header__center,
+.app-landing-header--mafia-obs .app-landing-header__actions {
+  display: none;
 }
 
 .app-landing-header__logo {

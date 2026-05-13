@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import AppContainer from '@/components/ui/AppContainer.vue'
-import JarPaymentModal from '@/components/billing/JarPaymentModal.vue'
+// Payment modal is hidden behind the "Buy Pro" CTA; lazy so the
+// `/app/billing` first paint does not pay for the modal chunk.
+const JarPaymentModal = defineAsyncComponent(
+  () => import('@/components/billing/JarPaymentModal.vue'),
+)
 import { useProSubscription } from '@/composables/useProSubscription'
 import { useJarBillingFlow } from '@/composables/useJarBillingFlow'
 import { refreshBillingConfig, useBillingConfig } from '@/composables/useBillingConfig'
@@ -143,7 +147,9 @@ function onGoPro(): void {
 }
 
 onMounted(() => {
-  void refreshSubscription()
+  // Subscription state is kept fresh by the global `BillingToastSurface`
+  // notifier (immediate tick on auth, then every 20s + on visibility).
+  // No need to fire a duplicate `subscription/me` from this page on mount.
   void refreshBillingConfig()
 })
 </script>
@@ -293,6 +299,7 @@ onMounted(() => {
     </section>
 
     <JarPaymentModal
+      v-if="modalOpen"
       :open="modalOpen"
       :kind="flow.kind.value"
       :request="flow.request.value"

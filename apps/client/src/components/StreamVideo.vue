@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { createLogger } from '@/utils/logger'
+import {
+  isMediaDebugEnabled,
+  registerVideoDebugReader,
+  type MediaDebugVideoSnapshot,
+} from '@/utils/mediaDebugRuntime'
 
 const streamVideoLog = createLogger('stream-video')
 
@@ -10,13 +15,13 @@ const props = withDefaults(
     muted?: boolean
     playRev?: number
     fill?: boolean
-    
+
     fillCover?: boolean
-    
+
     reportVideoUi?: boolean
-    
+
     videoPresentation?: 'camera' | 'screen' | 'none'
-    
+
 
 
 
@@ -26,11 +31,19 @@ const props = withDefaults(
      * Ignored when {@link playbackSuppressed} is true. Does not change WebRTC decode/consume.
      */
     targetPlaybackFps?: number
-    
+
 
 
 
     remotePlaybackStallPeerId?: string | null
+    /**
+     * Optional peerId, used by the stall watchdog and the dev `?mediaDebug=1`
+     * registry. When unset, both are no-ops. Has no effect on rendering.
+     * Distinct from {@link remotePlaybackStallPeerId} (which is a separate
+     * flag for the `<video>` `waiting`-event reporter); a tile may set both
+     * to the same value.
+     */
+    peerId?: string | null
   }>(),
   {
     muted: false,
@@ -38,12 +51,20 @@ const props = withDefaults(
     fillCover: false,
     reportVideoUi: true,
     playbackSuppressed: false,
+    peerId: null,
   },
 )
 
 const emit = defineEmits<{
   videoUi: [payload: { readyState: number; videoWidth: number; videoHeight: number }]
   remotePlaybackStall: [payload: { peerId: string; stalling: boolean }]
+  /**
+   * Frame-decode stall detected: `<video>.currentTime` did not advance for
+   * >= STALL_THRESHOLD_MS while the track was live and dimensions were
+   * present. Consumer is expected to debounce globally and trigger a soft
+   * producer resync.
+   */
+  videoStall: [payload: { peerId: string }]
 }>()
 
 const el = ref<HTMLVideoElement | null>(null)
@@ -651,9 +672,143 @@ function onDocumentVisibleTryPlay(): void {
   void bindStream()
 }
 
+/**
+ * Frame-decode stall watchdog (remote tiles only).
+ *
+ * The element-level `waiting` event fires on buffer underrun, but a key-frame
+ * loss or a paused-by-server consumer can leave `currentTime` frozen with
+ * `readyState >= 2`, no `waiting` event, and the track still `live`. We
+ * sample every {@link STALL_SAMPLE_MS} and emit `videoStall` once when the
+ * gap exceeds {@link STALL_THRESHOLD_MS}. Re-arms only after `currentTime`
+ * advances again, so a single stall produces at most one event.
+ *
+ * Conditions to even sample:
+ *   - This is a remote tile (`reportVideoUi === false`).
+ *   - A peerId is provided (`props.peerId`).
+ *   - There is a usable video track and dimensions are present.
+ *   - Playback is not intentionally suppressed (off-screen / hidden tile).
+ */
+const STALL_SAMPLE_MS = 2000
+const STALL_THRESHOLD_MS = 6000
+const STALL_MIN_DELTA = 0.05
+
+let stallTimer: ReturnType<typeof setInterval> | null = null
+let lastStallSampleCurrentTime = -1
+let lastStallSampleAt = 0
+let stallFiredAt = 0
+let stallCurrentlyDetected = false
+/**
+ * Tracks the inbound video track id between samples so we can reset the
+ * watchdog state when the track is replaced (camera ↔ screen-share switch,
+ * publisher camera unplug/replug, any `replaceTrack` flow). Without this,
+ * `lastStallSampleCurrentTime` from the old track can be larger than the
+ * new track's initial `currentTime`, producing a negative delta that
+ * masquerades as "no advance" and emits a false stall after 6 s.
+ */
+let lastStallSampleTrackId: string | null = null
+
+function shouldRunStallWatchdog(): boolean {
+  if (props.reportVideoUi) return false
+  const peerId = typeof props.peerId === 'string' ? props.peerId.trim() : ''
+  if (peerId.length === 0) return false
+  if (props.playbackSuppressed) return false
+  if (!hasUsableVideoTrack.value) return false
+  return true
+}
+
+function tickStallWatchdog(): void {
+  if (!shouldRunStallWatchdog()) {
+    if (lastStallSampleCurrentTime !== -1) {
+      lastStallSampleCurrentTime = -1
+      lastStallSampleTrackId = null
+      stallCurrentlyDetected = false
+    }
+    return
+  }
+  const v = el.value
+  if (!v) return
+  if (v.videoWidth <= 0 || v.videoHeight <= 0) return
+  const trackId = v.srcObject
+    ? (v.srcObject as MediaStream).getVideoTracks()[0]?.id ?? null
+    : null
+  if (trackId !== lastStallSampleTrackId) {
+    lastStallSampleTrackId = trackId
+    lastStallSampleCurrentTime = -1
+    stallCurrentlyDetected = false
+  }
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  const ct = v.currentTime
+  if (lastStallSampleCurrentTime === -1) {
+    lastStallSampleCurrentTime = ct
+    lastStallSampleAt = now
+    return
+  }
+  const delta = ct - lastStallSampleCurrentTime
+  if (delta >= STALL_MIN_DELTA) {
+    lastStallSampleCurrentTime = ct
+    lastStallSampleAt = now
+    if (stallCurrentlyDetected) {
+      stallCurrentlyDetected = false
+    }
+    return
+  }
+  if (now - lastStallSampleAt < STALL_THRESHOLD_MS) {
+    return
+  }
+  if (stallCurrentlyDetected) {
+    return
+  }
+  if (now - stallFiredAt < STALL_THRESHOLD_MS) {
+    return
+  }
+  stallCurrentlyDetected = true
+  stallFiredAt = now
+  const peerId = typeof props.peerId === 'string' ? props.peerId.trim() : ''
+  if (peerId.length === 0) return
+  if (import.meta.env.DEV) {
+    streamVideoLog.warn('decode stall detected (currentTime not advancing)', {
+      peerId,
+      currentTime: ct,
+      videoWidth: v.videoWidth,
+      videoHeight: v.videoHeight,
+      readyState: v.readyState,
+    })
+  }
+  emit('videoStall', { peerId })
+}
+
+let detachVideoDebugReader: (() => void) | null = null
+
 onMounted(() => {
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', onDocumentVisibleTryPlay)
+  }
+  stallTimer = setInterval(tickStallWatchdog, STALL_SAMPLE_MS)
+
+  if (isMediaDebugEnabled()) {
+    const peerId = typeof props.peerId === 'string' && props.peerId.length > 0 ? props.peerId : null
+    if (peerId != null) {
+      detachVideoDebugReader = registerVideoDebugReader(peerId, (): MediaDebugVideoSnapshot => {
+        const v = el.value
+        const track = v?.srcObject ? (v.srcObject as MediaStream).getVideoTracks()[0] ?? null : null
+        return {
+          el: v,
+          currentTime: v?.currentTime ?? 0,
+          readyState: v?.readyState ?? 0,
+          videoWidth: v?.videoWidth ?? 0,
+          videoHeight: v?.videoHeight ?? 0,
+          paused: v?.paused ?? true,
+          trackId: track?.id ?? null,
+          trackMuted: track ? track.muted : null,
+          trackEnabled: track ? track.enabled : null,
+          trackReadyState: track ? track.readyState : null,
+          lastSampleCurrentTime: lastStallSampleCurrentTime,
+          lastSampleAt: lastStallSampleAt,
+          stalled: stallCurrentlyDetected,
+          playbackSuppressed: !!props.playbackSuppressed,
+        }
+      })
+    }
   }
 })
 
@@ -665,6 +820,12 @@ onUnmounted(() => {
   if (typeof document !== 'undefined') {
     document.removeEventListener('visibilitychange', onDocumentVisibleTryPlay)
   }
+  if (stallTimer != null) {
+    clearInterval(stallTimer)
+    stallTimer = null
+  }
+  detachVideoDebugReader?.()
+  detachVideoDebugReader = null
 })
 </script>
 

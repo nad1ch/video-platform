@@ -30,6 +30,13 @@ export class Peer {
   
   mafiaSessionId = ''
   /**
+   * Generic game-room (Phase 3A) host session id. Parallel to
+   * `mafiaSessionId` but for the `gameroom:<base>` namespace. The two are
+   * intentionally separate so a user who hosts a Mafia room and a game-room
+   * with the same base id keeps independent host identities per namespace.
+   */
+  gameRoomSessionId = ''
+  /**
    * Eat First identity: server-validated slot id (`p1`..`p11`) the peer
    * claimed via `eat:slot-claim` (token/device auth). Call moderator never binds a seat.
    * Used by Eat First trait-overlay logic to map call peers to authoritative `EatFirstPlayer`

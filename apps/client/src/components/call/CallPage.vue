@@ -35,9 +35,21 @@ import {
   saveCallTileLocalDisplayOverrides,
 } from '@/utils/callTileLocalDisplayNames'
 import { pinHostPeerToEndOfOrder } from '@/utils/mafiaHostOrdering'
+import { resolveHostPeerIdForGrid, sortPeerIdsHostLast } from './callTileOrderRules'
 
 const callPageLog = createLogger('call-page')
 import ParticipantTile from './ParticipantTile.vue'
+import MediaDiagnosticsPanel from './MediaDiagnosticsPanel.vue'
+import {
+  installMediaDebugGlobal,
+  isMediaDebugEnabled,
+  recordMediaDebugSignalingIncoming,
+  recordMediaDebugWsTransition,
+  setMediaDebugEnvInfo,
+  startMediaDebugRafProbe,
+  startMediaDebugTimerDriftProbe,
+} from '@/utils/mediaDebugRuntime'
+import { useMediaStallRecovery } from './useMediaStallRecovery'
 import CallRoomPopover from './CallRoomPopover.vue'
 import CallControlsDock from './CallControlsDock.vue'
 import CallChatPanel from './CallChatPanel.vue'
@@ -54,6 +66,8 @@ import {
   useCallRoomHeaderJoinStore,
 } from '@/stores/callRoomHeaderJoin'
 import { useMafiaHostSignaling } from '@/composables/useMafiaHostSignaling'
+import { useMafiaCallHostUi } from '@/composables/useMafiaCallHostUi'
+import { useEatFirstCallSignaling } from '@/composables/useEatFirstCallSignaling'
 import {
   mafiaBaseRoomIdFromSignaling,
   mafiaSignalingRoomId,
@@ -81,9 +95,9 @@ import { mafiaEliminationAvatarKindForPeerId } from '@/utils/mafiaEliminationAva
 import { EAT_FIRST_OBS_URL_TOAST_EVENT } from '@/composables/eatFirstCallStreamView'
 import { MAFIA_OBS_URL_TOAST_EVENT, MAFIA_SETTINGS_TOAST_EVENT } from '@/composables/mafiaStreamViewRoute'
 import { MafiaWs } from '@/composables/mafiaWsProtocol'
+import { useMafiaAudioMixSignaling } from '@/composables/useMafiaAudioMixSignaling'
 import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
-import type { MafiaEliminationBackground } from '@/utils/mafiaGameTypes'
-import { decodeSpeakingNominationFlat, nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
+import { nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
 import {
   applyCallAudioOutputSinkToStreamAudios,
   CALL_AUDIO_OUTPUT_DEVICE_ID_KEY,
@@ -161,8 +175,6 @@ const {
   tiles,
   sizeTier,
   activeSpeakerPeerId,
-  dominantSpeakerPeerId,
-  audioLevelsByPeerId,
   localAudioSourceStream,
   micEnabled,
   camEnabled,
@@ -196,38 +208,35 @@ const {
   serverActiveSpeakerPeerId,
   playbackRenderFpsPressureByPeerId,
   setPeerVisible,
+  requestForcedProducerResync,
+  requestHardProducerResync,
 } = useCallOrchestrator({ allowManualVideoQuality, joinAvatarUrl, joinUserId, role: callEngineRole })
 
-const remotePlaybackWaitingPeerIds = shallowRef(new Set<string>())
+/** Dev-only: gate for the floating `<MediaDiagnosticsPanel>` and the `__MEDIA_DEBUG__` console helpers. */
+const mediaDebugPanelEnabled = isMediaDebugEnabled()
 
-function onRemotePlaybackStall(payload: { peerId: string; stalling: boolean }): void {
-  const id = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
-  if (!id) {
-    return
-  }
-  const next = new Set(remotePlaybackWaitingPeerIds.value)
-  if (payload.stalling) {
-    next.add(id)
-  } else {
-    next.delete(id)
-  }
-  remotePlaybackWaitingPeerIds.value = next
+/**
+ * OBS / `?mode=view` safety gate. Read by `useMediaStallRecovery` to skip the
+ * hard producer resync (which would broadcast a synchronous all-cameras
+ * flicker to stream viewers) and by anything else that needs to know whether
+ * this CallPage instance is acting as a public OBS source rather than a
+ * normal participant.
+ */
+function isOperatingAsObsViewSource(): boolean {
+  return mafiaViewUi.value || eatFirstViewUi.value
 }
 
-watch(
-  () => tiles.value.map((t) => `${t.peerId}:${t.isLocal ? 'L' : 'R'}`).join('|'),
-  () => {
-    const remoteIds = new Set(tiles.value.filter((t) => !t.isLocal).map((t) => t.peerId))
-    const stale = [...remotePlaybackWaitingPeerIds.value].some((id) => !remoteIds.has(id))
-    if (!stale) {
-      return
-    }
-    remotePlaybackWaitingPeerIds.value = new Set(
-      [...remotePlaybackWaitingPeerIds.value].filter((id) => remoteIds.has(id)),
-    )
-  },
-  { flush: 'post' },
-)
+const {
+  remotePlaybackWaitingPeerIds,
+  onRemotePlaybackStall,
+  onTileVideoStall,
+  onTileAudioStall,
+} = useMediaStallRecovery({
+  tiles,
+  isOperatingAsObsViewSource,
+  requestForcedProducerResync,
+  requestHardProducerResync,
+})
 
 /**
  * Global health for **playback budget / full-power** only (strong profile).
@@ -306,30 +315,57 @@ if (import.meta.env.DEV) {
 
 useMafiaHostSignaling(sendSignalingMessage, subscribeSignalingMessage, wsStatus)
 
+// Diagnostics-only WS lifecycle counter. Reads the existing `wsStatus` ref;
+// no call-core change required. Records open/close/error counts and
+// detects `closed → open` (i.e. WS reconnect) transitions for the
+// `?mediaDebug=1` panel + `__MEDIA_DEBUG__.wsStats()` console accessor.
+let lastObservedWsStatus: string | null = null
+watch(
+  () => wsStatus.value,
+  (next) => {
+    const nextStr = typeof next === 'string' ? next : String(next)
+    if (lastObservedWsStatus === nextStr) return
+    recordMediaDebugWsTransition(lastObservedWsStatus, nextStr)
+    lastObservedWsStatus = nextStr
+  },
+  { immediate: true },
+)
+
+// Diagnostics-only counting subscriber. Does NOT apply state — every other
+// `subscribeSignalingMessage` registration handles real apply paths. This
+// one increments per-type counters so post-incident analysis can correlate
+// flicker / blackout reports with WS message bursts (`producer-sync`,
+// `producer-closed`, `new-producer`, `room-state`, `peer-joined/left`,
+// Mafia snapshot replies). Cost: one switch + counter per inbound message.
+const offMediaDebugSignalingCounter = subscribeSignalingMessage((data) => {
+  if (!data || typeof data !== 'object') return
+  const type = (data as { type?: unknown }).type
+  if (typeof type !== 'string') return
+  if (type === 'producer-sync') {
+    const payload = (data as { payload?: { syncReason?: unknown } }).payload
+    const syncReason =
+      payload && typeof payload.syncReason === 'string' ? payload.syncReason : undefined
+    recordMediaDebugSignalingIncoming(type, { syncReason })
+    return
+  }
+  recordMediaDebugSignalingIncoming(type)
+})
+onBeforeUnmount(offMediaDebugSignalingCounter)
+
 const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
 
 const MAFIA_FORCE_CAMERA_OFF_SIGNAL = MafiaWs.forceCameraOff
 const MAFIA_FORCE_MUTE_ALL_SIGNAL = MafiaWs.forceMuteAll
 const EAT_FIRST_FORCE_MUTE_ALL_SIGNAL = EatFirstWs.forceMuteAll
-const EAT_FIRST_HOST_UPDATED_SIGNAL = EatFirstWs.hostUpdated
 const EAT_FIRST_TRAIT_REVEAL_REQUEST_SIGNAL = EatFirstWs.traitRevealRequest
-const EAT_FIRST_TRAIT_REVEALED_SIGNAL = EatFirstWs.traitRevealed
 const EAT_FIRST_TRAIT_REGENERATE_REQUEST_SIGNAL = EatFirstWs.traitRegenerateRequest
-const EAT_FIRST_TRAIT_REGENERATED_SIGNAL = EatFirstWs.traitRegenerated
 const EAT_FIRST_TRAIT_TYPE_REROLL_REQUEST_SIGNAL = EatFirstWs.traitTypeRerollRequest
-const EAT_FIRST_TRAIT_TYPE_REROLLED_SIGNAL = EatFirstWs.traitTypeRerolled
 const EAT_FIRST_ACTION_CARD_REROLL_REQUEST_SIGNAL = EatFirstWs.actionCardRerollRequest
-const EAT_FIRST_ACTION_CARD_REROLLED_SIGNAL = EatFirstWs.actionCardRerolled
 const EAT_FIRST_ACTION_CARD_USE_SIGNAL = EatFirstWs.actionCardUse
-const EAT_FIRST_ACTION_CARD_USED_SIGNAL = EatFirstWs.actionCardUsed
 const EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL = EatFirstWs.tableRoundDeal
 const EAT_FIRST_SPEAKING_QUEUE_UPDATE_SIGNAL = EatFirstWs.speakingQueueUpdate
-const EAT_FIRST_TRAIT_STATE_SYNC_SIGNAL = EatFirstWs.traitStateSync
-const EAT_FIRST_TABLE_STATE_SYNC_SIGNAL = EatFirstWs.tableStateSync
 const EAT_FIRST_SLOT_CLAIM_SIGNAL = EatFirstWs.slotClaim
-
-/** Suppress host echo when applying `eat:speaking-queue-update` from the server. */
-const applyingEatFirstSpeakingQueueFromSignaling = ref(false)
+// Inbound `eat:*` response signals are handled by `useEatFirstCallSignaling`.
 
 type EatFirstTraitKey =
   | 'gender'
@@ -340,17 +376,6 @@ type EatFirstTraitKey =
   | 'phobia'
   | 'fact'
   | 'baggage'
-
-const EAT_FIRST_TRAIT_ORDER: readonly EatFirstTraitKey[] = [
-  'gender',
-  'age',
-  'profession',
-  'health',
-  'hobby',
-  'phobia',
-  'fact',
-  'baggage',
-]
 
 function mafiaSignalPayload(data: unknown, type: string): Record<string, unknown> | null {
   if (data == null || typeof data !== 'object') {
@@ -408,9 +433,82 @@ const offMafiaForceControls = subscribeSignalingMessage((data) => {
   if (typeof peerId === 'string' && peerId === selfPeerId.value && camEnabled.value) {
     void toggleCam()
   }
+  // Per-peer Mafia mic-force (server-emitted side effect of kick/revive).
+  // `muted: true` flips the local mic UI off via the existing call-core
+  // `toggleMic` action so the killed peer stops trying to talk into a
+  // server-paused producer. `muted: false` is a UI hint clear only — we
+  // do NOT auto-unmute the user; they unmute manually after revive.
+  const forcePeerMicPayload = mafiaSignalPayload(data, MafiaWs.forcePeerMic)
+  if (forcePeerMicPayload != null) {
+    const targetPeerId = forcePeerMicPayload.peerId
+    const muted = forcePeerMicPayload.muted === true
+    if (
+      typeof targetPeerId === 'string'
+      && targetPeerId === selfPeerId.value
+      && muted
+      && micEnabled.value
+    ) {
+      void toggleMic()
+    }
+  }
 })
 
 onBeforeUnmount(offMafiaForceControls)
+
+/**
+ * Mafia P1 Bug 1+2: per-peer effective audio-muted tracking for the host's
+ * "mute all" button visual state. Server's `peer-audio-muted` already
+ * encodes effective mute (`audioMuted || forcedAudioMuted`); the room-state
+ * snapshot at join carries the same data per peer. Both flow into the
+ * store's `peerEffectiveMutedByPeerId`, which `MafiaHostActionsBar`
+ * reduces against `nonHostPeerIds` for the visual.
+ *
+ * Gated on `isMafiaRoute` so non-Mafia rooms never write to the Mafia store.
+ */
+const offMafiaPeerAudioMuted = subscribeSignalingMessage((data) => {
+  if (!isMafiaRoute.value) {
+    return
+  }
+  if (data == null || typeof data !== 'object') {
+    return
+  }
+  const rec = data as { type?: unknown; payload?: unknown }
+  if (rec.type === 'room-state') {
+    const peers = (rec.payload as { peers?: unknown } | undefined)?.peers
+    if (!Array.isArray(peers)) {
+      return
+    }
+    const snapshot: Record<string, boolean> = {}
+    for (const p of peers) {
+      if (p == null || typeof p !== 'object') continue
+      const pid = (p as { peerId?: unknown }).peerId
+      const muted = (p as { audioMuted?: unknown }).audioMuted
+      if (typeof pid === 'string' && pid.length > 0 && muted === true) {
+        snapshot[pid] = true
+      }
+    }
+    mafiaGameStore.replacePeerEffectiveMutedSnapshot(snapshot)
+    return
+  }
+  if (rec.type === 'peer-audio-muted') {
+    const p = rec.payload
+    if (p == null || typeof p !== 'object') return
+    const pid = (p as { peerId?: unknown }).peerId
+    const muted = (p as { muted?: unknown }).muted
+    if (typeof pid !== 'string' || pid.length === 0) return
+    mafiaGameStore.setPeerEffectiveMuted(pid, muted === true)
+    return
+  }
+  if (rec.type === 'peer-left') {
+    const p = rec.payload
+    if (p == null || typeof p !== 'object') return
+    const pid = (p as { peerId?: unknown }).peerId
+    if (typeof pid !== 'string' || pid.length === 0) return
+    mafiaGameStore.clearPeerEffectiveMuted(pid)
+  }
+})
+
+onBeforeUnmount(offMafiaPeerAudioMuted)
 
 /**
  * Toggling Mafia `?mode=view` (header / router) flips `callEngineRole` only after a new wire; re-join
@@ -572,11 +670,40 @@ function peerAvatarFallbackName(peerId: string): string {
 const remoteListenVolumeByPeer = new Map<string, (v: number) => void>()
 const remoteListenMutedByPeer = new Map<string, (v: boolean) => void>()
 
+/**
+ * Deferred slot: assigned by `useMafiaAudioMixSignaling` further down the
+ * setup script (it depends on `mafiaGameStore` which is initialized later).
+ * Handlers below reference the slot lazily so the host's slider/mute toggle
+ * also fans out a `mafia:audio-mix-update` to the room (OBS view applies it).
+ * No-op for non-host or non-Mafia routes.
+ */
+const mafiaAudioMixBroadcasterSlot: { broadcast: ((delta: { peerId: string; volume: number; muted: boolean }) => void) | null } = {
+  broadcast: null,
+}
+
+function broadcastMafiaAudioMixDeltaForTile(peerId: string, volume: number, muted: boolean): void {
+  mafiaAudioMixBroadcasterSlot.broadcast?.({ peerId, volume, muted })
+}
+
+function readTileMutedForPeer(peerId: string): boolean {
+  const t = tiles.value.find((row) => !row.isLocal && row.peerId === peerId)
+  return Boolean(t?.remoteListenMuted)
+}
+
+function readTileVolumeForPeer(peerId: string): number {
+  const t = tiles.value.find((row) => !row.isLocal && row.peerId === peerId)
+  const raw = Number(t?.remoteListenVolume ?? 1)
+  return Number.isFinite(raw) ? Math.min(2, Math.max(0, raw)) : 1
+}
+
 function remoteListenVolumeHandler(peerId: string) {
   let h = remoteListenVolumeByPeer.get(peerId)
   if (!h) {
     h = (v: number) => {
       setRemoteListenVolume(peerId, v)
+      // Read companion (muted) AFTER apply so the broadcast carries the
+      // engine-resolved entry — `setRemoteListenVolume` does not change muted.
+      broadcastMafiaAudioMixDeltaForTile(peerId, readTileVolumeForPeer(peerId), readTileMutedForPeer(peerId))
     }
     remoteListenVolumeByPeer.set(peerId, h)
   }
@@ -588,6 +715,9 @@ function remoteListenMutedHandler(peerId: string) {
   if (!h) {
     h = (v: boolean) => {
       setRemoteListenMuted(peerId, v)
+      // Engine may bump volume from 0 → nz on unmute; reading after apply
+      // mirrors what the host's UI now shows so OBS sees the same state.
+      broadcastMafiaAudioMixDeltaForTile(peerId, readTileVolumeForPeer(peerId), readTileMutedForPeer(peerId))
     }
     remoteListenMutedByPeer.set(peerId, h)
   }
@@ -644,32 +774,6 @@ const remoteVideoSuppressDelayTimerByPeer = new Map<string, ReturnType<typeof se
 const remoteVideoSuppressPendingKind = new Map<string, 'offscreen' | 'outside-budget'>()
 const remoteVideoPlaybackSuppressed = shallowRef(new Map<string, boolean>())
 const eatFirstShell = useEatFirstCallShellStore()
-/**
- * Eat First trait state is keyed by **slotId** (`p1..p11`), not peerId.
- * Server-side `revealedBySlot`/`overridesBySlot`/`openedBySlot` is the source
- * of truth; on a hard refresh the new peer rebinds via `eat:slot-claim` and
- * the same reveal/override state re-attaches to it.
- */
-const eatFirstRevealedBySlot = shallowRef<Record<string, Record<string, boolean>>>({})
-const eatFirstOverridesBySlot = shallowRef<Record<string, Record<string, string>>>({})
-const eatFirstOpenedBySlot = shallowRef<Record<string, Record<string, boolean>>>({})
-/**
- * Server-authoritative `peerId → slotId` map and `playerOrder` in `eat:trait-state-sync` / `eat:table-state-sync`.
- * Replaces the old `eatFirstSeatByPeer` (which derived seat from local tile
- * index and made every client see only the first player's traits).
- */
-const eatFirstSlotByPeer = shallowRef<Record<string, string>>({})
-
-watch(
-  () => session.roomId,
-  () => {
-    eatFirstRevealedBySlot.value = {}
-    eatFirstOverridesBySlot.value = {}
-    eatFirstOpenedBySlot.value = {}
-    eatFirstSlotByPeer.value = {}
-  },
-)
-
 function bumpRemotePlaybackSuppressed(peerId: string, suppressed: boolean, reason: string): void {
   const prev = remoteVideoPlaybackSuppressed.value.get(peerId) === true
   if (prev === suppressed) {
@@ -815,6 +919,17 @@ watch(
     if (vmChanged) {
       callTileViewportVisibleByPeer.value = vm
     }
+    // `remoteVideoSuppressDelayTimerByPeer` had no per-peer-set prune; only
+    // the unmount path cleared it. Across long sessions with player reloads,
+    // it accumulated dead-peerId timer entries (each holding a setTimeout
+    // handle + a tag in `remoteVideoSuppressPendingKind`). Mirror the
+    // existing `setPeerVisibleHideTimerByPeer` prune here so dead peerIds
+    // are dropped within one tile-set tick.
+    for (const id of [...remoteVideoSuppressDelayTimerByPeer.keys()]) {
+      if (!ids.has(id)) {
+        clearRemoteVideoSuppressTimer(id)
+      }
+    }
     for (const id of [...setPeerVisibleHideTimerByPeer.keys()]) {
       if (!ids.has(id)) {
         cancelSetPeerVisibleHideTimer(id)
@@ -917,30 +1032,6 @@ watch(
   },
 )
 
-function onMafiaToggleLifeFromTile(peerId: string): void {
-  if (typeof peerId !== 'string' || peerId.length < 1) {
-    return
-  }
-  mafiaGameStore.hostToggleMafiaPlayerLife(peerId)
-}
-
-function onMafiaForceCameraOffFromTile(peerId: string): void {
-  if (!isMafiaRoute.value || !mafiaGameStore.isMafiaHost) {
-    return
-  }
-  if (typeof peerId !== 'string' || peerId.length < 1 || peerId === selfPeerId.value) {
-    return
-  }
-  sendSignalingMessage({ type: MAFIA_FORCE_CAMERA_OFF_SIGNAL, payload: { peerId } })
-}
-
-function onMafiaForceMuteAll(muted: boolean): void {
-  if (!isMafiaRoute.value || !mafiaGameStore.isMafiaHost) {
-    return
-  }
-  sendSignalingMessage({ type: MAFIA_FORCE_MUTE_ALL_SIGNAL, payload: { muted } })
-}
-
 function onEatFirstForceMuteAll(muted: boolean): void {
   if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) {
     return
@@ -1022,375 +1113,38 @@ function patchEatFirstTraitForSlot(slotId: string, traitKey: EatFirstTraitKey, v
   })
 }
 
-const offEatFirstForceControls = subscribeSignalingMessage((data) => {
-  if (!isEatFirstRoute.value) {
-    return
-  }
-  const rec = data as { type?: unknown; payload?: unknown }
-  if (rec.type === 'room-state') {
-    attemptEatFirstSlotClaim()
-    return
-  }
-  if (rec.type === EAT_FIRST_HOST_UPDATED_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const hostPeerId = typeof payload?.hostPeerId === 'string' ? payload.hostPeerId.trim() : ''
-    const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
-    eatFirstShell.setEatFirstHostPeer(hostPeerId || null, selfId || null)
-    return
-  }
-  if (rec.type === EAT_FIRST_SPEAKING_QUEUE_UPDATE_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const raw = payload?.speakingQueue
-    applyingEatFirstSpeakingQueueFromSignaling.value = true
-    eatFirstShell.applySpeakingQueueFromSignaling(Array.isArray(raw) ? raw : [])
-    void nextTick(() => {
-      applyingEatFirstSpeakingQueueFromSignaling.value = false
-    })
-    return
-  }
-  if (rec.type === EAT_FIRST_TABLE_STATE_SYNC_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    if (!payload) return
-    eatFirstOverridesBySlot.value = {}
-    const playerOrderRaw = Array.isArray(payload.playerOrder) ? payload.playerOrder : []
-    const nextPlayerOrder = playerOrderRaw
-      .filter((x): x is string => typeof x === 'string' && /^p([1-9]|1[01])$/i.test(x.trim()))
-      .map((x) => x.trim())
-    if (nextPlayerOrder.length > 0) {
-      eatFirstShell.setPlayerOrder(nextPlayerOrder)
-    }
-    const slotByPeerRaw =
-      payload.slotByPeer && typeof payload.slotByPeer === 'object' && !Array.isArray(payload.slotByPeer)
-        ? (payload.slotByPeer as Record<string, unknown>)
-        : {}
-    const nextSlotByPeer: Record<string, string> = {}
-    for (const [peerId, slotUnknown] of Object.entries(slotByPeerRaw)) {
-      if (typeof slotUnknown !== 'string') continue
-      const slot = slotUnknown.trim()
-      if (!/^p([1-9]|1[01])$/i.test(slot)) continue
-      nextSlotByPeer[peerId] = slot
-    }
-    eatFirstSlotByPeer.value = nextSlotByPeer
-    const traitsBySlotRaw =
-      payload.traitsBySlot && typeof payload.traitsBySlot === 'object' && !Array.isArray(payload.traitsBySlot)
-        ? (payload.traitsBySlot as Record<string, unknown>)
-        : {}
-    const mergedTraitsBySlot: Record<string, Record<EatFirstTraitKey, string>> = { ...eatFirstShell.traitsBySlot }
-    for (const [slotId, rowUnknown] of Object.entries(traitsBySlotRaw)) {
-      if (!/^p([1-9]|1[01])$/i.test(String(slotId).trim())) continue
-      if (!rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
-      const row = rowUnknown as Record<string, unknown>
-      const normalized = {} as Record<EatFirstTraitKey, string>
-      let complete = true
-      for (const key of EAT_FIRST_TRAIT_ORDER) {
-        const value = typeof row[key] === 'string' ? row[key].trim() : ''
-        if (value.length < 1) {
-          complete = false
-          break
-        }
-        normalized[key] = value
-      }
-      if (complete) mergedTraitsBySlot[slotId.trim()] = normalized
-    }
-    eatFirstShell.setTraitsBySlot(mergedTraitsBySlot)
-    const actionCardBySlotRaw =
-      payload.actionCardBySlot &&
-      typeof payload.actionCardBySlot === 'object' &&
-      !Array.isArray(payload.actionCardBySlot)
-        ? (payload.actionCardBySlot as Record<string, unknown>)
-        : {}
-    const mergedActionCardBySlot: Record<
-      string,
-      { title: string; description: string; templateId: string; effectId: string; used: boolean }
-    > = { ...eatFirstShell.actionCardBySlot }
-    for (const [slotId, rowUnknown] of Object.entries(actionCardBySlotRaw)) {
-      if (!/^p([1-9]|1[01])$/i.test(String(slotId).trim())) continue
-      if (!rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
-      const row = rowUnknown as Record<string, unknown>
-      const title = typeof row.title === 'string' ? row.title.trim() : ''
-      const description = typeof row.description === 'string' ? row.description.trim() : ''
-      const templateId = typeof row.templateId === 'string' ? row.templateId.trim() : ''
-      const effectId = typeof row.effectId === 'string' ? row.effectId.trim() : ''
-      const used = row.used === true
-      if (title.length < 1 && templateId.length < 1) continue
-      mergedActionCardBySlot[slotId.trim()] = { title, description, templateId, effectId, used }
-    }
-    eatFirstShell.setActionCardBySlot(mergedActionCardBySlot)
-    const lastUsedRaw =
-      payload.lastUsedActionCard &&
-      typeof payload.lastUsedActionCard === 'object' &&
-      !Array.isArray(payload.lastUsedActionCard)
-        ? (payload.lastUsedActionCard as Record<string, unknown>)
-        : null
-    if (lastUsedRaw) {
-      const slotId = typeof lastUsedRaw.slotId === 'string' ? lastUsedRaw.slotId.trim() : ''
-      const title = typeof lastUsedRaw.title === 'string' ? lastUsedRaw.title.trim() : ''
-      const description = typeof lastUsedRaw.description === 'string' ? lastUsedRaw.description.trim() : ''
-      if (slotId.length > 0 && title.length > 0) {
-        eatFirstShell.setLastUsedActionCard({ slotId, title, description })
-      } else {
-        eatFirstShell.setLastUsedActionCard(null)
-      }
-    } else {
-      eatFirstShell.setLastUsedActionCard(null)
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'timer')) {
-      const timerRaw = payload.timer
-      let nextCallTimer: { startedAt: number; durationMs: number; isRunning: boolean } | null = null
-      if (timerRaw === null) {
-        nextCallTimer = null
-      } else if (timerRaw && typeof timerRaw === 'object' && !Array.isArray(timerRaw)) {
-        const tr = timerRaw as Record<string, unknown>
-        const startedAt = typeof tr.startedAt === 'number' ? tr.startedAt : Number.NaN
-        const duration = typeof tr.duration === 'number' ? tr.duration : Number.NaN
-        if (
-          tr.isRunning === true &&
-          Number.isFinite(startedAt) &&
-          Number.isFinite(duration) &&
-          duration >= 5000 &&
-          duration <= 7_200_000
-        ) {
-          nextCallTimer = { startedAt, durationMs: duration, isRunning: true }
-        }
-      }
-      eatFirstShell.setEatFirstCallTimerFromTableSync(nextCallTimer)
-    }
-    const revealedRaw =
-      payload.revealedTraitsBySlot &&
-      typeof payload.revealedTraitsBySlot === 'object' &&
-      !Array.isArray(payload.revealedTraitsBySlot)
-        ? (payload.revealedTraitsBySlot as Record<string, unknown>)
-        : {}
-    const openedRaw =
-      payload.openedByBySlot && typeof payload.openedByBySlot === 'object' && !Array.isArray(payload.openedByBySlot)
-        ? (payload.openedByBySlot as Record<string, unknown>)
-        : {}
-    const nextRevealedBySlot: Record<string, Record<string, boolean>> = {}
-    for (const [slotId, keysUnknown] of Object.entries(revealedRaw)) {
-      if (!Array.isArray(keysUnknown)) continue
-      const row: Record<string, boolean> = {}
-      for (const key of keysUnknown) {
-        if (typeof key === 'string' && key.trim().length > 0) row[key.trim()] = true
-      }
-      if (Object.keys(row).length > 0) nextRevealedBySlot[slotId] = row
-    }
-    const nextOpenedBySlot: Record<string, Record<string, boolean>> = {}
-    for (const [slotId, rowUnknown] of Object.entries(openedRaw)) {
-      if (!rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
-      const row = rowUnknown as Record<string, unknown>
-      const out: Record<string, boolean> = {}
-      for (const [traitKey, openedBy] of Object.entries(row)) {
-        if (openedBy === 'player' || openedBy === 'host') out[traitKey] = true
-      }
-      if (Object.keys(out).length > 0) nextOpenedBySlot[slotId] = out
-    }
-    eatFirstRevealedBySlot.value = nextRevealedBySlot
-    eatFirstOpenedBySlot.value = nextOpenedBySlot
-    attemptEatFirstSlotClaim()
-    return
-  }
-  if (rec.type === EAT_FIRST_TRAIT_STATE_SYNC_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    if (!payload) return
-    const traitSyncPlayerOrderRaw = Array.isArray(payload.playerOrder) ? payload.playerOrder : []
-    const traitSyncPlayerOrder = traitSyncPlayerOrderRaw
-      .filter((x): x is string => typeof x === 'string' && /^p([1-9]|1[01])$/i.test(x.trim()))
-      .map((x) => x.trim())
-    if (traitSyncPlayerOrder.length > 0) {
-      eatFirstShell.setPlayerOrder(traitSyncPlayerOrder)
-    }
-    const revealedRaw =
-      payload.revealedBySlot && typeof payload.revealedBySlot === 'object' && !Array.isArray(payload.revealedBySlot)
-        ? (payload.revealedBySlot as Record<string, unknown>)
-        : {}
-    const overridesRaw =
-      payload.overridesBySlot && typeof payload.overridesBySlot === 'object' && !Array.isArray(payload.overridesBySlot)
-        ? (payload.overridesBySlot as Record<string, unknown>)
-        : {}
-    const openedRaw =
-      payload.openedBySlot && typeof payload.openedBySlot === 'object' && !Array.isArray(payload.openedBySlot)
-        ? (payload.openedBySlot as Record<string, unknown>)
-        : {}
-    const slotByPeerRaw =
-      payload.slotByPeer && typeof payload.slotByPeer === 'object' && !Array.isArray(payload.slotByPeer)
-        ? (payload.slotByPeer as Record<string, unknown>)
-        : {}
-    const nextSlotByPeer: Record<string, string> = {}
-    for (const [peerId, slotUnknown] of Object.entries(slotByPeerRaw)) {
-      if (typeof slotUnknown !== 'string') continue
-      const slot = slotUnknown.trim()
-      if (slot.length < 1) continue
-      nextSlotByPeer[peerId] = slot
-    }
-    eatFirstSlotByPeer.value = nextSlotByPeer
-    if (import.meta.env.DEV) {
-      callPageLog.info('[eat-first:slot-map:update]', {
-        selfPeerId: selfPeerId.value,
-        selfSlotId: selfPeerId.value ? nextSlotByPeer[selfPeerId.value] ?? null : null,
-      })
-    }
-    const nextRevealedBySlot: Record<string, Record<string, boolean>> = {}
-    const nextOverridesBySlot: Record<string, Record<string, string>> = {}
-    const nextOpenedBySlot: Record<string, Record<string, boolean>> = {}
-    for (const [slotId, keysUnknown] of Object.entries(revealedRaw)) {
-      if (!Array.isArray(keysUnknown)) continue
-      const row: Record<string, boolean> = {}
-      for (const k of keysUnknown) {
-        if (typeof k === 'string' && k.trim().length > 0) {
-          row[k.trim()] = true
-        }
-      }
-      if (Object.keys(row).length > 0) nextRevealedBySlot[slotId] = row
-    }
-    for (const [slotId, rowUnknown] of Object.entries(overridesRaw)) {
-      if (!rowUnknown || typeof rowUnknown !== 'object' || Array.isArray(rowUnknown)) continue
-      const row = rowUnknown as Record<string, unknown>
-      const out: Record<string, string> = {}
-      for (const [k, v] of Object.entries(row)) {
-        if (typeof k === 'string' && k.trim().length > 0 && typeof v === 'string' && v.trim().length > 0) {
-          out[k.trim()] = v.trim()
-        }
-      }
-      if (Object.keys(out).length > 0) nextOverridesBySlot[slotId] = out
-    }
-    for (const [slotId, keysUnknown] of Object.entries(openedRaw)) {
-      if (!Array.isArray(keysUnknown)) continue
-      const row: Record<string, boolean> = {}
-      for (const k of keysUnknown) {
-        if (typeof k === 'string' && k.trim().length > 0) {
-          row[k.trim()] = true
-        }
-      }
-      if (Object.keys(row).length > 0) nextOpenedBySlot[slotId] = row
-    }
-    eatFirstRevealedBySlot.value = nextRevealedBySlot
-    eatFirstOverridesBySlot.value = nextOverridesBySlot
-    eatFirstOpenedBySlot.value = nextOpenedBySlot
-    return
-  }
-  if (rec.type === EAT_FIRST_TRAIT_REVEALED_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const slotId = typeof payload?.slotId === 'string' ? payload.slotId.trim() : ''
-    const traitKey = typeof payload?.traitKey === 'string' ? payload.traitKey.trim() : ''
-    const openedBy = payload?.openedBy === 'host' ? 'host' : 'player'
-    const closed = payload?.closed === true
-    if (!slotId || !traitKey) return
-    if (closed) {
-      const prevRevealed = eatFirstRevealedBySlot.value[slotId]
-      if (prevRevealed && prevRevealed[traitKey]) {
-        const nextRow = { ...prevRevealed }
-        delete nextRow[traitKey]
-        const next = { ...eatFirstRevealedBySlot.value }
-        if (Object.keys(nextRow).length > 0) next[slotId] = nextRow
-        else delete next[slotId]
-        eatFirstRevealedBySlot.value = next
-      }
-      const prevOpened = eatFirstOpenedBySlot.value[slotId]
-      if (prevOpened && prevOpened[traitKey]) {
-        const nextRow = { ...prevOpened }
-        delete nextRow[traitKey]
-        const next = { ...eatFirstOpenedBySlot.value }
-        if (Object.keys(nextRow).length > 0) next[slotId] = nextRow
-        else delete next[slotId]
-        eatFirstOpenedBySlot.value = next
-      }
-      return
-    }
-    eatFirstRevealedBySlot.value = {
-      ...eatFirstRevealedBySlot.value,
-      [slotId]: { ...(eatFirstRevealedBySlot.value[slotId] ?? {}), [traitKey]: true },
-    }
-    if (openedBy === 'player') {
-      eatFirstOpenedBySlot.value = {
-        ...eatFirstOpenedBySlot.value,
-        [slotId]: { ...(eatFirstOpenedBySlot.value[slotId] ?? {}), [traitKey]: true },
-      }
-    }
-    return
-  }
-  if (rec.type === EAT_FIRST_TRAIT_REGENERATED_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const slotId = typeof payload?.slotId === 'string' ? payload.slotId.trim() : ''
-    const traitKey = typeof payload?.traitKey === 'string' ? payload.traitKey.trim() : ''
-    const value = typeof payload?.value === 'string' ? payload.value.trim() : ''
-    if (!slotId || !traitKey || !value) return
-    patchEatFirstTraitForSlot(slotId, traitKey as EatFirstTraitKey, value)
-    eatFirstOverridesBySlot.value = {
-      ...eatFirstOverridesBySlot.value,
-      [slotId]: { ...(eatFirstOverridesBySlot.value[slotId] ?? {}), [traitKey]: value },
-    }
-    return
-  }
-  if (rec.type === EAT_FIRST_TRAIT_TYPE_REROLLED_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const traitKey = typeof payload?.traitKey === 'string' ? payload.traitKey.trim() : ''
-    const valuesBySlotRaw =
-      payload?.valuesBySlot &&
-      typeof payload.valuesBySlot === 'object' &&
-      !Array.isArray(payload.valuesBySlot)
-        ? (payload.valuesBySlot as Record<string, unknown>)
-        : null
-    if (!traitKey || !valuesBySlotRaw) return
-    const next = { ...eatFirstOverridesBySlot.value }
-    for (const [slotId, valueUnknown] of Object.entries(valuesBySlotRaw)) {
-      if (typeof valueUnknown !== 'string') continue
-      const value = valueUnknown.trim()
-      if (value.length < 1) continue
-      patchEatFirstTraitForSlot(slotId, traitKey as EatFirstTraitKey, value)
-      next[slotId] = { ...(next[slotId] ?? {}), [traitKey]: value }
-    }
-    eatFirstOverridesBySlot.value = next
-    return
-  }
-  if (rec.type === EAT_FIRST_ACTION_CARD_REROLLED_SIGNAL) {
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const slotId = typeof payload?.slotId === 'string' ? payload.slotId.trim() : ''
-    const card =
-      payload?.card && typeof payload.card === 'object' && !Array.isArray(payload.card)
-        ? (payload.card as Record<string, unknown>)
-        : null
-    if (!slotId || !card) return
-    const title = typeof card.title === 'string' ? card.title : ''
-    const description = typeof card.description === 'string' ? card.description : ''
-    const templateId = typeof card.templateId === 'string' ? card.templateId : ''
-    const effectId = typeof card.effectId === 'string' ? card.effectId : ''
-    const used = card.used === true
-    eatFirstShell.setActionCardForSlot(slotId, { title, description, templateId, effectId, used })
-    return
-  }
-  if (rec.type === EAT_FIRST_ACTION_CARD_USED_SIGNAL) {
-    if (!eatFirstShell.isEatFirstRoomHost) return
-    const payload =
-      rec.payload != null && typeof rec.payload === 'object'
-        ? (rec.payload as Record<string, unknown>)
-        : null
-    const peerId = typeof payload?.peerId === 'string' ? payload.peerId.trim() : ''
-    const title = typeof payload?.title === 'string' ? payload.title.trim() : ''
-    if (!peerId || title.length < 1) return
+/**
+ * Eat First inbound signaling — extracted into `useEatFirstCallSignaling`.
+ *
+ * The composable owns the four `slot/revealed/overrides/opened-bySlot`
+ * shallowRefs (returned here so the rest of CallPage's computeds can read
+ * them with the original variable names) plus the `applyingSpeakingQueueFromSignaling`
+ * flag the host-side rebroadcast watcher uses to suppress its own echo.
+ *
+ * Cross-cutting effects that need other CallPage-scope deps stay here as
+ * callbacks: slot-claim (route + per-game token store), trait patcher
+ * (writes through `eatFirstShell.traitsBySlot`), and the action-card-used
+ * toast (i18n + display name + `callToasts`).
+ */
+// `overridesBySlot` and `openedBySlot` are internal to the composable today
+// (the dispatcher writes them; no CallPage computed reads them). Kept on the
+// composable's return shape for future EatFirst adapters; not destructured
+// here to avoid lint warnings.
+const {
+  applyingSpeakingQueueFromSignaling: applyingEatFirstSpeakingQueueFromSignaling,
+  slotByPeer: eatFirstSlotByPeer,
+  revealedBySlot: eatFirstRevealedBySlot,
+} = useEatFirstCallSignaling({
+  subscribeSignalingMessage,
+  selfPeerId,
+  roomId: computed(() => session.roomId),
+  isEatFirstRoute,
+  eatFirstShell,
+  micEnabled,
+  toggleMic,
+  attemptSlotClaim: attemptEatFirstSlotClaim,
+  patchTraitForSlot: patchEatFirstTraitForSlot,
+  onPlayerUsedActionCard: ({ peerId, title }) => {
     const name = peerDisplayName(peerId)
     const id = `eat-ac-${Date.now()}-${peerId}`
     const text = t('eatFirstCall.playerUsedActionCardToast', { name, card: title })
@@ -1398,20 +1152,9 @@ const offEatFirstForceControls = subscribeSignalingMessage((data) => {
     window.setTimeout(() => {
       callToasts.value = callToasts.value.filter((x) => x.id !== id)
     }, 5200)
-    return
-  }
-  if (rec.type !== EAT_FIRST_FORCE_MUTE_ALL_SIGNAL || rec.payload == null || typeof rec.payload !== 'object') return
-  if (eatFirstShell.isEatFirstRoomHost) return
-  const payload = rec.payload as Record<string, unknown>
-  const muted = payload.muted !== false
-  if (muted && micEnabled.value) {
-    void toggleMic()
-  } else if (!muted && !micEnabled.value) {
-    void toggleMic()
-  }
+  },
+  log: callPageLog,
 })
-
-onBeforeUnmount(offEatFirstForceControls)
 
 /**
  * Host-panel <-> CallPage bridge. The panel is rendered as a sibling of
@@ -1700,6 +1443,20 @@ watch(
   { immediate: true },
 )
 
+const { mafiaHostPeerId: mafiaHostPeerIdRef, isMafiaHost: isMafiaHostRef } = storeToRefs(mafiaGameStore)
+const { broadcastMafiaAudioMixDelta } = useMafiaAudioMixSignaling({
+  sendSignalingMessage,
+  subscribeSignalingMessage,
+  wsStatus,
+  isMafiaRoute,
+  isViewMode: mafiaViewUi,
+  isMafiaHost: isMafiaHostRef,
+  hostPeerId: mafiaHostPeerIdRef,
+  setRemoteListenVolume,
+  setRemoteListenMuted,
+})
+mafiaAudioMixBroadcasterSlot.broadcast = broadcastMafiaAudioMixDelta
+
 
 function displayCallOrMafiaRoomCode(): string {
   const raw = normalizeDisplayName(session.roomId) || 'demo'
@@ -1983,27 +1740,13 @@ watch(
     let ids = list.map((t) => t.peerId)
     if (isEatFirstRoute.value) {
       const hostId = typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId : ''
-      const sorted = [...ids].sort((a, b) => a.localeCompare(b))
-      ids =
-        hostId && sorted.includes(hostId)
-          ? [...sorted.filter((id) => id !== hostId), hostId]
-          : sorted
+      ids = sortPeerIdsHostLast(ids, hostId)
     }
     if (isMafiaRoute.value) {
       const explicitHostId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
       const prevDisplayOrder = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
-      const fallbackHostId =
-        explicitHostId.length > 0
-          ? ''
-          : prevDisplayOrder.length > 0
-            ? prevDisplayOrder[prevDisplayOrder.length - 1] ?? ''
-            : ''
-      const hostId = explicitHostId.length > 0 ? explicitHostId : fallbackHostId
-      const sorted = [...ids].sort((a, b) => a.localeCompare(b))
-      ids =
-        hostId && sorted.includes(hostId)
-          ? [...sorted.filter((id) => id !== hostId), hostId]
-          : sorted
+      const hostId = resolveHostPeerIdForGrid(explicitHostId, prevDisplayOrder)
+      ids = sortPeerIdsHostLast(ids, hostId)
       tileOrder.value = ids
       return
     }
@@ -2034,6 +1777,29 @@ watch(
   { flush: 'pre' },
 )
 
+/**
+ * Push the current non-host participant peerIds to the Mafia store so it
+ * can compute "every non-host effectively muted" for the host UI button
+ * (P1 Bug 1+2). The store filters out the host peerId internally.
+ */
+watch(
+  () => [
+    isMafiaRoute.value,
+    mafiaGameStore.mafiaHostPeerId,
+    tiles.value.map((t) => t.peerId).join('|'),
+  ],
+  () => {
+    if (!isMafiaRoute.value) {
+      mafiaGameStore.setNonHostPeerIds([])
+      return
+    }
+    // Pass every tile peerId; the store filters the host peer internally.
+    // This keeps the membership stable when host changes via transfer.
+    mafiaGameStore.setNonHostPeerIds(tiles.value.map((t) => t.peerId))
+  },
+  { immediate: true, flush: 'post' },
+)
+
 
 const mafiaNumberByPeer = computed(() => {
   if (!isMafiaRoute.value) {
@@ -2042,17 +1808,44 @@ const mafiaNumberByPeer = computed(() => {
   const m = new Map<string, number>()
   const order = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
   const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
-  const hostPeerId =
-    explicitHostPeerId.length > 0
-      ? explicitHostPeerId
-      : order.length > 0
-        ? order[order.length - 1] ?? ''
-        : ''
+  const hostPeerId = resolveHostPeerIdForGrid(explicitHostPeerId, order)
   const numbered = hostPeerId.length > 0 ? order.filter((id) => id !== hostPeerId) : order
   numbered.forEach((id, i) => {
     m.set(id, i + 1)
   })
   return m
+})
+
+/**
+ * Mafia call-host UI behaviour — extracted into `useMafiaCallHostUi` (Phase 2).
+ *
+ * Owns the host-side handlers, the night-action/speaking seat-highlight
+ * computeds, the speak-hint visibility ref + lifecycle, and the Mafia branch
+ * of the tile-click router. CallPage's template binds the destructured names
+ * unchanged, so no template edits are required.
+ *
+ * The Mafia OBS/host-claim flow, audio-mix host broadcast, and inbound
+ * Mafia signaling continue to live in `useMafiaHostSignaling` and
+ * `useMafiaAudioMixSignaling`; this composable is strictly the CallPage-level
+ * host-UI surface.
+ */
+const {
+  isMafiaHostNightActionSeat,
+  isMafiaHostSpeakingNominationUiSeat,
+  onMafiaToggleLifeFromTile,
+  onMafiaForceCameraOffFromTile,
+  onMafiaForceMuteAll,
+  onMafiaSetEliminationBackground,
+  handleMafiaHostTileClick,
+} = useMafiaCallHostUi({
+  isMafiaRoute,
+  mafiaViewUi,
+  selfPeerId,
+  mafiaGameStore,
+  mafiaNumberByPeer,
+  sendSignalingMessage,
+  pushCallToast,
+  t,
 })
 
 const eatFirstSeatByPeer = computed(() => {
@@ -2268,12 +2061,7 @@ const orderedTiles = computed(() => {
   if (isMafiaRoute.value && list.length > 0) {
     const base = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
     const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
-    const hostPidForGrid =
-      explicitHostPeerId.length > 0
-        ? explicitHostPeerId
-        : base.length > 0
-          ? base[base.length - 1] ?? ''
-          : ''
+    const hostPidForGrid = resolveHostPeerIdForGrid(explicitHostPeerId, base)
     const order = hostPidForGrid.length > 0 ? pinHostPeerToEndOfOrder(base, hostPidForGrid) : base.slice()
 
     const orderIndex = new Map<string, number>()
@@ -2704,49 +2492,10 @@ function isTileRowSpeaking(row: (typeof orderedGridRows.value)[number]): boolean
   return pid === activeSpeakerPeerId.value || pid === serverActiveSpeakerPeerId.value
 }
 
-function remoteAudioLevelForPeer(peerId: string): number {
-  return audioLevelsByPeerId.value[peerId] ?? 0
-}
-
-function isRemoteVoiceDucked(peerId: string): boolean {
-  const dominant = dominantSpeakerPeerId.value
-  return dominant !== null && dominant !== peerId
-}
-
-
 function resumeCallAudioAnalysisFromGesture(): void {
   void getAudioAnalysisAudioContext().resume().catch(() => {})
 }
 
-
-const mafiaHostNightActionSeatSet = computed(() => {
-  const a = mafiaGameStore.nightActions
-  const s = new Set<number>()
-  for (const x of [a.mafia, a.doctor, a.sheriff, a.don] as const) {
-    if (typeof x === 'number' && Number.isInteger(x) && x >= 1) {
-      s.add(x)
-    }
-  }
-  return s
-})
-
-const mafiaHostSpeakingNominationTargetSeatSet = computed(() =>
-  nominationTargetSeatsFromSpeakingFlat(mafiaGameStore.speakingQueue),
-)
-
-function isMafiaHostNightActionSeat(seat: number | undefined): boolean {
-  if (seat == null) {
-    return false
-  }
-  return mafiaHostNightActionSeatSet.value.has(seat)
-}
-
-function isMafiaHostSpeakingNominationUiSeat(seat: number | undefined): boolean {
-  if (seat == null) {
-    return false
-  }
-  return mafiaHostSpeakingNominationTargetSeatSet.value.has(seat)
-}
 
 function isEatFirstHostSpeakingNominationSeat(seat: number | undefined): boolean {
   if (seat == null) {
@@ -2755,6 +2504,17 @@ function isEatFirstHostSpeakingNominationSeat(seat: number | undefined): boolean
   return nominationTargetSeatsFromSpeakingFlat(eatFirstShell.speakingQueue).has(seat)
 }
 
+/**
+ * Tile-click router across all three call routes.
+ *
+ * The EatFirst speaking-mode branch (host-only nomination toggle) remains
+ * inline here because it reads `eatFirstShell` state owned by the EatFirst
+ * domain in CallPage's setup. The Mafia branch (swap / speaking / night
+ * action) is delegated to `useMafiaCallHostUi.handleMafiaHostTileClick`.
+ *
+ * Behaviour preserved 1:1: same guards, same `ev.stopPropagation()`
+ * semantics, same toast keys, same store dispatch order.
+ */
 function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value)[number]): void {
   if (isEatFirstRoute.value && !eatFirstViewUi.value && eatFirstShell.isEatFirstRoomHost) {
     if (!eatFirstShell.speakingMode) {
@@ -2784,117 +2544,8 @@ function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value
     ev.stopPropagation()
     return
   }
-  if (mafiaViewUi.value) {
-    return
-  }
-  if (!isMafiaRoute.value || !mafiaGameStore.isMafiaHost) {
-    return
-  }
-  const clickTarget = ev.target
-  if (clickTarget instanceof Element) {
-    if (clickTarget.closest('button, input, textarea, a, [data-no-mafia-tile-host]')) {
-      return
-    }
-    if (clickTarget.closest('.tile-overlay__label-group, .tile-overlay__name-input, .tile-overlay__name-edit')) {
-      return
-    }
-  }
-  if (mafiaGameStore.hostInteractionMode === 'swap') {
-    const pid = row.tile.peerId
-    const sel = mafiaGameStore.hostSeatSwapSelectionPeerId
-    if (sel == null) {
-      mafiaGameStore.setSeatSwapSelectionPeerId(pid)
-    } else if (sel === pid) {
-      mafiaGameStore.setSeatSwapSelectionPeerId(null)
-    } else {
-      mafiaGameStore.swapSeatsByPeerId(sel, pid)
-    }
-    ev.stopPropagation()
-    return
-  }
-  const seat = mafiaNumberByPeer.value.get(row.tile.peerId)
-  if (seat == null) {
-    return
-  }
-  if (mafiaGameStore.hostInteractionMode === 'speaking') {
-    const draft = mafiaGameStore.speakingNominationDraftBySeat
-    const segments = decodeSpeakingNominationFlat(mafiaGameStore.speakingQueue)
-    if (draft == null) {
-      const existingBy = segments.find((seg) => seg.bySeat === seat)
-      if (existingBy) {
-        pushCallToast(
-          t('mafiaPage.speakingByAlreadyNominatedToast', {
-            by: seat,
-            target: existingBy.targetSeat,
-          }),
-          'leave',
-        )
-        ev.stopPropagation()
-        return
-      }
-      mafiaGameStore.setSpeakingNominationDraftBySeat(seat)
-    } else if (draft === seat) {
-      mafiaGameStore.setSpeakingNominationDraftBySeat(null)
-    } else {
-      const existingTarget = segments.find((seg) => seg.targetSeat === seat)
-      if (existingTarget) {
-        pushCallToast(
-          t('mafiaPage.speakingTargetAlreadyNominatedToast', {
-            target: seat,
-            by: existingTarget.bySeat ?? '?',
-          }),
-          'leave',
-        )
-        ev.stopPropagation()
-        return
-      }
-      const existingBy = segments.find((seg) => seg.bySeat === draft)
-      if (existingBy) {
-        pushCallToast(
-          t('mafiaPage.speakingByAlreadyNominatedToast', {
-            by: draft,
-            target: existingBy.targetSeat,
-          }),
-          'leave',
-        )
-        mafiaGameStore.setSpeakingNominationDraftBySeat(null)
-        ev.stopPropagation()
-        return
-      }
-      mafiaGameStore.appendSpeakingNominationPair(draft, seat)
-    }
-  } else {
-    mafiaGameStore.assignOrClearNightActionForActiveRole(seat)
-  }
-  ev.stopPropagation()
+  handleMafiaHostTileClick(ev, row)
 }
-
-function onMafiaSetEliminationBackground(payload: { peerId: string; background: MafiaEliminationBackground }): void {
-  mafiaGameStore.setPeerEliminationBackground(payload.peerId, payload.background)
-}
-
-const mafiaSpeakingOrderHintVisible = ref(false)
-let mafiaSpeakingOrderHintTimer: ReturnType<typeof setTimeout> | undefined
-
-watch(
-  () => mafiaGameStore.hostInteractionMode,
-  (mode, prev) => {
-    if (!isMafiaRoute.value || mafiaViewUi.value || !mafiaGameStore.isMafiaHost) {
-      return
-    }
-    if (mode !== 'speaking' || prev == null || prev === 'speaking') {
-      return
-    }
-    mafiaSpeakingOrderHintVisible.value = true
-    if (mafiaSpeakingOrderHintTimer != null) {
-      clearTimeout(mafiaSpeakingOrderHintTimer)
-    }
-    mafiaSpeakingOrderHintTimer = setTimeout(() => {
-      mafiaSpeakingOrderHintVisible.value = false
-      mafiaSpeakingOrderHintTimer = undefined
-    }, 4500)
-  },
-)
 
 function refreshMafiaPlayersState(): void {
   if (!isMafiaRoute.value) {
@@ -3143,10 +2794,11 @@ onBeforeUnmount(() => {
     clearTimeout(roomCopyFlashTimer)
     roomCopyFlashTimer = null
   }
-  if (mafiaSpeakingOrderHintTimer != null) {
-    clearTimeout(mafiaSpeakingOrderHintTimer)
-    mafiaSpeakingOrderHintTimer = undefined
-  }
+  // The Mafia speaking-hint timer is owned by `useMafiaSpeakingHint`
+  // (inside `MafiaCallAdapter`); the composable's own `onBeforeUnmount`
+  // clears it. A leftover reference here from before the Phase 2A
+  // extraction was throwing a `ReferenceError` at unmount and aborting
+  // the rest of this hook — including `leaveCall()` below.
   for (const pid of [...remoteVideoSuppressDelayTimerByPeer.keys()]) {
     clearRemoteVideoSuppressTimer(pid)
   }
@@ -3192,7 +2844,40 @@ onMounted(() => {
   window.addEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
   window.addEventListener(EAT_FIRST_OBS_URL_TOAST_EVENT, onEatFirstObsUrlCopiedToast)
   window.addEventListener(MAFIA_SETTINGS_TOAST_EVENT, onMafiaSettingsToast)
+  // Always-on timer-drift probe — diagnostic only, no media side effects.
+  // Surfaces OBS browser-source / hidden-tab throttling that would otherwise
+  // silently break the StreamVideo currentTime stall watchdog and the
+  // StreamAudio AudioContext heartbeat. Cost is one setInterval at 2 s per
+  // call route; result accessible via `__MEDIA_DEBUG__.timerDrift()` and
+  // surfaced in the `?mediaDebug=1` panel.
+  detachMediaDebugTimerDriftProbe = startMediaDebugTimerDriftProbe()
+  // Companion rAF probe. setInterval and rAF are throttled differently in
+  // some Chromium versions; the rAF probe surfaces render-loop pressure
+  // (long frames, low FPS) that the timer-drift probe cannot. Pure counter
+  // updates per frame; no DOM access in the callback.
+  detachMediaDebugRafProbe = startMediaDebugRafProbe()
+  // Stamp env info ONCE at mount. Read live `documentVisibilityState`
+  // is included by the reader, so no need to track it reactively.
+  setMediaDebugEnvInfo({
+    isMafiaView: mafiaViewUi.value,
+    isEatFirstView: eatFirstViewUi.value,
+  })
+  if (isMediaDebugEnabled()) {
+    detachMediaDebugGlobal = installMediaDebugGlobal({
+      forceSoftResync: () => {
+        try {
+          requestForcedProducerResync()
+        } catch (err) {
+          console.warn('[mediaDebug] forceSoftResync failed', err)
+        }
+      },
+    })
+  }
 })
+
+let detachMediaDebugGlobal: (() => void) | null = null
+let detachMediaDebugTimerDriftProbe: (() => void) | null = null
+let detachMediaDebugRafProbe: (() => void) | null = null
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
@@ -3206,9 +2891,15 @@ onUnmounted(() => {
     cancelSetPeerVisibleHideTimer(id)
   }
   lastSentPeerVisibleByPeer.clear()
+  detachMediaDebugTimerDriftProbe?.()
+  detachMediaDebugTimerDriftProbe = null
+  detachMediaDebugRafProbe?.()
+  detachMediaDebugRafProbe = null
   if (import.meta.env.DEV) {
     delete (globalThis as unknown as { __CALL_DEBUG__?: unknown }).__CALL_DEBUG__
   }
+  detachMediaDebugGlobal?.()
+  detachMediaDebugGlobal = null
 })
 
 watch(
@@ -3232,6 +2923,7 @@ watch(joining, (j) => {
 <template>
   <div class="page-route">
     <AppFullPageLoader :visible="joining" :aria-label="t('callPage.joining')" label="" />
+    <MediaDiagnosticsPanel v-if="mediaDebugPanelEnabled" />
     <CallRoomPopover
       v-model:display-name="session.selfDisplayName"
       v-model:room-join-draft="roomJoinDraft"
@@ -3280,15 +2972,13 @@ watch(joining, (j) => {
             </div>
           </TransitionGroup>
         </div>
-        <Transition name="call-toast" appear>
-          <div
-            v-if="mafiaSpeakingOrderHintVisible"
-            class="call-page__toast call-page__toast--join call-page__mafia-speak-hint"
-            role="status"
-          >
-            {{ t('mafiaPage.speakingOrderFloatHint') }}
-          </div>
-        </Transition>
+        <!--
+          The Mafia "speaking order" hint toast lives on
+          `MafiaCallAdapter.vue`, mounted from `MafiaPage` as a sibling of
+          `<CallPage>`. Its CSS positioning is `position: fixed` (top: 4.75rem;
+          right: 1rem; z-index: 110) so rendering from a different DOM
+          ancestor does not change visual placement.
+        -->
 
         <div
           v-if="session.inCall && !mafiaViewUi && !eatFirstViewUi && callChatInboundToasts.length > 0"
@@ -3428,8 +3118,6 @@ watch(joining, (j) => {
                 :row-speaking="isTileRowSpeaking(row)"
                 :remote-listen-volume="row.tile.remoteListenVolume"
                 :remote-listen-muted="row.tile.remoteListenMuted"
-                :remote-audio-level="remoteAudioLevelForPeer(row.tile.peerId)"
-                :remote-voice-ducked="isRemoteVoiceDucked(row.tile.peerId)"
                 :raise-hand="Boolean(row.tile.handRaised)"
                 :video-presentation="row.tile.videoPresentation"
                 :avatar-url="row.tile.avatarUrl ?? ''"
@@ -3463,6 +3151,8 @@ watch(joining, (j) => {
                 @mafia-set-elimination-background="onMafiaSetEliminationBackground"
                 @mafia-viewport-layers="(v) => onCallTileViewportForLayers(row.tile.peerId, v)"
                 @remote-playback-stall="onRemotePlaybackStall"
+                @video-stall="onTileVideoStall"
+                @audio-stall="onTileAudioStall"
                 @eat-first-reveal-trait="onEatFirstRevealTrait"
                 @eat-first-generate-trait="onEatFirstGenerateTrait"
                 @eat-first-reroll-action-card="onEatFirstRerollActionCard"

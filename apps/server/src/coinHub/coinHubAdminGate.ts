@@ -53,11 +53,15 @@ export function isCoinHubDevMutationBypassEnabled(): boolean {
   return v === '1' || v === 'true'
 }
 
-export async function shouldBypassCoinHubMutations(
-  userId: string,
-): Promise<boolean> {
-  if (isCoinHubDevMutationBypassEnabled()) {
-    return true
-  }
-  return isCoinHubApiAdminUser(userId)
+/**
+ * Coin Hub mutation cooldown bypass. Scoped exclusively to the explicit
+ * non-production env-flag path: the admin role check used to OR-in here, which
+ * meant DB `User.role === 'admin'` accounts received unlimited spin / case
+ * rewards in production (audit Phase 3 finding #3, Phase 8 P1 #7). Admin status
+ * is intentionally NOT a cooldown bypass — admins who need to grant coins should
+ * use a dedicated audited admin endpoint. `isCoinHubApiAdminUser` remains
+ * exported for callers that genuinely need an admin check elsewhere.
+ */
+export async function shouldBypassCoinHubMutations(): Promise<boolean> {
+  return isCoinHubDevMutationBypassEnabled()
 }

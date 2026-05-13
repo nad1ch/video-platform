@@ -308,6 +308,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     setPeerVisible,
     removeRemotePeer,
     requestForcedProducerResync,
+    requestHardProducerResync,
     receiveQualityPressure,
     receiveDeviceProfile,
     lastPreferredLayerTargetsByPeerId,
@@ -1604,5 +1605,23 @@ export function useCallEngine(options?: CallEngineOptions) {
 
     sendSignalingMessage: sendJson,
     subscribeSignalingMessage: addMessageListener,
+    /**
+     * Soft recv-side producer-list resync: same payload the visibility/focus policy
+     * already issues internally. Exposed so app-layer stall watchdogs (video freeze
+     * detector, manual debug button) can request a recover without forcing a
+     * full transport teardown. Caller MUST debounce — do not call faster than
+     * the existing policy cadence (~once per minute) to avoid WS spam.
+     */
+    requestForcedProducerResync,
+    /**
+     * Hard recv-side producer-list resync: the same path the server's
+     * `client-refresh` reason already drives — receiver tears down ALL recv
+     * consumers (recv transport stays) and re-consumes from a fresh
+     * `producer-sync`. Use only when the soft path has demonstrably failed:
+     * a confirmed persistent stall, an irrecoverable consumer state, or a
+     * manual debug request. Caller MUST throttle aggressively (≤ 1 per few
+     * minutes); a hard resync produces a brief media gap on every tile.
+     */
+    requestHardProducerResync,
   }
 }

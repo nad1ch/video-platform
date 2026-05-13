@@ -18,6 +18,24 @@ function shouldTrackApiError(path: string): boolean {
 const CSRF_HEADER_NAME = 'X-Requested-With'
 const CSRF_HEADER_VALUE = 'streamassist-fetch'
 
+/**
+ * Default network-level timeout for every `apiFetch` request. Keeps a slow
+ * upstream from pinning the UI (e.g. a stalled `/api/auth/me` or
+ * `/api/billing/subscription/me` previously stretched into 20-40s waits
+ * and blocked initial paint).
+ *
+ * Callers that genuinely need a longer ceiling can override via
+ * `apiFetch(path, { timeoutMs: … })`; pass `0` or a negative number to
+ * opt out entirely. A caller-supplied `init.signal` still wins for early
+ * cancellation — both signals can abort the same request.
+ */
+const DEFAULT_API_TIMEOUT_MS = 12_000
+
+export type ApiFetchInit = RequestInit & {
+  /** Override the default 12s timeout. `0` or negative disables timeout. */
+  timeoutMs?: number
+}
+
 function withCsrfHeader(init?: RequestInit): RequestInit {
   const next: RequestInit = { credentials: 'include', ...(init ?? {}) }
   const headers = new Headers(next.headers ?? undefined)
@@ -28,9 +46,63 @@ function withCsrfHeader(init?: RequestInit): RequestInit {
   return next
 }
 
-export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(apiUrl(path), withCsrfHeader(init)).then(
+/**
+ * Compose an internal timeout `AbortController` with the caller-provided
+ * `init.signal` (if any) so either side can cancel the request. The
+ * external signal is forwarded — including its `reason` — to the internal
+ * controller, preserving existing `try/catch` semantics. Returns the
+ * timer id (or `null` if the timeout is disabled) plus a cleanup hook.
+ */
+function setupTimeoutSignal(
+  init: ApiFetchInit | undefined,
+): { signal: AbortSignal; cleanup: () => void; didTimeOut: () => boolean } {
+  const timeoutMs =
+    typeof init?.timeoutMs === 'number' ? init.timeoutMs : DEFAULT_API_TIMEOUT_MS
+  const controller = new AbortController()
+  let timedOut = false
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let onExternalAbort: (() => void) | null = null
+
+  if (timeoutMs > 0) {
+    timer = setTimeout(() => {
+      timedOut = true
+      controller.abort(new DOMException('apiFetch timeout', 'TimeoutError'))
+    }, timeoutMs)
+  }
+
+  const external = init?.signal
+  if (external) {
+    if (external.aborted) {
+      controller.abort(external.reason)
+    } else {
+      onExternalAbort = () => controller.abort(external.reason)
+      external.addEventListener('abort', onExternalAbort, { once: true })
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup() {
+      if (timer != null) clearTimeout(timer)
+      if (external && onExternalAbort) {
+        external.removeEventListener('abort', onExternalAbort)
+      }
+    },
+    didTimeOut: () => timedOut,
+  }
+}
+
+export function apiFetch(path: string, init?: ApiFetchInit): Promise<Response> {
+  const { signal, cleanup, didTimeOut } = setupTimeoutSignal(init)
+  // Strip `timeoutMs` from what we hand to `fetch` (RequestInit does not know
+  // about it). Keep every other caller-provided init field intact.
+  const { timeoutMs: _timeoutMs, signal: _externalSignal, ...passThrough } = init ?? {}
+  void _timeoutMs
+  void _externalSignal
+  const requestInit = withCsrfHeader({ ...passThrough, signal })
+  return fetch(apiUrl(path), requestInit).then(
     (res) => {
+      cleanup()
       if (!res.ok && shouldTrackApiError(path)) {
         trackClientError(
           new Error(`API ${res.status} ${res.statusText || 'Request failed'}`),
@@ -41,8 +113,14 @@ export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
       return res
     },
     (error: unknown) => {
+      cleanup()
       if (shouldTrackApiError(path)) {
-        trackClientError(error, { apiPath: path.split('?')[0], method: init?.method ?? 'GET' }, 'apiFetch')
+        const reason = didTimeOut() ? 'timeout' : 'fetch'
+        trackClientError(
+          error,
+          { apiPath: path.split('?')[0], method: init?.method ?? 'GET', reason },
+          'apiFetch',
+        )
       }
       throw error
     },

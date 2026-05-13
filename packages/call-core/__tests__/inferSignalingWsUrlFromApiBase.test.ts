@@ -11,7 +11,7 @@ describe('inferWsOriginFromHttpApiBase', () => {
   })
 
   it('maps http to ws for local dev', () => {
-    expect(inferWsOriginFromHttpApiBase('http://127.0.0.1:3000')).toBe('ws://127.0.0.1:3000/')
+    expect(inferWsOriginFromHttpApiBase('http://127.0.0.1:3333')).toBe('ws://127.0.0.1:3333/')
   })
 })
 

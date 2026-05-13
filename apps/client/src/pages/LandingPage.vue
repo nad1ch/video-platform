@@ -39,20 +39,19 @@ import landingCameraIcon from '@/assets/landing/decor/landing-camera.svg'
 import landingMegaphoneIcon from '@/assets/landing/decor/landing-megaphone.svg'
 import landingMicrophoneIcon from '@/assets/landing/decor/landing-microphone.svg'
 import landingMonitorIcon from '@/assets/landing/decor/landing-monitor.svg'
-import eatFirstIcon from '@/assets/landing/eat-first.png'
-import eatFirstIconWebp from '@/assets/landing/eat-first.webp'
-import nadrawPhoneIcon from '@/assets/landing/nadraw-phone.png'
-import nadrawPhoneIconWebp from '@/assets/landing/nadraw-phone.webp'
+// WebP is universally supported on every browser we target; drop the PNG
+// twins for the four landing game cards so they don't ship in the chunk
+// alongside the WebP that the `<picture>` always serves.
+import eatFirstIcon from '@/assets/landing/eat-first.webp'
+import nadrawPhoneIcon from '@/assets/landing/nadraw-phone.webp'
 import instagramIcon from '@/assets/landing/instagram.png'
-import mafiaIcon from '@/assets/landing/mafia.png'
-import mafiaIconWebp from '@/assets/landing/mafia.webp'
+import mafiaIcon from '@/assets/landing/mafia.webp'
 import checkersMarkImage from '@/assets/landing/checkers-mark.svg'
 import durakCardImage from '@/assets/landing/durak-card.svg'
 import telegramIcon from '@/assets/landing/telegram.png'
 import tiktokIcon from '@/assets/landing/tiktok.png'
 import twitchIcon from '@/assets/landing/twitch.png'
-import nadleGameIcon from '@/assets/landing/nadle.png'
-import nadleGameIconWebp from '@/assets/landing/nadle.webp'
+import nadleGameIcon from '@/assets/landing/nadle.webp'
 import { persistLocale } from '@/eat-first/i18n/index.js'
 import {
   BRAND_LOGO_LIGHT_SVG,
@@ -309,7 +308,6 @@ const landingGameCards = computed<LandingGameCard[]>(() => [
     title: t('home.gameEatFirst'),
     to: { name: 'eat' },
     image: eatFirstIcon,
-    imageWebp: eatFirstIconWebp,
     ariaLabel: t('home.openEatFirst'),
     tone: 'amber',
   },
@@ -318,7 +316,6 @@ const landingGameCards = computed<LandingGameCard[]>(() => [
     title: t('home.gameMafia'),
     to: mafiaRoute,
     image: mafiaIcon,
-    imageWebp: mafiaIconWebp,
     ariaLabel: t('home.openMafia'),
     tone: 'slate',
   },
@@ -327,7 +324,6 @@ const landingGameCards = computed<LandingGameCard[]>(() => [
     title: t('home.gameNadle'),
     to: { name: 'nadle-streamer', params: { streamer: defaultNadleStreamer } },
     image: nadleGameIcon,
-    imageWebp: nadleGameIconWebp,
     ariaLabel: t('home.openNadle'),
     tone: 'green',
   },
@@ -336,7 +332,6 @@ const landingGameCards = computed<LandingGameCard[]>(() => [
     title: t('home.gameNadraw'),
     to: { name: 'nadraw-show', params: { streamer: defaultNadleStreamer } },
     image: nadrawPhoneIcon,
-    imageWebp: nadrawPhoneIconWebp,
     ariaLabel: t('home.openNadraw'),
     tone: 'violet',
   },
@@ -1354,7 +1349,7 @@ watch(
 
 .landing-topbar {
   position: absolute;
-  left: calc(var(--u) * 540);
+  left: calc(var(--u) * 570);
   right: calc(var(--u) * 570);
   top: calc(var(--u) * 21);
   min-height: calc(var(--u) * 61.5);
@@ -1390,14 +1385,14 @@ watch(
   position: relative;
   left: auto;
   top: auto;
-  width: calc(var(--u) * 190);
+  width: calc(var(--u) * 132);
   height: calc(var(--u) * 60);
   overflow: visible;
 }
 
 .landing-header__brand-mark {
   position: absolute;
-  left: calc(var(--u) * -12);
+  left: 0;
   top: calc(var(--u) * 2.25);
   width: auto;
   height: calc(var(--u) * 55);
@@ -1410,7 +1405,7 @@ watch(
 
 .landing-header__brand-name {
   position: absolute;
-  left: calc(var(--u) * 38);
+  left: calc(var(--u) * 50);
   top: calc(var(--u) * 11.5);
   margin: 0;
   display: grid;
@@ -2607,8 +2602,8 @@ watch(
 
 @media (min-width: 961px) {
   .landing__canvas {
-    width: max(1515px, calc((100vw - 300px) * 2));
-    max-width: none;
+    width: min(max(1515px, calc((100vw - 300px) * 2)), 3100px);
+    max-width: 3100px;
   }
 }
 
@@ -2712,11 +2707,11 @@ watch(
   .landing-header__brand-mark {
     height: calc(var(--u) * 40);
     max-width: calc(var(--u) * 34);
-    transform: translate(calc(var(--u) * -8.5), calc(var(--u) * 1.75));
+    transform: translate(0, calc(var(--u) * 1.75));
   }
 
   .landing-header__brand-name {
-    left: calc(var(--u) * 28);
+    left: calc(var(--u) * 36.5);
     top: calc(var(--u) * 7.5);
     font-size: clamp(9px, 2.35vw, 10.5px);
     line-height: 1.12;

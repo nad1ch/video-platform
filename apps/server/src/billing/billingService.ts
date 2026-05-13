@@ -218,17 +218,24 @@ export async function getSubscriptionDtoForUser(userId: string): Promise<Subscri
         data: { expiredEmailSentAt: now },
       })
       if (claim.count > 0) {
-        
-        
-        void sendUserBillingNotification({
+        // Fire-and-forget: the expired-notification email must not block the
+        // hot-path subscription GET, but its rejection still has to be
+        // observable. Without an explicit catch, transport failures bubble up
+        // as `UnhandledPromiseRejection`.
+        sendUserBillingNotification({
           event: 'subscription_expired',
           to,
           displayName: userRow?.displayName ?? 'StreamAssist',
-          
+
           amountKopecks: 0,
           currency: '',
           subscriptionExpiresAt: row.expiresAt,
           adminNote: null,
+        }).catch((err) => {
+          console.error('[billing] sendUserBillingNotification(subscription_expired) failed', {
+            subscriptionId: row.id,
+            err: err instanceof Error ? err.message : String(err),
+          })
         })
       }
     }
@@ -1178,7 +1185,10 @@ export async function cancelAdminSubscription(
     
     const userTo = row.user?.billingEmail ?? row.user?.email ?? null
     if (userTo) {
-      void sendUserBillingNotification({
+      // Fire-and-forget: cancellation notification must not block the admin
+      // response, but transport failure has to surface as a log line rather
+      // than an unhandled promise rejection.
+      sendUserBillingNotification({
         event: 'subscription_cancelled',
         to: userTo,
         displayName: row.user?.displayName ?? 'StreamAssist',
@@ -1186,6 +1196,11 @@ export async function cancelAdminSubscription(
         currency: '',
         subscriptionExpiresAt: null,
         adminNote: null,
+      }).catch((err) => {
+        console.error('[billing] sendUserBillingNotification(subscription_cancelled) failed', {
+          subscriptionId: row.id,
+          err: err instanceof Error ? err.message : String(err),
+        })
       })
     }
   }

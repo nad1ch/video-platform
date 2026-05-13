@@ -24,12 +24,31 @@ import {
   handleMafiaModeUpdate,
   handleMafiaSettingsUpdate,
   handleMafiaPageBackgroundSettings,
+  handleMafiaAudioMixUpdate,
   handleMafiaTimerStart,
   handleMafiaTimerStop,
   handleMafiaPlayerKick,
   handleMafiaPlayerRevive,
   handleMafiaForceCameraOff,
   handleMafiaForceMuteAll,
+  handleMafiaRequestSnapshot,
+  // Generic game-room (Phase 3A). Parallel of the Mafia handlers above —
+  // each function is gated by `isGameRoomId(room.id)` and never reaches
+  // into Mafia state.
+  handleGameRoomClaimHost,
+  handleGameRoomTransferHost,
+  handleGameRoomQueueUpdate,
+  handleGameRoomReshuffle,
+  handleGameRoomPlayersUpdate,
+  handleGameRoomPlayerNameUpdate,
+  handleGameRoomAudioMixUpdate,
+  handleGameRoomTimerStart,
+  handleGameRoomTimerStop,
+  handleGameRoomPlayerKick,
+  handleGameRoomPlayerRevive,
+  handleGameRoomForceCameraOff,
+  handleGameRoomForceMuteAll,
+  handleGameRoomRequestSnapshot,
   handleEatFirstForceMuteAll,
   handleEatFirstSlotClaim,
   handleEatFirstTraitRevealRequest,
@@ -274,7 +293,7 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'mafia:reshuffle': {
-              handleMafiaReshuffle(socket, parsed.data.payload, deps)
+              await handleMafiaReshuffle(socket, parsed.data.payload, deps)
               break
             }
             case 'mafia:players-update': {
@@ -297,6 +316,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               handleMafiaPageBackgroundSettings(socket, parsed.data.payload, deps)
               break
             }
+            case 'mafia:audio-mix-update': {
+              handleMafiaAudioMixUpdate(socket, parsed.data.payload, deps)
+              break
+            }
             case 'mafia:timer-start': {
               handleMafiaTimerStart(socket, parsed.data.payload, deps)
               break
@@ -306,11 +329,11 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'mafia:player-kick': {
-              handleMafiaPlayerKick(socket, parsed.data.payload, deps)
+              await handleMafiaPlayerKick(socket, parsed.data.payload, deps)
               break
             }
             case 'mafia:player-revive': {
-              handleMafiaPlayerRevive(socket, parsed.data.payload, deps)
+              await handleMafiaPlayerRevive(socket, parsed.data.payload, deps)
               break
             }
             case 'mafia:force-camera-off': {
@@ -319,6 +342,68 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'mafia:force-mute-all': {
               await handleMafiaForceMuteAll(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:request-snapshot': {
+              handleMafiaRequestSnapshot(socket, deps)
+              break
+            }
+            // Generic game-room (Phase 3A) — parallel of the Mafia arms above.
+            // Mafia arms are unmodified.
+            case 'gameroom:claim-host': {
+              handleGameRoomClaimHost(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:transfer-host': {
+              handleGameRoomTransferHost(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:queue-update': {
+              handleGameRoomQueueUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:reshuffle': {
+              await handleGameRoomReshuffle(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:players-update': {
+              handleGameRoomPlayersUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:player-name-update': {
+              handleGameRoomPlayerNameUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:audio-mix-update': {
+              handleGameRoomAudioMixUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:timer-start': {
+              handleGameRoomTimerStart(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:timer-stop': {
+              handleGameRoomTimerStop(socket, deps)
+              break
+            }
+            case 'gameroom:player-kick': {
+              await handleGameRoomPlayerKick(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:player-revive': {
+              await handleGameRoomPlayerRevive(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:force-camera-off': {
+              await handleGameRoomForceCameraOff(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:force-mute-all': {
+              await handleGameRoomForceMuteAll(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'gameroom:request-snapshot': {
+              handleGameRoomRequestSnapshot(socket, deps)
               break
             }
             case 'eat:force-mute-all': {
@@ -334,11 +419,11 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
             }
             case 'eat:trait-regenerate-request': {
-              handleEatFirstTraitRegenerateRequest(socket, parsed.data.payload, deps)
+              await handleEatFirstTraitRegenerateRequest(socket, parsed.data.payload, deps)
               break
             }
             case 'eat:trait-type-reroll-request': {
-              handleEatFirstTraitTypeRerollRequest(socket, parsed.data.payload, deps)
+              await handleEatFirstTraitTypeRerollRequest(socket, parsed.data.payload, deps)
               break
             }
             case 'eat:action-card-reroll-request': {

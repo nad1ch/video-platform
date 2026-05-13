@@ -197,6 +197,7 @@
   "routes": {
     "call": "Відеодзвінок",
     "mafia": "Мафія",
+    "gameTemplate": "Шаблон гри",
     "nadle": "Nadle",
     "admin": "Адмін",
     "nadrawShow": "Nadraw",

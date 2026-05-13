@@ -1,0 +1,15 @@
+# Cloudflare Pages headers — see https://developers.cloudflare.com/pages/configuration/headers/
+#
+# Vite emits content-hashed filenames under /assets/* on every build, so the
+# URL itself is the cache key — safe to cache for a year and skip revalidation.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The SPA shell references the latest hashed asset graph. It must revalidate on
+# every request so users do not get a stale shell pointing at deleted assets
+# after a deploy. Pages serves /index.html for "/" too; both must match.
+/
+  Cache-Control: no-cache, must-revalidate
+
+/index.html
+  Cache-Control: no-cache, must-revalidate

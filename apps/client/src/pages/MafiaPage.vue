@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useCallSessionStore } from 'call-core'
 import CallPage from '@/components/call/CallPage.vue'
+import MafiaCallAdapter from '@/components/mafia/adapters/MafiaCallAdapter.vue'
 import MafiaHostPanel from '@/components/mafia/MafiaHostPanel.vue'
 import MafiaOverlay from '@/components/mafia/MafiaOverlay.vue'
 import { useMafiaViewMode } from '@/composables/mafiaStreamViewRoute'
@@ -47,6 +48,7 @@ const showSignalingSessionWarning = computed(
       {{ t('mafiaPage.signalingSessionMissing') }}
     </div>
     <CallPage :mafia-stream-view="isViewMode" />
+    <MafiaCallAdapter />
     <MafiaHostPanel v-if="showHostTools" />
     <MafiaOverlay v-if="showMafiaOverlay" :view-mode="isViewMode" />
   </div>
