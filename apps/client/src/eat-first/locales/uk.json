@@ -653,7 +653,16 @@
     "speakingByAlreadyNominatedToast": "Гравець №{by} уже виставляв гравця №{target}.",
     "speakingTargetAlreadyNominatedToast": "Гравець №{target} уже виставлений (виставив №{by}).",
     "obsViewUrlCopiedToast": "Посилання скопійоване — вставте його в OBS",
-    "backgroundUploadFailed": "Не вдалося завантажити фон."
+    "backgroundUploadFailed": "Не вдалося завантажити фон.",
+    "hostTileReviveTitle": "Повернути за стіл",
+    "hostTileEliminateTitle": "Вибивання зі столу",
+    "eliminationBackgroundLabel": "Фон вибулого",
+    "eliminationBackground": {
+      "dark": "Темний",
+      "red": "Червоний",
+      "violet": "Фіолетовий",
+      "gray": "Сірий"
+    }
   },
   "callPage": {
     "title": "Відеодзвінок",

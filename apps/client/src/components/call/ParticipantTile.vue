@@ -12,11 +12,15 @@ import {
 import { useI18n } from 'vue-i18n'
 import { normalizeDisplayName } from 'call-core'
 import { createLogger } from '@/utils/logger'
-import type { MafiaEliminationBackground, MafiaPlayerLifeState, MafiaRole } from '@/utils/mafiaGameTypes'
-import MafiaEliminationMark from '../mafia/MafiaEliminationMark.vue'
+import type { MafiaRole } from '@/utils/mafiaGameTypes'
+import type {
+  GameEliminationAvatarKind,
+  GameEliminationBackground,
+  GamePlayerLifeState,
+} from '@/utils/gameTileTypes'
+import GameEliminationMark from '../game-call/GameEliminationMark.vue'
 import StreamAudio from '../StreamAudio.vue'
 import StreamVideo from '../StreamVideo.vue'
-import type { MafiaEliminationAvatarKind } from '@/utils/mafiaEliminationAvatarKind'
 
 const tileLog = createLogger('participant-tile')
 
@@ -48,9 +52,9 @@ const emit = defineEmits<{
   /** Neutral alias of `mafia-force-camera-off`; fired in parallel for Game Template. */
   'game-force-camera-off': [peerId: string]
 
-  'mafia-set-elimination-background': [payload: { peerId: string; background: MafiaEliminationBackground }]
+  'mafia-set-elimination-background': [payload: { peerId: string; background: GameEliminationBackground }]
   /** Neutral alias of `mafia-set-elimination-background`; fired in parallel for Game Template. */
-  'game-set-elimination-background': [payload: { peerId: string; background: MafiaEliminationBackground }]
+  'game-set-elimination-background': [payload: { peerId: string; background: GameEliminationBackground }]
 
   'mafia-viewport-layers': [visible: boolean]
   /** Neutral alias of `mafia-viewport-layers`; fired in parallel for Game Template. */
@@ -135,15 +139,15 @@ const props = withDefaults(
 
     streamViewMode?: boolean
 
-    mafiaLifeState?: MafiaPlayerLifeState
+    mafiaLifeState?: GamePlayerLifeState
     /** Neutral alias of `mafiaLifeState`; takes precedence when defined. */
-    gameLifeState?: MafiaPlayerLifeState
-    mafiaEliminationKind?: MafiaEliminationAvatarKind
+    gameLifeState?: GamePlayerLifeState
+    mafiaEliminationKind?: GameEliminationAvatarKind
     /** Neutral alias of `mafiaEliminationKind`; takes precedence when defined. */
-    gameEliminationKind?: MafiaEliminationAvatarKind
-    mafiaEliminationBackground?: MafiaEliminationBackground
+    gameEliminationKind?: GameEliminationAvatarKind
+    mafiaEliminationBackground?: GameEliminationBackground
     /** Neutral alias of `mafiaEliminationBackground`; takes precedence when defined. */
-    gameEliminationBackground?: MafiaEliminationBackground
+    gameEliminationBackground?: GameEliminationBackground
     mafiaDeadBackgroundUrl?: string | null
     /** Neutral alias of `mafiaDeadBackgroundUrl`; takes precedence when defined. */
     gameDeadBackgroundUrl?: string | null
@@ -188,7 +192,7 @@ const ELIMINATION_BACKGROUND_OPTIONS = Object.freeze([
   'red',
   'violet',
   'gray',
-] as const satisfies readonly MafiaEliminationBackground[])
+] as const satisfies readonly GameEliminationBackground[])
 
 const tileRootRef = ref<HTMLElement | null>(null)
 let tileLayerObserver: IntersectionObserver | null = null
@@ -342,10 +346,10 @@ const resolvedDeadBackgroundUrl = computed(
   () => props.gameDeadBackgroundUrl ?? props.mafiaDeadBackgroundUrl,
 )
 const resolvedHostShowLifeToggle = computed(
-  () => props.gameHostShowLifeToggle ?? props.mafiaHostShowLifeToggle,
+  () => props.gameHostShowLifeToggle || props.mafiaHostShowLifeToggle,
 )
 const resolvedLayerViewportObserve = computed(
-  () => props.gameLayerViewportObserve ?? props.mafiaLayerViewportObserve,
+  () => props.gameLayerViewportObserve || props.mafiaLayerViewportObserve,
 )
 
 const showSeatBadge = computed(
@@ -679,6 +683,41 @@ const eliminationBackgroundClass = computed(() =>
     : '',
 )
 
+/**
+ * Per-tile signal that the consumer opted into the neutral `game-*`
+ * API (i.e. rendered from the Game Template / GameRoom path):
+ * `gameLifeState` is the one `game*` prop the GT call site always binds
+ * to a defined value; Mafia never binds it. Used to route user-visible
+ * i18n labels (host life toggle title, elimination-background labels)
+ * through `gameRoom.*` keys instead of legacy `mafiaPage.*` ones.
+ * No route-name coupling: ParticipantTile stays a pure presentational
+ * component.
+ */
+const usesNeutralApi = computed(() => props.gameLifeState !== undefined)
+
+const hostLifeToggleTitle = computed(() => {
+  if (usesNeutralApi.value) {
+    return isDead.value
+      ? t('gameRoom.hostTileReviveTitle')
+      : t('gameRoom.hostTileEliminateTitle')
+  }
+  return isDead.value
+    ? t('mafiaPage.hostTileReviveTitle')
+    : t('mafiaPage.hostTileEliminateTitle')
+})
+
+const eliminationBackgroundGroupLabel = computed(() =>
+  usesNeutralApi.value
+    ? t('gameRoom.eliminationBackgroundLabel')
+    : t('mafiaPage.eliminationBackgroundLabel'),
+)
+
+function eliminationBackgroundSwatchLabel(bg: GameEliminationBackground): string {
+  return usesNeutralApi.value
+    ? t(`gameRoom.eliminationBackground.${bg}`)
+    : t(`mafiaPage.eliminationBackground.${bg}`)
+}
+
 const deadBackgroundStyle = computed(() =>
   hasCustomDeadBackground.value
     ? { '--mafia-dead-background-image': `url(${JSON.stringify(deadBackgroundUrlText.value)})` }
@@ -819,7 +858,7 @@ function onHostLifeClick(): void {
   }
 }
 
-function setEliminationBackground(background: MafiaEliminationBackground): void {
+function setEliminationBackground(background: GameEliminationBackground): void {
   const id = typeof props.peerId === 'string' ? props.peerId.trim() : ''
   if (id.length < 1) {
     return
@@ -1558,7 +1597,7 @@ if (import.meta.env.DEV) {
       </div>
       <div v-if="!showVideo" class="tile-placeholder">
         <div class="tile-placeholder__main">
-          <MafiaEliminationMark
+          <GameEliminationMark
             v-if="showEliminationMark"
             class="tile-placeholder-elimination"
             :kind="resolvedEliminationKind"
@@ -1675,8 +1714,8 @@ if (import.meta.env.DEV) {
           :class="{ 'tile-menu__life--revive': isDead }"
           data-no-mafia-tile-host
           data-no-game-room-tile-host
-          :title="isDead ? t('mafiaPage.hostTileReviveTitle') : t('mafiaPage.hostTileEliminateTitle')"
-          :aria-label="isDead ? t('mafiaPage.hostTileReviveTitle') : t('mafiaPage.hostTileEliminateTitle')"
+          :title="hostLifeToggleTitle"
+          :aria-label="hostLifeToggleTitle"
           @click.stop="onHostLifeClick"
         >
           <span class="tile-menu__life-ico" aria-hidden="true">{{
@@ -1759,15 +1798,15 @@ if (import.meta.env.DEV) {
                 @touchstart.stop
               />
               <div v-if="isDead" class="tile-menu__row tile-menu__row--mafia-bg">
-                <span class="tile-menu__label">{{ t('mafiaPage.eliminationBackgroundLabel') }}</span>
-                <div class="tile-menu__swatches" role="group" :aria-label="t('mafiaPage.eliminationBackgroundLabel')">
+                <span class="tile-menu__label">{{ eliminationBackgroundGroupLabel }}</span>
+                <div class="tile-menu__swatches" role="group" :aria-label="eliminationBackgroundGroupLabel">
                   <button
                     v-for="bg in ELIMINATION_BACKGROUND_OPTIONS"
                     :key="bg"
                     type="button"
                     class="tile-menu__swatch"
                     :class="[`tile-menu__swatch--${bg}`, { 'tile-menu__swatch--active': resolvedEliminationBackground === bg }]"
-                    :aria-label="t(`mafiaPage.eliminationBackground.${bg}`)"
+                    :aria-label="eliminationBackgroundSwatchLabel(bg)"
                     :aria-pressed="resolvedEliminationBackground === bg"
                     @click="setEliminationBackground(bg)"
                   />
