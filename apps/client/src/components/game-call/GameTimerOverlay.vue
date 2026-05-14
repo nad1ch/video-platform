@@ -28,7 +28,7 @@
 
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { GAME_TIMER_PRESET_MS } from '@/utils/gameTimerPresets'
-import mafiaTimerClock from '@/assets/mafia/ui/timer-clock.svg'
+import mafiaTimerClock from '@/assets/game-call/timer-clock.svg'
 
 export interface GameTimerState {
   /** Wall-clock epoch ms when the timer started. */

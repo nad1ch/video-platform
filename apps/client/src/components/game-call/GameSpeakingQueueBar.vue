@@ -10,8 +10,9 @@
  *   - all locale strings arrive via the `labels` prop
  *
  * Hard isolation: NO Mafia store / composable / signaling / i18n key imports.
- * Asset paths under `@/assets/mafia/ui/` are static SVGs (no code dependency
- * on Mafia logic).
+ * Asset paths live under the neutral `@/assets/game-call/` folder; the
+ * SVG bytes are namespace-neutral and shared with Mafia / Game Template /
+ * Eat First via the same component.
  *
  * CSS class names preserved as `.mafia-vote-hud*`. **This is intentional**:
  * `apps/client/src/components/call/CallPage.css` carries cross-component
@@ -24,8 +25,8 @@
 
 import { computed } from 'vue'
 import type { SpeakingNominationSegment } from '@/utils/speakingNominationQueue'
-import mafiaVoteClear from '@/assets/mafia/ui/vote-clear.svg'
-import mafiaVoteStart from '@/assets/mafia/ui/vote-start.svg'
+import mafiaVoteClear from '@/assets/game-call/vote-clear.svg'
+import mafiaVoteStart from '@/assets/game-call/vote-start.svg'
 
 export interface GameSpeakingQueueLabels {
   /** ARIA-label for the outer `<div role="region">`. */

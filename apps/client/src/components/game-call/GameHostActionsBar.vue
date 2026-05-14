@@ -15,16 +15,17 @@
  * dialog's text comes through `labels.reshuffleConfirm*`.
  *
  * Hard isolation: NO imports from any Mafia store, composable, signaling,
- * or i18n keys. Asset paths under `@/assets/mafia/ui/` are static SVGs (no
- * code dependency on Mafia logic); they can be relocated under a neutral
- * `@/assets/game-call/` path in a later cosmetic commit.
+ * or i18n keys. Asset paths live under the neutral `@/assets/game-call/`
+ * folder; the file names + variable bindings keep their `mafia*` prefix
+ * to minimize diff (the SVG bytes are namespace-neutral and shared with
+ * Mafia / Game Template / Eat First via the same components).
  */
 
 import { computed, ref } from 'vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
-import mafiaHostMuteAllActive from '@/assets/mafia/ui/host-mute-all-active.svg'
-import mafiaHostMuteAll from '@/assets/mafia/ui/host-mute-all.svg'
-import mafiaHostRoles from '@/assets/mafia/ui/host-roles.svg'
+import mafiaHostMuteAllActive from '@/assets/game-call/host-mute-all-active.svg'
+import mafiaHostMuteAll from '@/assets/game-call/host-mute-all.svg'
+import mafiaHostRoles from '@/assets/game-call/host-roles.svg'
 
 export interface GameHostActionsLabels {
   /** ARIA-label for the outer `<div role="toolbar">`. */
