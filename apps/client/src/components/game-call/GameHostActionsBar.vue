@@ -57,10 +57,21 @@ const props = withDefaults(
     canReshuffle: boolean
     /** True when swap-mode is currently selected. */
     swapActive: boolean
+    /**
+     * When `false`, the swap-mode button is hidden and the container
+     * collapses from the 3-button width (153 px) to the 2-button width
+     * (104 px). Defaults to `true` so existing Mafia / Game Template
+     * consumers are unaffected. Eat First passes `false` because the
+     * generic swap-mode mechanic does not exist in the Eat First
+     * protocol.
+     */
+    showSwap?: boolean
     /** Required i18n strings (component is locale-free). */
     labels: GameHostActionsLabels
   }>(),
-  {},
+  {
+    showSwap: true,
+  },
 )
 
 const emit = defineEmits<{
@@ -116,6 +127,7 @@ function onSwapClick(): void {
 <template>
   <div
     class="game-host-actions"
+    :class="{ 'game-host-actions--no-swap': !showSwap }"
     role="toolbar"
     :aria-label="labels.toolbarAria"
   >
@@ -141,6 +153,7 @@ function onSwapClick(): void {
       <img class="game-host-actions__roles-art" :src="mafiaHostRoles" alt="" aria-hidden="true" />
     </button>
     <button
+      v-if="showSwap"
       type="button"
       class="game-host-actions__btn game-host-actions__btn--swap"
       :class="{ 'game-host-actions__btn--swap-active': swapActive }"
@@ -198,6 +211,16 @@ function onSwapClick(): void {
   border-radius: 33px;
   background: rgb(32 20 51 / 0.29);
   pointer-events: auto;
+}
+
+/*
+ * Two-button variant (swap-mode button hidden via `:show-swap="false"`).
+ * Width collapses from 3-button (153 px) to 2-button (104 px); the
+ * 2-button geometry matches the original 104 px container the Eat First
+ * adapter used before it adopted the shared bar.
+ */
+.game-host-actions--no-swap {
+  width: 104px;
 }
 
 .game-host-actions__btn {

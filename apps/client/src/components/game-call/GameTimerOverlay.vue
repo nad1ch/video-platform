@@ -55,6 +55,16 @@ export interface GameTimerLabels {
   controlsAria: string
   /** ARIA-label for the presets `<div role="group">`. */
   durationsAria: string
+  /**
+   * Optional override for the literal text rendered inside the start
+   * button (the small pill). Defaults to the literal `'Start'`. Mafia /
+   * Game Template have historically shipped the hard-coded literal;
+   * Eat First passes its `eatFirstCall.timerStartLabel` to preserve its
+   * existing localized button text.
+   */
+  startButton?: string
+  /** Optional override for the literal text rendered inside the stop button. */
+  stopButton?: string
 }
 
 const props = withDefaults(
@@ -86,6 +96,31 @@ const props = withDefaults(
      * preset was added in Phase 5b.
      */
     defaultDurationMs?: number
+    /**
+     * When `true`, the chip freezes its countdown text at
+     * `frozenRemainingMs` (instead of computing from
+     * `nowMs - timer.startedAt`) and does NOT run the 1 s tick interval.
+     * The Start/Stop button stays labelled "Stop" because the timer is
+     * conceptually still active. Default `false` preserves Mafia / Game
+     * Template behavior (those routes never pause; they pass `paused:
+     * false` or omit the prop entirely).
+     */
+    paused?: boolean
+    /**
+     * The frozen remaining time in milliseconds when `paused === true`.
+     * Read only while paused; ignored otherwise. `null` / non-finite ⇒
+     * the chip falls back to the computed `remainingMs` for display.
+     * Eat First populates this from
+     * `timerRoomFields.frozenRemainingSec * 1000`.
+     */
+    frozenRemainingMs?: number | null
+    /**
+     * When `true`, the Start/Stop button is rendered with `:disabled`.
+     * Eat First sets this when the route is missing a `gameId` (the
+     * server-side state key the start/stop messages address). Default
+     * `false` preserves Mafia / Game Template behavior.
+     */
+    disabled?: boolean
     /** i18n strings (required so the component is locale-free). */
     labels: GameTimerLabels
   }>(),
@@ -94,6 +129,9 @@ const props = withDefaults(
     streamView: false,
     compact: false,
     defaultDurationMs: undefined,
+    paused: false,
+    frozenRemainingMs: null,
+    disabled: false,
     // `withDefaults` hoists this factory above setup() — but importing a
     // module-scope `const` is fine; the compiler-sfc rule only forbids
     // referencing setup-scope locals. `GAME_TIMER_PRESET_MS` is a module
@@ -125,26 +163,62 @@ function stopTick(): void {
 }
 
 const remainingMs = computed<number>(() => {
+  // Pause path (Eat First only — Mafia / Game Template default `paused`
+  // to `false` so this branch never fires). Display the frozen remaining
+  // time without consulting `nowMs`, so the tick interval can stay off.
+  if (
+    props.paused &&
+    typeof props.frozenRemainingMs === 'number' &&
+    Number.isFinite(props.frozenRemainingMs)
+  ) {
+    return Math.max(0, props.frozenRemainingMs)
+  }
   const t = props.timer
   if (t == null) return 0
   const elapsed = Math.max(0, nowMs.value - t.startedAt)
   return Math.max(0, t.durationMs - elapsed)
 })
 
-const isRunning = computed<boolean>(() => props.timer != null && remainingMs.value > 0)
+/**
+ * "The timer is active": running OR paused with a finite frozen-remaining
+ * value. Drives the button label, title, ARIA, and `timerDisplay`
+ * fallback. For Mafia / Game Template (where `paused === false` and
+ * `frozenRemainingMs == null`), this is byte-equivalent to the previous
+ * `isRunning = timer != null && remainingMs > 0`.
+ */
+const isActive = computed<boolean>(() => {
+  if (props.timer != null && remainingMs.value > 0) return true
+  if (
+    props.paused &&
+    typeof props.frozenRemainingMs === 'number' &&
+    Number.isFinite(props.frozenRemainingMs) &&
+    props.frozenRemainingMs > 0
+  ) {
+    return true
+  }
+  return false
+})
+
+/**
+ * "The timer needs the 1 s tick": active AND not paused. Drives the
+ * tick-interval start/stop watcher. Idle rooms (Mafia / Game Template /
+ * Eat First) all stay quiet; paused EF rooms also stay quiet because
+ * the display is frozen and does not need a tick.
+ */
+const isTicking = computed<boolean>(() => isActive.value && !props.paused)
 
 const showHostControls = computed<boolean>(() => props.isHost && !props.streamView)
 
 /**
  * The 1 s tick previously ran for the whole life of `MafiaPage` even when no
  * timer was running, idly waking the JS loop every second. We start/stop it
- * strictly around the `isRunning` transition so an idle room is fully quiet.
- * Preserved 1:1 from `MafiaOverlay.vue`.
+ * strictly around the `isTicking` transition so an idle room — and a paused
+ * EF room — is fully quiet.
  */
 watch(
-  isRunning,
-  (running) => {
-    if (running) {
+  isTicking,
+  (ticking) => {
+    if (ticking) {
       startTickIfNeeded()
     } else {
       stopTick()
@@ -194,7 +268,7 @@ watch(
 )
 
 const timerDisplay = computed<string | null>(() => {
-  if (!isRunning.value) return null
+  if (!isActive.value) return null
   return formatMmss(remainingMs.value)
 })
 
@@ -204,6 +278,15 @@ const timerText = computed<string>(() => timerDisplay.value ?? timerIdleDisplay.
 
 const useCompactTimer = computed<boolean>(() => props.compact || !showHostControls.value)
 
+/**
+ * Button text. Defaults to the literal `'Start'` / `'Stop'` Mafia and
+ * Game Template have always shipped. Eat First passes
+ * `labels.startButton` / `labels.stopButton` to keep its Ukrainian
+ * "Стоп" instead of falling back to the English literal.
+ */
+const startButtonText = computed<string>(() => props.labels.startButton ?? 'Start')
+const stopButtonText = computed<string>(() => props.labels.stopButton ?? 'Stop')
+
 function onSelectDuration(ms: number): void {
   if (!showHostControls.value) return
   selectedDurationMs.value = ms
@@ -211,7 +294,8 @@ function onSelectDuration(ms: number): void {
 
 function onToggleTimer(): void {
   if (!showHostControls.value) return
-  if (isRunning.value) {
+  if (props.disabled) return
+  if (isActive.value) {
     emit('stop')
     return
   }
@@ -264,11 +348,12 @@ function onToggleTimer(): void {
         <button
           type="button"
           class="sa-chip-btn game-timer-overlay__action game-timer-overlay__action--start"
-          :title="isRunning ? labels.stop : labels.start"
-          :aria-label="isRunning ? labels.stop : labels.start"
+          :title="isActive ? labels.stop : labels.start"
+          :aria-label="isActive ? labels.stop : labels.start"
+          :disabled="disabled"
           @click="onToggleTimer"
         >
-          {{ isRunning ? 'Stop' : 'Start' }}
+          {{ isActive ? stopButtonText : startButtonText }}
         </button>
       </div>
     </div>

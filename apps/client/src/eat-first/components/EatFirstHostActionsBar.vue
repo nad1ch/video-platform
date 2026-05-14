@@ -1,12 +1,50 @@
 <script setup lang="ts">
+/**
+ * EatFirstHostActionsBar — thin adapter around the shared
+ * `<GameHostActionsBar>` toolbar.
+ *
+ * Same pattern as `MafiaHostActionsBar.vue` and
+ * `GameTemplateHostActionsBar.vue`: the presentational button surface +
+ * confirm-dialog lifecycle lives in
+ * `components/game-call/GameHostActionsBar.vue`; this file only wires
+ * Eat First state into the shared props/emits and feeds Eat First i18n
+ * keys via the `labels` prop.
+ *
+ * Eat First-specific carry-over (preserved 1:1 from the inline form):
+ *
+ *   - The mute-all flag is **local** (no server-authoritative
+ *     `forceMuteAllActive` like Mafia / Game Template). Clicking
+ *     flips a local ref AND emits `force-mute-all` so CallPage can
+ *     dispatch `eat:force-mute-all`.
+ *
+ *   - The reshuffle gate uses
+ *     `Math.max(playerOrder, playerCount, connectedPlayerCount) >= 2`
+ *     because Eat First may have remote players counted in
+ *     `connectedPlayerCount` before `playerOrder` is populated.
+ *
+ *   - The swap-mode button is hidden via `:show-swap="false"` on the
+ *     shared bar — Eat First does not have a generic swap-mode
+ *     mechanic in its protocol.
+ *
+ *   - The destructive reshuffle confirm dialog (server-authoritative
+ *     `eat:table-round-deal` wipes the reveal ledger, marks every
+ *     action card unused, regenerates traits, and resets the speaking
+ *     queue) is now owned by the shared bar via its own
+ *     `<ConfirmDialog>` mount. The dialog text comes from
+ *     `eatFirstCall.reshuffleConfirm*` i18n keys.
+ *
+ * Public emit contract preserved for `CallPage.vue`:
+ *   - `force-mute-all [muted: boolean]`
+ *   - `reshuffle []`
+ */
+
 import { computed, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
+import { useI18n } from 'vue-i18n'
 import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
-import ConfirmDialog from '@/eat-first/ui/molecules/ConfirmDialog.vue'
-import mafiaHostMuteAllActive from '@/assets/mafia/ui/host-mute-all-active.svg'
-import mafiaHostMuteAll from '@/assets/mafia/ui/host-mute-all.svg'
-import mafiaHostRoles from '@/assets/mafia/ui/host-roles.svg'
+import GameHostActionsBar, {
+  type GameHostActionsLabels,
+} from '@/components/game-call/GameHostActionsBar.vue'
 
 const emit = defineEmits<{
   'force-mute-all': [muted: boolean]
@@ -15,266 +53,71 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const eatFirstShell = useEatFirstCallShellStore()
-const { isEatFirstRoomHost, playerOrder, playerCount, connectedPlayerCount } = storeToRefs(eatFirstShell)
-
-const muteAllActive = ref(false)
-
-const muteAllIcon = computed(() => (muteAllActive.value ? mafiaHostMuteAllActive : mafiaHostMuteAll))
-const canReshuffle = computed(
-  () => Math.max(playerOrder.value.length, playerCount.value, connectedPlayerCount.value) >= 2,
-)
-
-function onMuteAll(): void {
-  if (!isEatFirstRoomHost.value) return
-  muteAllActive.value = !muteAllActive.value
-  emit('force-mute-all', muteAllActive.value)
-}
+const { isEatFirstRoomHost, playerOrder, playerCount, connectedPlayerCount } =
+  storeToRefs(eatFirstShell)
 
 /**
- * Lower cube / deal is destructive: server-authoritative `eat:table-round-deal`
- * wipes the reveal ledger, marks every action card unused, regenerates traits,
- * and resets the speaking queue. Gate the click behind a confirm step so a
- * single mis-tap on the icon-only toolbar can't drop a live game's table state.
- *
- * Cancel = pure no-op. Confirm runs the original `reshuffle` emit, so the
- * existing `CallPage` -> `eat:table-round-deal` signaling path is unchanged
- * (no protocol change, no server change).
+ * Local mute-all state — Eat First does NOT carry a
+ * server-authoritative mute-all flag like Mafia's
+ * `mafiaForceMuteAllActive`. The original inline component flipped a
+ * local ref on each click; preserved 1:1 here.
  */
-const reshuffleConfirmOpen = ref(false)
+const muteAllActive = ref(false)
+
+const canReshuffle = computed(
+  () =>
+    Math.max(playerOrder.value.length, playerCount.value, connectedPlayerCount.value) >= 2,
+)
+
+const labels = computed<GameHostActionsLabels>(() => ({
+  toolbarAria: t('eatFirstCall.hostActionsAria'),
+  muteAllTitle: t('eatFirstCall.forceMuteAllTitle'),
+  reshuffleTitle: t('eatFirstCall.reshuffleOrderTitle'),
+  reshuffleDisabledHint: t('eatFirstCall.reshuffleOrderHint'),
+  // Swap button is hidden via `show-swap="false"`; these strings are
+  // never rendered but the `GameHostActionsLabels` interface requires
+  // them. Use empty strings rather than fake i18n keys.
+  swapModeTitle: '',
+  swapModeAria: '',
+  reshuffleConfirmTitle: t('eatFirstCall.reshuffleConfirmTitle'),
+  reshuffleConfirmBody: t('eatFirstCall.reshuffleConfirmMessage'),
+  reshuffleConfirmProceed: t('eatFirstCall.reshuffleConfirmAction'),
+  reshuffleConfirmCancel: t('eatFirstCall.reshuffleConfirmCancel'),
+}))
+
+function onSetMuteAll(muted: boolean): void {
+  if (!isEatFirstRoomHost.value) return
+  muteAllActive.value = muted
+  emit('force-mute-all', muted)
+}
 
 function onReshuffle(): void {
   if (!isEatFirstRoomHost.value || !canReshuffle.value) return
-  reshuffleConfirmOpen.value = true
+  emit('reshuffle')
 }
 
-function onReshuffleConfirmed(): void {
-  if (!isEatFirstRoomHost.value || !canReshuffle.value) return
-  emit('reshuffle')
+/**
+ * Swap-mode is hidden in this adapter (`:show-swap="false"`). The
+ * shared bar still declares the `toggle-swap-mode` emit type; it will
+ * never fire while the button is `v-if`-ed out, but we keep a no-op
+ * handler so any future regression that re-renders the button does
+ * not crash on a missing listener.
+ */
+function onToggleSwapModeNoop(): void {
+  /* no-op — swap mode hidden for Eat First */
 }
 </script>
 
 <template>
-  <div
+  <GameHostActionsBar
     v-if="isEatFirstRoomHost"
-    class="ef-host-actions"
-    role="toolbar"
-    :aria-label="t('eatFirstCall.hostActionsAria')"
-  >
-    <button
-      type="button"
-      class="ef-host-actions__btn ef-host-actions__btn--mute"
-      :class="{ 'ef-host-actions__btn--mute-active': muteAllActive }"
-      :title="t('eatFirstCall.forceMuteAllTitle')"
-      :aria-label="t('eatFirstCall.forceMuteAllTitle')"
-      :aria-pressed="muteAllActive"
-      @click="onMuteAll"
-    >
-      <img
-        class="ef-host-actions__full-art"
-        :src="muteAllIcon"
-        alt=""
-        aria-hidden="true"
-      />
-    </button>
-    <button
-      type="button"
-      class="ef-host-actions__btn ef-host-actions__btn--roles"
-      :disabled="!canReshuffle"
-      :title="canReshuffle ? t('eatFirstCall.reshuffleOrderTitle') : t('eatFirstCall.reshuffleOrderHint')"
-      :aria-label="canReshuffle ? t('eatFirstCall.reshuffleOrderTitle') : t('eatFirstCall.reshuffleOrderHint')"
-      @click="onReshuffle"
-    >
-      <img
-        class="ef-host-actions__roles-art"
-        :src="mafiaHostRoles"
-        alt=""
-        aria-hidden="true"
-      />
-    </button>
-    <ConfirmDialog
-      v-model:open="reshuffleConfirmOpen"
-      :title="t('eatFirstCall.reshuffleConfirmTitle')"
-      :message="t('eatFirstCall.reshuffleConfirmMessage')"
-      :confirm-label="t('eatFirstCall.reshuffleConfirmAction')"
-      :cancel-label="t('eatFirstCall.reshuffleConfirmCancel')"
-      @confirm="onReshuffleConfirmed"
-    />
-  </div>
+    :mute-all-active="muteAllActive"
+    :can-reshuffle="canReshuffle"
+    :swap-active="false"
+    :show-swap="false"
+    :labels="labels"
+    @set-mute-all="onSetMuteAll"
+    @reshuffle="onReshuffle"
+    @toggle-swap-mode="onToggleSwapModeNoop"
+  />
 </template>
-
-<style scoped>
-.ef-host-actions {
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 104px;
-  height: 55px;
-  padding: 7px;
-  gap: 8px;
-  border-radius: 33px;
-  background: rgb(32 20 51 / 0.29);
-  pointer-events: auto;
-}
-
-.ef-host-actions__btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 41px;
-  height: 41px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  color: #fff;
-  background: transparent;
-  cursor: pointer;
-  transition:
-    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.16s ease;
-}
-
-.ef-host-actions__btn:hover:not(:disabled) {
-  transform: scale(1.025);
-}
-
-.ef-host-actions__btn--mute-active {
-  filter: brightness(1.05);
-}
-
-.ef-host-actions__btn:focus-visible {
-  outline: 2px solid rgb(255 255 255 / 0.82);
-  outline-offset: 2px;
-}
-
-.ef-host-actions__btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.42;
-}
-
-.ef-host-actions__btn--roles {
-  background: rgb(102 56 143 / 0.47);
-}
-
-.ef-host-actions__full-art {
-  --ef-host-action-hover: 0;
-  --ef-host-action-x: 0px;
-  --ef-host-action-y: 0px;
-  --ef-host-action-scale: 0;
-  --ef-host-action-rotate: 0deg;
-  display: block;
-  width: 41px;
-  height: 41px;
-  object-fit: contain;
-  transform:
-    translate(
-      calc(var(--ef-host-action-x) * var(--ef-host-action-hover)),
-      calc(var(--ef-host-action-y) * var(--ef-host-action-hover))
-    )
-    scale(calc(1 + var(--ef-host-action-scale) * var(--ef-host-action-hover)))
-    rotate(calc(var(--ef-host-action-rotate) * var(--ef-host-action-hover)));
-  transform-origin: center;
-  animation: ef-host-action-mics 1.18s ease-in-out infinite;
-  transition: --ef-host-action-hover 0.24s ease;
-}
-
-.ef-host-actions__btn:hover:not(:disabled) .ef-host-actions__full-art {
-  --ef-host-action-hover: 1;
-}
-
-.ef-host-actions__roles-art {
-  --ef-host-action-hover: 0;
-  --ef-host-action-x: 0px;
-  --ef-host-action-y: 0px;
-  --ef-host-action-scale: 0;
-  --ef-host-action-rotate: 0deg;
-  display: block;
-  width: 24px;
-  height: 24px;
-  object-fit: contain;
-  transform:
-    translate(
-      calc(var(--ef-host-action-x) * var(--ef-host-action-hover)),
-      calc(var(--ef-host-action-y) * var(--ef-host-action-hover))
-    )
-    scale(calc(1 + var(--ef-host-action-scale) * var(--ef-host-action-hover)))
-    rotate(calc(var(--ef-host-action-rotate) * var(--ef-host-action-hover)));
-  transform-origin: center;
-  animation: ef-host-action-dice 1.18s ease-in-out infinite;
-  transition: --ef-host-action-hover 0.24s ease;
-}
-
-.ef-host-actions__btn:hover:not(:disabled) .ef-host-actions__roles-art {
-  --ef-host-action-hover: 1;
-}
-
-@property --ef-host-action-hover {
-  syntax: '<number>';
-  inherits: false;
-  initial-value: 0;
-}
-
-@property --ef-host-action-x {
-  syntax: '<length>';
-  inherits: false;
-  initial-value: 0px;
-}
-
-@property --ef-host-action-y {
-  syntax: '<length>';
-  inherits: false;
-  initial-value: 0px;
-}
-
-@property --ef-host-action-scale {
-  syntax: '<number>';
-  inherits: false;
-  initial-value: 0;
-}
-
-@property --ef-host-action-rotate {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
-}
-
-@keyframes ef-host-action-mics {
-  0%, 100% {
-    --ef-host-action-x: 0px;
-    --ef-host-action-y: 0px;
-    --ef-host-action-scale: 0;
-    --ef-host-action-rotate: 0deg;
-  }
-  42% {
-    --ef-host-action-y: -1.2px;
-    --ef-host-action-scale: 0.035;
-    --ef-host-action-rotate: -1.5deg;
-  }
-  74% {
-    --ef-host-action-y: -0.5px;
-    --ef-host-action-scale: 0.016;
-    --ef-host-action-rotate: 1deg;
-  }
-}
-
-@keyframes ef-host-action-dice {
-  0%, 100% {
-    --ef-host-action-x: 0px;
-    --ef-host-action-y: 0px;
-    --ef-host-action-scale: 0;
-    --ef-host-action-rotate: 0deg;
-  }
-  38% {
-    --ef-host-action-y: -1px;
-    --ef-host-action-scale: 0.055;
-    --ef-host-action-rotate: -5deg;
-  }
-  70% {
-    --ef-host-action-y: -0.4px;
-    --ef-host-action-scale: 0.024;
-    --ef-host-action-rotate: 2.5deg;
-  }
-}
-</style>
