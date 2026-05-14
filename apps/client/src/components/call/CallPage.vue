@@ -5,7 +5,6 @@ import {
   onBeforeUnmount,
   onMounted,
   onUnmounted,
-  provide,
   ref,
   shallowRef,
   watch,
@@ -14,39 +13,23 @@ import type { CallEngineRole } from 'call-core'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  buildCallParticipantMap,
-  buildDisplayNameUiMap,
   getAudioAnalysisAudioContext,
   normalizeDisplayName,
-  resolvePeerDisplayNameForUi,
   useCallOrchestrator,
   VIDEO_QUALITY_PRESETS,
-  type CallChatLine,
   type InboundVideoDebugRow,
   type VideoQualityPreset,
 } from 'call-core'
 import { useLocalTileSpeakingVisual } from '@/composables/useLocalTileSpeakingVisual'
 import { useAuth } from '@/composables/useAuth'
 import { createLogger } from '@/utils/logger'
-import {
-  loadCallTileLocalDisplayOverrides,
-  saveCallTileLocalDisplayOverrides,
-} from '@/utils/callTileLocalDisplayNames'
-import { pinHostPeerToEndOfOrder } from '@/utils/mafiaHostOrdering'
+import { saveCallTileLocalDisplayOverrides } from '@/utils/callTileLocalDisplayNames'
 import { resolveHostPeerIdForGrid, sortPeerIdsHostLast } from './callTileOrderRules'
 
 const callPageLog = createLogger('call-page')
 import ParticipantTile from './ParticipantTile.vue'
 import MediaDiagnosticsPanel from './MediaDiagnosticsPanel.vue'
-import {
-  installMediaDebugGlobal,
-  isMediaDebugEnabled,
-  recordMediaDebugSignalingIncoming,
-  recordMediaDebugWsTransition,
-  setMediaDebugEnvInfo,
-  startMediaDebugRafProbe,
-  startMediaDebugTimerDriftProbe,
-} from '@/utils/mediaDebugRuntime'
+import { isMediaDebugEnabled } from '@/utils/mediaDebugRuntime'
 import { useMediaStallRecovery } from './useMediaStallRecovery'
 import CallRoomPopover from './CallRoomPopover.vue'
 import CallControlsDock from './CallControlsDock.vue'
@@ -57,16 +40,29 @@ import {
   SPOTLIGHT_STRIP_VISIBLE_LIMIT,
   useCallSpotlightLayout,
 } from '@/composables/game-room/useCallSpotlightLayout'
+import { useFullPowerMode } from '@/composables/game-room/useFullPowerMode'
+import { useCallMediaDebugTaps } from '@/composables/game-room/useCallMediaDebugTaps'
+import { useCallPresenceToasts } from '@/composables/game-room/useCallPresenceToasts'
+import { useCallDevicePickers } from '@/composables/game-room/useCallDevicePickers'
+import { useRemoteTileBudget } from '@/composables/game-room/useRemoteTileBudget'
+import { useCallRoomCodeChip } from '@/composables/game-room/useCallRoomCodeChip'
+import { useCallDisplayNames } from '@/composables/game-room/useCallDisplayNames'
+import { useCallChatInboundToasts } from '@/composables/game-room/useCallChatInboundToasts'
+import { useCallTileOrdering } from '@/composables/game-room/useCallTileOrdering'
+import { buildHostLastOrderedTiles } from '@/composables/game-room/callTileOrdering'
+import { useCallRouteHtmlClass } from '@/composables/game-room/useCallRouteHtmlClass'
+import { useCallToastEventListeners } from '@/composables/game-room/useCallToastEventListeners'
+import { useCallPageBootstrap } from '@/composables/game-room/useCallPageBootstrap'
+import GameRoomCallBottomCluster from '@/components/game-room/GameRoomCallBottomCluster.vue'
+import GameRoomCallPresenceToastsPanel from '@/components/game-room/GameRoomCallPresenceToastsPanel.vue'
+import GameRoomCallChatInboundToastsPanel from '@/components/game-room/GameRoomCallChatInboundToastsPanel.vue'
+import GameRoomCallDebugOverlay from '@/components/game-room/GameRoomCallDebugOverlay.vue'
 import AppContainer from '@/components/ui/AppContainer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import mafiaTilePinIcon from '@/assets/mafia/ui/tile-pin.svg'
 import { generateCallRoomCode } from '@/utils/callRoomUi'
-import {
-  CALL_ROOM_DROPDOWN_HOST_ID,
-  CALL_ROOM_POPOVER_PANEL_ID,
-  useCallRoomHeaderJoinStore,
-} from '@/stores/callRoomHeaderJoin'
+import { useCallRoomHeaderJoinStore } from '@/stores/callRoomHeaderJoin'
 import { useMafiaHostSignaling } from '@/composables/useMafiaHostSignaling'
 import { useMafiaCallHostUi } from '@/composables/useMafiaCallHostUi'
 import { useEatFirstCallSignaling } from '@/composables/useEatFirstCallSignaling'
@@ -100,21 +96,12 @@ import { MafiaWs } from '@/composables/mafiaWsProtocol'
 import { useMafiaAudioMixSignaling } from '@/composables/useMafiaAudioMixSignaling'
 import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
 import { nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
-import {
-  applyCallAudioOutputSinkToStreamAudios,
-  CALL_AUDIO_OUTPUT_DEVICE_ID_KEY,
-} from '@/audio/callAudioOutputInjection'
-
 type VideoQualityUiChoice = 'auto' | VideoQualityPreset
-
-const CALL_AUDIO_OUTPUT_LS_KEY = 'streamassist_call_audio_out_v1'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const { user, ensureAuthLoaded, isAdmin } = useAuth()
-
-const CALL_ROUTE_HTML_CLASS = 'sa-call-route'
 
 /**
  * `/app/call`, `/app/mafia`, and `/app/eat` share one `CallPage` (video + orchestrator).
@@ -143,14 +130,8 @@ const callEngineRole = computed((): CallEngineRole =>
   mafiaViewUi.value || eatFirstViewUi.value ? 'viewer' : 'participant',
 )
 
-watch(
-  () => isCallAppRoute.value,
-  (onCallShell) => {
-    if (typeof document === 'undefined') return
-    document.documentElement.classList.toggle(CALL_ROUTE_HTML_CLASS, onCallShell)
-  },
-  { immediate: true },
-)
+// `sa-call-route` <html> class toggle + onUnmounted cleanup — Block 27.
+useCallRouteHtmlClass(isCallAppRoute)
 
 
 const allowManualVideoQuality = computed(() => isAdmin.value)
@@ -260,43 +241,10 @@ const isSystemHealthy = computed(() => {
 
 
 
-const FULL_POWER_ENTER_AFTER_MS = 4000
-const isFullPowerMode = shallowRef(false)
-let fullPowerEnterTimer: ReturnType<typeof setTimeout> | null = null
-
-function clearFullPowerEnterTimer(): void {
-  if (fullPowerEnterTimer != null) {
-    clearTimeout(fullPowerEnterTimer)
-    fullPowerEnterTimer = null
-  }
-}
-
-watch(
-  () =>
-    [isSystemHealthy.value, receiveDeviceProfile.value.profile === 'strong'] as const,
-  ([healthy, strongProfile]) => {
-    if (!strongProfile || !healthy) {
-      clearFullPowerEnterTimer()
-      if (isFullPowerMode.value) {
-        isFullPowerMode.value = false
-      }
-      return
-    }
-    if (isFullPowerMode.value) {
-      return
-    }
-    if (fullPowerEnterTimer != null) {
-      return
-    }
-    fullPowerEnterTimer = window.setTimeout(() => {
-      fullPowerEnterTimer = null
-      if (receiveDeviceProfile.value.profile === 'strong' && isSystemHealthy.value) {
-        isFullPowerMode.value = true
-      }
-    }, FULL_POWER_ENTER_AFTER_MS)
-  },
-  { flush: 'post' },
-)
+const { isFullPowerMode } = useFullPowerMode({
+  isSystemHealthy,
+  receiveDeviceProfile,
+})
 
 if (import.meta.env.DEV) {
   watch(
@@ -317,42 +265,21 @@ if (import.meta.env.DEV) {
 
 useMafiaHostSignaling(sendSignalingMessage, subscribeSignalingMessage, wsStatus)
 
-// Diagnostics-only WS lifecycle counter. Reads the existing `wsStatus` ref;
-// no call-core change required. Records open/close/error counts and
-// detects `closed → open` (i.e. WS reconnect) transitions for the
-// `?mediaDebug=1` panel + `__MEDIA_DEBUG__.wsStats()` console accessor.
-let lastObservedWsStatus: string | null = null
-watch(
-  () => wsStatus.value,
-  (next) => {
-    const nextStr = typeof next === 'string' ? next : String(next)
-    if (lastObservedWsStatus === nextStr) return
-    recordMediaDebugWsTransition(lastObservedWsStatus, nextStr)
-    lastObservedWsStatus = nextStr
-  },
-  { immediate: true },
-)
-
-// Diagnostics-only counting subscriber. Does NOT apply state — every other
-// `subscribeSignalingMessage` registration handles real apply paths. This
-// one increments per-type counters so post-incident analysis can correlate
-// flicker / blackout reports with WS message bursts (`producer-sync`,
-// `producer-closed`, `new-producer`, `room-state`, `peer-joined/left`,
-// Mafia snapshot replies). Cost: one switch + counter per inbound message.
-const offMediaDebugSignalingCounter = subscribeSignalingMessage((data) => {
-  if (!data || typeof data !== 'object') return
-  const type = (data as { type?: unknown }).type
-  if (typeof type !== 'string') return
-  if (type === 'producer-sync') {
-    const payload = (data as { payload?: { syncReason?: unknown } }).payload
-    const syncReason =
-      payload && typeof payload.syncReason === 'string' ? payload.syncReason : undefined
-    recordMediaDebugSignalingIncoming(type, { syncReason })
-    return
-  }
-  recordMediaDebugSignalingIncoming(type)
+// Diagnostics-only WS / signaling counters + probes + env-info stamp +
+// optional `__MEDIA_DEBUG__` global install live in `useCallMediaDebugTaps`
+// (Block 24). The composable owns the WS watcher, the
+// `subscribeSignalingMessage` detach, the timer-drift + rAF probes, and the
+// `installMediaDebugGlobal` lifecycle. The env-info payload is route-specific
+// (Mafia stamps `isMafiaView` + `isEatFirstView`) and is supplied as a thunk.
+useCallMediaDebugTaps({
+  wsStatus,
+  subscribeSignalingMessage,
+  requestForcedProducerResync,
+  envInfo: () => ({
+    isMafiaView: mafiaViewUi.value,
+    isEatFirstView: eatFirstViewUi.value,
+  }),
 })
-onBeforeUnmount(offMediaDebugSignalingCounter)
 
 const { selfPeerId, selfDisplayName, remoteDisplayNames } = storeToRefs(session)
 
@@ -561,112 +488,17 @@ watch(
 )
 
 
-const participantsByPeerId = computed(() =>
-  buildCallParticipantMap(tiles.value, { ...remoteDisplayNames.value }, selfPeerId.value),
-)
-
-
-const displayNameUiByPeerId = computed(() =>
-  buildDisplayNameUiMap(participantsByPeerId.value, {
-    selfPeerId: selfPeerId.value,
-    selfDisplayName: selfDisplayName.value,
-  }),
-)
-
+// `mafiaNicknameOverrideByPeerId` is page-owned because the Mafia
+// `playerNicknameUpdate` WS handler above (and the in-call view) writes
+// to it from outside the composable. It's the route-specific input that
+// `useCallDisplayNames` consumes via its `policy.nicknameOverrides`.
 const mafiaNicknameOverrideByPeerId = shallowRef<Record<string, string>>({})
 
-
-const localTileDisplayOverrides = shallowRef<Record<string, string>>(loadCallTileLocalDisplayOverrides())
-
-function canEditTileDisplayName(peerId: string): boolean {
-  const id = typeof peerId === 'string' ? peerId.trim() : ''
-  if (!id) {
-    return false
-  }
-  const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
-  const isLocalTile = tiles.value.some((x) => x.peerId === id && x.isLocal)
-  if (isMafiaRoute.value) {
-    return mafiaGameStore.isMafiaHost || (selfId.length > 0 && id === selfId) || isLocalTile
-  }
-  return (selfId.length > 0 && id === selfId) || isLocalTile
-}
-
-function onCommitLocalTileDisplayName(payload: { peerId: string; name: string | null }): void {
-  const id = typeof payload.peerId === 'string' ? payload.peerId.trim() : ''
-  if (!id) {
-    return
-  }
-  if (!canEditTileDisplayName(id)) {
-    return
-  }
-  const t = payload.name != null ? normalizeDisplayName(payload.name).slice(0, 64) : ''
-  if (isMafiaRoute.value) {
-    sendSignalingMessage({ type: MafiaWs.playerNameUpdate, payload: { targetPeerId: id, displayName: t } })
-    // Optimistic UI update: server will broadcast the same value (or clear) back.
-    // Without this, the label snaps back to the old value until the WS roundtrip completes.
-    const next = { ...mafiaNicknameOverrideByPeerId.value }
-    if (!t) {
-      delete next[id]
-    } else {
-      next[id] = t
-    }
-    mafiaNicknameOverrideByPeerId.value = next
-    // Mafia nickname overrides are server-authoritative; avoid a stale local override
-    // shadowing the optimistic / server nickname.
-    if (Object.prototype.hasOwnProperty.call(localTileDisplayOverrides.value, id)) {
-      const cleaned = { ...localTileDisplayOverrides.value }
-      delete cleaned[id]
-      localTileDisplayOverrides.value = cleaned
-      saveCallTileLocalDisplayOverrides(cleaned)
-    }
-    return
-  }
-  const next = { ...localTileDisplayOverrides.value }
-  if (!t) {
-    delete next[id]
-  } else {
-    next[id] = t
-  }
-  localTileDisplayOverrides.value = next
-  saveCallTileLocalDisplayOverrides(next)
-}
-
-
-function peerDisplayName(peerId: string): string {
-  const o = localTileDisplayOverrides.value[peerId]
-  if (typeof o === 'string' && normalizeDisplayName(o)) {
-    return normalizeDisplayName(o).slice(0, 64)
-  }
-  if (isMafiaRoute.value) {
-    const n = mafiaNicknameOverrideByPeerId.value[peerId]
-    if (typeof n === 'string' && normalizeDisplayName(n)) {
-      return normalizeDisplayName(n).slice(0, 64)
-    }
-  }
-  const participants = participantsByPeerId.value
-  const opts = {
-    selfPeerId: selfPeerId.value,
-    selfDisplayName: selfDisplayName.value,
-  }
-  const hit = displayNameUiByPeerId.value.get(peerId)
-  if (hit !== undefined) {
-    return hit
-  }
-  return resolvePeerDisplayNameForUi(peerId, participants, opts)
-}
-
-function peerAvatarFallbackName(peerId: string): string {
-  const participants = participantsByPeerId.value
-  const opts = {
-    selfPeerId: selfPeerId.value,
-    selfDisplayName: selfDisplayName.value,
-  }
-  const hit = displayNameUiByPeerId.value.get(peerId)
-  if (hit !== undefined) {
-    return hit
-  }
-  return resolvePeerDisplayNameForUi(peerId, participants, opts)
-}
+// `participantsByPeerId`, `displayNameUiByPeerId`, `localTileDisplayOverrides`,
+// `canEditTileDisplayName`, `onCommitLocalTileDisplayName`, `peerDisplayName`,
+// and `peerAvatarFallbackName` live in `useCallDisplayNames` (Block 25). The
+// composable call itself is below — it depends on `mafiaGameStore.isMafiaHost`,
+// so the call is placed after that store is instantiated.
 
 /** Stable handlers so grid re-renders do not allocate new fns per tile per frame. */
 const remoteListenVolumeByPeer = new Map<string, (v: number) => void>()
@@ -727,178 +559,32 @@ function remoteListenMutedHandler(peerId: string) {
 }
 
 
-const callTileViewportVisibleByPeer = shallowRef(new Map<string, boolean>())
-
-/**
- * Per-tile server-side video pause hysteresis.
- * Resume on visible is immediate; pause on hidden waits a short window so
- * a quick scroll-by does not flap `setPeerVisible` (which sends WS messages
- * and triggers keyframe requests on resume).
- */
-const SET_PEER_VISIBLE_HIDE_DEBOUNCE_MS = 500
-const setPeerVisibleHideTimerByPeer = new Map<string, ReturnType<typeof setTimeout>>()
-const lastSentPeerVisibleByPeer = new Map<string, boolean>()
-
-function cancelSetPeerVisibleHideTimer(peerId: string): void {
-  const t = setPeerVisibleHideTimerByPeer.get(peerId)
-  if (t != null) {
-    clearTimeout(t)
-    setPeerVisibleHideTimerByPeer.delete(peerId)
-  }
-}
-
-function applyPeerVisible(peerId: string, visible: boolean): void {
-  if (lastSentPeerVisibleByPeer.get(peerId) === visible) {
-    return
-  }
-  lastSentPeerVisibleByPeer.set(peerId, visible)
-  setPeerVisible(peerId, visible)
-}
-
-function scheduleSetPeerVisible(peerId: string, visible: boolean): void {
-  if (visible) {
-    cancelSetPeerVisibleHideTimer(peerId)
-    applyPeerVisible(peerId, true)
-    return
-  }
-  if (setPeerVisibleHideTimerByPeer.has(peerId)) {
-    return
-  }
-  const t = setTimeout(() => {
-    setPeerVisibleHideTimerByPeer.delete(peerId)
-    applyPeerVisible(peerId, false)
-  }, SET_PEER_VISIBLE_HIDE_DEBOUNCE_MS)
-  setPeerVisibleHideTimerByPeer.set(peerId, t)
-}
-
-const remoteVideoSuppressDelayTimerByPeer = new Map<string, ReturnType<typeof setTimeout>>()
-
-const remoteVideoSuppressPendingKind = new Map<string, 'offscreen' | 'outside-budget'>()
-const remoteVideoPlaybackSuppressed = shallowRef(new Map<string, boolean>())
 const eatFirstShell = useEatFirstCallShellStore()
-function bumpRemotePlaybackSuppressed(peerId: string, suppressed: boolean, reason: string): void {
-  const prev = remoteVideoPlaybackSuppressed.value.get(peerId) === true
-  if (prev === suppressed) {
-    return
-  }
-  const next = new Map(remoteVideoPlaybackSuppressed.value)
-  if (suppressed) {
-    next.set(peerId, true)
-  } else {
-    next.delete(peerId)
-  }
-  remoteVideoPlaybackSuppressed.value = next
-  if (import.meta.env.DEV) {
-    const prof = receiveDeviceProfile.value
-    callPageLog.debug('[call-qa:playback-suppress]', {
-      peerId,
-      suppressed,
-      reason,
-      profile: prof.profile,
-      maxActiveRemoteVideos: prof.maxActiveRemoteVideos,
-      allowRenderSuppression: prof.allowRenderSuppression,
-    })
-  }
-}
 
-function clearRemoteVideoSuppressTimer(peerId: string): void {
-  const t = remoteVideoSuppressDelayTimerByPeer.get(peerId)
-  if (t != null) {
-    clearTimeout(t)
-    remoteVideoSuppressDelayTimerByPeer.delete(peerId)
-  }
-  remoteVideoSuppressPendingKind.delete(peerId)
-}
-
-function reconcileRemoteVideoPlaybackSuppression(): void {
-  for (const pid of [...remoteVideoSuppressDelayTimerByPeer.keys()]) {
-    clearRemoteVideoSuppressTimer(pid)
-  }
-  for (const pid of [...remoteVideoPlaybackSuppressed.value.keys()]) {
-    bumpRemotePlaybackSuppressed(pid, false, 'fixed-quality')
-  }
-}
-
-/**
- * Stable scalar key for the suppression-reconcile watcher. Returning a
- * primitive string lets Vue compare with `Object.is` and skip the callback
- * when nothing visible-to-this-watcher actually changed; the previous object
- * source returned a fresh object on every reactivity flush which forced the
- * callback to fire even when the underlying values were equal.
- *
- * `viewport` is a `Map<string, boolean>`; we encode only the visible tile
- * ids into the key so that toggling an unrelated peer's `false` to `false`
- * does not refire the watcher.
- */
-const suppressionWatcherKey = computed(() => {
-  const visiblePeers: string[] = []
-  for (const [pid, vis] of callTileViewportVisibleByPeer.value) {
-    if (vis) {
-      visiblePeers.push(pid)
-    }
-  }
-  visiblePeers.sort()
-  const tilesKey = tiles.value.map((t) => `${t.peerId}:${t.isLocal ? 'L' : 'R'}`).join('|')
-  return [
-    receiveDeviceProfile.value.allowRenderSuppression ? '1' : '0',
-    isFullPowerMode.value ? '1' : '0',
-    tilesKey,
-    visiblePeers.join(','),
-    activeSpeakerPeerId.value ?? '',
-    serverActiveSpeakerPeerId.value ?? '',
-  ].join('::')
+// Remote-tile playback budget — viewport-visible map, server-side
+// `setPeerVisible` debounce, per-peer suppression state, suppression
+// watcher, and the page-facing `videoPlaybackSuppressedForPeer` /
+// `remoteVideoTargetPlaybackFpsForPeer` / `onCallTileViewportForLayers`
+// — live in `useRemoteTileBudget` (Block 24). The tile-set-change
+// watcher below still owns the non-budget prunes (display-name overrides,
+// listen-volume / listen-muted maps); it delegates its budget prunes to
+// the composable's `cleanupForRemovedPeers` helper.
+const {
+  videoPlaybackSuppressedForPeer,
+  remoteVideoTargetPlaybackFpsForPeer,
+  onCallTileViewportForLayers,
+  cleanupForRemovedPeers: cleanupBudgetForRemovedPeers,
+} = useRemoteTileBudget({
+  tiles,
+  selfPeerId,
+  receiveDeviceProfile,
+  setPeerVisible,
+  activeSpeakerPeerId,
+  serverActiveSpeakerPeerId,
+  isFullPowerMode,
+  isCallAppRoute,
+  log: callPageLog,
 })
-
-watch(
-  suppressionWatcherKey,
-  () => {
-    reconcileRemoteVideoPlaybackSuppression()
-  },
-  { flush: 'post' },
-)
-
-function videoPlaybackSuppressedForPeer(peerId: string): boolean {
-  return remoteVideoPlaybackSuppressed.value.get(peerId) === true
-}
-
-/**
- * Phase 3.5: presentation FPS cap is a last resort.
- * Simulcast slots handle normal load; RVFC/pulse throttling only kicks in for bad, non-priority tiles.
- */
-function remoteVideoTargetPlaybackFpsForPeer(peerId: string): number | undefined {
-  void peerId
-  return undefined
-}
-
-function onCallTileViewportForLayers(peerId: string, visible: boolean): void {
-  if (!isCallAppRoute.value) {
-    return
-  }
-  const id = typeof peerId === 'string' ? peerId.trim() : ''
-  if (!id) {
-    return
-  }
-  const prev = callTileViewportVisibleByPeer.value.get(id)
-  if (prev === visible) {
-    return
-  }
-  const nextMap = new Map(callTileViewportVisibleByPeer.value)
-  nextMap.set(id, visible)
-  callTileViewportVisibleByPeer.value = nextMap
-  // Server-side video consumer pause for tiles that scroll out / are hidden.
-  // Audio consumers are never paused (call-core invariant); only the video
-  // consumer for this peer is affected. Hysteresis lives in scheduler.
-  if (id !== selfPeerId.value) {
-    scheduleSetPeerVisible(id, visible)
-  }
-  if (import.meta.env.DEV) {
-    callPageLog.info('[call-qa:viewport] remote tile IO', {
-      peerId: id,
-      visible,
-      isLocalSelf: id === selfPeerId.value,
-    })
-  }
-}
 
 watch(
   () => tiles.value.map((t) => t.peerId).join(),
@@ -910,34 +596,9 @@ watch(
     for (const id of remoteListenMutedByPeer.keys()) {
       if (!ids.has(id)) remoteListenMutedByPeer.delete(id)
     }
-    const vm = new Map(callTileViewportVisibleByPeer.value)
-    let vmChanged = false
-    for (const id of vm.keys()) {
-      if (!ids.has(id)) {
-        vm.delete(id)
-        vmChanged = true
-      }
-    }
-    if (vmChanged) {
-      callTileViewportVisibleByPeer.value = vm
-    }
-    // `remoteVideoSuppressDelayTimerByPeer` had no per-peer-set prune; only
-    // the unmount path cleared it. Across long sessions with player reloads,
-    // it accumulated dead-peerId timer entries (each holding a setTimeout
-    // handle + a tag in `remoteVideoSuppressPendingKind`). Mirror the
-    // existing `setPeerVisibleHideTimerByPeer` prune here so dead peerIds
-    // are dropped within one tile-set tick.
-    for (const id of [...remoteVideoSuppressDelayTimerByPeer.keys()]) {
-      if (!ids.has(id)) {
-        clearRemoteVideoSuppressTimer(id)
-      }
-    }
-    for (const id of [...setPeerVisibleHideTimerByPeer.keys()]) {
-      if (!ids.has(id)) {
-        cancelSetPeerVisibleHideTimer(id)
-        lastSentPeerVisibleByPeer.delete(id)
-      }
-    }
+    // Budget prunes (viewport map, suppress-delay timers, peer-visible
+    // hide timers + last-sent map) are delegated to `useRemoteTileBudget`.
+    cleanupBudgetForRemovedPeers(ids)
     const o = localTileDisplayOverrides.value
     let next: Record<string, string> | null = null
     for (const k of Object.keys(o)) {
@@ -997,42 +658,15 @@ const qualityPresets = VIDEO_QUALITY_PRESETS
 const inboundDebugRows = ref<InboundVideoDebugRow[]>([])
 const inboundDebugBusy = ref(false)
 
-type CallToast = { id: string; text: string; kind: 'join' | 'leave' }
-
-const callToasts = ref<CallToast[]>([])
-let lastPresenceToastSourceId = ''
-
-function pushCallToast(text: string, kind: 'join' | 'leave' = 'join', ttlMs = 4200): void {
-  const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  callToasts.value = [...callToasts.value, { id, text, kind }]
-  window.setTimeout(() => {
-    callToasts.value = callToasts.value.filter((x) => x.id !== id)
-  }, ttlMs)
-}
-
-
-watch(
-  () => callPresenceMessages.value[callPresenceMessages.value.length - 1]?.id,
-  () => {
-    const msgs = callPresenceMessages.value
-    const last = msgs[msgs.length - 1]
-    if (!last || last.id === lastPresenceToastSourceId) {
-      return
-    }
-    lastPresenceToastSourceId = last.id
-    
-    const name = last.displayName
-    const text =
-      last.kind === 'join'
-        ? t('callPage.presenceJoined', { name })
-        : t('callPage.presenceLeft', { name })
-    const id = `toast-${last.id}`
-    callToasts.value = [...callToasts.value, { id, text, kind: last.kind }]
-    window.setTimeout(() => {
-      callToasts.value = callToasts.value.filter((x) => x.id !== id)
-    }, 4200)
-  },
-)
+// `callToasts` stack + `pushCallToast` + presence-toast watcher are owned
+// by `useCallPresenceToasts` (Block 24). The route-specific OBS / Settings
+// toast handlers below still push into `callToasts.value` directly because
+// their `id` prefix (`mafia-obs-…`, `eat-first-obs-…`, `mafia-settings-…`)
+// is the existing observable shape.
+const { callToasts, pushCallToast } = useCallPresenceToasts({
+  callPresenceMessages,
+  t,
+})
 
 function onEatFirstForceMuteAll(muted: boolean): void {
   if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) {
@@ -1242,44 +876,34 @@ if (typeof window !== 'undefined') {
   })
 }
 
-function onMafiaObsUrlCopiedToast(): void {
-  const id = `mafia-obs-${Date.now()}`
-  callToasts.value = [
-    ...callToasts.value,
-    { id, text: t('mafiaPage.obsViewUrlCopiedToast'), kind: 'join' },
-  ]
-  window.setTimeout(() => {
-    callToasts.value = callToasts.value.filter((x) => x.id !== id)
-  }, 4200)
-}
-
-function onEatFirstObsUrlCopiedToast(): void {
-  if (!isEatFirstRoute.value) {
-    return
-  }
-  const id = `eat-first-obs-${Date.now()}`
-  callToasts.value = [
-    ...callToasts.value,
-    { id, text: t('eatFirstCall.obsCopied'), kind: 'join' },
-  ]
-  window.setTimeout(() => {
-    callToasts.value = callToasts.value.filter((x) => x.id !== id)
-  }, 4200)
-}
-
-function onMafiaSettingsToast(ev: Event): void {
-  const text = ev instanceof CustomEvent && typeof ev.detail?.text === 'string'
-    ? ev.detail.text
-    : t('mafiaPage.backgroundUploadFailed')
-  const id = `mafia-settings-${Date.now()}`
-  callToasts.value = [
-    ...callToasts.value,
-    { id, text, kind: 'leave' },
-  ]
-  window.setTimeout(() => {
-    callToasts.value = callToasts.value.filter((x) => x.id !== id)
-  }, 4200)
-}
+// Route-specific OBS / Settings toast event listeners — Block 27. The
+// composable owns the `addEventListener` / `removeEventListener` pairs
+// and the prefixed-id push pattern; the i18n keys, id prefixes, and the
+// EatFirst route gate stay route-specific via the `events` array.
+useCallToastEventListeners({
+  callToasts,
+  events: [
+    {
+      eventName: MAFIA_OBS_URL_TOAST_EVENT,
+      idPrefix: 'mafia-obs',
+      getText: () => t('mafiaPage.obsViewUrlCopiedToast'),
+    },
+    {
+      eventName: EAT_FIRST_OBS_URL_TOAST_EVENT,
+      idPrefix: 'eat-first-obs',
+      getText: () => (isEatFirstRoute.value ? t('eatFirstCall.obsCopied') : null),
+    },
+    {
+      eventName: MAFIA_SETTINGS_TOAST_EVENT,
+      idPrefix: 'mafia-settings',
+      kind: 'leave',
+      getText: (ev) =>
+        ev instanceof CustomEvent && typeof ev.detail?.text === 'string'
+          ? ev.detail.text
+          : t('mafiaPage.backgroundUploadFailed'),
+    },
+  ],
+})
 
 const {
   chatOpen,
@@ -1294,147 +918,65 @@ const {
   roomId: () => session.roomId,
 })
 
-type CallChatInboundToast = { toastId: string; lineId: string; title: string; preview: string }
-
-const callChatInboundToasts = ref<CallChatInboundToast[]>([])
-let lastSeenCallChatLineId = ''
-const CHAT_INBOUND_TOAST_TTL_MS = 3800
-const MAX_CHAT_INBOUND_TOASTS = 4
-
-function dismissCallChatInboundToast(toastId: string): void {
-  callChatInboundToasts.value = callChatInboundToasts.value.filter((x) => x.toastId !== toastId)
-}
-
-function pushCallChatInboundToast(line: CallChatLine): void {
-  const previewRaw = line.text.trim()
-  const preview = previewRaw.length > 96 ? `${previewRaw.slice(0, 96)}…` : previewRaw
-  const title = normalizeDisplayName(line.displayName).trim() || '—'
-  const toastId = `chat-toast-${line.id}`
-  callChatInboundToasts.value = [
-    ...callChatInboundToasts.value.filter((x) => x.lineId !== line.id),
-    { toastId, lineId: line.id, title, preview },
-  ].slice(-MAX_CHAT_INBOUND_TOASTS)
-  window.setTimeout(() => dismissCallChatInboundToast(toastId), CHAT_INBOUND_TOAST_TTL_MS)
-}
-
-function openChatFromInboundToast(toastId: string): void {
-  dismissCallChatInboundToast(toastId)
-  chatOpen.value = true
-}
-
-watch(
-  () => session.inCall,
-  (inCall) => {
-    if (!inCall) {
-      lastSeenCallChatLineId = ''
-      callChatInboundToasts.value = []
-    }
-  },
-)
-
-watch(chatOpen, (open) => {
-  const msgs = callChatMessages.value
-  if (open && msgs.length > 0) {
-    lastSeenCallChatLineId = msgs[msgs.length - 1].id
-  }
-})
-
-watch(
+// Chat inbound toast stack (queue, dismiss / open-chat helpers, inCall
+// reset + chatOpen sync + messages watcher) lives in
+// `useCallChatInboundToasts` (Block 25). `isViewMode` is route-specific —
+// Mafia ORs `mafiaViewUi` with `eatFirstViewUi`.
+const {
+  callChatInboundToasts,
+  dismissCallChatInboundToast,
+  openChatFromInboundToast,
+} = useCallChatInboundToasts({
+  isInCall: computed(() => session.inCall),
+  joining,
+  isViewMode: computed(() => mafiaViewUi.value || eatFirstViewUi.value),
   callChatMessages,
-  (msgs) => {
-    if (
-      !session.inCall ||
-      joining.value ||
-      mafiaViewUi.value ||
-      eatFirstViewUi.value ||
-      msgs.length === 0
-    ) {
-      return
-    }
-    const last = msgs[msgs.length - 1]
-    if (chatOpen.value) {
-      lastSeenCallChatLineId = last.id
-      return
-    }
-    if (last.id === lastSeenCallChatLineId) {
-      return
-    }
-    lastSeenCallChatLineId = last.id
-    const selfId = typeof selfPeerId.value === 'string' ? selfPeerId.value.trim() : ''
-    if (selfId.length > 0 && last.peerId === selfId) {
-      return
-    }
-    pushCallChatInboundToast(last)
-  },
-  { deep: true },
-)
-
-const micPickerOpen = ref(false)
-const camPickerOpen = ref(false)
-const speakerPickerOpen = ref(false)
-const lastPickedAudioOutputId = ref('')
-const callAudioOutputDeviceId = ref('')
-
-provide(CALL_AUDIO_OUTPUT_DEVICE_ID_KEY, callAudioOutputDeviceId)
-
-function readCallAudioOutputFromStorage(): void {
-  if (typeof localStorage === 'undefined') {
-    return
-  }
-  try {
-    const raw = localStorage.getItem(CALL_AUDIO_OUTPUT_LS_KEY)
-    if (typeof raw === 'string' && raw.trim().length > 0) {
-      callAudioOutputDeviceId.value = raw.trim()
-    }
-  } catch {
-    /* ignore */
-  }
-}
-readCallAudioOutputFromStorage()
-
-const localAudioOutputDeviceId = computed((): string | null => {
-  const picked = lastPickedAudioOutputId.value.trim()
-  if (picked && audioOutputDevices.value.some((d) => d.deviceId === picked)) {
-    return picked
-  }
-  const cur = callAudioOutputDeviceId.value.trim()
-  if (cur && audioOutputDevices.value.some((d) => d.deviceId === cur)) {
-    return cur
-  }
-  return null
+  selfPeerId,
+  chatOpen,
 })
 
-watch(
-  callAudioOutputDeviceId,
-  async (id) => {
-    const t = typeof id === 'string' ? id.trim() : ''
-    try {
-      if (typeof localStorage !== 'undefined') {
-        if (t.length > 0) {
-          localStorage.setItem(CALL_AUDIO_OUTPUT_LS_KEY, t)
-        } else {
-          localStorage.removeItem(CALL_AUDIO_OUTPUT_LS_KEY)
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-    if (t.length > 0) {
-      await applyCallAudioOutputSinkToStreamAudios(t)
-    }
-  },
-  { flush: 'post', immediate: true },
-)
+// Media-device picker open refs, audio-output LS persistence, sink-apply
+// watcher, `provide(CALL_AUDIO_OUTPUT_DEVICE_ID_KEY, …)`, and the
+// outside-click handler live in `useCallDevicePickers` (Block 24). The
+// composable call itself is below — it depends on the `callRoomHeaderJoin`
+// store, so the call is placed after that store is instantiated.
 type CallControlsDockExpose = { containsDevicePickerTarget(target: Node): boolean }
 const callControlsDockRef = ref<CallControlsDockExpose | null>(null)
-const roomJoinDraft = ref('')
-const roomCopyFlash = ref(false)
-let roomCopyFlashTimer: ReturnType<typeof setTimeout> | null = null
+
+// `roomJoinDraft`, `roomCopyFlash`, `copyRoomToClipboard`,
+// `onGenerateNewRoom`, `submitRoomDraft`, and the popover-open sync
+// watcher live in `useCallRoomCodeChip` (Block 25). The composable
+// call itself is below — it depends on `displayCallOrMafiaRoomCode`
+// and `switchToRoom`, both of which are page-specific.
 
 const callAuthReady = ref(false)
 
 const callRoomHeaderJoin = useCallRoomHeaderJoinStore()
 const { roomPopoverOpen } = storeToRefs(callRoomHeaderJoin)
+
+const {
+  micPickerOpen,
+  camPickerOpen,
+  speakerPickerOpen,
+  localAudioOutputDeviceId,
+  showMediaDevicePickers,
+  closeMediaDevicePickers,
+  pickAudioInput,
+  pickVideoInput,
+  pickAudioOutput,
+} = useCallDevicePickers({
+  isInCall: computed(() => session.inCall),
+  audioInputDevices,
+  videoInputDevices,
+  audioOutputDevices,
+  setCallAudioInputDevice,
+  setCallVideoInputDevice,
+  callControlsDockRef,
+  isRoomPopoverOpen: () => callRoomHeaderJoin.roomPopoverOpen,
+  closeRoomPopover: () => callRoomHeaderJoin.closeRoomPopover(),
+  log: callPageLog,
+})
+
 const mafiaPlayersStore = useMafiaPlayersStore()
 const mafiaGameStore = useMafiaGameStore()
 watch(
@@ -1446,6 +988,31 @@ watch(
 )
 
 const { mafiaHostPeerId: mafiaHostPeerIdRef, isMafiaHost: isMafiaHostRef } = storeToRefs(mafiaGameStore)
+
+const {
+  localTileDisplayOverrides,
+  canEditTileDisplayName,
+  onCommitLocalTileDisplayName,
+  peerDisplayName,
+  peerAvatarFallbackName,
+} = useCallDisplayNames({
+  tiles,
+  remoteDisplayNames,
+  selfPeerId,
+  selfDisplayName,
+  policy: {
+    isRouteActive: isMafiaRoute,
+    isHost: isMafiaHostRef,
+    nicknameOverrides: mafiaNicknameOverrideByPeerId,
+    sendPlayerNameUpdate: (peerId, displayName) => {
+      sendSignalingMessage({
+        type: MafiaWs.playerNameUpdate,
+        payload: { targetPeerId: peerId, displayName },
+      })
+    },
+  },
+})
+
 const { broadcastMafiaAudioMixDelta } = useMafiaAudioMixSignaling({
   sendSignalingMessage,
   subscribeSignalingMessage,
@@ -1595,120 +1162,20 @@ watch(
   { immediate: true },
 )
 
-watch(roomPopoverOpen, (open) => {
-  if (open) {
-    roomJoinDraft.value = displayCallOrMafiaRoomCode()
-  }
+const {
+  roomJoinDraft,
+  roomCopyFlash,
+  copyRoomToClipboard,
+  onGenerateNewRoom,
+  submitRoomDraft,
+} = useCallRoomCodeChip({
+  roomPopoverOpen,
+  displayRoomCode: displayCallOrMafiaRoomCode,
+  switchToRoom,
 })
-
-async function copyRoomToClipboard(): Promise<void> {
-  const text = normalizeDisplayName(roomJoinDraft.value) || displayCallOrMafiaRoomCode()
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {
-    try {
-      const ta = document.createElement('textarea')
-      ta.value = text
-      ta.style.position = 'fixed'
-      ta.style.left = '-9999px'
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
-    } catch {
-      return
-    }
-  }
-  if (roomCopyFlashTimer !== null) {
-    clearTimeout(roomCopyFlashTimer)
-  }
-  roomCopyFlash.value = true
-  roomCopyFlashTimer = setTimeout(() => {
-    roomCopyFlashTimer = null
-    roomCopyFlash.value = false
-  }, 1600)
-}
-
-async function onGenerateNewRoom(): Promise<void> {
-  const nextRoom = generateCallRoomCode()
-  roomJoinDraft.value = nextRoom
-  await switchToRoom(nextRoom)
-}
-
-function submitRoomDraft(): void {
-  const id = normalizeDisplayName(roomJoinDraft.value)
-  if (!id) {
-    return
-  }
-  void switchToRoom(id)
-}
 
 function retryJoinCall(): void {
   void joinCall()
-}
-
-const showMediaDevicePickers = computed(
-  () =>
-    session.inCall &&
-    (audioInputDevices.value.length > 0 ||
-      videoInputDevices.value.length > 0 ||
-      audioOutputDevices.value.length > 0),
-)
-
-function closeMediaDevicePickers(): void {
-  micPickerOpen.value = false
-  camPickerOpen.value = false
-  speakerPickerOpen.value = false
-}
-
-function onDocumentPointerForDevicePickers(ev: PointerEvent): void {
-  const t = ev.target
-  if (!(t instanceof Node)) {
-    return
-  }
-  const roomHost = typeof document !== 'undefined' ? document.getElementById(CALL_ROOM_DROPDOWN_HOST_ID) : null
-  const roomPanel = typeof document !== 'undefined' ? document.getElementById(CALL_ROOM_POPOVER_PANEL_ID) : null
-  if (roomHost?.contains(t) || roomPanel?.contains(t)) {
-    return
-  }
-  if (callRoomHeaderJoin.roomPopoverOpen) {
-    callRoomHeaderJoin.closeRoomPopover()
-  }
-  if (!micPickerOpen.value && !camPickerOpen.value && !speakerPickerOpen.value) {
-    return
-  }
-  if (callControlsDockRef.value?.containsDevicePickerTarget(t)) {
-    return
-  }
-  closeMediaDevicePickers()
-}
-
-async function pickAudioInput(deviceId: string): Promise<void> {
-  closeMediaDevicePickers()
-  try {
-    await setCallAudioInputDevice(deviceId)
-  } catch (err) {
-    callPageLog.warn('audio input', err)
-  }
-}
-
-async function pickVideoInput(deviceId: string): Promise<void> {
-  closeMediaDevicePickers()
-  try {
-    await setCallVideoInputDevice(deviceId)
-  } catch (err) {
-    callPageLog.warn('video input', err)
-  }
-}
-
-async function pickAudioOutput(deviceId: string): Promise<void> {
-  closeMediaDevicePickers()
-  const id = deviceId.trim()
-  if (id.length < 1) {
-    return
-  }
-  lastPickedAudioOutputId.value = id
-  callAudioOutputDeviceId.value = id
 }
 
 async function refreshInboundDebug(): Promise<void> {
@@ -2065,41 +1532,41 @@ function onEatFirstPlayerUseActionCard(payload: { peerId: string }): void {
   })
 }
 
-const orderedTiles = computed(() => {
-  const list = tiles.value.slice()
-  if (isMafiaRoute.value && list.length > 0) {
-    const base = mafiaGameStore.getDisplayNumberingOrder(tileOrder.value)
-    const explicitHostPeerId = typeof mafiaGameStore.mafiaHostPeerId === 'string' ? mafiaGameStore.mafiaHostPeerId.trim() : ''
-    const hostPidForGrid = resolveHostPeerIdForGrid(explicitHostPeerId, base)
-    const order = hostPidForGrid.length > 0 ? pinHostPeerToEndOfOrder(base, hostPidForGrid) : base.slice()
+// Local-tile speaking ring source. Moved up so it can be consumed by
+// `useCallTileOrdering` below (which owns `isTileRowSpeaking`).
+const localTileSpeakingForWrap = useLocalTileSpeakingVisual(
+  () => localAudioSourceStream.value,
+  () => true,
+  () => micEnabled.value,
+)
 
-    const orderIndex = new Map<string, number>()
-    let cursor = 0
-    for (const peerId of order) {
-      if (typeof peerId !== 'string' || peerId.length < 1) continue
-      if (orderIndex.has(peerId)) continue
-      orderIndex.set(peerId, cursor)
-      cursor += 1
+// Tile ordering + row shaping + speaking check — Block 26.
+// `orderedTiles` precedence: `customOrdering()` (EatFirst slot order) →
+// `hostLastPolicy` (Mafia route, host pinned last + extras fold) →
+// fallback (`tileOrder` + spotlight pin).
+// `getSpotlightActive` is taken as a thunk so the composable can be
+// wired BEFORE `useCallSpotlightLayout` (which consumes `orderedTiles`).
+const { orderedTiles, orderedGridRows, isTileRowSpeaking } = useCallTileOrdering({
+  tiles,
+  tileOrder,
+  pinnedPeerId,
+  getSpotlightActive: () => spotlightDesktop.value,
+  peerDisplayName,
+  localTileSpeaking: localTileSpeakingForWrap,
+  activeSpeakerPeerId,
+  serverActiveSpeakerPeerId,
+  hostLastPolicy: {
+    isActive: isMafiaRoute,
+    getDisplayNumberingOrder: (o) => mafiaGameStore.getDisplayNumberingOrder(o),
+    getExplicitHostPeerId: () =>
+      typeof mafiaGameStore.mafiaHostPeerId === 'string'
+        ? mafiaGameStore.mafiaHostPeerId.trim()
+        : '',
+  },
+  customOrdering: () => {
+    if (!isEatFirstRoute.value || tiles.value.length === 0) {
+      return null
     }
-    const extras = list.filter((t) => !orderIndex.has(t.peerId))
-    const extrasOrdered =
-      hostPidForGrid.length > 0
-        ? [...extras.filter((t) => t.peerId !== hostPidForGrid), ...extras.filter((t) => t.peerId === hostPidForGrid)]
-        : extras.slice()
-    for (const tile of extrasOrdered) {
-      orderIndex.set(tile.peerId, cursor)
-      cursor += 1
-    }
-    return [...list].sort((a, b) => {
-      const ai = orderIndex.get(a.peerId) ?? Number.MAX_SAFE_INTEGER
-      const bi = orderIndex.get(b.peerId) ?? Number.MAX_SAFE_INTEGER
-      if (ai !== bi) return ai - bi
-      return a.peerId.localeCompare(b.peerId)
-    })
-  }
-
-  if (isEatFirstRoute.value && list.length > 0) {
-    const orderIndex = new Map<string, number>()
     const slotByPeer = eatFirstSlotByPeer.value
     const peerBySlot = new Map<string, string>()
     for (const [peerId, slotId] of Object.entries(slotByPeer)) {
@@ -2107,59 +1574,16 @@ const orderedTiles = computed(() => {
         peerBySlot.set(slotId.trim(), peerId)
       }
     }
-    let cursor = 0
+    const baseOrder: string[] = []
     for (const slotId of eatFirstShell.playerOrder) {
       const peerId = peerBySlot.get(slotId)
       if (!peerId) continue
-      if (orderIndex.has(peerId)) continue
-      orderIndex.set(peerId, cursor)
-      cursor += 1
+      baseOrder.push(peerId)
     }
-    const hostPidRaw = eatFirstShell.hostPeerId
-    const hostPidForGrid = typeof hostPidRaw === 'string' ? hostPidRaw.trim() : ''
-    const extras = list.filter((t) => !orderIndex.has(t.peerId))
-    const extrasOrdered =
-      hostPidForGrid.length > 0
-        ? [...extras.filter((t) => t.peerId !== hostPidForGrid), ...extras.filter((t) => t.peerId === hostPidForGrid)]
-        : extras.slice()
-    for (const tile of extrasOrdered) {
-      orderIndex.set(tile.peerId, cursor)
-      cursor += 1
-    }
-    return [...list].sort((a, b) => {
-      const ai = orderIndex.get(a.peerId) ?? Number.MAX_SAFE_INTEGER
-      const bi = orderIndex.get(b.peerId) ?? Number.MAX_SAFE_INTEGER
-      if (ai !== bi) {
-        return ai - bi
-      }
-      return a.peerId.localeCompare(b.peerId)
-    })
-  }
-
-  const orderIndex = new Map(tileOrder.value.map((peerId, index) => [peerId, index]))
-  return list.sort((a, b) => {
-    if (spotlightDesktop.value && pinnedPeerId.value != null) {
-      if (a.peerId === pinnedPeerId.value) {
-        return -1
-      }
-      if (b.peerId === pinnedPeerId.value) {
-        return 1
-      }
-    }
-
-    const ai = orderIndex.get(a.peerId)
-    const bi = orderIndex.get(b.peerId)
-    if (ai != null && bi != null && ai !== bi) {
-      return ai - bi
-    }
-    if (ai != null && bi == null) {
-      return -1
-    }
-    if (ai == null && bi != null) {
-      return 1
-    }
-    return a.peerId.localeCompare(b.peerId)
-  })
+    const hostPid =
+      typeof eatFirstShell.hostPeerId === 'string' ? eatFirstShell.hostPeerId.trim() : ''
+    return buildHostLastOrderedTiles(tiles.value, baseOrder, hostPid)
+  },
 })
 
 const {
@@ -2184,6 +1608,17 @@ const { stageSize, setTileWrapRef, getGrid } = useCallTileLayoutFlip({
   layoutMode,
   spotlightPeerId,
   dragPeerId,
+})
+
+// Auth-load IIFE + ?callDebug parse + DEV-only __CALL_DEBUG__ global —
+// Block 28. Page-owned `callAuthReady` is mutated by the composable.
+useCallPageBootstrap({
+  session,
+  user,
+  ensureAuthLoaded,
+  stageSize,
+  orderedTiles,
+  callAuthReady,
 })
 
 
@@ -2214,55 +1649,10 @@ if (import.meta.env.DEV) {
 }
 
 
-const orderedGridRows = computed(() => {
-  const participants = participantsByPeerId.value
-  const opts = {
-    selfPeerId: selfPeerId.value,
-    selfDisplayName: selfDisplayName.value,
-  }
-  const names = displayNameUiByPeerId.value
-  const overrides = localTileDisplayOverrides.value
-  const mafiaNicknames = mafiaNicknameOverrideByPeerId.value
-  return orderedTiles.value.map((tile) => {
-    const ov = overrides[tile.peerId]
-    if (typeof ov === 'string' && normalizeDisplayName(ov)) {
-      return { tile, displayName: normalizeDisplayName(ov).slice(0, 64) }
-    }
-    if (isMafiaRoute.value) {
-      const n = mafiaNicknames[tile.peerId]
-      if (typeof n === 'string' && normalizeDisplayName(n)) {
-        return { tile, displayName: normalizeDisplayName(n).slice(0, 64) }
-      }
-    }
-    return {
-      tile,
-      displayName:
-        names.get(tile.peerId) ??
-        resolvePeerDisplayNameForUi(tile.peerId, participants, opts),
-    }
-  })
-})
-
-/**
- * Speaking highlight — single source of truth (no child emit, no per-peer reactive map; those caused update churn).
- * - Remote tiles: `activeSpeakerPeerId` from call-core VAD.
- * - Local tile: `useLocalTileSpeakingVisual` fed from `localAudioSourceStream` (raw getUserMedia),
- *   not `tile.stream` (which is a video-preview stream that goes `null` when camera is off,
- *   which previously hid the local glow whenever the cam was off even with mic on).
- */
-const localTileSpeakingForWrap = useLocalTileSpeakingVisual(
-  () => localAudioSourceStream.value,
-  () => true,
-  () => micEnabled.value,
-)
-
-function isTileRowSpeaking(row: (typeof orderedGridRows.value)[number]): boolean {
-  if (row.tile.isLocal) {
-    return localTileSpeakingForWrap.value
-  }
-  const pid = row.tile.peerId
-  return pid === activeSpeakerPeerId.value || pid === serverActiveSpeakerPeerId.value
-}
+// `orderedGridRows` + `isTileRowSpeaking` are part of `useCallTileOrdering`
+// (Block 26). The single-source-of-truth speaking-ring rule (local tile
+// via `useLocalTileSpeakingVisual`, remote tiles via `activeSpeakerPeerId`
+// + `serverActiveSpeakerPeerId`) is preserved verbatim inside the composable.
 
 function resumeCallAudioAnalysisFromGesture(): void {
   void getAudioAnalysisAudioContext().resume().catch(() => {})
@@ -2550,22 +1940,17 @@ function onTileDragEnd(): void {
 onBeforeUnmount(() => {
   // matchMedia teardown + FLIP RAF/timer cleanup are owned by
   // `useCallSpotlightLayout` and `useCallTileLayoutFlip` (Block 23).
-  clearFullPowerEnterTimer()
-  isFullPowerMode.value = false
+  // Full-power timer + flag reset → `useFullPowerMode` (Block 24).
+  // Remote-tile suppression-delay timers + suppressed map reset →
+  //   `useRemoteTileBudget` onBeforeUnmount (Block 24).
+  // Media-debug probe + global detach → `useCallMediaDebugTaps` onUnmounted (Block 24).
+  // Room copy-flash timer cleanup → `useCallRoomCodeChip` onBeforeUnmount (Block 25).
   remotePlaybackWaitingPeerIds.value = new Set()
-  if (roomCopyFlashTimer !== null) {
-    clearTimeout(roomCopyFlashTimer)
-    roomCopyFlashTimer = null
-  }
   // The Mafia speaking-hint timer is owned by `useMafiaSpeakingHint`
   // (inside `MafiaCallAdapter`); the composable's own `onBeforeUnmount`
   // clears it. A leftover reference here from before the Phase 2A
   // extraction was throwing a `ReferenceError` at unmount and aborting
   // the rest of this hook — including `leaveCall()` below.
-  for (const pid of [...remoteVideoSuppressDelayTimerByPeer.keys()]) {
-    clearRemoteVideoSuppressTimer(pid)
-  }
-  remoteVideoPlaybackSuppressed.value = new Map()
   callRoomHeaderJoin.reset()
   mafiaPlayersStore.reset()
   mafiaGameStore.fullReset()
@@ -2575,91 +1960,28 @@ onBeforeUnmount(() => {
 
 onMounted(() => {
   // The spotlight matchMedia listener is owned by `useCallSpotlightLayout`
-  // (Block 23).
-  document.addEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
+  // (Block 23). The `pointerdown` outside-click closer for media pickers
+  // is owned by `useCallDevicePickers` (Block 24).
+  // Auth-load IIFE, `?callDebug` URL parse, and DEV-only `__CALL_DEBUG__`
+  // global are owned by `useCallPageBootstrap` (Block 28).
+  // Timer-drift / rAF probes, `setMediaDebugEnvInfo`, and the optional
+  // `installMediaDebugGlobal` install are owned by `useCallMediaDebugTaps`
+  // (Block 24); see the composable call earlier in this script.
+  // OBS / Settings toast event listeners are owned by
+  // `useCallToastEventListeners` (Block 27).
   window.addEventListener('resize', syncChatPanelToViewport)
-  void (async () => {
-    await ensureAuthLoaded()
-    const authName = normalizeDisplayName(user.value?.displayName)
-    const cur = normalizeDisplayName(session.selfDisplayName)
-    if (authName && (!cur || cur === 'You')) {
-      session.selfDisplayName = authName
-    }
-    callAuthReady.value = true
-  })()
-  try {
-    const q = new URLSearchParams(window.location.search).get('callDebug')
-    if (q === '1' || q === 'true') {
-      session.setCallDebugOverlay(true)
-    }
-  } catch {
-    /* ignore */
-  }
-  if (import.meta.env.DEV) {
-    ;(globalThis as unknown as { __CALL_DEBUG__: { stageSize: typeof stageSize; orderedTiles: typeof orderedTiles } }).__CALL_DEBUG__ = {
-      stageSize,
-      orderedTiles,
-    }
-  }
-  window.addEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
-  window.addEventListener(EAT_FIRST_OBS_URL_TOAST_EVENT, onEatFirstObsUrlCopiedToast)
-  window.addEventListener(MAFIA_SETTINGS_TOAST_EVENT, onMafiaSettingsToast)
-  // Always-on timer-drift probe — diagnostic only, no media side effects.
-  // Surfaces OBS browser-source / hidden-tab throttling that would otherwise
-  // silently break the StreamVideo currentTime stall watchdog and the
-  // StreamAudio AudioContext heartbeat. Cost is one setInterval at 2 s per
-  // call route; result accessible via `__MEDIA_DEBUG__.timerDrift()` and
-  // surfaced in the `?mediaDebug=1` panel.
-  detachMediaDebugTimerDriftProbe = startMediaDebugTimerDriftProbe()
-  // Companion rAF probe. setInterval and rAF are throttled differently in
-  // some Chromium versions; the rAF probe surfaces render-loop pressure
-  // (long frames, low FPS) that the timer-drift probe cannot. Pure counter
-  // updates per frame; no DOM access in the callback.
-  detachMediaDebugRafProbe = startMediaDebugRafProbe()
-  // Stamp env info ONCE at mount. Read live `documentVisibilityState`
-  // is included by the reader, so no need to track it reactively.
-  setMediaDebugEnvInfo({
-    isMafiaView: mafiaViewUi.value,
-    isEatFirstView: eatFirstViewUi.value,
-  })
-  if (isMediaDebugEnabled()) {
-    detachMediaDebugGlobal = installMediaDebugGlobal({
-      forceSoftResync: () => {
-        try {
-          requestForcedProducerResync()
-        } catch (err) {
-          console.warn('[mediaDebug] forceSoftResync failed', err)
-        }
-      },
-    })
-  }
 })
 
-let detachMediaDebugGlobal: (() => void) | null = null
-let detachMediaDebugTimerDriftProbe: (() => void) | null = null
-let detachMediaDebugRafProbe: (() => void) | null = null
-
 onUnmounted(() => {
-  document.removeEventListener('pointerdown', onDocumentPointerForDevicePickers, true)
   window.removeEventListener('resize', syncChatPanelToViewport)
   stopChatPanelGesture()
-  window.removeEventListener(MAFIA_OBS_URL_TOAST_EVENT, onMafiaObsUrlCopiedToast)
-  window.removeEventListener(EAT_FIRST_OBS_URL_TOAST_EVENT, onEatFirstObsUrlCopiedToast)
-  window.removeEventListener(MAFIA_SETTINGS_TOAST_EVENT, onMafiaSettingsToast)
-  document.documentElement.classList.remove(CALL_ROUTE_HTML_CLASS)
-  for (const id of [...setPeerVisibleHideTimerByPeer.keys()]) {
-    cancelSetPeerVisibleHideTimer(id)
-  }
-  lastSentPeerVisibleByPeer.clear()
-  detachMediaDebugTimerDriftProbe?.()
-  detachMediaDebugTimerDriftProbe = null
-  detachMediaDebugRafProbe?.()
-  detachMediaDebugRafProbe = null
-  if (import.meta.env.DEV) {
-    delete (globalThis as unknown as { __CALL_DEBUG__?: unknown }).__CALL_DEBUG__
-  }
-  detachMediaDebugGlobal?.()
-  detachMediaDebugGlobal = null
+  // `pointerdown` listener teardown → `useCallDevicePickers`.
+  // `setPeerVisibleHideTimerByPeer` + `lastSentPeerVisibleByPeer` cleanup
+  //   → `useRemoteTileBudget` onUnmounted.
+  // Media debug probe + global detach → `useCallMediaDebugTaps` onUnmounted.
+  // `sa-call-route` <html> class teardown → `useCallRouteHtmlClass` (Block 27).
+  // OBS / Settings event listener teardown → `useCallToastEventListeners` (Block 27).
+  // DEV-only `__CALL_DEBUG__` teardown → `useCallPageBootstrap` (Block 28).
 })
 
 watch(
@@ -2720,18 +2042,7 @@ watch(joining, (j) => {
             {{ t('callPage.retryJoin') }}
           </AppButton>
         </div>
-        <div class="call-page__toasts" role="region" :aria-label="t('callPage.toastStackAria')">
-          <TransitionGroup name="call-toast" tag="div" class="call-page__toast-stack">
-            <div
-              v-for="x in callToasts"
-              :key="x.id"
-              class="call-page__toast"
-              :class="x.kind === 'leave' ? 'call-page__toast--leave' : 'call-page__toast--join'"
-            >
-              {{ x.text }}
-            </div>
-          </TransitionGroup>
-        </div>
+        <GameRoomCallPresenceToastsPanel :toasts="callToasts" />
         <!--
           The Mafia "speaking order" hint toast lives on
           `MafiaCallAdapter.vue`, mounted from `MafiaPage` as a sibling of
@@ -2740,44 +2051,12 @@ watch(joining, (j) => {
           ancestor does not change visual placement.
         -->
 
-        <div
+        <GameRoomCallChatInboundToastsPanel
           v-if="session.inCall && !mafiaViewUi && !eatFirstViewUi && callChatInboundToasts.length > 0"
-          class="call-page__chat-toasts"
-          role="region"
-          :aria-label="t('callPage.chatInboundToastAria')"
-        >
-          <TransitionGroup
-            name="call-chat-toast"
-            tag="div"
-            class="call-page__chat-toasts-stack"
-            aria-live="polite"
-          >
-            <div
-              v-for="row in callChatInboundToasts"
-              :key="row.toastId"
-              class="call-page__chat-toast"
-              role="article"
-            >
-              <button
-                type="button"
-                class="call-page__chat-toast-main"
-                :aria-label="t('callPage.chatInboundToastOpenChat')"
-                @click="openChatFromInboundToast(row.toastId)"
-              >
-                <span class="call-page__chat-toast-title">{{ row.title }}</span>
-                <span class="call-page__chat-toast-preview">{{ row.preview }}</span>
-              </button>
-              <button
-                type="button"
-                class="call-page__chat-toast-dismiss"
-                :aria-label="t('callPage.chatInboundToastDismiss')"
-                @click.stop="dismissCallChatInboundToast(row.toastId)"
-              >
-                ×
-              </button>
-            </div>
-          </TransitionGroup>
-        </div>
+          :toasts="callChatInboundToasts"
+          @open="openChatFromInboundToast"
+          @dismiss="dismissCallChatInboundToast"
+        />
 
         <div
           ref="stageRef"
@@ -2949,17 +2228,10 @@ watch(joining, (j) => {
           </div>
         </div>
 
-        <div
+        <GameRoomCallBottomCluster
           v-if="(session.inCall || joining) && !mafiaViewUi && !eatFirstViewUi"
-          class="call-page__bottom-cluster"
         >
-          <div
-            class="call-page__bottom-cluster__left call-page__bottom-cluster__left--empty"
-            aria-hidden="true"
-          />
-          <div
-            class="call-page__bottom-cluster__center call-page__bottom-cluster__center--speak-dock"
-          >
+          <template #host-actions>
             <MafiaHostActionsBar
               v-if="isMafiaRoute && mafiaGameStore.isMafiaHost"
               @force-mute-all="onMafiaForceMuteAll"
@@ -2969,6 +2241,8 @@ watch(joining, (j) => {
               @force-mute-all="onEatFirstForceMuteAll"
               @reshuffle="onEatFirstReshuffle"
             />
+          </template>
+          <template #dock>
             <CallControlsDock
               ref="callControlsDockRef"
               v-model:mic-picker-open="micPickerOpen"
@@ -2998,10 +2272,12 @@ watch(joining, (j) => {
               @pick-video-input="pickVideoInput"
               @pick-audio-output="pickAudioOutput"
             />
+          </template>
+          <template #speaking-queue>
             <MafiaSpeakingQueueBar v-if="isMafiaRoute" :show-tools="mafiaGameStore.isMafiaHost" />
             <EatFirstSpeakingQueueBar v-if="isEatFirstRoute" :show-tools="eatFirstShell.isEatFirstRoomHost" />
-          </div>
-        </div>
+          </template>
+        </GameRoomCallBottomCluster>
         <div
           v-if="(session.inCall || joining) && mafiaViewUi && isMafiaRoute"
           class="call-page__mafia-view-bottom"
@@ -3022,44 +2298,13 @@ watch(joining, (j) => {
           @resize-pointer-down="onChatPanelResizePointerDown"
         />
 
-        <aside
+        <GameRoomCallDebugOverlay
           v-if="session.callDebugOverlay && showCallDebugControls && !mafiaViewUi && !eatFirstViewUi"
-          class="call-page__debug"
-          :aria-label="t('callPage.debugAria')"
-        >
-          <div class="call-page__debug-head">
-            <span class="call-page__debug-title">{{ t('callPage.debugTitle') }}</span>
-            <AppButton variant="secondary" :disabled="inboundDebugBusy" @click="refreshInboundDebug">
-              {{ inboundDebugBusy ? t('callPage.debugRefreshing') : t('callPage.debugRefresh') }}
-            </AppButton>
-          </div>
-          <dl class="call-page__debug-dl">
-            <dt>{{ t('callPage.debugPreset') }}</dt>
-            <dd>{{ callDebugSnapshot.videoQualityPreset }}</dd>
-            <dt>{{ t('callPage.debugExplicit') }}</dt>
-            <dd>{{ callDebugSnapshot.videoQualityExplicit }}</dd>
-            <dt>{{ t('callPage.debugPublishTier') }}</dt>
-            <dd>{{ callDebugSnapshot.videoPublishTier }}</dd>
-            <dt>{{ t('callPage.debugActiveCamerasWire') }}</dt>
-            <dd>{{ callDebugSnapshot.activeCameraPublishersAtWire }}</dd>
-            <dt>{{ t('callPage.debugPeersWire') }}</dt>
-            <dd>{{ callDebugSnapshot.peerCountAtWire }}</dd>
-            <dt>{{ t('callPage.debugPublishSimulcast') }}</dt>
-            <dd>{{ callDebugSnapshot.publishSimulcast }}</dd>
-            <dt>{{ t('callPage.debugActiveSpeaker') }}</dt>
-            <dd>{{ callDebugSnapshot.effectiveActiveSpeakerPeerId ?? '—' }}</dd>
-            <dt>{{ t('callPage.debugServerSpeaker') }}</dt>
-            <dd>{{ callDebugSnapshot.serverActiveSpeakerPeerId ?? '—' }}</dd>
-          </dl>
-          <ul v-if="inboundDebugRows.length" class="call-page__debug-list">
-            <li v-for="row in inboundDebugRows" :key="row.producerId" class="call-page__debug-li">
-              <span class="call-page__debug-peer">{{ row.peerId.slice(0, 8) }}…</span>
-              {{ row.frameWidth ?? '?' }}×{{ row.frameHeight ?? '?' }}
-              <span v-if="row.framesPerSecond != null" class="call-page__debug-fps"> ~{{ row.framesPerSecond.toFixed(1) }} fps</span>
-              <span class="call-page__debug-loss"> loss {{ row.packetsLost ?? '—' }}</span>
-            </li>
-          </ul>
-        </aside>
+          :snapshot="callDebugSnapshot"
+          :inbound-rows="inboundDebugRows"
+          :inbound-busy="inboundDebugBusy"
+          @refresh="refreshInboundDebug"
+        />
       </section>
     </div>
     </AppContainer>

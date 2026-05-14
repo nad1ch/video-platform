@@ -1488,6 +1488,7 @@ export function handleMafiaClaimHost(
         diagEmit('host_conflict', 'warn', 'game', room.id, peer, {
           namespace: 'mafia',
           reason: 'same_user_other_session',
+          displayName: peer.displayName,
         })
         return
       }
@@ -1499,6 +1500,7 @@ export function handleMafiaClaimHost(
       diagEmit('host_claimed', 'info', 'game', room.id, peer, {
         namespace: 'mafia',
         reason: 'rebind',
+        displayName: peer.displayName,
       })
     }
     return
@@ -1507,6 +1509,7 @@ export function handleMafiaClaimHost(
     diagEmit('host_conflict', 'warn', 'game', room.id, peer, {
       namespace: 'mafia',
       reason: 'host_already_held_by_other_user',
+      displayName: peer.displayName,
     })
     return
   }
@@ -1519,6 +1522,7 @@ export function handleMafiaClaimHost(
     diagEmit('host_conflict', 'warn', 'game', room.id, peer, {
       namespace: 'mafia',
       reason: 'owner_lock_mismatch',
+      displayName: peer.displayName,
     })
     return
   }
@@ -1532,6 +1536,7 @@ export function handleMafiaClaimHost(
   diagEmit('host_claimed', 'info', 'game', room.id, peer, {
     namespace: 'mafia',
     reason: ownerUserId == null ? 'first_claim' : 'owner_lock_match',
+    displayName: peer.displayName,
   })
 }
 
@@ -3950,6 +3955,7 @@ export function handleGameRoomClaimHost(
         diagEmit('host_conflict', 'warn', 'game', room.id, peer, {
           namespace: 'game-room',
           reason: 'same_user_other_session',
+          displayName: peer.displayName,
         })
         return
       }
@@ -3960,6 +3966,7 @@ export function handleGameRoomClaimHost(
       diagEmit('host_claimed', 'info', 'game', room.id, peer, {
         namespace: 'game-room',
         reason: 'rebind',
+        displayName: peer.displayName,
       })
     }
     return
@@ -3968,6 +3975,7 @@ export function handleGameRoomClaimHost(
     diagEmit('host_conflict', 'warn', 'game', room.id, peer, {
       namespace: 'game-room',
       reason: 'host_already_held_by_other_user',
+      displayName: peer.displayName,
     })
     return
   }
@@ -3976,6 +3984,7 @@ export function handleGameRoomClaimHost(
     diagEmit('host_conflict', 'warn', 'game', room.id, peer, {
       namespace: 'game-room',
       reason: 'owner_lock_mismatch',
+      displayName: peer.displayName,
     })
     return
   }
@@ -3987,6 +3996,7 @@ export function handleGameRoomClaimHost(
   diagEmit('host_claimed', 'info', 'game', room.id, peer, {
     namespace: 'game-room',
     reason: ownerUserId == null ? 'first_claim' : 'owner_lock_match',
+    displayName: peer.displayName,
   })
 }
 
