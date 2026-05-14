@@ -28,6 +28,13 @@
 
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { GAME_TIMER_PRESET_MS } from '@/utils/gameTimerPresets'
+import {
+  computeTimerIsActive,
+  computeTimerIsTicking,
+  computeTimerRemainingMs,
+  formatTimerMmss,
+  pickInitialTimerPreset,
+} from '@/utils/gameTimerCompute'
 import mafiaTimerClock from '@/assets/game-call/timer-clock.svg'
 
 export interface GameTimerState {
@@ -162,22 +169,17 @@ function stopTick(): void {
   }
 }
 
-const remainingMs = computed<number>(() => {
+const remainingMs = computed<number>(() =>
   // Pause path (Eat First only — Mafia / Game Template default `paused`
   // to `false` so this branch never fires). Display the frozen remaining
   // time without consulting `nowMs`, so the tick interval can stay off.
-  if (
-    props.paused &&
-    typeof props.frozenRemainingMs === 'number' &&
-    Number.isFinite(props.frozenRemainingMs)
-  ) {
-    return Math.max(0, props.frozenRemainingMs)
-  }
-  const t = props.timer
-  if (t == null) return 0
-  const elapsed = Math.max(0, nowMs.value - t.startedAt)
-  return Math.max(0, t.durationMs - elapsed)
-})
+  computeTimerRemainingMs({
+    timer: props.timer,
+    nowMs: nowMs.value,
+    paused: props.paused,
+    frozenRemainingMs: props.frozenRemainingMs,
+  }),
+)
 
 /**
  * "The timer is active": running OR paused with a finite frozen-remaining
@@ -186,18 +188,14 @@ const remainingMs = computed<number>(() => {
  * `frozenRemainingMs == null`), this is byte-equivalent to the previous
  * `isRunning = timer != null && remainingMs > 0`.
  */
-const isActive = computed<boolean>(() => {
-  if (props.timer != null && remainingMs.value > 0) return true
-  if (
-    props.paused &&
-    typeof props.frozenRemainingMs === 'number' &&
-    Number.isFinite(props.frozenRemainingMs) &&
-    props.frozenRemainingMs > 0
-  ) {
-    return true
-  }
-  return false
-})
+const isActive = computed<boolean>(() =>
+  computeTimerIsActive({
+    timer: props.timer,
+    remainingMs: remainingMs.value,
+    paused: props.paused,
+    frozenRemainingMs: props.frozenRemainingMs,
+  }),
+)
 
 /**
  * "The timer needs the 1 s tick": active AND not paused. Drives the
@@ -205,7 +203,9 @@ const isActive = computed<boolean>(() => {
  * Eat First) all stay quiet; paused EF rooms also stay quiet because
  * the display is frozen and does not need a tick.
  */
-const isTicking = computed<boolean>(() => isActive.value && !props.paused)
+const isTicking = computed<boolean>(() =>
+  computeTimerIsTicking({ isActive: isActive.value, paused: props.paused }),
+)
 
 const showHostControls = computed<boolean>(() => props.isHost && !props.streamView)
 
@@ -229,31 +229,14 @@ watch(
 
 onBeforeUnmount(() => stopTick())
 
-function formatMmss(ms: number): string {
-  const totalSec = Math.floor(ms / 1000)
-  const m = Math.floor(totalSec / 60)
-  const s = totalSec % 60
-  return `${m}:${String(s).padStart(2, '0')}`
-}
-
 /**
  * Host-selected preset for the next Start press. Mirrors `selectedDurationMs`
  * in the original `MafiaOverlay`: defaults to `defaultDurationMs` if it is a
  * member of the preset list, otherwise the last preset. Persists across
  * Start/Stop cycles so the host doesn't need to re-pick it.
  */
-const FALLBACK_PRESET_MS = 90_000
-
-function pickInitialPreset(
-  defaultMs: number | undefined,
-  list: readonly number[],
-): number {
-  if (defaultMs != null && list.includes(defaultMs)) return defaultMs
-  return list[list.length - 1] ?? FALLBACK_PRESET_MS
-}
-
 const selectedDurationMs = ref<number>(
-  pickInitialPreset(props.defaultDurationMs, props.presetMsList),
+  pickInitialTimerPreset(props.defaultDurationMs, props.presetMsList),
 )
 
 // Keep selectedDurationMs valid if the host swaps the preset list mid-life
@@ -262,17 +245,17 @@ watch(
   () => props.presetMsList,
   (list) => {
     if (!list.includes(selectedDurationMs.value)) {
-      selectedDurationMs.value = pickInitialPreset(props.defaultDurationMs, list)
+      selectedDurationMs.value = pickInitialTimerPreset(props.defaultDurationMs, list)
     }
   },
 )
 
 const timerDisplay = computed<string | null>(() => {
   if (!isActive.value) return null
-  return formatMmss(remainingMs.value)
+  return formatTimerMmss(remainingMs.value)
 })
 
-const timerIdleDisplay = computed<string>(() => formatMmss(selectedDurationMs.value))
+const timerIdleDisplay = computed<string>(() => formatTimerMmss(selectedDurationMs.value))
 
 const timerText = computed<string>(() => timerDisplay.value ?? timerIdleDisplay.value)
 

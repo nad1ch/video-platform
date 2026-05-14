@@ -12,6 +12,7 @@ import { normalizeDisplayName } from 'call-core'
 import { efEnsureGame } from '@/eat-first/services/eatFirstTransport'
 import { setPersistedGameId } from '@/eat-first/utils/persistedGameId.js'
 import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
+import { resolveEatFirstTimerStripModel } from '@/eat-first/utils/eatFirstTimerStripModel'
 import { createLogger } from '@/utils/logger'
 
 const log = createLogger('eat-first:call-page')
@@ -283,29 +284,13 @@ watch(
 const showHostPanel = computed(() => !isStreamView.value && eatFirstShell.isEatFirstRoomHost)
 
 /** Prefer signaling timer from `eat:table-state-sync`; snapshot fields only when shell has no timer. */
-const eatFirstTimerStripModel = computed(() => {
-  const t = eatFirstCallTimerFromTableSync.value
-  if (
-    t &&
-    t.isRunning &&
-    Number.isFinite(t.startedAt) &&
-    Number.isFinite(t.durationMs) &&
-    t.durationMs >= 5000
-  ) {
-    return {
-      speakingTotalSec: Math.floor(t.durationMs / 1000),
-      timerStartedAt: new Date(t.startedAt).toISOString(),
-      timerPaused: false,
-      frozenRemainingSec: null as number | null,
-    }
-  }
-  return {
-    speakingTotalSec: speakingTimer.value,
-    timerStartedAt: timerRoomFields.value.startedAt,
-    timerPaused: timerRoomFields.value.paused,
-    frozenRemainingSec: timerRoomFields.value.frozenRemainingSec,
-  }
-})
+const eatFirstTimerStripModel = computed(() =>
+  resolveEatFirstTimerStripModel({
+    tableSyncTimer: eatFirstCallTimerFromTableSync.value,
+    snapshotSpeakingTotalSec: speakingTimer.value,
+    snapshotTimerFields: timerRoomFields.value,
+  }),
+)
 
 onUnmounted(() => {
   eatFirstShell.setEatFirstCallShellHost(false)
