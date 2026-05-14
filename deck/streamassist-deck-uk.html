@@ -6,7 +6,7 @@
 <title>StreamAssist — Інвестиційний дек</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Science+Gothic:wght@400..800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg-base: #0A0B14; --bg-edge: #06070C;
@@ -19,7 +19,7 @@
   --m: #FF3CC6; --a: #FFB547; --as: rgba(255,181,71,0.40);
   --r: #FF5C6B; --g: #4ADE80;
   --t1: #F4F5FF; --t2: #B8BBD6; --t3: #6F7393; --t4: #4A4D6B;
-  --fd: 'Inter Tight','Inter',system-ui,sans-serif;
+  --fd: 'Science Gothic','Inter',system-ui,sans-serif;
   --fb: 'Inter',system-ui,sans-serif;
   --fm: 'JetBrains Mono',ui-monospace,monospace;
   --scale: 1;
@@ -276,7 +276,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-edge);font-
   border:1px solid rgba(124,92,255,0.30);
   box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),0 0 36px -12px rgba(124,92,255,0.30);
   display:flex;align-items:center;gap:18px}
-.os-thesis::before{content:'\201C';position:absolute;top:-14px;left:24px;font-family:'Inter Tight';font-size:62px;line-height:1;
+.os-thesis::before{content:'\201C';position:absolute;top:-14px;left:24px;font-family:'Science Gothic';font-size:62px;line-height:1;
   color:#7C5CFF;text-shadow:0 0 24px rgba(124,92,255,0.55);font-weight:700}
 .os-thesis-tag{flex-shrink:0;padding:5px 11px;border-radius:5px;font-family:var(--fm);font-size:10px;
   letter-spacing:0.20em;text-transform:uppercase;font-weight:800;
@@ -287,7 +287,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-edge);font-
 .os-thesis-text .em{background:linear-gradient(135deg,#FFFFFF 0%,#A8E8FF 60%,#3FE0FF 100%);
   -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:700}
 .os-layout{display:flex;flex-direction:column;gap:10px;flex:1;min-height:0}
-.os-tier{padding:8px 18px 14px;display:flex;flex-direction:column;gap:8px;position:relative}
+.os-tier{padding:8px 18px 14px;display:flex;flex-direction:column;gap:8px;position:relative;flex:1;min-height:0}
 .os-tier-head{display:flex;align-items:center;justify-content:space-between;padding-bottom:6px}
 .os-tier-l{display:flex;align-items:center;gap:14px}
 .os-tier-tag{font-family:var(--fm);font-size:10px;font-weight:700;letter-spacing:0.20em;text-transform:uppercase;
@@ -327,8 +327,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-edge);font-
 .os-mod-bd{font-size:11.5px;color:var(--t3);line-height:1.4}
 
 /* ===== SLIDE 6 · CINEMATIC PIPELINE ===== */
-.pl-layout{display:flex;flex-direction:column;gap:16px;flex:1;min-height:0;position:relative}
-.pl-stage{flex:1;position:relative;min-height:0;display:flex;align-items:center}
+.pl-layout{display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;position:relative}
+.pl-stage{flex:0 0 auto;position:relative;min-height:0;display:flex;align-items:center;padding-block:8px}
 .pl-track{position:relative;width:100%;height:340px}
 .pl-line{position:absolute;left:30px;right:30px;top:50%;height:3px;border-radius:2px;
   background:linear-gradient(90deg,rgba(63,224,255,0.30) 0%,rgba(124,92,255,0.75) 50%,rgba(255,181,71,0.60) 100%);
@@ -626,7 +626,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-edge);font-
 .wordmark .accent{background:linear-gradient(135deg,#FFFFFF 0%,#C8B4FF 35%,#7C5CFF 75%,#3FE0FF 100%);
   -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .cover-sub{margin-top:30px;font-family:var(--fd);font-size:34px;color:var(--t2);font-weight:400;letter-spacing:-0.005em}
-.cover-claim{margin-top:38px;font-family:var(--fm);font-size:14px;color:var(--t3);letter-spacing:0.04em;max-width:1000px;line-height:1.6}
+.cover-claim{position:absolute;bottom:140px;left:50%;transform:translateX(-50%);margin-top:0;font-family:var(--fm);font-size:14px;color:var(--t3);letter-spacing:0.04em;max-width:1000px;line-height:1.6}
 .cover-corner{position:absolute;z-index:4}
 .cover-corner.tl{top:48px;left:88px}.cover-corner.tr{top:48px;right:88px}
 .cover-corner.bl{bottom:48px;left:88px}.cover-corner.br{bottom:48px;right:88px;text-align:right}
@@ -641,6 +641,284 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-edge);font-
 .stat-ribbon .stat:last-child{border-right:none}
 .stat-ribbon .stat .v{font-family:var(--fd);font-weight:700;font-size:22px;color:var(--t1);letter-spacing:-0.01em;line-height:1}
 .stat-ribbon .stat .l{font-family:var(--fm);font-size:9px;letter-spacing:0.12em;color:var(--t3);text-transform:uppercase;margin-top:4px}
+
+/* ===== SLIDE 1 · MIRROR CUBE BACKGROUND ===== */
+.cover-cube-stage{position:absolute;inset:0;z-index:0;overflow:hidden;
+  perspective:1500px;perspective-origin:50% 48%;pointer-events:none}
+.cover-cube-stage::before{content:'';position:absolute;top:50%;left:50%;
+  width:1000px;height:1000px;transform:translate(-50%,-50%);pointer-events:none;
+  background:
+    radial-gradient(circle at 50% 50%,rgba(124,92,255,0.22) 0%,transparent 45%),
+    radial-gradient(circle at 36% 38%,rgba(63,224,255,0.12) 0%,transparent 38%);
+  filter:blur(30px)}
+.cover-cube-orbit{position:absolute;top:50%;left:50%;width:0;height:0;
+  transform-style:preserve-3d;animation:cubeOrbit 38s linear infinite}
+@keyframes cubeOrbit{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}
+.cover-cube{position:absolute;width:460px;height:460px;left:-230px;top:-230px;
+  transform-style:preserve-3d;animation:cubeTumble 26s linear infinite}
+@keyframes cubeTumble{
+  0%{transform:rotateX(-18deg) rotateZ(0deg)}
+  50%{transform:rotateX(22deg) rotateZ(180deg)}
+  100%{transform:rotateX(-18deg) rotateZ(360deg)}}
+.cube-face{position:absolute;width:460px;height:460px;
+  background:
+    linear-gradient(118deg,rgba(255,255,255,0.10) 0%,rgba(255,255,255,0.02) 20%,transparent 38%,transparent 62%,rgba(255,255,255,0.03) 82%,rgba(255,255,255,0.10) 100%),
+    linear-gradient(180deg,rgba(16,20,40,0.22) 0%,rgba(6,7,15,0.28) 100%);
+  border:1px solid rgba(255,255,255,0.16);border-radius:8px;
+  box-shadow:
+    inset 0 0 50px rgba(124,92,255,0.10),
+    inset 0 1px 0 rgba(255,255,255,0.16),
+    inset 0 -1px 0 rgba(0,0,0,0.30),
+    0 0 60px rgba(124,92,255,0.12);
+  overflow:hidden;backface-visibility:hidden}
+.cube-face.f-front{transform:translateZ(230px)}
+.cube-face.f-back{transform:rotateY(180deg) translateZ(230px)}
+.cube-face.f-right{transform:rotateY(90deg) translateZ(230px)}
+.cube-face.f-left{transform:rotateY(-90deg) translateZ(230px)}
+.cube-face.f-top{transform:rotateX(90deg) translateZ(230px)}
+.cube-face.f-bottom{transform:rotateX(-90deg) translateZ(230px)}
+
+/* face screen — fills the entire face; minimal wrapper.
+   NOTE: `.fs` is also used on slides 4/5 — use `.cube-face .fs` here so it wins specificity */
+.cube-face .fs{position:absolute;inset:0;overflow:hidden;padding:0;display:block;background:transparent}
+/* thin cinematic scanline sweeping each face */
+.fs-scan{position:absolute;left:-2%;right:-2%;top:0;height:2px;z-index:4;pointer-events:none;
+  background:linear-gradient(180deg,transparent 0%,rgba(63,224,255,0.55) 50%,transparent 100%);
+  box-shadow:0 0 10px rgba(63,224,255,0.45);
+  animation:scanSweep 7.2s cubic-bezier(.55,0,.45,1) infinite}
+@keyframes scanSweep{
+  0%{transform:translateY(-8px);opacity:0}
+  6%{opacity:0.9}
+  94%{opacity:0.9}
+  100%{transform:translateY(460px);opacity:0}}
+
+.fs-bar{position:absolute;top:0;left:0;right:0;height:24px;
+  display:flex;align-items:center;gap:8px;padding:0 12px;z-index:5;
+  background:linear-gradient(180deg,rgba(0,0,0,0.78) 0%,rgba(0,0,0,0.55) 100%);
+  border-bottom:1px solid rgba(255,255,255,0.12)}
+.fs-bar .live{width:7px;height:7px;border-radius:50%;background:#FF5C6B;
+  box-shadow:0 0 8px #FF5C6B;animation:lp 1.4s ease-in-out infinite;flex-shrink:0}
+.fs-bar .ttl{font-family:var(--fm);font-size:9px;letter-spacing:0.16em;
+  color:#F4F5FF;text-transform:uppercase;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fs-bar .views{margin-left:auto;font-family:var(--fm);font-size:9px;
+  color:#3FE0FF;letter-spacing:0.10em;font-weight:600;white-space:nowrap}
+
+/* shared animations */
+@keyframes audioWave{0%,100%{transform:scaleY(0.32)}50%{transform:scaleY(1)}}
+@keyframes chatScroll{0%{transform:translateY(0)}100%{transform:translateY(-50%)}}
+@keyframes coinShimmer{0%,100%{filter:brightness(1) drop-shadow(0 0 4px rgba(255,181,71,0.4))}50%{filter:brightness(1.35) drop-shadow(0 0 8px rgba(255,181,71,0.7))}}
+@keyframes xpBreath{0%,100%{width:74%;box-shadow:0 0 6px rgba(124,92,255,0.5)}50%{width:78%;box-shadow:0 0 12px rgba(124,92,255,0.85)}}
+@keyframes hostBreath{
+  0%,100%{box-shadow:inset 0 0 22px rgba(63,224,255,0.18),inset 0 0 0 1px rgba(63,224,255,0.55),0 0 8px rgba(63,224,255,0.22)}
+  50%{box-shadow:inset 0 0 32px rgba(63,224,255,0.30),inset 0 0 0 1.5px rgba(63,224,255,0.95),0 0 16px rgba(63,224,255,0.50)}}
+
+/* ===== F1 · LIVE CAM GRID (Mafia show room) ·
+   layout split: 4 tiles in TOP edge band + 4 in BOTTOM edge band,
+   so participants are visible above/below the StreamAssist wordmark ===== */
+.fs1{position:absolute;top:24px;left:0;right:0;bottom:0;background:rgba(8,10,22,0.32);z-index:2;
+  display:flex;flex-direction:column;padding:5px;gap:5px}
+.fs1-row{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:1fr;gap:5px;flex-shrink:0}
+.fs1-row.top{height:88px}
+.fs1-row.bot{height:118px}
+.fs1-mid{flex:1;position:relative;display:flex;align-items:center;justify-content:center;min-height:0;
+  padding:0 6%}
+.fs1-mid::before,.fs1-mid::after{content:'';position:absolute;left:8%;right:8%;height:1px;
+  background:linear-gradient(90deg,transparent 0%,rgba(124,92,255,0.45) 50%,transparent 100%)}
+.fs1-mid::before{top:38%}
+.fs1-mid::after{top:62%}
+.fs1-mid .state{padding:7px 16px;border-radius:6px;background:rgba(124,92,255,0.14);
+  border:1px solid rgba(124,92,255,0.45);color:#C8BEFF;position:relative;z-index:1;
+  font-family:var(--fm);font-size:8.5px;letter-spacing:0.22em;font-weight:700;text-transform:uppercase;
+  box-shadow:0 0 16px rgba(124,92,255,0.30),inset 0 0 14px rgba(124,92,255,0.14);
+  display:flex;align-items:center;gap:7px}
+.fs1-mid .state::before{content:'';width:5px;height:5px;border-radius:50%;background:#7C5CFF;
+  box-shadow:0 0 6px #7C5CFF;animation:lp 1.6s ease-in-out infinite}
+.fs1 .tile{position:relative;border-radius:5px;overflow:hidden;
+  background:var(--tbg);border:2px solid var(--tborder)}
+.fs1 .tile::before{content:'';position:absolute;left:50%;top:38%;
+  width:44px;height:44px;border-radius:50%;transform:translate(-50%,-50%);
+  background:radial-gradient(circle at 38% 28%,#FFFFFF 0%,#D8DCEE 30%,#6D7595 70%,#1A1F30 100%);
+  box-shadow:0 0 0 2.5px var(--avring),0 4px 12px rgba(0,0,0,0.65);z-index:2}
+.fs1-row.bot .tile::before{width:58px;height:58px;top:42%}
+.fs1 .tile .lab{position:absolute;left:5px;bottom:5px;font-family:var(--fm);
+  font-size:9px;letter-spacing:0.10em;text-transform:uppercase;color:#FFFFFF;
+  padding:3px 6px;border-radius:3px;background:#000000;
+  border:1.5px solid var(--tborder);font-weight:700;z-index:3;line-height:1}
+.fs1-row.bot .tile .lab{font-size:10px;padding:3px 8px}
+.fs1 .tile .mic{position:absolute;right:5px;top:5px;width:7px;height:7px;border-radius:50%;
+  background:#6F7393;box-shadow:0 0 0 1.5px #000;z-index:3}
+.fs1 .tile.host{--tbg:rgba(14,40,64,0.55);--tborder:rgba(63,224,255,0.50);--avring:rgba(63,224,255,0.65);
+  box-shadow:0 0 10px rgba(63,224,255,0.22),inset 0 0 14px rgba(63,224,255,0.10);
+  animation:hostBreath 3.4s ease-in-out infinite}
+.fs1 .tile.host .lab{background:rgba(63,224,255,0.30);color:#C8F0FF;border-color:rgba(255,255,255,0.30)}
+.fs1 .tile.blue{--tbg:rgba(14,30,48,0.50);--tborder:rgba(63,224,255,0.32);--avring:rgba(63,224,255,0.42)}
+.fs1 .tile.red{--tbg:rgba(40,12,20,0.50);--tborder:rgba(255,92,107,0.34);--avring:rgba(255,92,107,0.44)}
+.fs1 .tile.doc{--tbg:rgba(42,28,10,0.55);--tborder:rgba(255,181,71,0.36);--avring:rgba(255,181,71,0.46)}
+.fs1 .tile.speaking{box-shadow:0 0 16px var(--avring),inset 0 0 20px rgba(74,222,128,0.20)}
+.fs1 .tile.speaking .mic{background:#4ADE80;box-shadow:0 0 8px #4ADE80,0 0 0 1.5px #000;animation:lp 0.9s ease-in-out infinite}
+.fs1 .tile.speaking::before{box-shadow:0 0 0 3px var(--avring),0 0 16px var(--avring),0 4px 12px rgba(0,0,0,0.65)}
+.fs1 .tile .wave{position:absolute;left:5px;top:5px;display:flex;gap:2px;align-items:flex-end;height:12px;z-index:3}
+.fs1 .tile .wave i{width:3px;background:#4ADE80;border-radius:1px;transform-origin:bottom;
+  box-shadow:0 0 6px #4ADE80;animation:audioWave 0.7s ease-in-out infinite}
+.fs1 .tile .wave i:nth-child(1){height:40%}
+.fs1 .tile .wave i:nth-child(2){height:90%;animation-delay:0.15s}
+.fs1 .tile .wave i:nth-child(3){height:60%;animation-delay:0.30s}
+.fs1 .tile .wave i:nth-child(4){height:100%;animation-delay:0.10s}
+
+/* ===== F2 · CHAT PANEL ===== */
+.fs2-wrap{position:absolute;top:24px;left:0;right:0;bottom:0;background:rgba(8,10,22,0.32);z-index:2;
+  display:flex;flex-direction:column;padding:10px 12px;gap:7px}
+.fs2-head{display:flex;align-items:center;gap:7px;font-family:var(--fm);font-size:7.5px;
+  letter-spacing:0.16em;text-transform:uppercase;color:#6F7393;font-weight:700;flex-shrink:0}
+.fs2-head .dot{width:5px;height:5px;border-radius:50%;background:#4ADE80;
+  box-shadow:0 0 6px #4ADE80;animation:lp 1.2s ease-in-out infinite}
+.fs2-head .count{margin-left:auto;color:#3FE0FF;letter-spacing:0.10em}
+.fs2-feed{flex:1;position:relative;overflow:hidden}
+.fs2-feed::before,.fs2-feed::after{content:'';position:absolute;left:0;right:0;height:14px;z-index:3;pointer-events:none}
+.fs2-feed::before{top:0;background:linear-gradient(180deg,#06070F 0%,transparent 100%)}
+.fs2-feed::after{bottom:0;background:linear-gradient(0deg,#06070F 0%,transparent 100%)}
+.fs2-feed .feed-inner{display:flex;flex-direction:column;gap:6px;animation:chatScroll 22s linear infinite}
+.fs2-msg{display:flex;align-items:baseline;gap:5px;font-family:var(--fm);font-size:8.5px;line-height:1.35;color:#B8BBD6;flex-shrink:0}
+.fs2-msg .u{font-weight:700;letter-spacing:0.04em;flex-shrink:0}
+.fs2-msg .t{color:#D6D8E8;letter-spacing:0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fs2-msg .icn{font-size:8px;margin-left:auto;flex-shrink:0;padding-left:4px;line-height:1}
+.fs2-msg .icn.coin{color:#FFB547}
+.fs2-msg .icn.heart{color:#FF3CC6}
+.fs2-msg .icn.pin{color:#3FE0FF}
+.fs2-msg.u-c .u{color:#3FE0FF}
+.fs2-msg.u-v .u{color:#A8A0FF}
+.fs2-msg.u-a .u{color:#FFB547}
+.fs2-msg.u-m .u{color:#FF8FD0}
+.fs2-msg.u-g .u{color:#86E5A6}
+.fs2-msg.u-r .u{color:#FF8590}
+.fs2-vote{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:5px;flex-shrink:0;
+  background:rgba(124,92,255,0.06);border:1px solid rgba(124,92,255,0.22);font-family:var(--fm)}
+.fs2-vote .lbl{font-size:7px;letter-spacing:0.14em;text-transform:uppercase;color:#6F7393;font-weight:700}
+.fs2-vote .bar{flex:1;height:5px;border-radius:3px;background:rgba(255,92,107,0.22);position:relative;overflow:hidden}
+.fs2-vote .bar::before{content:'';position:absolute;left:0;top:0;bottom:0;width:67%;
+  background:linear-gradient(90deg,#3FE0FF 0%,#7C5CFF 100%);box-shadow:0 0 6px rgba(63,224,255,0.55)}
+.fs2-vote .pct{font-size:7px;letter-spacing:0.06em;font-weight:700}
+.fs2-vote .pct .b{color:#3FE0FF}
+.fs2-vote .pct .r{color:#FF5C6B;margin-left:5px}
+
+/* ===== F3 · STREAMER CONTROL ROOM ===== */
+.fs3-ctrl{position:absolute;top:24px;left:0;right:0;bottom:0;background:rgba(8,10,22,0.32);z-index:2;
+  display:flex;flex-direction:column;padding:10px 12px;gap:7px}
+.fs3-scene{display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:5px;
+  background:rgba(124,92,255,0.14);border:1px solid rgba(124,92,255,0.36);font-family:var(--fm)}
+.fs3-scene .sl{font-size:6.5px;letter-spacing:0.18em;text-transform:uppercase;color:#6F7393;font-weight:700}
+.fs3-scene .sn{font-size:9px;letter-spacing:0.06em;color:#D4C8FF;font-weight:700;text-transform:uppercase}
+.fs3-scene .st{margin-left:auto;font-size:6.5px;letter-spacing:0.14em;color:#4ADE80;font-weight:700;display:flex;align-items:center;gap:4px;text-transform:uppercase}
+.fs3-scene .st::before{content:'';width:5px;height:5px;border-radius:50%;background:#4ADE80;box-shadow:0 0 6px #4ADE80;animation:lp 1.2s ease-in-out infinite}
+.fs3-audio{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;
+  background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.08)}
+.fs3-audio .lbl{font-family:var(--fm);font-size:6.5px;letter-spacing:0.16em;text-transform:uppercase;color:#6F7393;font-weight:700;flex-shrink:0}
+.fs3-audio .bars{display:flex;align-items:flex-end;gap:1.5px;height:11px;flex:1}
+.fs3-audio .bars i{flex:1;background:linear-gradient(180deg,#4ADE80 0%,#3FE0FF 100%);border-radius:1px;transform-origin:bottom;animation:audioWave 0.7s ease-in-out infinite}
+.fs3-audio .bars i:nth-child(2n){animation-delay:0.18s}
+.fs3-audio .bars i:nth-child(3n){animation-delay:0.36s}
+.fs3-audio .bars i:nth-child(4n){animation-delay:0.10s}
+.fs3-audio .bars i.peak{background:linear-gradient(180deg,#FF5C6B 0%,#FFB547 100%)}
+.fs3-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.fs3-card{padding:7px 9px;border-radius:5px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10);font-family:var(--fm);position:relative}
+.fs3-card .lbl{font-size:6.5px;letter-spacing:0.16em;text-transform:uppercase;color:#6F7393;font-weight:700;display:block}
+.fs3-card .val{font-family:var(--fd);font-size:14px;font-weight:700;color:#F4F5FF;letter-spacing:-0.01em;display:block;margin-top:1px;line-height:1}
+.fs3-card.warn{background:rgba(255,92,107,0.10);border-color:rgba(255,92,107,0.38)}
+.fs3-card.warn .val{color:#FFB0B8;font-family:var(--fm);font-size:9px;letter-spacing:0.04em}
+.fs3-card.warn .wdot{position:absolute;top:7px;right:8px;width:6px;height:6px;border-radius:50%;background:#FF5C6B;box-shadow:0 0 6px #FF5C6B;animation:lp 0.9s ease-in-out infinite}
+.fs3-card.timer .val{font-family:var(--fm);color:#3FE0FF;font-size:13px;letter-spacing:0.06em}
+.fs3-chips{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.fs3-chip{padding:5px 4px;border-radius:5px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);
+  font-family:var(--fm);font-size:6.5px;letter-spacing:0.14em;text-transform:uppercase;color:#B8BBD6;text-align:center;font-weight:700;position:relative}
+.fs3-chip.clip{background:rgba(63,224,255,0.12);border-color:rgba(63,224,255,0.42);color:#C8F0FF}
+.fs3-chip.clip::after{content:'';position:absolute;top:3px;right:4px;width:4px;height:4px;border-radius:50%;background:#3FE0FF;box-shadow:0 0 6px #3FE0FF;animation:lp 1.4s ease-in-out infinite}
+.fs3-hint{font-family:var(--fm);font-size:7px;letter-spacing:0.12em;color:#6F7393;text-align:center;line-height:1.5;margin-top:auto;padding-top:5px;border-top:1px dashed rgba(255,255,255,0.10)}
+.fs3-hint b{color:#A8A0FF;font-weight:700;letter-spacing:0.10em}
+
+/* ===== F4 · VIEWER ECONOMY ===== */
+.fs4-econ{position:absolute;top:24px;left:0;right:0;bottom:0;background:rgba(8,10,22,0.32);z-index:2;
+  display:flex;flex-direction:column;padding:10px 12px;gap:8px}
+.fs4-coin{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:6px;
+  background:radial-gradient(ellipse 80% 100% at 50% 50%,rgba(255,181,71,0.20) 0%,transparent 70%),rgba(0,0,0,0.40);
+  border:1px solid rgba(255,181,71,0.38)}
+.fs4-coin .ico{width:20px;height:20px;border-radius:50%;
+  background:radial-gradient(circle at 38% 30%,#FFFFFF 0%,#FFE19F 28%,#FFB547 60%,#A06010 100%);
+  box-shadow:0 0 8px rgba(255,181,71,0.5),inset 0 -1px 1px rgba(0,0,0,0.3);
+  animation:coinShimmer 3s ease-in-out infinite;flex-shrink:0}
+.fs4-coin .balance{display:flex;flex-direction:column;line-height:1}
+.fs4-coin .balance .lbl{font-family:var(--fm);font-size:6.5px;letter-spacing:0.16em;text-transform:uppercase;color:#6F7393;font-weight:700}
+.fs4-coin .balance .val{font-family:var(--fd);font-size:18px;font-weight:700;color:#FFE0B5;letter-spacing:-0.01em;margin-top:2px}
+.fs4-coin .delta{margin-left:auto;font-family:var(--fm);font-size:8px;letter-spacing:0.06em;color:#4ADE80;font-weight:700}
+.fs4-xp{padding:7px 10px;border-radius:5px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10)}
+.fs4-xp .row{display:flex;align-items:center;gap:7px;font-family:var(--fm);font-size:7px;letter-spacing:0.14em;text-transform:uppercase;font-weight:700;color:#B8BBD6;margin-bottom:5px}
+.fs4-xp .row .lvl{color:#A8A0FF}
+.fs4-xp .row .pct{margin-left:auto;color:#3FE0FF}
+.fs4-xp .bar{height:6px;border-radius:3px;background:rgba(124,92,255,0.20);position:relative;overflow:hidden}
+.fs4-xp .bar::before{content:'';position:absolute;left:0;top:0;bottom:0;width:75%;
+  background:linear-gradient(90deg,#7C5CFF 0%,#3FE0FF 100%);
+  border-radius:3px;animation:xpBreath 4.2s ease-in-out infinite}
+.fs4-perks{display:flex;gap:5px;flex-wrap:wrap}
+.fs4-perks .p{padding:3px 7px;border-radius:4px;font-family:var(--fm);font-size:7px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;border:1px solid}
+.fs4-perks .p.vip{color:#FFB547;background:rgba(255,181,71,0.14);border-color:rgba(255,181,71,0.42)}
+.fs4-perks .p.mod{color:#3FE0FF;background:rgba(63,224,255,0.10);border-color:rgba(63,224,255,0.40)}
+.fs4-perks .p.t2{color:#A8A0FF;background:rgba(124,92,255,0.16);border-color:rgba(124,92,255,0.42)}
+.fs4-perks .p.donor{color:#FF8FD0;background:rgba(255,60,198,0.12);border-color:rgba(255,60,198,0.42)}
+.fs4-activity{flex:1;display:flex;flex-direction:column;gap:5px;overflow:hidden;
+  font-family:var(--fm);font-size:8px;color:#B8BBD6;position:relative}
+.fs4-activity::after{content:'';position:absolute;bottom:0;left:0;right:0;height:14px;z-index:2;pointer-events:none;
+  background:linear-gradient(0deg,#06070F 0%,transparent 100%)}
+.fs4-activity .a{display:flex;align-items:center;gap:6px;letter-spacing:0.02em;flex-shrink:0;line-height:1}
+.fs4-activity .a .ico{width:7px;height:7px;border-radius:50%;flex-shrink:0;
+  background:radial-gradient(circle at 38% 30%,#FFE19F 0%,#FFB547 55%,#A06010 100%);box-shadow:0 0 4px rgba(255,181,71,0.45)}
+.fs4-activity .a .plus{color:#4ADE80;font-weight:700}
+.fs4-activity .a .u{color:#A8A0FF;font-weight:700}
+
+/* ===== F5 · STATS DASHBOARD (refined) ===== */
+.fs5{position:absolute;top:24px;left:0;right:0;bottom:0;background:rgba(8,10,22,0.32);z-index:2;
+  display:grid;grid-template-rows:auto 1fr;gap:8px;padding:10px}
+.fs5 .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.fs5 .kpis .k{padding:8px 9px;border-radius:6px;background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.10);position:relative}
+.fs5 .kpis .k .l{font-family:var(--fm);font-size:7px;letter-spacing:0.14em;
+  color:#6F7393;text-transform:uppercase;display:block;font-weight:700}
+.fs5 .kpis .k .v{font-family:var(--fd);font-size:20px;font-weight:700;letter-spacing:-0.02em;
+  color:#F4F5FF;display:block;margin-top:2px;line-height:1}
+.fs5 .kpis .k .tr{position:absolute;top:8px;right:8px;font-family:var(--fm);font-size:7px;font-weight:700;letter-spacing:0.04em;color:#4ADE80}
+.fs5 .kpis .k.a .v{color:#3FE0FF}
+.fs5 .kpis .k.b .v{color:#7C5CFF}
+.fs5 .kpis .k.x .v{color:#FFB547}
+.fs5 .chart{border-radius:6px;background:rgba(0,0,0,0.5);
+  border:1px solid rgba(255,255,255,0.10);position:relative;overflow:hidden}
+.fs5 .chart::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(124,92,255,0.50) 0%,transparent 75%);
+  clip-path:polygon(0% 78%,10% 62%,20% 68%,30% 40%,40% 50%,50% 28%,60% 35%,70% 18%,80% 25%,90% 14%,100% 9%,100% 100%,0% 100%)}
+
+/* ===== F6 · MAFIA ROLES STATE ===== */
+.fs6{position:absolute;top:24px;left:0;right:0;bottom:0;background:rgba(8,10,22,0.32);z-index:2;
+  display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:5px;padding:8px}
+.fs6 .r{border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px;
+  font-family:var(--fm);font-size:8.5px;font-weight:700;letter-spacing:0.10em;
+  text-transform:uppercase;border:1px solid rgba(255,255,255,0.12);
+  background:rgba(0,0,0,0.45);color:#B8BBD6;position:relative}
+.fs6 .r::before{content:'';width:14px;height:14px;border-radius:50%;flex-shrink:0;
+  background:radial-gradient(circle at 38% 30%,#FFFFFF 0%,#D8DCEC 26%,#7078A0 66%,#2A2E48 100%);
+  box-shadow:0 0 0 1.5px rgba(255,255,255,0.22)}
+.fs6 .r.m{background:rgba(255,92,107,0.22);border-color:rgba(255,92,107,0.55);color:#FFC8CC}
+.fs6 .r.s{background:rgba(63,224,255,0.18);border-color:rgba(63,224,255,0.55);color:#C8F0FF}
+.fs6 .r.d{background:rgba(124,92,255,0.24);border-color:rgba(124,92,255,0.55);color:#D4C8FF}
+.fs6 .r.x{background:rgba(255,181,71,0.20);border-color:rgba(255,181,71,0.55);color:#FFE0B5}
+.fs6 .r.now{box-shadow:inset 0 0 0 1.5px rgba(63,224,255,0.85),0 0 14px rgba(63,224,255,0.40);animation:hostBreath 3.4s ease-in-out infinite}
+
+/* 3D particles drifting between cube faces */
+.cube-particles{position:absolute;inset:0;pointer-events:none;transform-style:preserve-3d}
+.cube-particles i{position:absolute;top:50%;left:50%;width:3px;height:3px;border-radius:50%;
+  margin:-1.5px 0 0 -1.5px;
+  transform:translate3d(var(--x),var(--y),var(--z));
+  animation:particlePulse 6s ease-in-out infinite;animation-delay:var(--d,0s)}
+.cube-particles i.c{background:#3FE0FF;box-shadow:0 0 8px #3FE0FF}
+.cube-particles i.v{background:#7C5CFF;box-shadow:0 0 8px #7C5CFF}
+.cube-particles i.a{background:#FFB547;box-shadow:0 0 8px #FFB547}
+@keyframes particlePulse{0%,100%{opacity:0}50%{opacity:0.85}}
 
 /* ===== SLIDE 2 MEME ===== */
 .meme-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;flex:1;min-height:0}
@@ -756,38 +1034,38 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-edge);font-
 .meme-sub-l{font-family:var(--fm);font-size:13px;color:var(--c);letter-spacing:0.04em}
 .meme-sub-r{font-family:var(--fm);font-size:13px;color:var(--r);letter-spacing:0.04em}
 .chaos{position:relative;flex:1;min-height:0}
-.cx{position:absolute;background:var(--glass);border:1px solid var(--stroke);border-radius:11px;backdrop-filter:blur(18px);
-  box-shadow:0 12px 32px -10px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.05);
-  padding:10px 14px;font-family:var(--fm);font-size:12px;color:var(--t2)}
-.cx.tabs{top:0;left:0;right:0;display:flex;gap:4px;padding:8px 10px;background:rgba(15,17,36,0.85);transform:rotate(-1.2deg);z-index:1}
-.cx.tabs .tab{font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.04);border-radius:5px;white-space:nowrap;color:var(--t3);
+.cx{position:absolute;background:var(--glass);border:1px solid var(--stroke);border-radius:13px;backdrop-filter:blur(18px);
+  box-shadow:0 14px 38px -10px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.05);
+  padding:13px 17px;font-family:var(--fm);font-size:14px;color:var(--t2)}
+.cx.tabs{top:0;left:0;right:0;display:flex;gap:5px;padding:10px 13px;background:rgba(15,17,36,0.85);transform:rotate(-1.2deg);z-index:1}
+.cx.tabs .tab{font-size:12px;padding:5px 10px;background:rgba(255,255,255,0.04);border-radius:6px;white-space:nowrap;color:var(--t3);
   border:1px solid rgba(255,255,255,0.04)}
 .cx.tabs .tab.on{color:var(--t1);background:rgba(124,92,255,0.15);border-color:rgba(124,92,255,0.35)}
-.cx.dc{top:80px;left:8px;width:260px;transform:rotate(-2deg);border-color:rgba(88,101,242,0.30);z-index:3}
-.cx.dc .h{color:var(--r);font-weight:600;font-size:11px;display:flex;align-items:center;gap:6px;letter-spacing:0.08em}
-.cx.dc .h::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--r);box-shadow:0 0 6px var(--r);animation:lp 1.4s ease-in-out infinite}
-.cx.dc .rw{margin-top:6px;color:var(--t2);font-size:11px}
-.cx.dc .wn{margin-top:8px;padding:5px 8px;background:rgba(255,181,71,0.10);border:1px solid rgba(255,181,71,0.25);color:var(--a);border-radius:5px;font-size:10px}
-.cx.obs{top:108px;right:0;width:320px;transform:rotate(1.8deg);background:rgba(255,92,107,0.08);border-color:rgba(255,92,107,0.30);z-index:4}
-.cx.obs .e{color:var(--r);font-weight:600;font-size:11px}
-.cx.obs .b{margin-top:4px;color:var(--t2);font-size:11px}
-.cx.obs .b code{color:var(--t1);background:rgba(0,0,0,0.3);padding:1px 5px;border-radius:3px}
-.cx.sk{width:170px;background:rgba(255,212,90,0.10);border-color:rgba(255,212,90,0.30);color:rgba(255,232,150,0.92);
-  font-family:'Inter Tight',cursive;font-size:13px;line-height:1.35;padding:12px 14px}
-.cx.sk.s1{top:248px;left:16px;transform:rotate(-4deg);z-index:5}
-.cx.sk.s2{top:288px;left:198px;transform:rotate(3deg);z-index:6}
-.cx.ch{top:378px;right:18px;width:280px;transform:rotate(-1.4deg);background:rgba(124,92,255,0.06);
-  border-color:rgba(124,92,255,0.35);z-index:5;font-size:11px;color:var(--t2);line-height:1.5}
-.cx.ch .l{font-size:9px;color:var(--t3);letter-spacing:0.12em;margin-bottom:6px}
-.cx.nt{top:450px;left:8px;width:320px;transform:rotate(-1deg);z-index:4;font-size:11px;color:var(--t2)}
-.cx.nt .c{color:var(--t3);font-size:10px}
-.cx.nt .t{color:var(--t1);font-weight:600;margin-top:2px}
-.cx.wc{width:130px;height:100px;bottom:16px;right:24px;transform:rotate(2deg);background:linear-gradient(135deg,#3D2B5A,#1A1228);
+.cx.dc{top:84px;left:8px;width:320px;transform:rotate(-2deg);border-color:rgba(88,101,242,0.30);z-index:3}
+.cx.dc .h{color:var(--r);font-weight:600;font-size:13px;display:flex;align-items:center;gap:7px;letter-spacing:0.08em}
+.cx.dc .h::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--r);box-shadow:0 0 7px var(--r);animation:lp 1.4s ease-in-out infinite}
+.cx.dc .rw{margin-top:7px;color:var(--t2);font-size:13px}
+.cx.dc .wn{margin-top:9px;padding:6px 10px;background:rgba(255,181,71,0.10);border:1px solid rgba(255,181,71,0.25);color:var(--a);border-radius:6px;font-size:12px}
+.cx.obs{top:118px;right:0;width:380px;transform:rotate(1.8deg);background:rgba(255,92,107,0.08);border-color:rgba(255,92,107,0.30);z-index:4}
+.cx.obs .e{color:var(--r);font-weight:600;font-size:13px}
+.cx.obs .b{margin-top:5px;color:var(--t2);font-size:13px}
+.cx.obs .b code{color:var(--t1);background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px}
+.cx.sk{width:210px;background:rgba(255,212,90,0.10);border-color:rgba(255,212,90,0.30);color:rgba(255,232,150,0.92);
+  font-family:'Science Gothic',cursive;font-size:15px;line-height:1.35;padding:14px 16px}
+.cx.sk.s1{top:280px;left:16px;transform:rotate(-4deg);z-index:5}
+.cx.sk.s2{top:320px;left:238px;transform:rotate(3deg);z-index:6}
+.cx.ch{top:430px;right:18px;width:340px;transform:rotate(-1.4deg);background:rgba(124,92,255,0.06);
+  border-color:rgba(124,92,255,0.35);z-index:5;font-size:13px;color:var(--t2);line-height:1.5}
+.cx.ch .l{font-size:11px;color:var(--t3);letter-spacing:0.12em;margin-bottom:7px}
+.cx.nt{top:520px;left:8px;width:380px;transform:rotate(-1deg);z-index:4;font-size:13px;color:var(--t2)}
+.cx.nt .c{color:var(--t3);font-size:12px}
+.cx.nt .t{color:var(--t1);font-weight:600;margin-top:3px;font-size:13px}
+.cx.wc{width:160px;height:125px;bottom:16px;right:24px;transform:rotate(2deg);background:linear-gradient(135deg,#3D2B5A,#1A1228);
   border-color:rgba(124,92,255,0.25);z-index:7;padding:0;overflow:hidden;display:flex;align-items:flex-end;justify-content:flex-start}
-.cx.wc::after{content:'😅';position:absolute;top:12px;right:14px;font-size:24px;animation:sw 3s ease-in-out infinite}
+.cx.wc::after{content:'😅';position:absolute;top:14px;right:16px;font-size:30px;animation:sw 3s ease-in-out infinite}
 @keyframes sw{0%,100%{transform:translateY(0)}50%{transform:translateY(3px)}}
-.cx.wc .cp{position:relative;z-index:2;background:rgba(0,0,0,0.5);padding:3px 7px;margin:8px;border-radius:4px;
-  font-size:9px;color:rgba(255,255,255,0.85);letter-spacing:0.08em}
+.cx.wc .cp{position:relative;z-index:2;background:rgba(0,0,0,0.5);padding:4px 9px;margin:10px;border-radius:5px;
+  font-size:11px;color:rgba(255,255,255,0.85);letter-spacing:0.08em}
 
 /* ===== SLIDE 3 PROBLEM ===== */
 .prob-layout{display:grid;grid-template-columns:0.7fr 1.3fr;gap:48px;flex:1;min-height:0}
@@ -829,7 +1107,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-edge);font-
 .trend.c .trend-icon{background:rgba(63,224,255,0.10);color:var(--c);border-color:rgba(63,224,255,0.30)}
 .trend.a .trend-icon{background:rgba(255,181,71,0.10);color:var(--a);border-color:rgba(255,181,71,0.30)}
 .trend-title{font-family:var(--fd);font-weight:600;font-size:24px;color:var(--t1);letter-spacing:-0.012em;line-height:1.15}
-.trend-body{font-size:14.5px;color:var(--t2);line-height:1.5}
+.trend-body{font-size:14.5px;color:var(--t2);line-height:1.5;min-height:calc(14.5px * 1.5 * 2)}
 .trend-chart{margin-top:6px;border-radius:10px;background:rgba(0,0,0,0.20);border:1px solid var(--stroke);padding:14px 14px 8px}
 .trend-chart-meta{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;font-family:var(--fm);font-size:10px;letter-spacing:0.10em;color:var(--t3);text-transform:uppercase}
 .trend-chart-meta .ya{color:var(--t2)}
@@ -890,7 +1168,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-edge);font-
 .arch-foot{margin-top:8px;padding:14px 26px;border-radius:14px;background:rgba(124,92,255,0.06);
   border:1px solid rgba(124,92,255,0.35);font-family:var(--fd);font-size:17px;color:var(--t1);letter-spacing:-0.005em;
   display:flex;align-items:center;gap:14px}
-.arch-foot::before{content:'\201C';font-family:'Inter Tight';font-size:44px;color:var(--v);line-height:0}
+.arch-foot::before{content:'\201C';font-family:'Science Gothic';font-size:44px;color:var(--v);line-height:0}
 
 /* ===== SLIDE 6 PRODUCT FLOW ===== */
 .fs{position:relative}
@@ -1865,78 +2143,188 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
 =================== SLIDE 1 COVER =================== -->
 <section class="slide active cover-slide" data-slide="1">
   <div class="cover-bg">
-    <div class="cover-grid"></div>
-    <div class="cover-aurora"></div>
-    <div class="cover-glow"></div>
-    <svg class="cover-hero" viewBox="0 0 920 520" preserveAspectRatio="xMidYMid meet">
-      <defs>
-        <linearGradient id="mfill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="rgba(124,92,255,0.45)"/>
-          <stop offset="100%" stop-color="rgba(124,92,255,0.08)"/>
-        </linearGradient>
-        <linearGradient id="mfill2" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="rgba(63,224,255,0.40)"/>
-          <stop offset="100%" stop-color="rgba(63,224,255,0.06)"/>
-        </linearGradient>
-        <linearGradient id="mfill3" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="rgba(255,60,198,0.30)"/>
-          <stop offset="100%" stop-color="rgba(255,60,198,0.04)"/>
-        </linearGradient>
-      </defs>
-      <!-- back row monitors -->
-      <g opacity="0.55" class="anim d200 breath">
-        <rect x="80" y="80" width="180" height="120" rx="10" fill="url(#mfill2)" stroke="rgba(63,224,255,0.4)" stroke-width="1"/>
-        <rect x="280" y="60" width="180" height="120" rx="10" fill="url(#mfill)" stroke="rgba(124,92,255,0.4)" stroke-width="1"/>
-        <rect x="480" y="60" width="180" height="120" rx="10" fill="url(#mfill3)" stroke="rgba(255,60,198,0.4)" stroke-width="1"/>
-        <rect x="680" y="80" width="160" height="120" rx="10" fill="url(#mfill2)" stroke="rgba(63,224,255,0.4)" stroke-width="1"/>
-      </g>
-      <!-- mid row -->
-      <g opacity="0.75" class="anim d300 breath b2">
-        <rect x="160" y="240" width="220" height="160" rx="12" fill="url(#mfill)" stroke="rgba(124,92,255,0.6)" stroke-width="1.5"/>
-        <rect x="540" y="240" width="220" height="160" rx="12" fill="url(#mfill2)" stroke="rgba(63,224,255,0.6)" stroke-width="1.5"/>
-      </g>
-      <!-- center main "stage" -->
-      <g class="anim d400">
-        <rect x="340" y="200" width="240" height="180" rx="14" fill="rgba(124,92,255,0.20)" stroke="rgba(124,92,255,0.95)" stroke-width="2"/>
-        <rect x="356" y="216" width="208" height="120" rx="8" fill="rgba(10,11,20,0.6)"/>
-        <!-- camera tiles inside main -->
-        <g>
-          <rect x="364" y="224" width="46" height="36" rx="4" fill="rgba(124,92,255,0.30)"/>
-          <rect x="418" y="224" width="46" height="36" rx="4" fill="rgba(63,224,255,0.25)"/>
-          <rect x="472" y="224" width="46" height="36" rx="4" fill="rgba(255,60,198,0.20)"/>
-          <rect x="526" y="224" width="32" height="36" rx="4" fill="rgba(124,92,255,0.20)"/>
-          <rect x="364" y="266" width="46" height="36" rx="4" fill="rgba(63,224,255,0.18)"/>
-          <rect x="418" y="266" width="46" height="36" rx="4" fill="rgba(124,92,255,0.22)"/>
-          <rect x="472" y="266" width="46" height="36" rx="4" fill="rgba(255,181,71,0.20)"/>
-          <rect x="526" y="266" width="32" height="36" rx="4" fill="rgba(63,224,255,0.15)"/>
-        </g>
-        <!-- bottom bar with chat -->
-        <rect x="356" y="346" width="208" height="26" rx="4" fill="rgba(0,0,0,0.4)"/>
-        <circle class="signal-pulse" cx="368" cy="359" r="4" fill="#FF5C6B" style="filter:drop-shadow(0 0 4px #FF5C6B)"/>
-        <rect x="378" y="356" width="60" height="6" rx="2" fill="rgba(255,255,255,0.30)"/>
-        <rect x="378" y="364" width="120" height="4" rx="2" fill="rgba(255,255,255,0.15)"/>
-        <!-- top-right LIVE pill on central card -->
-        <g>
-          <rect x="538" y="210" width="32" height="12" rx="3" fill="rgba(255,92,107,0.20)" stroke="rgba(255,92,107,0.50)" stroke-width="0.5"/>
-          <circle class="signal-pulse" cx="544" cy="216" r="2" fill="#FF5C6B" style="filter:drop-shadow(0 0 3px #FF5C6B)"/>
-          <text x="550" y="219" font-family="JetBrains Mono" font-size="6" font-weight="700" fill="#FF8A95" letter-spacing="0.10em">LIVE</text>
-        </g>
-      </g>
-      <!-- connection lines -->
-      <g stroke="rgba(124,92,255,0.35)" stroke-width="1" stroke-dasharray="3 4" fill="none" class="anim d600">
-        <path d="M260 320 L 340 300"/>
-        <path d="M580 300 L 660 320"/>
-        <path d="M270 140 L 340 230"/>
-        <path d="M580 230 L 660 140"/>
-      </g>
-      <!-- glow dots on connections -->
-      <g class="anim d700">
-        <circle cx="300" cy="310" r="3" fill="#7C5CFF"><animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" repeatCount="indefinite"/></circle>
-        <circle cx="620" cy="310" r="3" fill="#3FE0FF"><animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0.6s" repeatCount="indefinite"/></circle>
-        <circle cx="305" cy="185" r="3" fill="#7C5CFF"><animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="1.2s" repeatCount="indefinite"/></circle>
-        <circle cx="615" cy="185" r="3" fill="#3FE0FF"><animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="1.8s" repeatCount="indefinite"/></circle>
-      </g>
-    </svg>
+    <div class="cover-cube-stage" aria-hidden="true">
+      <div class="cover-cube-orbit">
+        <div class="cover-cube">
+          <div class="cube-particles">
+            <i class="c" style="--x:-260px;--y:-160px;--z:260px;--d:0s"></i>
+            <i class="v" style="--x:240px;--y:-220px;--z:-180px;--d:1.2s"></i>
+            <i class="a" style="--x:-200px;--y:200px;--z:240px;--d:2.4s"></i>
+            <i class="c" style="--x:260px;--y:180px;--z:-260px;--d:3.0s"></i>
+            <i class="v" style="--x:-280px;--y:60px;--z:-200px;--d:0.6s"></i>
+            <i class="a" style="--x:220px;--y:-60px;--z:280px;--d:4.0s"></i>
+            <i class="c" style="--x:80px;--y:280px;--z:-220px;--d:1.8s"></i>
+            <i class="v" style="--x:-60px;--y:-280px;--z:200px;--d:3.6s"></i>
+          </div>
+
+          <!-- F1 · Live cam grid · Mafia room -->
+          <div class="cube-face f-front">
+            <div class="fs">
+              <div class="fs-bar"><span class="live"></span><span class="ttl">Mafia · Day 3 · Live Room</span><span class="views">12.4K LIVE</span></div>
+              <div class="fs1">
+                <div class="fs1-row top">
+                  <div class="tile host"><span class="lab">host</span><span class="mic"></span></div>
+                  <div class="tile blue speaking">
+                    <div class="wave"><i></i><i></i><i></i><i></i></div>
+                    <span class="lab">blue_01</span>
+                  </div>
+                  <div class="tile blue"><span class="lab">blue_02</span><span class="mic"></span></div>
+                  <div class="tile blue"><span class="lab">blue_03</span><span class="mic"></span></div>
+                </div>
+                <div class="fs1-mid">
+                  <div class="state">Day Round · Vote</div>
+                </div>
+                <div class="fs1-row bot">
+                  <div class="tile red"><span class="lab">red_01</span><span class="mic"></span></div>
+                  <div class="tile red"><span class="lab">red_02</span><span class="mic"></span></div>
+                  <div class="tile red"><span class="lab">red_03</span><span class="mic"></span></div>
+                  <div class="tile doc"><span class="lab">doctor</span><span class="mic"></span></div>
+                </div>
+              </div>
+              <div class="fs-scan"></div>
+            </div>
+          </div>
+
+          <!-- F2 · Twitch-style chat panel -->
+          <div class="cube-face f-back">
+            <div class="fs">
+              <div class="fs-bar"><span class="live"></span><span class="ttl">Live Chat</span><span class="views">340/MIN</span></div>
+              <div class="fs2-wrap">
+                <div class="fs2-head"><span class="dot"></span><span>Stream chat</span><span class="count">340/min</span></div>
+                <div class="fs2-feed">
+                  <div class="feed-inner">
+                    <div class="fs2-msg u-c"><span class="u">@viewer_42</span><span class="t">vote blue</span><span class="icn pin">★</span></div>
+                    <div class="fs2-msg u-v"><span class="u">@chat_friend</span><span class="t">red sus</span></div>
+                    <div class="fs2-msg u-a"><span class="u">@new_follower</span><span class="t">host тримайся</span></div>
+                    <div class="fs2-msg u-m"><span class="u">@cubeit_99</span><span class="t">+100</span><span class="icn coin">◈</span></div>
+                    <div class="fs2-msg u-g"><span class="u">@midnight_2k</span><span class="t">clip that!</span></div>
+                    <div class="fs2-msg u-c"><span class="u">@neon_kate</span><span class="t">vote red</span></div>
+                    <div class="fs2-msg u-r"><span class="u">@rng_god</span><span class="t">doc reveal?</span></div>
+                    <div class="fs2-msg u-v"><span class="u">@plot_twist</span><span class="t">blue_02 is maf</span><span class="icn heart">♥</span></div>
+                    <!-- duplicated for seamless loop -->
+                    <div class="fs2-msg u-c"><span class="u">@viewer_42</span><span class="t">vote blue</span><span class="icn pin">★</span></div>
+                    <div class="fs2-msg u-v"><span class="u">@chat_friend</span><span class="t">red sus</span></div>
+                    <div class="fs2-msg u-a"><span class="u">@new_follower</span><span class="t">host тримайся</span></div>
+                    <div class="fs2-msg u-m"><span class="u">@cubeit_99</span><span class="t">+100</span><span class="icn coin">◈</span></div>
+                    <div class="fs2-msg u-g"><span class="u">@midnight_2k</span><span class="t">clip that!</span></div>
+                    <div class="fs2-msg u-c"><span class="u">@neon_kate</span><span class="t">vote red</span></div>
+                    <div class="fs2-msg u-r"><span class="u">@rng_god</span><span class="t">doc reveal?</span></div>
+                    <div class="fs2-msg u-v"><span class="u">@plot_twist</span><span class="t">blue_02 is maf</span><span class="icn heart">♥</span></div>
+                  </div>
+                </div>
+                <div class="fs2-vote">
+                  <span class="lbl">Vote</span>
+                  <div class="bar"></div>
+                  <span class="pct"><span class="b">67%</span><span class="r">33%</span></span>
+                </div>
+              </div>
+              <div class="fs-scan" style="animation-delay:2.4s"></div>
+            </div>
+          </div>
+
+          <!-- F3 · Streamer control room -->
+          <div class="cube-face f-right">
+            <div class="fs">
+              <div class="fs-bar"><span class="live"></span><span class="ttl">Control Room</span><span class="views">v0.6</span></div>
+              <div class="fs3-ctrl">
+                <div class="fs3-scene">
+                  <span class="sl">Scene</span>
+                  <span class="sn">Day Round</span>
+                  <span class="st">On Air</span>
+                </div>
+                <div class="fs3-audio">
+                  <span class="lbl">Audio</span>
+                  <div class="bars"><i></i><i></i><i></i><i></i><i></i><i class="peak"></i><i></i><i></i></div>
+                </div>
+                <div class="fs3-row">
+                  <div class="fs3-card"><span class="lbl">Round</span><span class="val">3 / 7</span></div>
+                  <div class="fs3-card timer"><span class="lbl">Timer</span><span class="val">02:34</span></div>
+                </div>
+                <div class="fs3-row">
+                  <div class="fs3-card"><span class="lbl">Players</span><span class="val">4 alive</span></div>
+                  <div class="fs3-card warn"><span class="wdot"></span><span class="lbl">Audio</span><span class="val">mic 4 low</span></div>
+                </div>
+                <div class="fs3-chips">
+                  <div class="fs3-chip clip">Clip</div>
+                  <div class="fs3-chip">Overlay</div>
+                  <div class="fs3-chip">Mute</div>
+                  <div class="fs3-chip">Cut</div>
+                </div>
+                <div class="fs3-hint">1 hub instead of <b>OBS + Discord + Bots</b></div>
+              </div>
+              <div class="fs-scan" style="animation-delay:3.6s"></div>
+            </div>
+          </div>
+
+          <!-- F4 · Viewer economy / XP / coins -->
+          <div class="cube-face f-left">
+            <div class="fs">
+              <div class="fs-bar"><span class="live"></span><span class="ttl">Viewer Economy</span><span class="views">XP · COINS</span></div>
+              <div class="fs4-econ">
+                <div class="fs4-coin">
+                  <span class="ico"></span>
+                  <div class="balance">
+                    <span class="lbl">Coins</span>
+                    <span class="val">12,480</span>
+                  </div>
+                  <span class="delta">+340 today</span>
+                </div>
+                <div class="fs4-xp">
+                  <div class="row"><span>LVL</span><span class="lvl">14 → 15</span><span class="pct">75%</span></div>
+                  <div class="bar"></div>
+                </div>
+                <div class="fs4-perks">
+                  <span class="p vip">VIP</span>
+                  <span class="p mod">MOD</span>
+                  <span class="p t2">TIER 2</span>
+                  <span class="p donor">DONOR</span>
+                </div>
+                <div class="fs4-activity">
+                  <div class="a"><span class="ico"></span><span class="plus">+50</span><span class="u">@viewer_42</span></div>
+                  <div class="a"><span class="ico"></span><span class="plus">+25</span><span class="u">@new_follower</span></div>
+                  <div class="a"><span class="ico"></span><span class="plus">+120</span><span class="u">@chat_friend</span></div>
+                  <div class="a"><span class="ico"></span><span class="plus">+10</span><span class="u">@midnight_2k</span></div>
+                </div>
+              </div>
+              <div class="fs-scan" style="animation-delay:1.8s"></div>
+            </div>
+          </div>
+
+          <!-- F5 · Live stats dashboard -->
+          <div class="cube-face f-top">
+            <div class="fs">
+              <div class="fs-bar"><span class="live"></span><span class="ttl">Stream Stats</span><span class="views">REAL-TIME</span></div>
+              <div class="fs5">
+                <div class="kpis">
+                  <div class="k a"><span class="l">Viewers</span><span class="v">12.4K</span><span class="tr">↑ 8%</span></div>
+                  <div class="k b"><span class="l">Donations</span><span class="v">$847</span><span class="tr">↑ 22%</span></div>
+                  <div class="k x"><span class="l">Chat/min</span><span class="v">340</span><span class="tr">↑ 12%</span></div>
+                </div>
+                <div class="chart"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- F6 · Mafia roles state -->
+          <div class="cube-face f-bottom">
+            <div class="fs">
+              <div class="fs-bar"><span class="live"></span><span class="ttl">Mafia · Night 2 · Roles</span><span class="views">ALIVE 4/8</span></div>
+              <div class="fs6">
+                <div class="r m">Maf</div>
+                <div class="r s now">Sheriff</div>
+                <div class="r d">Doctor</div>
+                <div class="r">Civ</div>
+                <div class="r x">Don</div>
+                <div class="r">Civ</div>
+                <div class="r m">Maf</div>
+                <div class="r">Civ</div>
+                <div class="r">Civ</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="cover-corner tl anim" style="display:flex;align-items:center;gap:14px">
@@ -1951,24 +2339,9 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
     <div class="cover-claim anim d500">«Одне шоу не має триматися на Discord, OBS, ботах і ручних правилах.»</div>
   </div>
 
-  <div class="stat-ribbon anim d700">
-    <div class="stat"><div class="v">5</div><div class="l">Ігрових форматів</div></div>
-    <div class="stat">
-      <div class="v dual"><span class="old">12</span><span class="arr">→</span><span class="new">20</span></div>
-      <div class="l">Стрімерів у пілоті</div>
-      <div class="stat-meta">+8 у суботу</div>
-    </div>
-    <div class="stat"><div class="v">12</div><div class="l">Камер у тесті</div></div>
-    <div class="stat"><div class="v">7+<span style="font-size:14px;color:var(--t3)">год</span></div><div class="l">Live-тестів</div></div>
-    <div class="stat"><div class="v">4</div><div class="l">Локалі</div></div>
-  </div>
-
   <div class="cover-corner bl anim d800">
     <div class="label">Фаундери</div>
-    <div class="cover-founders">Богдан&nbsp;Недеберний <span style="color:var(--c);font-family:var(--fm);font-size:13px;letter-spacing:0.10em;font-weight:600">@nad1ch</span> &nbsp;·&nbsp; Роман&nbsp;Дужий</div>
-  </div>
-  <div class="cover-corner br anim d800">
-    <div class="cover-hint">Натисни<span class="arrow">→</span></div>
+    <div class="cover-founders">Богдан&nbsp;Недеберний <span style="color:var(--c);font-family:var(--fm);font-size:13px;letter-spacing:0.10em;font-weight:600">@nad1ch</span><br>Роман&nbsp;Дужий</div>
   </div>
 </section>
 
@@ -1976,7 +2349,7 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
 <section class="slide" data-slide="2">
   <div style="margin-bottom:24px">
     <div class="eyebrow anim">Дві сторони одного шоу</div>
-    <h2 class="hd h3 anim d100" style="margin-top:8px;line-height:1.05;white-space:nowrap">Глядач бачить шоу&nbsp;— стрімер бореться з&nbsp;шістьма інструментами</h2>
+    <h2 class="hd h3 anim d100" style="margin-top:8px;line-height:1.08;font-size:46px;max-width:1600px">Глядач бачить шоу&nbsp;— стрімер бореться<br>з&nbsp;шістьма інструментами</h2>
   </div>
   <div class="meme-grid">
     <div class="meme-side l anim d200">
@@ -2221,7 +2594,7 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
 
 <!-- =================== SLIDE 3 · SYSTEM FAILURE BOARD =================== -->
 <section class="slide" data-slide="3">
-  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;gap:24px">
+  <div style="display:flex;align-items:baseline;justify-content:flex-start;margin-bottom:14px;gap:32px;flex-wrap:wrap">
     <div>
       <div class="eyebrow anim">Проблема&nbsp;— діагноз</div>
       <h2 class="hd h3 anim d100" style="margin-top:8px;line-height:1.05;white-space:nowrap">Шість точок, де ламається поточний show stack</h2>
@@ -2229,7 +2602,7 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
     <div class="anim d200" style="display:flex;gap:8px;align-items:center;flex-wrap:nowrap">
       <span class="pill med"><span class="dot"></span>Medium</span>
       <span class="pill r"><span class="dot"></span>High</span>
-      <span class="pill a"><span class="dot"></span>Critical · root cause</span>
+      <span class="pill a" style="white-space:nowrap"><span class="dot"></span>Critical</span>
     </div>
   </div>
 
@@ -2353,9 +2726,6 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
         <span class="eyebrow anim">Чому зараз</span>
         <h2 class="hd anim d100" style="margin-top:8px;font-size:60px;letter-spacing:-0.022em;line-height:1.05;white-space:nowrap">Три тренди зустрілись в одному вікні.</h2>
       </div>
-      <p class="body anim d200" style="max-width:440px;font-size:14px;color:var(--t2);text-align:right;line-height:1.5;padding-bottom:6px">
-        Інтерактивність, пряма монетизація глядачами, дешеві AI-формати — усе одночасно. <b style="color:var(--t1)">Уперше</b> можна побудувати цей продукт.
-      </p>
     </div>
 
     <div class="wn-grid">
@@ -2708,9 +3078,8 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
   <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px">
     <div>
       <div class="eyebrow anim">Як працює одне шоу</div>
-      <h2 class="hd h2 anim d100" style="margin-top:6px">Один цикл — від ідеї до кліпу.</h2>
+      <h2 class="hd h3 anim d100" style="margin-top:6px">Автоматичний цикл&nbsp;— від ідеї до популярності.</h2>
     </div>
-    <div class="anim d200" style="font-family:var(--fm);font-size:12px;color:var(--t3);letter-spacing:0.08em">креатор → учасники → гра → глядачі → кліп → нова аудиторія</div>
   </div>
 
   <div class="pl-layout">
@@ -2732,14 +3101,14 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
                 <rect x="6" y="6" width="168" height="14" rx="3" fill="rgba(124,92,255,0.10)" stroke="rgba(124,92,255,0.30)"/>
                 <text x="14" y="16" font-family="JetBrains Mono" font-size="6" fill="#C8B4FF">+ Нове шоу</text>
                 <rect x="6" y="26" width="52" height="40" rx="4" fill="rgba(124,92,255,0.20)" stroke="rgba(124,92,255,0.7)"/>
-                <text x="32" y="44" font-family="Inter Tight" font-size="7" font-weight="600" fill="#F4F5FF" text-anchor="middle">Mafia</text>
+                <text x="32" y="44" font-family="Science Gothic" font-size="7" font-weight="600" fill="#F4F5FF" text-anchor="middle">Mafia</text>
                 <circle cx="32" cy="54" r="3" fill="#7C5CFF"/>
                 <rect x="64" y="26" width="52" height="40" rx="4" fill="rgba(63,224,255,0.10)" stroke="rgba(63,224,255,0.40)"/>
-                <text x="90" y="44" font-family="Inter Tight" font-size="7" font-weight="600" fill="#F4F5FF" text-anchor="middle">Checkers</text>
+                <text x="90" y="44" font-family="Science Gothic" font-size="7" font-weight="600" fill="#F4F5FF" text-anchor="middle">Checkers</text>
                 <rect x="122" y="26" width="52" height="40" rx="4" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.15)"/>
-                <text x="148" y="44" font-family="Inter Tight" font-size="7" font-weight="600" fill="#B8BBD6" text-anchor="middle">Custom</text>
+                <text x="148" y="44" font-family="Science Gothic" font-size="7" font-weight="600" fill="#B8BBD6" text-anchor="middle">Custom</text>
                 <rect x="6" y="74" width="168" height="20" rx="4" fill="#7C5CFF"/>
-                <text x="90" y="87" font-family="Inter Tight" font-size="8" font-weight="700" fill="#0A0B14" text-anchor="middle">Запустити →</text>
+                <text x="90" y="87" font-family="Science Gothic" font-size="8" font-weight="700" fill="#0A0B14" text-anchor="middle">Запустити →</text>
               </svg>
               <span class="pl-mock-tag">GIF · запис</span>
             </div>
@@ -2825,10 +3194,10 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
                 <rect x="6" y="6" width="78" height="84" rx="4" fill="rgba(124,92,255,0.05)" stroke="rgba(124,92,255,0.30)"/>
                 <text x="14" y="18" font-family="JetBrains Mono" font-size="6" fill="#C8B4FF" font-weight="700">VOTE</text>
                 <rect x="14" y="24" width="62" height="14" rx="3" fill="rgba(255,92,107,0.18)" stroke="rgba(255,92,107,0.5)"/>
-                <text x="20" y="33" font-family="Inter Tight" font-size="7" font-weight="600" fill="#FF5C6B">RED</text>
+                <text x="20" y="33" font-family="Science Gothic" font-size="7" font-weight="600" fill="#FF5C6B">RED</text>
                 <text x="70" y="33" font-family="JetBrains Mono" font-size="9" fill="#FF5C6B" text-anchor="end" font-weight="700">47</text>
                 <rect x="14" y="42" width="62" height="14" rx="3" fill="rgba(63,224,255,0.10)" stroke="rgba(63,224,255,0.40)"/>
-                <text x="20" y="51" font-family="Inter Tight" font-size="7" font-weight="600" fill="#3FE0FF">BLUE</text>
+                <text x="20" y="51" font-family="Science Gothic" font-size="7" font-weight="600" fill="#3FE0FF">BLUE</text>
                 <text x="70" y="51" font-family="JetBrains Mono" font-size="9" fill="#3FE0FF" text-anchor="end" font-weight="700">31</text>
                 <rect x="92" y="6" width="82" height="84" rx="4" fill="rgba(0,0,0,0.3)" stroke="rgba(255,255,255,0.08)"/>
                 <text x="100" y="18" font-family="JetBrains Mono" font-size="6" fill="#6F7393">TWITCH CHAT</text>
@@ -2858,7 +3227,7 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
                 <polygon points="85 30 100 36 85 42" fill="#FFB547"/>
                 <text x="90" y="58" font-family="JetBrains Mono" font-size="5" fill="#FFB547" text-anchor="middle" font-weight="700">00:42</text>
                 <rect x="20" y="72" width="140" height="18" rx="4" fill="rgba(255,181,71,0.10)" stroke="rgba(255,181,71,0.40)"/>
-                <text x="28" y="84" font-family="Inter Tight" font-size="8" font-weight="600" fill="#FFB547">✓ Highlight saved</text>
+                <text x="28" y="84" font-family="Science Gothic" font-size="8" font-weight="600" fill="#FFB547">✓ Highlight saved</text>
                 <text x="152" y="84" font-family="JetBrains Mono" font-size="6" fill="#FFB547" text-anchor="end">Copy link</text>
               </svg>
               <span class="pl-mock-tag concept">6-міс concept</span>
@@ -2931,14 +3300,14 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
           <rect x="6" y="6" width="168" height="14" rx="3" fill="rgba(124,92,255,0.10)" stroke="rgba(124,92,255,0.30)"/>
           <text x="14" y="16" font-family="JetBrains Mono" font-size="6" fill="#C8B4FF">+ Нове шоу</text>
           <rect x="6" y="26" width="52" height="40" rx="4" fill="rgba(124,92,255,0.20)" stroke="rgba(124,92,255,0.7)"/>
-          <text x="32" y="44" font-family="Inter Tight" font-size="7" font-weight="600" fill="#F4F5FF" text-anchor="middle">Mafia</text>
+          <text x="32" y="44" font-family="Science Gothic" font-size="7" font-weight="600" fill="#F4F5FF" text-anchor="middle">Mafia</text>
           <circle cx="32" cy="54" r="3" fill="#7C5CFF"/>
           <rect x="64" y="26" width="52" height="40" rx="4" fill="rgba(63,224,255,0.10)" stroke="rgba(63,224,255,0.40)"/>
-          <text x="90" y="44" font-family="Inter Tight" font-size="7" font-weight="600" fill="#F4F5FF" text-anchor="middle">Checkers</text>
+          <text x="90" y="44" font-family="Science Gothic" font-size="7" font-weight="600" fill="#F4F5FF" text-anchor="middle">Checkers</text>
           <rect x="122" y="26" width="52" height="40" rx="4" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.15)"/>
-          <text x="148" y="44" font-family="Inter Tight" font-size="7" font-weight="600" fill="#B8BBD6" text-anchor="middle">Custom</text>
+          <text x="148" y="44" font-family="Science Gothic" font-size="7" font-weight="600" fill="#B8BBD6" text-anchor="middle">Custom</text>
           <rect x="6" y="74" width="168" height="20" rx="4" fill="#7C5CFF"/>
-          <text x="90" y="87" font-family="Inter Tight" font-size="8" font-weight="700" fill="#0A0B14" text-anchor="middle">Запустити →</text>
+          <text x="90" y="87" font-family="Science Gothic" font-size="8" font-weight="700" fill="#0A0B14" text-anchor="middle">Запустити →</text>
         </svg>
       </div>
       <div class="fs-tag">GIF · запис пізніше</div>
@@ -3015,10 +3384,10 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
           <rect x="6" y="6" width="78" height="84" rx="4" fill="rgba(124,92,255,0.05)" stroke="rgba(124,92,255,0.30)"/>
           <text x="14" y="20" font-family="JetBrains Mono" font-size="6" fill="#C8B4FF" font-weight="700">ГОЛОСУВАННЯ</text>
           <rect x="14" y="28" width="62" height="14" rx="3" fill="rgba(255,92,107,0.18)" stroke="rgba(255,92,107,0.5)"/>
-          <text x="20" y="37" font-family="Inter Tight" font-size="7" font-weight="600" fill="#FF5C6B">RED</text>
+          <text x="20" y="37" font-family="Science Gothic" font-size="7" font-weight="600" fill="#FF5C6B">RED</text>
           <text x="70" y="37" font-family="JetBrains Mono" font-size="9" fill="#FF5C6B" text-anchor="end" font-weight="700">47</text>
           <rect x="14" y="46" width="62" height="14" rx="3" fill="rgba(63,224,255,0.10)" stroke="rgba(63,224,255,0.40)"/>
-          <text x="20" y="55" font-family="Inter Tight" font-size="7" font-weight="600" fill="#3FE0FF">BLUE</text>
+          <text x="20" y="55" font-family="Science Gothic" font-size="7" font-weight="600" fill="#3FE0FF">BLUE</text>
           <text x="70" y="55" font-family="JetBrains Mono" font-size="9" fill="#3FE0FF" text-anchor="end" font-weight="700">31</text>
           <rect x="14" y="68" width="62" height="14" rx="3" fill="rgba(255,255,255,0.04)"/>
           <text x="45" y="77" font-family="JetBrains Mono" font-size="6" fill="#6F7393" text-anchor="middle">ще 12с</text>
@@ -3046,7 +3415,7 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
           <polygon points="85 30 100 36 85 42" fill="#FFB547"/>
           <text x="90" y="58" font-family="JetBrains Mono" font-size="5" fill="#FFB547" text-anchor="middle" font-weight="700">00:42</text>
           <rect x="20" y="72" width="140" height="18" rx="4" fill="rgba(255,181,71,0.10)" stroke="rgba(255,181,71,0.40)"/>
-          <text x="28" y="84" font-family="Inter Tight" font-size="8" font-weight="600" fill="#FFB547">✓ Highlight saved</text>
+          <text x="28" y="84" font-family="Science Gothic" font-size="8" font-weight="600" fill="#FFB547">✓ Highlight saved</text>
           <text x="152" y="84" font-family="JetBrains Mono" font-size="6" fill="#FFB547" text-anchor="end">Copy link</text>
         </svg>
       </div>
@@ -3620,7 +3989,7 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
           <circle cx="-70" cy="0" r="5" fill="#7C5CFF" opacity="0.7"/>
         </g>
         <circle cx="0" cy="0" r="22" fill="rgba(124,92,255,0.25)" stroke="rgba(124,92,255,0.7)" stroke-width="1.5" class="lp-center-pulse"/>
-        <text x="0" y="6" text-anchor="middle" font-family="Inter Tight" font-size="14" font-weight="700" fill="#F4F5FF">₵</text>
+        <text x="0" y="6" text-anchor="middle" font-family="Science Gothic" font-size="14" font-weight="700" fill="#F4F5FF">₵</text>
         <text x="0" y="-82" font-family="JetBrains Mono" font-size="9" fill="#B8BBD6" text-anchor="middle">шоу</text>
         <text x="80" y="4" font-family="JetBrains Mono" font-size="9" fill="#B8BBD6" text-anchor="middle">заробив</text>
         <text x="0" y="92" font-family="JetBrains Mono" font-size="9" fill="#B8BBD6" text-anchor="middle">витратив</text>
@@ -4525,7 +4894,7 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
             <path d="M 39 50 Q 39 32 65 32 Q 91 32 91 50" stroke="#3FE0FF" stroke-width="2.5" fill="none"/>
             <ellipse cx="39" cy="54" rx="5" ry="7" fill="#3FE0FF"/>
             <ellipse cx="91" cy="54" rx="5" ry="7" fill="#3FE0FF"/>
-            <text x="65" y="62" font-family="Inter Tight" font-size="22" font-weight="800" fill="#F4F5FF" text-anchor="middle" letter-spacing="-0.5">BN</text>
+            <text x="65" y="62" font-family="Science Gothic" font-size="22" font-weight="800" fill="#F4F5FF" text-anchor="middle" letter-spacing="-0.5">BN</text>
             <circle cx="100" cy="22" r="6" fill="#FF5C6B"><animate attributeName="opacity" values="1;0.4;1" dur="1.6s" repeatCount="indefinite"/></circle>
           </svg>
         </div>
@@ -4606,7 +4975,7 @@ body.print-mode #nav,body.print-mode #particles{display:none!important}
             <g stroke="#FFB547" stroke-width="2" fill="none">
               <circle cx="55" cy="52" r="7"/><circle cx="78" cy="52" r="7"/><line x1="62" y1="52" x2="71" y2="52"/>
             </g>
-            <text x="65" y="76" font-family="Inter Tight" font-size="22" font-weight="800" fill="#F4F5FF" text-anchor="middle">R</text>
+            <text x="65" y="76" font-family="Science Gothic" font-size="22" font-weight="800" fill="#F4F5FF" text-anchor="middle">R</text>
             <g fill="#FFB547">
               <circle cx="100" cy="22" r="3"/><circle cx="106" cy="28" r="2"/><circle cx="94" cy="28" r="2"/>
             </g>
