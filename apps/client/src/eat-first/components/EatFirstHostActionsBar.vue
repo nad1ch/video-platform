@@ -86,12 +86,27 @@ const labels = computed<GameHostActionsLabels>(() => ({
 }))
 
 function onSetMuteAll(muted: boolean): void {
+  if (import.meta.env.DEV) {
+    console.info('[eat-first:adapter:mute-all]', {
+      muted,
+      isHost: isEatFirstRoomHost.value,
+    })
+  }
   if (!isEatFirstRoomHost.value) return
   muteAllActive.value = muted
   emit('force-mute-all', muted)
 }
 
 function onReshuffle(): void {
+  if (import.meta.env.DEV) {
+    console.info('[eat-first:adapter:reshuffle]', {
+      isHost: isEatFirstRoomHost.value,
+      canReshuffle: canReshuffle.value,
+      playerOrderLength: eatFirstShell.playerOrder.length,
+      playerCount: eatFirstShell.playerCount,
+      connectedPlayerCount: eatFirstShell.connectedPlayerCount,
+    })
+  }
   if (!isEatFirstRoomHost.value || !canReshuffle.value) return
   emit('reshuffle')
 }

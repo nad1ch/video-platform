@@ -644,10 +644,22 @@ function eatFirstHostPeerId(room: Room): string | null {
  */
 function isEatFirstHostPeer(room: Room, peer: Peer): boolean {
   const ownerUserId = getEatFirstOwnerUserId(room.id)
+  const peerUserId = typeof peer.userId === 'string' ? peer.userId.trim() : ''
+  if (process.env.NODE_ENV !== 'production') {
+    const ownerNonEmpty = ownerUserId != null && ownerUserId.length > 0
+    const peerNonEmpty = peerUserId.length > 0
+    console.info('[eat-first:server:host-check]', {
+      roomId: room.id,
+      baseGameId: eatFirstGameIdFromRoomId(room.id),
+      peerId: peer.id,
+      peerUserId,
+      ownerUserId,
+      match: ownerNonEmpty && peerNonEmpty && peerUserId === ownerUserId,
+    })
+  }
   if (ownerUserId == null || ownerUserId.length === 0) {
     return false
   }
-  const peerUserId = typeof peer.userId === 'string' ? peer.userId.trim() : ''
   if (peerUserId.length === 0) {
     return false
   }
@@ -2175,6 +2187,14 @@ export async function handleEatFirstForceMuteAll(
   const rp = resolveEatFirstPeerAndRoom(socket, deps)
   if (!rp) return
   const { peer, room } = rp
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[eat-first:server:eat-action:enter]', {
+      type: 'eat:force-mute-all',
+      roomId: room.id,
+      peerId: peer.id,
+      peerUserId: peer.userId,
+    })
+  }
   if (!isEatFirstHostPeer(room, peer)) return
 
   const muted = payload.muted !== false
@@ -2672,6 +2692,14 @@ export async function handleEatFirstTableRoundDeal(socket: WsSocket, deps: Signa
   const rp = resolveEatFirstPeerAndRoom(socket, deps)
   if (!rp) return
   const { peer, room } = rp
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[eat-first:server:eat-action:enter]', {
+      type: 'eat:table-round-deal',
+      roomId: room.id,
+      peerId: peer.id,
+      peerUserId: peer.userId,
+    })
+  }
   if (!isEatFirstHostPeer(room, peer)) return
   const gameId = eatFirstGameIdFromRoomId(room.id)
   if (!gameId) return
@@ -2715,6 +2743,14 @@ export async function handleEatFirstTimerStart(
   const rp = resolveEatFirstPeerAndRoom(socket, deps)
   if (!rp) return
   const { peer, room } = rp
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[eat-first:server:eat-action:enter]', {
+      type: 'eat:timer-start',
+      roomId: room.id,
+      peerId: peer.id,
+      peerUserId: peer.userId,
+    })
+  }
   if (!isEatFirstHostPeer(room, peer)) return
 
   const { startedAt, duration } = payload
@@ -2752,6 +2788,14 @@ export async function handleEatFirstTimerStop(socket: WsSocket, deps: SignalingD
   const rp = resolveEatFirstPeerAndRoom(socket, deps)
   if (!rp) return
   const { peer, room } = rp
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[eat-first:server:eat-action:enter]', {
+      type: 'eat:timer-stop',
+      roomId: room.id,
+      peerId: peer.id,
+      peerUserId: peer.userId,
+    })
+  }
   if (!isEatFirstHostPeer(room, peer)) return
 
   setEatFirstTimer(room.id, null)

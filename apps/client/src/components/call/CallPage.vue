@@ -669,18 +669,41 @@ const { callToasts, pushCallToast } = useCallPresenceToasts({
 })
 
 function onEatFirstForceMuteAll(muted: boolean): void {
+  if (import.meta.env.DEV) {
+    console.info('[eat-first:cp:mute-all:enter]', {
+      muted,
+      isEatFirstRoute: isEatFirstRoute.value,
+      isHost: eatFirstShell.isEatFirstRoomHost,
+    })
+  }
   if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) {
     return
+  }
+  if (import.meta.env.DEV) {
+    console.info('[eat-first:cp:ws-send]', {
+      type: EAT_FIRST_FORCE_MUTE_ALL_SIGNAL,
+      payload: { muted },
+    })
   }
   sendSignalingMessage({ type: EAT_FIRST_FORCE_MUTE_ALL_SIGNAL, payload: { muted } })
 }
 
 function onEatFirstReshuffle(): void {
+  if (import.meta.env.DEV) {
+    console.info('[eat-first:cp:reshuffle:enter]', {
+      isEatFirstRoute: isEatFirstRoute.value,
+      isHost: eatFirstShell.isEatFirstRoomHost,
+    })
+  }
   if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) {
     return
   }
   if (import.meta.env.DEV) {
     callPageLog.info('[eat-first:ws:send]', { type: EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL, payload: {} })
+    console.info('[eat-first:cp:ws-send]', {
+      type: EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL,
+      payload: {},
+    })
   }
   sendSignalingMessage({
     type: EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL,
@@ -844,6 +867,13 @@ function onEatFirstHostActionEvent(ev: Event): void {
 const EAT_FIRST_HOST_ACTION_EVENT = 'streamassist:eat-first:host-action'
 
 function onEatFirstTimerActionEvent(ev: Event): void {
+  if (import.meta.env.DEV) {
+    console.info('[eat-first:cp:timer:enter]', {
+      detail: (ev as CustomEvent).detail,
+      isEatFirstRoute: isEatFirstRoute.value,
+      isHost: eatFirstShell.isEatFirstRoomHost,
+    })
+  }
   if (!isEatFirstRoute.value) return
   if (!eatFirstShell.isEatFirstRoomHost) return
   const detail = (ev as CustomEvent).detail
@@ -854,6 +884,12 @@ function onEatFirstTimerActionEvent(ev: Event): void {
     const durationSec =
       typeof raw === 'number' && Number.isFinite(raw) ? Math.max(5, Math.floor(raw)) : 30
     const durationMs = durationSec * 1000
+    if (import.meta.env.DEV) {
+      console.info('[eat-first:cp:ws-send]', {
+        type: EatFirstWs.timerStart,
+        payload: { startedAt: Date.now(), duration: durationMs },
+      })
+    }
     sendSignalingMessage({
       type: EatFirstWs.timerStart,
       payload: { startedAt: Date.now(), duration: durationMs },
@@ -861,6 +897,12 @@ function onEatFirstTimerActionEvent(ev: Event): void {
     return
   }
   if (action === 'timer-stop') {
+    if (import.meta.env.DEV) {
+      console.info('[eat-first:cp:ws-send]', {
+        type: EatFirstWs.timerStop,
+        payload: {},
+      })
+    }
     sendSignalingMessage({ type: EatFirstWs.timerStop, payload: {} })
   }
 }

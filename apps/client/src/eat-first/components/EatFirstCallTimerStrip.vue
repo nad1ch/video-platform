@@ -128,6 +128,15 @@ function dispatchEatFirstTimerAction(detail: Record<string, unknown>): void {
 }
 
 function onStart(durationMs: number): void {
+  if (import.meta.env.DEV) {
+    console.info('[eat-first:adapter:timer-start]', {
+      durationMs,
+      isHost: isHost.value,
+      viewMode: props.viewMode,
+      disabled: disabled.value,
+      gameId: props.gameId,
+    })
+  }
   if (!isHost.value || props.viewMode) return
   if (disabled.value) return
   const durationSec = Math.max(5, Math.floor(durationMs / 1000))
@@ -135,6 +144,14 @@ function onStart(durationMs: number): void {
 }
 
 function onStop(): void {
+  if (import.meta.env.DEV) {
+    console.info('[eat-first:adapter:timer-stop]', {
+      isHost: isHost.value,
+      viewMode: props.viewMode,
+      disabled: disabled.value,
+      gameId: props.gameId,
+    })
+  }
   if (!isHost.value || props.viewMode) return
   if (disabled.value) return
   dispatchEatFirstTimerAction({ action: 'timer-stop' })
