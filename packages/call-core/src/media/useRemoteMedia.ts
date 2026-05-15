@@ -1117,11 +1117,35 @@ export function useRemoteMedia() {
       }
     } catch (err) {
       consumeLifecycle.releaseReservation(producerId)
+      // M2: roll back the optimistic `producerInfoById.set` above. Without
+      // this, a failed consume leaves stale producer metadata, so
+      // `getVideoPeerIds()` and preferred-layer signaling treat the producer
+      // as live. Peer-level derived maps are cleared only when no other
+      // producer for this `peerId` remains — a sibling (e.g. audio surviving
+      // a failed video consume) keeps its peer state.
+      producerInfoById.delete(producerId)
+      let peerHasOtherProducer = false
+      for (const remaining of producerInfoById.values()) {
+        if (remaining.peerId === peerId) {
+          peerHasOtherProducer = true
+          break
+        }
+      }
+      if (!peerHasOtherProducer) {
+        const nextVideoSource = new Map(remoteVideoSourceByPeerId.value)
+        if (nextVideoSource.delete(peerId)) {
+          remoteVideoSourceByPeerId.value = nextVideoSource
+        }
+        const nextOutboundPaused = new Map(remoteOutboundVideoPausedByPeerId.value)
+        if (nextOutboundPaused.delete(peerId)) {
+          remoteOutboundVideoPausedByPeerId.value = nextOutboundPaused
+        }
+      }
       throw err
     }
   }
 
-  
+
   async function consumeProducer(
     device: Device,
     room: SendTransportRoomApi,
