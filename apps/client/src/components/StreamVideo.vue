@@ -624,7 +624,12 @@ async function bindStream(): Promise<void> {
   attachInboundVideoTrackListeners()
 }
 
-/** Before v-if removes the element: pause + clear so play() cannot race teardown. */
+/**
+ * When the inbound track is gone: pause and clear `srcObject` so a future
+ * `play()` cannot race a stale binding. The element is now v-show-gated
+ * rather than v-if-gated, so it stays in the DOM (PERF2: element identity
+ * preserved across cam toggle / Mafia force-camera-off / showVideo flips).
+ */
 watch(
   hasUsableVideoTrack,
   (ok) => {
@@ -850,7 +855,7 @@ onUnmounted(() => {
 
 <template>
   <video
-    v-if="hasUsableVideoTrack"
+    v-show="hasUsableVideoTrack"
     ref="el"
     class="stream-video"
     :class="{ 'stream-video--fill': fill, 'stream-video--fill-cover': fill && fillCover }"
