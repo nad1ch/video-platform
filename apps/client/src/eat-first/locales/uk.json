@@ -54,6 +54,8 @@
     "speakingQueueClearAllTitle": "Очистити чергу виступів",
     "speakingQueueChipViewOnly": "Виставлення: місце {by} → {target}",
     "speakingQueueRemoveTitle": "Прибрати виставлення: місце {by} → {target}",
+    "speakingByAlreadyNominatedToast": "Гравець №{by} уже виставляв гравця №{target}.",
+    "speakingTargetAlreadyNominatedToast": "Гравець №{target} уже виставлений (виставив №{by}).",
     "reshuffleOrderTitle": "Перемішати порядок гравців",
     "reshuffleOrderHint": "Потрібно мінімум 5 гравців",
     "reshuffleConfirmTitle": "Роздати наново?",

@@ -21,7 +21,8 @@ const route = useRoute()
 const { t } = useI18n()
 const { isStreamView } = useEatFirstCallStreamView()
 const eatFirstShell = useEatFirstCallShellStore()
-const { eatFirstCallTimerFromTableSync } = storeToRefs(eatFirstShell)
+const { eatFirstCallTimerFromTableSync, selectedTimerDurationMs: eatFirstSelectedTimerDurationMs } =
+  storeToRefs(eatFirstShell)
 
 const gameId = computed(() => {
   const g = route.query.game
@@ -315,6 +316,7 @@ onUnmounted(() => {
       :timer-paused="eatFirstTimerStripModel.timerPaused"
       :frozen-remaining-sec="eatFirstTimerStripModel.frozenRemainingSec"
       :game-id="gameId"
+      :selected-timer-duration-ms="eatFirstSelectedTimerDurationMs"
     />
     <EatFirstCallHostPanel
       v-if="showHostPanel"

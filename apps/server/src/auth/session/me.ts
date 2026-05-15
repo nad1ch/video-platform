@@ -47,7 +47,7 @@ export async function handleGetApiAuthMe(req: Request, res: Response): Promise<v
       dbEmailVerified = row?.emailVerified ?? null
       dbEmailVerifiedAt = row?.emailVerifiedAt ?? null
     }
-    const base = sessionToGlobalAuthUser(session, dbRole)
+    const base = sessionToGlobalAuthUser(session, dbRole, dbEmailVerified)
     const email = dbEmail ?? base.email
     const emailVerified =
       typeof dbEmailVerified === 'boolean'

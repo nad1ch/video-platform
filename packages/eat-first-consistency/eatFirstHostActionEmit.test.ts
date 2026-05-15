@@ -6,10 +6,13 @@ import { describe, expect, it } from 'vitest'
 /**
  * Regression guard: the Eat First host actions adapter must
  *   - mount the shared `<GameHostActionsBar>`
- *   - hide the swap button via `:show-swap="false"`
+ *   - SHOW the swap button (Choice A — positional player swap reuses
+ *     the shared bar's swap button; the previous `:show-swap="false"`
+ *     hide was removed when swap mode was implemented in Eat First)
  *   - declare the `force-mute-all` and `reshuffle` outward emits CallPage relies on
- *   - never reference Mafia's `'night'` or Game Template's `'idle'`
- *     interaction-mode strings (Eat First has no generic swap mechanic)
+ *   - wire `@toggle-swap-mode` to the Eat First shell's host-interaction-mode setter
+ *   - never reference Mafia's `'night'` interaction-mode string (Eat First's
+ *     host interaction mode is `'idle' | 'swap'`, not `'night' | 'swap'`)
  *   - never import Mafia / GameRoom stores or WS protocols
  */
 
@@ -28,8 +31,8 @@ describe('EatFirstHostActionsBar.vue adapter contract', () => {
     expect(source).toMatch(/<GameHostActionsBar/)
   })
 
-  it('binds :show-swap="false"', () => {
-    expect(source).toMatch(/:show-swap="false"/)
+  it('does NOT bind :show-swap="false" (swap button must be visible — Choice A parity)', () => {
+    expect(source).not.toMatch(/:show-swap="false"/)
   })
 
   it('declares the force-mute-all emit', () => {
@@ -40,9 +43,24 @@ describe('EatFirstHostActionsBar.vue adapter contract', () => {
     expect(source).toMatch(/\breshuffle:\s*\[\]/)
   })
 
-  it('does not reference Mafia/GameRoom off-state literals', () => {
+  it('wires @toggle-swap-mode to the Eat First shell host-interaction-mode setter', () => {
+    expect(source).toMatch(/swapModeActive\s*=\s*computed\([\s\S]*?hostInteractionMode\.value\s*===\s*'swap'/)
+    expect(source).toMatch(/:swap-active="swapModeActive"/)
+    expect(source).toMatch(/@toggle-swap-mode="onToggleSwapMode"/)
+    expect(source).toMatch(
+      /function onToggleSwapMode[\s\S]*?eatFirstShell\.setHostInteractionMode\(swapModeActive\.value \? 'idle' : 'swap'\)/,
+    )
+  })
+
+  it('uses Eat First swap-mode i18n keys (no fake / empty strings)', () => {
+    expect(source).toMatch(/swapModeTitle:\s*t\('eatFirstCall\.swapModeHint'\)/)
+    expect(source).toMatch(/swapModeAria:\s*t\('eatFirstCall\.modeSwap'\)/)
+    expect(source).not.toMatch(/swapModeTitle:\s*''/)
+    expect(source).not.toMatch(/swapModeAria:\s*''/)
+  })
+
+  it('does not reference Mafia off-state literal (Eat First uses idle/swap, not night)', () => {
     expect(source).not.toMatch(/'night'/)
-    expect(source).not.toMatch(/'idle'/)
   })
 
   it('does not import Mafia or GameRoom stores / protocols', () => {

@@ -54,6 +54,8 @@
     "speakingQueueClearAllTitle": "Clear speaking order",
     "speakingQueueChipViewOnly": "Nomination: seat {by} → seat {target}",
     "speakingQueueRemoveTitle": "Remove nomination: seat {by} → seat {target}",
+    "speakingByAlreadyNominatedToast": "Seat #{by} already nominated seat #{target}.",
+    "speakingTargetAlreadyNominatedToast": "Seat #{target} is already nominated (by seat #{by}).",
     "reshuffleOrderTitle": "Shuffle player order",
     "reshuffleOrderHint": "Need at least 5 players to shuffle",
     "reshuffleConfirmTitle": "Deal a fresh table?",

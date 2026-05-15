@@ -152,6 +152,17 @@ function parseGameRoomTimerStart(data: unknown): GameRoomTimerStartPayload | nul
   return { startedAt: s, duration: d, isRunning }
 }
 
+function parseGameRoomTimerPresetSelect(data: unknown): number | null {
+  if (!data || typeof data !== 'object') return null
+  const o = data as { type?: unknown; payload?: unknown }
+  if (o.type !== GameRoomWs.timerPresetSelect) return null
+  const p = o.payload
+  if (!p || typeof p !== 'object') return null
+  const ms = (p as { durationMs?: unknown }).durationMs
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return null
+  return Math.floor(ms)
+}
+
 function parseGameRoomTimerStop(data: unknown): GameRoomTimerStopPayload | null {
   if (!data || typeof data !== 'object') return null
   const o = data as { type?: unknown; payload?: unknown }
@@ -242,6 +253,7 @@ export function useGameRoomHostSignaling(
     applyingPlayersUpdateFromSignaling,
     timerStartBroadcastPayload,
     timerStopBroadcastPayload,
+    timerPresetSelectBroadcastPayload,
     kickBroadcastPayload,
     reviveBroadcastPayload,
   } = storeToRefs(gameStore)
@@ -289,6 +301,10 @@ export function useGameRoomHostSignaling(
     }
     if (parseGameRoomTimerStop(data) != null) {
       gameStore.applyTimerStopFromSignaling()
+    }
+    const presetParsed = parseGameRoomTimerPresetSelect(data)
+    if (presetParsed != null) {
+      gameStore.applyTimerPresetSelectFromSignaling(presetParsed)
     }
     const kickParsed = parseGameRoomPlayerKick(data)
     if (kickParsed) {
@@ -471,6 +487,31 @@ export function useGameRoomHostSignaling(
       }
       sendSignalingMessage({ type: GameRoomWs.timerStop, payload: {} })
       gameStore.clearTimerStopBroadcastPayload()
+    },
+    { flush: 'post' },
+  )
+
+  watch(
+    timerPresetSelectBroadcastPayload,
+    (durationMs) => {
+      if (durationMs == null) return
+      if (!inCall.value) {
+        gameStore.clearTimerPresetSelectBroadcastPayload()
+        return
+      }
+      if (wsStatus.value !== 'open') {
+        gameStore.clearTimerPresetSelectBroadcastPayload()
+        return
+      }
+      if (!isGameRoomHost.value) {
+        gameStore.clearTimerPresetSelectBroadcastPayload()
+        return
+      }
+      sendSignalingMessage({
+        type: GameRoomWs.timerPresetSelect,
+        payload: { durationMs },
+      })
+      gameStore.clearTimerPresetSelectBroadcastPayload()
     },
     { flush: 'post' },
   )

@@ -96,6 +96,7 @@ import { MafiaWs } from '@/composables/mafiaWsProtocol'
 import { useMafiaAudioMixSignaling } from '@/composables/useMafiaAudioMixSignaling'
 import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
 import { nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
+import { decideSpeakingTileClick } from '@/utils/speakingNominationController'
 type VideoQualityUiChoice = 'auto' | VideoQualityPreset
 
 const { t } = useI18n()
@@ -669,41 +670,18 @@ const { callToasts, pushCallToast } = useCallPresenceToasts({
 })
 
 function onEatFirstForceMuteAll(muted: boolean): void {
-  if (import.meta.env.DEV) {
-    console.info('[eat-first:cp:mute-all:enter]', {
-      muted,
-      isEatFirstRoute: isEatFirstRoute.value,
-      isHost: eatFirstShell.isEatFirstRoomHost,
-    })
-  }
   if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) {
     return
-  }
-  if (import.meta.env.DEV) {
-    console.info('[eat-first:cp:ws-send]', {
-      type: EAT_FIRST_FORCE_MUTE_ALL_SIGNAL,
-      payload: { muted },
-    })
   }
   sendSignalingMessage({ type: EAT_FIRST_FORCE_MUTE_ALL_SIGNAL, payload: { muted } })
 }
 
 function onEatFirstReshuffle(): void {
-  if (import.meta.env.DEV) {
-    console.info('[eat-first:cp:reshuffle:enter]', {
-      isEatFirstRoute: isEatFirstRoute.value,
-      isHost: eatFirstShell.isEatFirstRoomHost,
-    })
-  }
   if (!isEatFirstRoute.value || !eatFirstShell.isEatFirstRoomHost) {
     return
   }
   if (import.meta.env.DEV) {
     callPageLog.info('[eat-first:ws:send]', { type: EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL, payload: {} })
-    console.info('[eat-first:cp:ws-send]', {
-      type: EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL,
-      payload: {},
-    })
   }
   sendSignalingMessage({
     type: EAT_FIRST_TABLE_ROUND_DEAL_SIGNAL,
@@ -867,13 +845,6 @@ function onEatFirstHostActionEvent(ev: Event): void {
 const EAT_FIRST_HOST_ACTION_EVENT = 'streamassist:eat-first:host-action'
 
 function onEatFirstTimerActionEvent(ev: Event): void {
-  if (import.meta.env.DEV) {
-    console.info('[eat-first:cp:timer:enter]', {
-      detail: (ev as CustomEvent).detail,
-      isEatFirstRoute: isEatFirstRoute.value,
-      isHost: eatFirstShell.isEatFirstRoomHost,
-    })
-  }
   if (!isEatFirstRoute.value) return
   if (!eatFirstShell.isEatFirstRoomHost) return
   const detail = (ev as CustomEvent).detail
@@ -884,12 +855,6 @@ function onEatFirstTimerActionEvent(ev: Event): void {
     const durationSec =
       typeof raw === 'number' && Number.isFinite(raw) ? Math.max(5, Math.floor(raw)) : 30
     const durationMs = durationSec * 1000
-    if (import.meta.env.DEV) {
-      console.info('[eat-first:cp:ws-send]', {
-        type: EatFirstWs.timerStart,
-        payload: { startedAt: Date.now(), duration: durationMs },
-      })
-    }
     sendSignalingMessage({
       type: EatFirstWs.timerStart,
       payload: { startedAt: Date.now(), duration: durationMs },
@@ -897,13 +862,17 @@ function onEatFirstTimerActionEvent(ev: Event): void {
     return
   }
   if (action === 'timer-stop') {
-    if (import.meta.env.DEV) {
-      console.info('[eat-first:cp:ws-send]', {
-        type: EatFirstWs.timerStop,
-        payload: {},
-      })
-    }
     sendSignalingMessage({ type: EatFirstWs.timerStop, payload: {} })
+    return
+  }
+  if (action === 'timer-preset-select') {
+    const raw = (detail as { durationSec?: unknown }).durationSec
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) return
+    const durationMs = Math.max(5_000, Math.floor(raw * 1000))
+    sendSignalingMessage({
+      type: EatFirstWs.timerPresetSelect,
+      payload: { durationMs },
+    })
   }
 }
 
@@ -1439,6 +1408,44 @@ watch(
   { deep: true },
 )
 
+/**
+ * Host-side outbound `eat:players-update` watcher. Driven by
+ * `eatFirstShell.swapEatFirstSlotsInPlayerOrder` which queues the new
+ * `playerOrder` on `playersUpdateBroadcastPayload` after a positional
+ * swap. Server's existing `handleEatFirstPlayersUpdate` validates the
+ * permutation, persists via `setEatFirstPlayerOrder`, and re-broadcasts
+ * via `eat:table-state-sync` to every peer. Mirrors the Mafia
+ * `playersUpdateBroadcastPayload` pattern.
+ */
+watch(
+  () => eatFirstShell.playersUpdateBroadcastPayload,
+  (p) => {
+    if (p == null) return
+    if (!isEatFirstRoute.value) {
+      eatFirstShell.clearPlayersUpdateBroadcastPayload()
+      return
+    }
+    if (!session.inCall) {
+      eatFirstShell.clearPlayersUpdateBroadcastPayload()
+      return
+    }
+    if (wsStatus.value !== 'open') {
+      eatFirstShell.clearPlayersUpdateBroadcastPayload()
+      return
+    }
+    if (!eatFirstShell.isEatFirstRoomHost) {
+      eatFirstShell.clearPlayersUpdateBroadcastPayload()
+      return
+    }
+    sendSignalingMessage({
+      type: EatFirstWs.playersUpdate,
+      payload: { playerOrder: [...p.playerOrder] },
+    })
+    eatFirstShell.clearPlayersUpdateBroadcastPayload()
+  },
+  { flush: 'post' },
+)
+
 const eatFirstActiveTabSlotId = computed(() => {
   if (!isEatFirstRoute.value) return ''
   const gid = typeof route.query?.game === 'string' ? route.query.game.trim() : ''
@@ -1721,6 +1728,46 @@ function isEatFirstHostSpeakingNominationSeat(seat: number | undefined): boolean
  */
 function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value)[number]): void {
   if (isEatFirstRoute.value && !eatFirstViewUi.value && eatFirstShell.isEatFirstRoomHost) {
+    // Swap mode branch (Choice A — Mafia / Game Template parity). Routed
+    // BEFORE the speaking-mode branch because `setHostInteractionMode`
+    // enforces mutual exclusion: speakingMode is forced off whenever swap
+    // mode is on, so the speaking branch below cannot fire while swap is
+    // active. First tile click stores the selection; second tile click on
+    // a different peer commits a positional swap in `playerOrder` and
+    // remaps the speaking queue. Slot ownership and slot-bound traits /
+    // action cards are NOT touched.
+    if (eatFirstShell.hostInteractionMode === 'swap') {
+      const swapClickTarget = ev.target
+      if (swapClickTarget instanceof Element) {
+        if (swapClickTarget.closest('button, input, textarea, a, [data-no-mafia-tile-host]')) {
+          return
+        }
+        if (swapClickTarget.closest('.tile-overlay__label-group, .tile-overlay__name-input, .tile-overlay__name-edit')) {
+          return
+        }
+      }
+      const clickedPeerId = row.tile.peerId
+      const slotForClicked = eatFirstSlotByPeer.value[clickedPeerId]
+      if (typeof slotForClicked !== 'string' || slotForClicked.length < 1) {
+        ev.stopPropagation()
+        return
+      }
+      const pending = eatFirstShell.hostSeatSwapSelectionPeerId
+      if (pending == null) {
+        eatFirstShell.setHostSeatSwapSelectionPeerId(clickedPeerId)
+      } else if (pending === clickedPeerId) {
+        eatFirstShell.setHostSeatSwapSelectionPeerId(null)
+      } else {
+        const slotForPending = eatFirstSlotByPeer.value[pending]
+        if (typeof slotForPending === 'string' && slotForPending.length >= 1) {
+          eatFirstShell.swapEatFirstSlotsInPlayerOrder(slotForPending, slotForClicked)
+        } else {
+          eatFirstShell.setHostSeatSwapSelectionPeerId(null)
+        }
+      }
+      ev.stopPropagation()
+      return
+    }
     if (!eatFirstShell.speakingMode) {
       return
     }
@@ -1737,13 +1784,51 @@ function onMafiaHostTileClick(ev: MouseEvent, row: (typeof orderedGridRows.value
     if (seat == null) {
       return
     }
-    const draft = eatFirstShell.speakingNominationDraftBySeat
-    if (draft == null) {
-      eatFirstShell.setSpeakingNominationDraftBySeat(seat)
-    } else if (draft === seat) {
-      eatFirstShell.setSpeakingNominationDraftBySeat(null)
-    } else {
-      eatFirstShell.appendSpeakingNominationPair(draft, seat)
+    // Route the tile click through the shared speaking-nomination state
+    // machine so Eat First applies the exact same rules Mafia / Game
+    // Template do (duplicate-by and duplicate-target collisions surface a
+    // toast instead of silently appending a duplicate entry). The
+    // controller is pure; this branch is the sole adapter.
+    const intent = decideSpeakingTileClick({
+      mode: 'speaking',
+      seat,
+      draft: eatFirstShell.speakingNominationDraftBySeat,
+      queue: eatFirstShell.speakingQueue,
+    })
+    switch (intent.kind) {
+      case 'set-draft':
+        eatFirstShell.setSpeakingNominationDraftBySeat(intent.seat)
+        break
+      case 'clear-draft':
+        eatFirstShell.setSpeakingNominationDraftBySeat(null)
+        break
+      case 'append-pair':
+        eatFirstShell.appendSpeakingNominationPair(intent.by, intent.target)
+        break
+      case 'reject-duplicate-by':
+        pushCallToast(
+          t('eatFirstCall.speakingByAlreadyNominatedToast', {
+            by: intent.bySeat,
+            target: intent.existingTarget,
+          }),
+          'leave',
+        )
+        if (intent.clearDraftAfter) {
+          eatFirstShell.setSpeakingNominationDraftBySeat(null)
+        }
+        break
+      case 'reject-duplicate-target':
+        pushCallToast(
+          t('eatFirstCall.speakingTargetAlreadyNominatedToast', {
+            target: intent.targetSeat,
+            by: intent.existingBySeat ?? '?',
+          }),
+          'leave',
+        )
+        break
+      case 'ignore':
+      default:
+        break
     }
     ev.stopPropagation()
     return

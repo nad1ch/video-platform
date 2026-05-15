@@ -73,6 +73,13 @@ export type EatFirstTableState = {
   lastUsedActionCard: EatFirstLastUsedCard | null
   /** Active timer; cleared when timer stops. */
   timer: EatFirstTimerState
+  /**
+   * Live host-selected timer preset (ms). Independent of `timer` —
+   * survives Start/Stop so the host's last picked idle duration persists
+   * across cycles. Broadcast via `eat:timer-preset-select` and replayed
+   * to each joining socket. `null` means "client uses its local default".
+   */
+  selectedTimerDurationMs: number | null
   /** True once the lazy DB hydration has completed at least once. */
   hydrated: boolean
 }
@@ -88,6 +95,7 @@ function makeEmpty(): EatFirstTableState {
     openedByBySlot: new Map(),
     lastUsedActionCard: null,
     timer: null,
+    selectedTimerDurationMs: null,
     hydrated: false,
   }
 }
@@ -515,6 +523,28 @@ export function setEatFirstTimer(
 ): void {
   const state = getEatFirstTableState(roomId)
   state.timer = timer
+}
+
+/**
+ * Live host-selected timer preset (ms). Stored on the in-memory
+ * `EatFirstTableState`, not persisted to the DB. Survives Start/Stop
+ * cycles so the host's last picked idle duration persists across the
+ * session. `null` clears the field (clients fall back to their local
+ * default).
+ */
+export function setEatFirstSelectedTimerDurationMs(
+  roomId: string,
+  durationMs: number | null,
+): void {
+  const state = getEatFirstTableState(roomId)
+  state.selectedTimerDurationMs =
+    typeof durationMs === 'number' && Number.isFinite(durationMs)
+      ? Math.floor(durationMs)
+      : null
+}
+
+export function getEatFirstSelectedTimerDurationMs(roomId: string): number | null {
+  return getEatFirstTableState(roomId).selectedTimerDurationMs
 }
 
 export type EatFirstTableSyncPayload = {

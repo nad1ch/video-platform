@@ -52,17 +52,23 @@ function denyRateLimited(res: Response, retryAfterSec: number): void {
   res.status(429).json({ error: 'RATE_LIMITED', retryAfterSec })
 }
 
-function rowToSessionUser(row: { id: string; display_name: string; email: string }): SessionUser {
+function rowToSessionUser(
+  row: { id: string; display_name: string; email: string },
+  options: { emailVerified?: boolean } = {},
+): SessionUser {
   const dn = row.display_name.trim()
   const fallback = row.email.includes('@') ? row.email.split('@')[0] : 'User'
   const normalizedEmail = normalizeEmail(row.email)
-  return withSessionRole({
-    id: row.id,
-    display_name: dn.length > 0 ? dn : fallback || 'User',
-    profile_image_url: '',
-    provider: 'email',
-    email: normalizedEmail,
-  })
+  return withSessionRole(
+    {
+      id: row.id,
+      display_name: dn.length > 0 ? dn : fallback || 'User',
+      profile_image_url: '',
+      provider: 'email',
+      email: normalizedEmail,
+    },
+    { emailVerified: options.emailVerified },
+  )
 }
 
 type EmailVerificationState = {
@@ -229,7 +235,12 @@ export async function handleEmailRegister(req: Request, res: Response): Promise<
         : 'User'
   try {
     const row = createEmailUser(normalized, password, disp)
-    const session = rowToSessionUser(row)
+    // The newly-created account is unverified by definition: pass
+    // `emailVerified: false` so the computed role is `'user'` even when the
+    // address is present in ADMIN_EMAILS. The issued session cookie therefore
+    // never carries `role: 'admin'` at register time. Admin authority requires
+    // a verified email and is granted on a subsequent login (audit S1).
+    const session = rowToSessionUser(row, { emailVerified: false })
     const verification = await ensurePrismaEmailUser(row, session)
     if (!verification.ok) {
       res.status(verification.error === 'ACCOUNT_LINK_REQUIRED' ? 409 : 500).json({ error: verification.error })
@@ -274,14 +285,30 @@ export async function handleEmailLogin(req: Request, res: Response): Promise<voi
     res.status(401).json({ error: 'INVALID_CREDENTIALS' })
     return
   }
-  const session = rowToSessionUser(row)
-  const verification = await ensurePrismaEmailUser(row, session)
+  // First sync to the Prisma row with a conservative `emailVerified: false`
+  // session role so a stale `role: 'admin'` left over by the pre-fix code path
+  // (audit S1) cannot leak through this login. The authoritative verification
+  // state then comes from `verification.state.emailVerified`.
+  const conservativeSession = rowToSessionUser(row, { emailVerified: false })
+  const verification = await ensurePrismaEmailUser(row, conservativeSession)
   if (!verification.ok) {
     res.status(verification.error === 'ACCOUNT_LINK_REQUIRED' ? 409 : 500).json({ error: verification.error })
     return
   }
-  
-  
+  // Re-compute the role using the DB-reported verification state. For verified
+  // ADMIN_EMAILS users this elevates the session to `'admin'`; for unverified
+  // users it keeps `'user'`. Re-stamp the DB so future cookie-less role reads
+  // agree with the issued cookie.
+  const verifiedFlag = verification.state?.emailVerified === true
+  const session = verifiedFlag ? rowToSessionUser(row, { emailVerified: true }) : conservativeSession
+  if (verifiedFlag && session.role !== conservativeSession.role) {
+    const restamp = await ensurePrismaEmailUser(row, session)
+    if (!restamp.ok) {
+      res.status(restamp.error === 'ACCOUNT_LINK_REQUIRED' ? 409 : 500).json({ error: restamp.error })
+      return
+    }
+  }
+
   loginIpLimiter.reset(`ip:${getClientIp(req)}`)
   loginEmailLimiter.reset(`email:${normalized}`)
   sendSession(res, session, false, 200, verification.state)

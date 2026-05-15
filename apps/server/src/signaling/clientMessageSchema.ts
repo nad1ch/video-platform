@@ -307,6 +307,12 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     payload: z.object({}).strict(),
   }),
   z.object({
+    type: z.literal(MafiaWs.timerPresetSelect),
+    payload: z.object({
+      durationMs: z.number().int().min(5_000).max(7_200_000),
+    }).strict(),
+  }),
+  z.object({
     type: z.literal(MafiaWs.playerKick),
     payload: z.object({
       peerId: z.string().min(1),
@@ -425,6 +431,12 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal(GameRoomWs.timerStop),
     payload: z.object({}).strict(),
+  }),
+  z.object({
+    type: z.literal(GameRoomWs.timerPresetSelect),
+    payload: z.object({
+      durationMs: z.number().int().min(5_000).max(7_200_000),
+    }).strict(),
   }),
   z.object({
     type: z.literal(GameRoomWs.playerKick),
@@ -550,6 +562,15 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('eat:timer-stop'),
     payload: z.object({}).strict(),
+  }),
+  /** Host-only: broadcast the next-Start preset selection so non-host peers
+   * see the same idle duration the host has picked. Server validates the
+   * range; the client only ever sends a value from the discrete preset list. */
+  z.object({
+    type: z.literal('eat:timer-preset-select'),
+    payload: z.object({
+      durationMs: z.number().int().min(5_000).max(7_200_000),
+    }).strict(),
   }),
   /** Seat owner marks their card used; host may mark any seated slot. Persists + broadcast. */
   z.object({

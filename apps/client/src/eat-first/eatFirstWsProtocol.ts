@@ -37,6 +37,14 @@ export const EatFirstWs = {
   /** Host-only: speaking timer (milliseconds), mirrored in `eat:table-state-sync`. */
   timerStart: 'eat:timer-start',
   timerStop: 'eat:timer-stop',
+  /**
+   * Host-only: live preset selection so non-host peers see the same
+   * idle timer duration the host has picked before pressing Start.
+   * Replayed on join. Mirrors `mafia:timer-preset-select` and
+   * `gameroom:timer-preset-select`; gated by `isEatFirstHostPeer`
+   * server-side.
+   */
+  timerPresetSelect: 'eat:timer-preset-select',
   traitStateSync: 'eat:trait-state-sync',
   tableStateSync: 'eat:table-state-sync',
 } as const

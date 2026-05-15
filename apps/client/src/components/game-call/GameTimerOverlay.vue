@@ -128,6 +128,19 @@ const props = withDefaults(
      * `false` preserves Mafia / Game Template behavior.
      */
     disabled?: boolean
+    /**
+     * Optional **controlled** selected preset. When provided AND the
+     * value is a member of `presetMsList`, this overrides the chip's
+     * internal local selection — used by route adapters to mirror the
+     * host's last preset across all peers (so non-hosts see the same
+     * idle duration the host picked before pressing Start).
+     *
+     * When `null` / `undefined` or not in the preset list, the chip
+     * falls back to its internal local `selectedDurationMs`. This makes
+     * the prop opt-in — Mafia / Game Template / Eat First adapters
+     * that don't wire the live source can keep working unchanged.
+     */
+    selectedDurationMs?: number | null
     /** i18n strings (required so the component is locale-free). */
     labels: GameTimerLabels
   }>(),
@@ -139,6 +152,7 @@ const props = withDefaults(
     paused: false,
     frozenRemainingMs: null,
     disabled: false,
+    selectedDurationMs: null,
     // `withDefaults` hoists this factory above setup() — but importing a
     // module-scope `const` is fine; the compiler-sfc rule only forbids
     // referencing setup-scope locals. `GAME_TIMER_PRESET_MS` is a module
@@ -150,6 +164,15 @@ const props = withDefaults(
 const emit = defineEmits<{
   start: [durationMs: number]
   stop: []
+  /**
+   * Emitted when the host picks a preset chip. The adapter routes this
+   * to the route-specific WS frame (`mafia:timer-preset-select`,
+   * `gameroom:timer-preset-select`, `eat:timer-preset-select`); the
+   * server fans it back out so other peers' chips update their idle
+   * display. Local selection updates immediately for instant host
+   * feedback regardless of whether the emit reaches the network.
+   */
+  'select-duration': [durationMs: number]
 }>()
 
 const nowMs = ref<number>(Date.now())
@@ -250,12 +273,30 @@ watch(
   },
 )
 
+/**
+ * The selected preset actually used for the idle display, the active-chip
+ * highlight, and the next `start(durationMs)` emit. If the controlled
+ * `props.selectedDurationMs` is provided AND is a member of the current
+ * preset list, it wins; otherwise the chip falls back to its internal
+ * local `selectedDurationMs`. The local ref is still updated on click
+ * for instant host feedback before the controlled prop round-trips back.
+ */
+const effectiveSelectedDurationMs = computed<number>(() => {
+  const c = props.selectedDurationMs
+  if (typeof c === 'number' && Number.isFinite(c) && props.presetMsList.includes(c)) {
+    return c
+  }
+  return selectedDurationMs.value
+})
+
 const timerDisplay = computed<string | null>(() => {
   if (!isActive.value) return null
   return formatTimerMmss(remainingMs.value)
 })
 
-const timerIdleDisplay = computed<string>(() => formatTimerMmss(selectedDurationMs.value))
+const timerIdleDisplay = computed<string>(() =>
+  formatTimerMmss(effectiveSelectedDurationMs.value),
+)
 
 const timerText = computed<string>(() => timerDisplay.value ?? timerIdleDisplay.value)
 
@@ -272,7 +313,11 @@ const stopButtonText = computed<string>(() => props.labels.stopButton ?? 'Stop')
 
 function onSelectDuration(ms: number): void {
   if (!showHostControls.value) return
+  // Optimistic local update for instant host feedback; the upstream
+  // controlled prop (if wired) overrides this once the WS round-trip
+  // completes.
   selectedDurationMs.value = ms
+  emit('select-duration', ms)
 }
 
 function onToggleTimer(): void {
@@ -282,7 +327,7 @@ function onToggleTimer(): void {
     emit('stop')
     return
   }
-  emit('start', selectedDurationMs.value)
+  emit('start', effectiveSelectedDurationMs.value)
 }
 </script>
 
@@ -319,10 +364,10 @@ function onToggleTimer(): void {
             :key="ms"
             type="button"
             class="sa-chip-btn game-timer-overlay__preset"
-            :class="{ 'game-timer-overlay__preset--active': selectedDurationMs === ms }"
+            :class="{ 'game-timer-overlay__preset--active': effectiveSelectedDurationMs === ms }"
             :title="labels.durationSec(ms / 1000)"
             :aria-label="labels.durationSec(ms / 1000)"
-            :aria-pressed="selectedDurationMs === ms"
+            :aria-pressed="effectiveSelectedDurationMs === ms"
             @click="onSelectDuration(ms)"
           >
             {{ ms / 1000 }}

@@ -127,6 +127,13 @@ export class Room {
   private eatFirstSpeakingQueue: number[] = []
   
   private mafiaTimer: { startedAt: number; duration: number } | null = null
+  /**
+   * Live host-selected timer preset (ms). Independent of the running timer
+   * — survives Start/Stop so the host's last picked idle duration persists
+   * across cycles. Broadcast on every host pick via `mafia:timer-preset-select`
+   * and replayed on join so OBS / late peers see the same idle value.
+   */
+  private mafiaSelectedTimerDurationMs: number | null = null
   private mafiaMode: 'old' | 'new' = 'old'
   private mafiaDeadBackgrounds: MafiaBackgroundItem[] = [...MAFIA_PRESET_BACKGROUND_ITEMS]
   private mafiaActiveBackgroundId: string | null = null
@@ -198,6 +205,8 @@ export class Room {
   private gameRoomHostPeerId: string | null = null
   private gameRoomSpeakingQueue: number[] = []
   private gameRoomTimer: { startedAt: number; duration: number } | null = null
+  /** Live host-selected timer preset (ms). Parallel of `mafiaSelectedTimerDurationMs`. */
+  private gameRoomSelectedTimerDurationMs: number | null = null
   private gameRoomNicknameByPeerId = new Map<string, string>()
   private gameRoomForceMuteAllActive = false
   private gameRoomForcedCameraOffPeerIds = new Set<string>()
@@ -480,6 +489,17 @@ export class Room {
 
   setMafiaTimer(t: { startedAt: number; duration: number } | null): void {
     this.mafiaTimer = t
+  }
+
+  getMafiaSelectedTimerDurationMs(): number | null {
+    return this.mafiaSelectedTimerDurationMs
+  }
+
+  setMafiaSelectedTimerDurationMs(durationMs: number | null): void {
+    this.mafiaSelectedTimerDurationMs =
+      typeof durationMs === 'number' && Number.isFinite(durationMs)
+        ? Math.floor(durationMs)
+        : null
   }
 
   getMafiaMode(): 'old' | 'new' {
@@ -963,6 +983,17 @@ export class Room {
 
   setGameRoomTimer(t: { startedAt: number; duration: number } | null): void {
     this.gameRoomTimer = t
+  }
+
+  getGameRoomSelectedTimerDurationMs(): number | null {
+    return this.gameRoomSelectedTimerDurationMs
+  }
+
+  setGameRoomSelectedTimerDurationMs(durationMs: number | null): void {
+    this.gameRoomSelectedTimerDurationMs =
+      typeof durationMs === 'number' && Number.isFinite(durationMs)
+        ? Math.floor(durationMs)
+        : null
   }
 
   getGameRoomPlayerLifeStateSnapshot(): Record<string, GameRoomPlayerLifeState> {

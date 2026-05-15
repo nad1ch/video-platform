@@ -32,6 +32,12 @@ import { fisherYatesShuffle } from '@/utils/fisherYatesShuffle'
 import { useMafiaPlayersStore } from '@/stores/mafiaPlayers'
 import { mafiaNightActionMaxSeatForOrder, pinHostPeerToEndOfOrder } from '@/utils/mafiaHostOrdering'
 import { GAME_TIMER_PRESET_MS } from '@/utils/gameTimerPresets'
+import {
+  appendSpeakingPair,
+  applySpeakingQueueFromSignaling as applySpeakingQueueFromSignalingShared,
+  remapSpeakingQueueForSeatSwap as remapSpeakingQueueForSeatSwapShared,
+  removeSpeakingPairAt,
+} from '@/utils/speakingNominationController'
 
 const mafiaGameLog = createLogger('mafia-game')
 
@@ -196,10 +202,19 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
   
   const mafiaTimer = ref<MafiaTimerState | null>(null)
 
-  
+  /**
+   * Live host-selected timer preset (ms). Mirrored across all peers via
+   * `mafia:timer-preset-select`. `null` means "no live override; clients
+   * use their local default". Survives Start/Stop so the chip returns to
+   * the host's last picked idle duration after a Stop.
+   */
+  const mafiaSelectedTimerDurationMs = ref<number | null>(null)
+  const timerPresetSelectBroadcastPayload = ref<number | null>(null)
+
+
   const timerStartBroadcastPayload = ref<MafiaTimerStartPayload | null>(null)
 
-  
+
   const timerStopBroadcastPayload = ref<MafiaTimerStopPayload | null>(null)
 
   
@@ -1226,9 +1241,17 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     if (seatA === seatB) {
       return
     }
-    speakingQueue.value = speakingQueue.value.map((n) =>
-      n === seatA ? seatB : n === seatB ? seatA : n,
-    )
+    // Delegate to the shared `speakingNominationController` so Mafia / Game
+    // Template / Eat First share one remap implementation. The shared
+    // helper is identity-preserving when no entries reference either seat;
+    // Mafia's original used `.map()` which always allocates, so callers
+    // (specifically the `playersUpdateBroadcastPayload`-gated swap path)
+    // could rely on `speakingQueue.value` always changing identity per
+    // remap call. Spread the result unconditionally to preserve that
+    // identity-changing semantic.
+    speakingQueue.value = [
+      ...remapSpeakingQueueForSeatSwapShared(speakingQueue.value, seatA, seatB),
+    ]
   }
 
   function buildPlayersUpdatePayloadFromState(): MafiaPlayersUpdatePayload {
@@ -1358,10 +1381,16 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     if (!isMafiaHost.value) {
       return
     }
-    if (!Number.isInteger(by) || by < 1 || !Number.isInteger(target) || target < 1) {
+    // Delegate to the shared controller. `appendSpeakingPair` returns the
+    // input reference on invalid seat numbers (matching the original
+    // `!Number.isInteger || < 1` early-return); on success it returns a
+    // new array which we spread into `speakingQueue.value` so the Pinia
+    // ref identity changes and Mafia's outbound queue watcher fires.
+    const next = appendSpeakingPair(speakingQueue.value, by, target)
+    if (next === speakingQueue.value) {
       return
     }
-    speakingQueue.value = [...speakingQueue.value, by, target]
+    speakingQueue.value = [...next]
     clearSpeakingNominationDraft()
     mafiaGameLog.info('speaking queue nomination pair', { by, target, order: speakingQueue.value })
   }
@@ -1370,22 +1399,16 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     if (!isMafiaHost.value) {
       return
     }
-    if (!Number.isInteger(pairIndex) || pairIndex < 0) {
+    // Delegate to the shared controller. `removeSpeakingPairAt` handles
+    // even-length (canonical pair splice) and odd-length (legacy
+    // single-entry filter) identically to the previous inline branches and
+    // returns the input reference for invalid / out-of-range indices —
+    // which matches the original `return` paths.
+    const next = removeSpeakingPairAt(speakingQueue.value, pairIndex)
+    if (next === speakingQueue.value) {
       return
     }
-    const flat = speakingQueue.value
-    if (flat.length % 2 === 1) {
-      if (pairIndex >= flat.length) {
-        return
-      }
-      speakingQueue.value = flat.filter((_, i) => i !== pairIndex)
-      return
-    }
-    const i = pairIndex * 2
-    if (i + 1 >= flat.length) {
-      return
-    }
-    speakingQueue.value = [...flat.slice(0, i), ...flat.slice(i + 2)]
+    speakingQueue.value = [...next]
   }
 
   function clearSpeakingQueue(): void {
@@ -1461,26 +1484,23 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
 
 
   function applySpeakingQueueFromSignaling(seats: number[]): void {
-    if (!Array.isArray(seats)) {
-      speakingQueue.value = []
-      if (!isMafiaHost.value) {
-        clearSpeakingNominationDraft()
-      }
-      return
-    }
-    const next: number[] = []
-    for (const x of seats) {
-      if (typeof x === 'number' && Number.isInteger(x) && x >= 1) {
-        next.push(x)
-      }
-    }
-    if (next.length % 2 === 1) {
-      next.pop()
-    }
-    speakingQueue.value = next
-    // Host may already be in the middle of selecting the next [by, target] pair;
-    // keep that draft across own queue echo updates.
-    if (!isMafiaHost.value) {
+    // Delegate to the shared controller. Identical behavior to the prior
+    // inline path:
+    //   - non-array → empty queue
+    //   - integer filter + ≥1 clamp
+    //   - odd-length truncated to even (pair-encoded)
+    //   - host preserves its in-flight nomination draft across own echo
+    //     (the controller's `shouldClearDraft` is `!isHost`); non-host
+    //     clears the draft
+    //
+    // Mafia is the behavioral source of truth here — the shared controller
+    // was extracted from this function, so the migration is a pure
+    // refactor.
+    const { nextQueue, shouldClearDraft } = applySpeakingQueueFromSignalingShared(seats, {
+      isHost: isMafiaHost.value,
+    })
+    speakingQueue.value = nextQueue
+    if (shouldClearDraft) {
       clearSpeakingNominationDraft()
     }
   }
@@ -1793,6 +1813,33 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     mafiaTimer.value = null
   }
 
+  /**
+   * Live host-selected preset write — used by both the host's own click
+   * and by inbound `mafia:timer-preset-select` from the server. Validates
+   * against `MAFIA_TIMER_PRESET_MS` so a stale frame can't smuggle in an
+   * out-of-band duration. The host path additionally queues the WS
+   * broadcast via `timerPresetSelectBroadcastPayload`.
+   */
+  function selectTimerPreset(durationMs: number): void {
+    if (!isMafiaHost.value) return
+    if (!Number.isFinite(durationMs)) return
+    const ms = Math.floor(durationMs)
+    if (!MAFIA_TIMER_PRESET_MS.includes(ms as (typeof MAFIA_TIMER_PRESET_MS)[number])) return
+    mafiaSelectedTimerDurationMs.value = ms
+    timerPresetSelectBroadcastPayload.value = ms
+  }
+
+  function applyMafiaTimerPresetSelectFromSignaling(durationMs: number): void {
+    if (!Number.isFinite(durationMs)) return
+    const ms = Math.floor(durationMs)
+    if (!MAFIA_TIMER_PRESET_MS.includes(ms as (typeof MAFIA_TIMER_PRESET_MS)[number])) return
+    mafiaSelectedTimerDurationMs.value = ms
+  }
+
+  function clearTimerPresetSelectBroadcastPayload(): void {
+    timerPresetSelectBroadcastPayload.value = null
+  }
+
   
   function isMafiaPeerEliminated(peerId: string): boolean {
     return lifeStateForPeer(peerId) === 'dead'
@@ -2018,6 +2065,11 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     clearTimerStartBroadcastPayload,
     timerStopBroadcastPayload,
     clearTimerStopBroadcastPayload,
+    mafiaSelectedTimerDurationMs,
+    selectTimerPreset,
+    applyMafiaTimerPresetSelectFromSignaling,
+    timerPresetSelectBroadcastPayload,
+    clearTimerPresetSelectBroadcastPayload,
     kickBroadcastPayload,
     kickPlayer,
     applyMafiaKickFromSignaling,
