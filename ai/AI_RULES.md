@@ -26,6 +26,7 @@ Every non-trivial task moves through six roles, in order. Do not skip:
 - **No refactor + behavior change in one diff.** Split into two: behavior-preserving refactor first, then behavior change.
 - **No drive-by formatting.** Do not reformat files you are not editing.
 - **No "while I'm here" changes.** If it isn't in the task statement, it isn't in this PR.
+- **Parallel agents require non-overlapping file ownership and one branch / worktree per workstream.** High-risk surfaces (per [`/ai/CLAUDE.md`](CLAUDE.md) §3 and [`/ai/REVIEW_CHECKLIST.md`](REVIEW_CHECKLIST.md) §6) cannot be edited in parallel — at most one workstream may touch each. See [`/ai/WORKTREES_PARALLEL_AGENTS_WORKFLOW.md`](WORKTREES_PARALLEL_AGENTS_WORKFLOW.md).
 
 ## 3. Reuse before creating
 

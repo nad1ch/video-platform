@@ -107,8 +107,9 @@ When opening this repo cold, read these in order:
 5. `/ai/DEBUG_PLAYBOOK.md` — when fixing a bug
 6. `/ai/BROWSER_DEBUG_WORKFLOW.md` — when the bug is observable in a running browser (black tile, stuck UI, failed network call, redirect loop, stale overlay)
 7. `/ai/REGRESSION_TEST_WORKFLOW.md` — when fixing a deterministic bug; write a failing test first, then the fix
-8. `/ai/REVIEW_CHECKLIST.md` — when reviewing a diff
-9. `/ai/QA_CHECKLIST.md` — before claiming done
+8. `/ai/WORKTREES_PARALLEL_AGENTS_WORKFLOW.md` — when running multiple agents or worktrees in parallel
+9. `/ai/REVIEW_CHECKLIST.md` — when reviewing a diff
+10. `/ai/QA_CHECKLIST.md` — before claiming done
 
 For copy-paste prompts, see `/ai/PROMPTS/`.
 

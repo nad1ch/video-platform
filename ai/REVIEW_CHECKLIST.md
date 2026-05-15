@@ -8,6 +8,7 @@ Use for every diff before claiming "done", and for every PR you review.
 - [ ] If a refactor was bundled with a behavior change, push back: separate PRs.
 - [ ] No new files unless the task needed them.
 - [ ] No "while I'm here" cleanup.
+- [ ] **For multi-agent / worktree work**: the PR cites its ownership map (which files this workstream owned), the branch base, and the planned merge order. No file in this PR was also owned by another concurrent workstream. No high-risk surface (per §6 of this checklist and [`/ai/CLAUDE.md`](CLAUDE.md) §3) overlaps with another workstream. See [`/ai/WORKTREES_PARALLEL_AGENTS_WORKFLOW.md`](WORKTREES_PARALLEL_AGENTS_WORKFLOW.md).
 
 ## 2. Runtime bugs
 
