@@ -19,7 +19,12 @@
       "Bash(echo \"tsc-exit=$?\")",
       "Bash(echo \"eslint-exit=$?\")",
       "Bash(echo \"exit=$?\")",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(npx vitest *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5174)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8080)"
     ]
   }
 }
