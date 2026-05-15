@@ -22,9 +22,12 @@
  *     because Eat First may have remote players counted in
  *     `connectedPlayerCount` before `playerOrder` is populated.
  *
- *   - The swap-mode button is hidden via `:show-swap="false"` on the
- *     shared bar — Eat First does not have a generic swap-mode
- *     mechanic in its protocol.
+ *   - The swap-mode button is visible (Choice A — Mafia / Game Template
+ *     parity). Toggling enters / exits the shell store's
+ *     `hostInteractionMode === 'swap'`; the actual positional swap is
+ *     committed by `CallPage`'s tile-click router via
+ *     `eatFirstShell.swapEatFirstSlotsInPlayerOrder`, then broadcast on
+ *     the existing `eat:players-update` WS path.
  *
  *   - The destructive reshuffle confirm dialog (server-authoritative
  *     `eat:table-round-deal` wipes the reveal ledger, marks every
@@ -53,8 +56,13 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const eatFirstShell = useEatFirstCallShellStore()
-const { isEatFirstRoomHost, playerOrder, playerCount, connectedPlayerCount } =
-  storeToRefs(eatFirstShell)
+const {
+  isEatFirstRoomHost,
+  playerOrder,
+  playerCount,
+  connectedPlayerCount,
+  hostInteractionMode,
+} = storeToRefs(eatFirstShell)
 
 /**
  * Local mute-all state — Eat First does NOT carry a
@@ -69,16 +77,15 @@ const canReshuffle = computed(
     Math.max(playerOrder.value.length, playerCount.value, connectedPlayerCount.value) >= 2,
 )
 
+const swapModeActive = computed(() => hostInteractionMode.value === 'swap')
+
 const labels = computed<GameHostActionsLabels>(() => ({
   toolbarAria: t('eatFirstCall.hostActionsAria'),
   muteAllTitle: t('eatFirstCall.forceMuteAllTitle'),
   reshuffleTitle: t('eatFirstCall.reshuffleOrderTitle'),
   reshuffleDisabledHint: t('eatFirstCall.reshuffleOrderHint'),
-  // Swap button is hidden via `show-swap="false"`; these strings are
-  // never rendered but the `GameHostActionsLabels` interface requires
-  // them. Use empty strings rather than fake i18n keys.
-  swapModeTitle: '',
-  swapModeAria: '',
+  swapModeTitle: t('eatFirstCall.swapModeHint'),
+  swapModeAria: t('eatFirstCall.modeSwap'),
   reshuffleConfirmTitle: t('eatFirstCall.reshuffleConfirmTitle'),
   reshuffleConfirmBody: t('eatFirstCall.reshuffleConfirmMessage'),
   reshuffleConfirmProceed: t('eatFirstCall.reshuffleConfirmAction'),
@@ -86,40 +93,26 @@ const labels = computed<GameHostActionsLabels>(() => ({
 }))
 
 function onSetMuteAll(muted: boolean): void {
-  if (import.meta.env.DEV) {
-    console.info('[eat-first:adapter:mute-all]', {
-      muted,
-      isHost: isEatFirstRoomHost.value,
-    })
-  }
   if (!isEatFirstRoomHost.value) return
   muteAllActive.value = muted
   emit('force-mute-all', muted)
 }
 
 function onReshuffle(): void {
-  if (import.meta.env.DEV) {
-    console.info('[eat-first:adapter:reshuffle]', {
-      isHost: isEatFirstRoomHost.value,
-      canReshuffle: canReshuffle.value,
-      playerOrderLength: eatFirstShell.playerOrder.length,
-      playerCount: eatFirstShell.playerCount,
-      connectedPlayerCount: eatFirstShell.connectedPlayerCount,
-    })
-  }
   if (!isEatFirstRoomHost.value || !canReshuffle.value) return
   emit('reshuffle')
 }
 
 /**
- * Swap-mode is hidden in this adapter (`:show-swap="false"`). The
- * shared bar still declares the `toggle-swap-mode` emit type; it will
- * never fire while the button is `v-if`-ed out, but we keep a no-op
- * handler so any future regression that re-renders the button does
- * not crash on a missing listener.
+ * Toggle positional swap mode (Choice A — Mafia / Game Template parity).
+ * The shared bar's swap button is now visible (`show-swap` defaults to
+ * `true`). Mutual-exclusion with speaking mode is enforced inside the
+ * shell's `setHostInteractionMode` setter so the host's first tile click
+ * routes through swap, not nomination.
  */
-function onToggleSwapModeNoop(): void {
-  /* no-op — swap mode hidden for Eat First */
+function onToggleSwapMode(): void {
+  if (!isEatFirstRoomHost.value) return
+  eatFirstShell.setHostInteractionMode(swapModeActive.value ? 'idle' : 'swap')
 }
 </script>
 
@@ -128,11 +121,10 @@ function onToggleSwapModeNoop(): void {
     v-if="isEatFirstRoomHost"
     :mute-all-active="muteAllActive"
     :can-reshuffle="canReshuffle"
-    :swap-active="false"
-    :show-swap="false"
+    :swap-active="swapModeActive"
     :labels="labels"
     @set-mute-all="onSetMuteAll"
     @reshuffle="onReshuffle"
-    @toggle-swap-mode="onToggleSwapModeNoop"
+    @toggle-swap-mode="onToggleSwapMode"
   />
 </template>

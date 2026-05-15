@@ -2,7 +2,10 @@ import { resolveUserRole } from '../resolveUserRole'
 import type { SessionUser } from './types'
 
 
-export function withSessionRole(user: Omit<SessionUser, 'role'>): SessionUser {
+export function withSessionRole(
+  user: Omit<SessionUser, 'role'>,
+  options: { emailVerified?: boolean } = {},
+): SessionUser {
   const twitchId = user.provider === 'twitch' ? user.id : undefined
   const withTwitchId =
     user.provider === 'twitch' ? { ...user, twitch_id: user.id } : user
@@ -12,6 +15,7 @@ export function withSessionRole(user: Omit<SessionUser, 'role'>): SessionUser {
       provider: user.provider,
       id: user.id,
       email: user.email,
+      emailVerified: options.emailVerified,
       twitchId,
     }),
   }

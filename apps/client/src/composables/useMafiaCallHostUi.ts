@@ -1,10 +1,8 @@
 import { computed, type Ref } from 'vue'
 import { MafiaWs } from '@/composables/mafiaWsProtocol'
 import type { useMafiaGameStore } from '@/stores/mafiaGame'
-import {
-  decodeSpeakingNominationFlat,
-  nominationTargetSeatsFromSpeakingFlat,
-} from '@/utils/speakingNominationQueue'
+import { nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
+import { decideSpeakingTileClick } from '@/utils/speakingNominationController'
 import type { MafiaEliminationBackground } from '@/utils/mafiaGameTypes'
 
 /**
@@ -196,51 +194,51 @@ export function useMafiaCallHostUi(
       return
     }
     if (mafiaGameStore.hostInteractionMode === 'speaking') {
-      const draft = mafiaGameStore.speakingNominationDraftBySeat
-      const segments = decodeSpeakingNominationFlat(mafiaGameStore.speakingQueue)
-      if (draft == null) {
-        const existingBy = segments.find((seg) => seg.bySeat === seat)
-        if (existingBy) {
+      // Route the tile click through the shared speaking-nomination state
+      // machine. The controller was extracted FROM this branch — it owns
+      // the exact same first-click / same-seat / second-click / duplicate-by
+      // / duplicate-target rules. Mafia is the behavioral source of truth;
+      // this is a pure refactor with zero observable change.
+      const intent = decideSpeakingTileClick({
+        mode: 'speaking',
+        seat,
+        draft: mafiaGameStore.speakingNominationDraftBySeat,
+        queue: mafiaGameStore.speakingQueue,
+      })
+      switch (intent.kind) {
+        case 'set-draft':
+          mafiaGameStore.setSpeakingNominationDraftBySeat(intent.seat)
+          break
+        case 'clear-draft':
+          mafiaGameStore.setSpeakingNominationDraftBySeat(null)
+          break
+        case 'append-pair':
+          mafiaGameStore.appendSpeakingNominationPair(intent.by, intent.target)
+          break
+        case 'reject-duplicate-by':
           pushCallToast(
             t('mafiaPage.speakingByAlreadyNominatedToast', {
-              by: seat,
-              target: existingBy.targetSeat,
+              by: intent.bySeat,
+              target: intent.existingTarget,
             }),
             'leave',
           )
-          ev.stopPropagation()
-          return
-        }
-        mafiaGameStore.setSpeakingNominationDraftBySeat(seat)
-      } else if (draft === seat) {
-        mafiaGameStore.setSpeakingNominationDraftBySeat(null)
-      } else {
-        const existingTarget = segments.find((seg) => seg.targetSeat === seat)
-        if (existingTarget) {
+          if (intent.clearDraftAfter) {
+            mafiaGameStore.setSpeakingNominationDraftBySeat(null)
+          }
+          break
+        case 'reject-duplicate-target':
           pushCallToast(
             t('mafiaPage.speakingTargetAlreadyNominatedToast', {
-              target: seat,
-              by: existingTarget.bySeat ?? '?',
+              target: intent.targetSeat,
+              by: intent.existingBySeat ?? '?',
             }),
             'leave',
           )
-          ev.stopPropagation()
-          return
-        }
-        const existingBy = segments.find((seg) => seg.bySeat === draft)
-        if (existingBy) {
-          pushCallToast(
-            t('mafiaPage.speakingByAlreadyNominatedToast', {
-              by: draft,
-              target: existingBy.targetSeat,
-            }),
-            'leave',
-          )
-          mafiaGameStore.setSpeakingNominationDraftBySeat(null)
-          ev.stopPropagation()
-          return
-        }
-        mafiaGameStore.appendSpeakingNominationPair(draft, seat)
+          break
+        case 'ignore':
+        default:
+          break
       }
     } else {
       mafiaGameStore.assignOrClearNightActionForActiveRole(seat)

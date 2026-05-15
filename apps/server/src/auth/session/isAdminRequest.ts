@@ -23,9 +23,15 @@ export async function isSessionAdminFromCookie(cookieHeader: string | undefined)
   if (!s) {
     return false
   }
-  if (resolveUserRole(roleInput(s)) === 'admin') {
+
+  // For non-email providers, the env allowlist match is final (Twitch is bound
+  // to a server-verified Twitch id; Google/Apple require completing legitimate
+  // provider OAuth). For email-password, admin authority requires DB-side
+  // verification — see below.
+  if (s.provider !== 'email' && resolveUserRole(roleInput(s)) === 'admin') {
     return true
   }
+
   if (!isDatabaseConfigured()) {
     return false
   }
@@ -35,7 +41,24 @@ export async function isSessionAdminFromCookie(cookieHeader: string | undefined)
   }
   const user = await prisma.user.findUnique({
     where: { id: prismaUserId },
-    select: { role: true },
+    select: { role: true, emailVerified: true },
   })
-  return user?.role === 'admin'
+  if (!user) {
+    return false
+  }
+
+  if (s.provider === 'email') {
+    // Email-provider admin (audit S1): both the env allowlist path and the
+    // stored DB role require `emailVerified === true`. Without verification,
+    // anyone could register the admin's email and assume admin authority.
+    if (!user.emailVerified) {
+      return false
+    }
+    if (user.role === 'admin') {
+      return true
+    }
+    return resolveUserRole({ ...roleInput(s), emailVerified: true }) === 'admin'
+  }
+
+  return user.role === 'admin'
 }

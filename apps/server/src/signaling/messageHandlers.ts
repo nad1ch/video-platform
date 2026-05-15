@@ -94,7 +94,9 @@ import {
   setEatFirstActionCard,
   setEatFirstActionCardUsed,
   setEatFirstPlayerOrder,
+  setEatFirstSelectedTimerDurationMs,
   setEatFirstTimer,
+  getEatFirstSelectedTimerDurationMs,
   type EatFirstTableSyncPayload,
 } from '../eatFirst/tableState'
 import {
@@ -240,6 +242,7 @@ export type ServerMessage =
   | { type: 'mafia:audio-mix-update'; payload: { entries: MafiaAudioMixEntry[] } }
   | { type: 'mafia:timer-start'; payload: { startedAt: number; duration: number; isRunning: boolean } }
   | { type: 'mafia:timer-stop'; payload: Record<string, never> }
+  | { type: 'mafia:timer-preset-select'; payload: { durationMs: number } }
   | { type: 'mafia:player-kick'; payload: { peerId: string } }
   | { type: 'mafia:player-revive'; payload: { peerId: string } }
   | { type: 'mafia:player-life-state'; payload: { states: Record<string, MafiaPlayerLifeState> } }
@@ -261,6 +264,7 @@ export type ServerMessage =
   | { type: 'gameroom:audio-mix-update'; payload: { entries: GameRoomAudioMixEntry[] } }
   | { type: 'gameroom:timer-start'; payload: { startedAt: number; duration: number; isRunning: boolean } }
   | { type: 'gameroom:timer-stop'; payload: Record<string, never> }
+  | { type: 'gameroom:timer-preset-select'; payload: { durationMs: number } }
   | { type: 'gameroom:player-kick'; payload: { peerId: string } }
   | { type: 'gameroom:player-revive'; payload: { peerId: string } }
   | { type: 'gameroom:player-life-state'; payload: { states: Record<string, GameRoomPlayerLifeState> } }
@@ -315,6 +319,7 @@ export type ServerMessage =
       }
     }
   | { type: 'eat:table-state-sync'; payload: EatFirstTableSyncPayload }
+  | { type: 'eat:timer-preset-select'; payload: { durationMs: number } }
 
 /**
  * Best-effort diagnostics emit from server signaling code. Type is `string`
@@ -634,36 +639,28 @@ function eatFirstHostPeerId(room: Room): string | null {
 }
 
 /**
- * Strict Eat First host authority for WS host-only commands. Requires a
- * server-authoritative `ownerUserId` AND a matching `peer.userId`. The loose
- * "first peer in room" fallback that `resolveEatFirstHostPeerId` performs is
- * intentionally not honored here — it remains valid only for the seat-assignment
- * heuristic in `assignEatFirstSlotsToUnclaimedPeers`. Legacy unstamped rooms
- * (no `ownerUserId`) cannot drive WS host actions; the HTTP gate
- * (`eatFirstSessionCanOperateGame`) still permits role-based admin operations.
+ * Live Eat First host authority for WS host-only commands. Mirrors the
+ * Mafia pattern: authorize by `peer.id === hostPeerId`, where `hostPeerId`
+ * comes from `eatFirstHostPeerId(room)` — the same resolver used to build
+ * the `eat:host-updated` broadcast payload. Client and server therefore
+ * agree on a single live-host model:
+ *
+ *   - server broadcasts `eat:host-updated { hostPeerId }`
+ *   - client sets `isEatFirstRoomHost` when `hostPeerId === selfPeerId`
+ *   - server now gates host actions on `peer.id === hostPeerId`
+ *
+ * The DB `EatFirstGame.room.ownerUserId` (internal Prisma user id) is NOT
+ * compared to `peer.userId` (the WS-session external id, e.g. Twitch sub)
+ * here — those are different identity namespaces and the comparison would
+ * always fail in production. DB owner remains the source of truth for
+ * game ownership / ensure / admin / persistence; it is still consulted
+ * inside `resolveEatFirstHostPeerId` to PICK which peer is the host when
+ * a peer with matching `userId` is present, with a longest-lived-peer
+ * fallback when not.
  */
 function isEatFirstHostPeer(room: Room, peer: Peer): boolean {
-  const ownerUserId = getEatFirstOwnerUserId(room.id)
-  const peerUserId = typeof peer.userId === 'string' ? peer.userId.trim() : ''
-  if (process.env.NODE_ENV !== 'production') {
-    const ownerNonEmpty = ownerUserId != null && ownerUserId.length > 0
-    const peerNonEmpty = peerUserId.length > 0
-    console.info('[eat-first:server:host-check]', {
-      roomId: room.id,
-      baseGameId: eatFirstGameIdFromRoomId(room.id),
-      peerId: peer.id,
-      peerUserId,
-      ownerUserId,
-      match: ownerNonEmpty && peerNonEmpty && peerUserId === ownerUserId,
-    })
-  }
-  if (ownerUserId == null || ownerUserId.length === 0) {
-    return false
-  }
-  if (peerUserId.length === 0) {
-    return false
-  }
-  return peerUserId === ownerUserId
+  const hostPeerId = eatFirstHostPeerId(room)
+  return hostPeerId != null && hostPeerId.length > 0 && peer.id === hostPeerId
 }
 
 function eatFirstTraitStatePayloadFromTable(
@@ -1224,6 +1221,13 @@ export async function handleJoinRoom(
       type: MafiaWs.playerLifeState,
       payload: { states: room.getMafiaPlayerLifeStateSnapshot() },
     })
+    const eSel = getEatFirstSelectedTimerDurationMs(room.id)
+    if (typeof eSel === 'number' && Number.isFinite(eSel)) {
+      sendServerMessage(socket, {
+        type: 'eat:timer-preset-select',
+        payload: { durationMs: eSel },
+      })
+    }
   }
 
   
@@ -1330,6 +1334,13 @@ function sendMafiaSnapshotToSocket(socket: WsSocket, room: Room, peer: Peer): vo
     } else {
       room.setMafiaTimer(null)
     }
+  }
+  const mSel = room.getMafiaSelectedTimerDurationMs()
+  if (typeof mSel === 'number' && Number.isFinite(mSel)) {
+    sendServerMessage(socket, {
+      type: MafiaWs.timerPresetSelect,
+      payload: { durationMs: mSel },
+    })
   }
   /**
    * Replay the latest server-accepted reshuffle to this socket only.
@@ -2187,14 +2198,6 @@ export async function handleEatFirstForceMuteAll(
   const rp = resolveEatFirstPeerAndRoom(socket, deps)
   if (!rp) return
   const { peer, room } = rp
-  if (process.env.NODE_ENV !== 'production') {
-    console.info('[eat-first:server:eat-action:enter]', {
-      type: 'eat:force-mute-all',
-      roomId: room.id,
-      peerId: peer.id,
-      peerUserId: peer.userId,
-    })
-  }
   if (!isEatFirstHostPeer(room, peer)) return
 
   const muted = payload.muted !== false
@@ -2692,14 +2695,6 @@ export async function handleEatFirstTableRoundDeal(socket: WsSocket, deps: Signa
   const rp = resolveEatFirstPeerAndRoom(socket, deps)
   if (!rp) return
   const { peer, room } = rp
-  if (process.env.NODE_ENV !== 'production') {
-    console.info('[eat-first:server:eat-action:enter]', {
-      type: 'eat:table-round-deal',
-      roomId: room.id,
-      peerId: peer.id,
-      peerUserId: peer.userId,
-    })
-  }
   if (!isEatFirstHostPeer(room, peer)) return
   const gameId = eatFirstGameIdFromRoomId(room.id)
   if (!gameId) return
@@ -2743,14 +2738,6 @@ export async function handleEatFirstTimerStart(
   const rp = resolveEatFirstPeerAndRoom(socket, deps)
   if (!rp) return
   const { peer, room } = rp
-  if (process.env.NODE_ENV !== 'production') {
-    console.info('[eat-first:server:eat-action:enter]', {
-      type: 'eat:timer-start',
-      roomId: room.id,
-      peerId: peer.id,
-      peerUserId: peer.userId,
-    })
-  }
   if (!isEatFirstHostPeer(room, peer)) return
 
   const { startedAt, duration } = payload
@@ -2784,18 +2771,34 @@ export async function handleEatFirstTimerStart(
   await broadcastEatFirstTableState(room)
 }
 
+/**
+ * Parallel of `handleMafiaTimerPresetSelect` for the `eat:` namespace.
+ * Persists the picked duration in `EatFirstTableState.selectedTimerDurationMs`
+ * (in-memory only; not persisted to DB) so it survives Start/Stop cycles
+ * and is replayed to each joining socket via `handleJoinRoom` for eat: rooms.
+ */
+export async function handleEatFirstTimerPresetSelect(
+  socket: WsSocket,
+  payload: { durationMs: number },
+  deps: SignalingDeps,
+): Promise<void> {
+  const rp = resolveEatFirstPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isEatFirstHostPeer(room, peer)) return
+  const durationMs = Math.floor(payload.durationMs)
+  if (!Number.isFinite(durationMs) || durationMs < 5_000 || durationMs > 7_200_000) return
+  setEatFirstSelectedTimerDurationMs(room.id, durationMs)
+  broadcastServerMessageToRoom(room, {
+    type: 'eat:timer-preset-select',
+    payload: { durationMs },
+  })
+}
+
 export async function handleEatFirstTimerStop(socket: WsSocket, deps: SignalingDeps): Promise<void> {
   const rp = resolveEatFirstPeerAndRoom(socket, deps)
   if (!rp) return
   const { peer, room } = rp
-  if (process.env.NODE_ENV !== 'production') {
-    console.info('[eat-first:server:eat-action:enter]', {
-      type: 'eat:timer-stop',
-      roomId: room.id,
-      peerId: peer.id,
-      peerUserId: peer.userId,
-    })
-  }
   if (!isEatFirstHostPeer(room, peer)) return
 
   setEatFirstTimer(room.id, null)
@@ -3145,6 +3148,29 @@ export function handleMafiaTimerStop(socket: WsSocket, deps: SignalingDeps): voi
   room.setMafiaTimer(null)
   broadcastMafiaTimerStop(room)
   diagEmit('timer_stopped', 'info', 'game', room.id, peer, { namespace: 'mafia' })
+}
+
+/**
+ * Host-only live preset selection. Persists the picked duration in the
+ * Room so OBS / late joiners replay the same idle value. Range validated
+ * by the inbound schema; client only sends discrete preset values.
+ */
+export function handleMafiaTimerPresetSelect(
+  socket: WsSocket,
+  payload: { durationMs: number },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isMafiaHostPeer(room, peer)) return
+  const durationMs = Math.floor(payload.durationMs)
+  if (!Number.isFinite(durationMs) || durationMs < 5_000 || durationMs > 7_200_000) return
+  room.setMafiaSelectedTimerDurationMs(durationMs)
+  broadcastServerMessageToRoom(room, {
+    type: MafiaWs.timerPresetSelect,
+    payload: { durationMs },
+  })
 }
 
 export function handleUpdateDisplayName(
@@ -3941,6 +3967,13 @@ function sendGameRoomSnapshotToSocket(socket: WsSocket, room: Room, peer: Peer):
       room.setGameRoomTimer(null)
     }
   }
+  const gSel = room.getGameRoomSelectedTimerDurationMs()
+  if (typeof gSel === 'number' && Number.isFinite(gSel)) {
+    sendServerMessage(socket, {
+      type: GameRoomWs.timerPresetSelect,
+      payload: { durationMs: gSel },
+    })
+  }
   const reshuffleSnap = room.getGameRoomReshuffleSnapshotIfFresh()
   if (reshuffleSnap != null) {
     sendServerMessage(socket, { type: GameRoomWs.reshuffle, payload: reshuffleSnap })
@@ -4279,6 +4312,25 @@ export function handleGameRoomTimerStop(socket: WsSocket, deps: SignalingDeps): 
   room.setGameRoomTimer(null)
   broadcastServerMessageToRoom(room, { type: GameRoomWs.timerStop, payload: {} })
   diagEmit('timer_stopped', 'info', 'game', room.id, peer, { namespace: 'game-room' })
+}
+
+/** Parallel of `handleMafiaTimerPresetSelect` for the `gameroom:` namespace. */
+export function handleGameRoomTimerPresetSelect(
+  socket: WsSocket,
+  payload: { durationMs: number },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveGameRoomPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isGameRoomHostPeer(room, peer)) return
+  const durationMs = Math.floor(payload.durationMs)
+  if (!Number.isFinite(durationMs) || durationMs < 5_000 || durationMs > 7_200_000) return
+  room.setGameRoomSelectedTimerDurationMs(durationMs)
+  broadcastServerMessageToRoom(room, {
+    type: GameRoomWs.timerPresetSelect,
+    payload: { durationMs },
+  })
 }
 
 export async function handleGameRoomPlayerKick(

@@ -25,6 +25,14 @@ export const MafiaWs = {
   audioMixUpdate: 'mafia:audio-mix-update',
   timerStart: 'mafia:timer-start',
   timerStop: 'mafia:timer-stop',
+  /**
+   * Host-only: broadcast the next-Start preset selection so non-host
+   * peers and OBS / `?mode=view` clients see the same idle duration the
+   * host has picked. Live state; not persisted in the timer ref —
+   * server stores it in-memory on the Room and replays on join. Gated
+   * by `isMafiaHostPeer` server-side.
+   */
+  timerPresetSelect: 'mafia:timer-preset-select',
   playerKick: 'mafia:player-kick',
   playerRevive: 'mafia:player-revive',
   playerLifeState: 'mafia:player-life-state',

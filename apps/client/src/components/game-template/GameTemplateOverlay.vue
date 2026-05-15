@@ -40,7 +40,7 @@ const isViewLayout = computed(() => Boolean(props.viewMode ?? props.streamView))
 
 const { t } = useI18n()
 const gameStore = useGameTemplateGameStore()
-const { isGameRoomHost, timer } = storeToRefs(gameStore)
+const { isGameRoomHost, timer, selectedTimerDurationMs } = storeToRefs(gameStore)
 
 const showTimerControls = computed(() => isGameRoomHost.value && !isViewLayout.value)
 const useCompactTimer = computed(() => !showTimerControls.value)
@@ -67,6 +67,10 @@ function onStart(durationMs: number): void {
 function onStop(): void {
   gameStore.stopTimer()
 }
+
+function onSelectDuration(durationMs: number): void {
+  gameStore.selectTimerPreset(durationMs)
+}
 </script>
 
 <template>
@@ -78,9 +82,11 @@ function onStop(): void {
       :compact="useCompactTimer"
       :preset-ms-list="GAME_ROOM_TIMER_PRESET_MS"
       :default-duration-ms="GAME_TEMPLATE_DEFAULT_TIMER_MS"
+      :selected-duration-ms="selectedTimerDurationMs"
       :labels="timerLabels"
       @start="onStart"
       @stop="onStop"
+      @select-duration="onSelectDuration"
     />
   </div>
 </template>

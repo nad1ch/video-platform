@@ -69,6 +69,7 @@ const EAT_FIRST_ACTION_CARD_USED_SIGNAL = EatFirstWs.actionCardUsed
 const EAT_FIRST_SPEAKING_QUEUE_UPDATE_SIGNAL = EatFirstWs.speakingQueueUpdate
 const EAT_FIRST_TRAIT_STATE_SYNC_SIGNAL = EatFirstWs.traitStateSync
 const EAT_FIRST_TABLE_STATE_SYNC_SIGNAL = EatFirstWs.tableStateSync
+const EAT_FIRST_TIMER_PRESET_SELECT_SIGNAL = EatFirstWs.timerPresetSelect
 
 export interface UseEatFirstCallSignalingDeps {
   subscribeSignalingMessage: (cb: (data: unknown) => void) => () => void
@@ -515,6 +516,17 @@ export function useEatFirstCallSignaling(
       const title = typeof payload?.title === 'string' ? payload.title.trim() : ''
       if (!peerId || title.length < 1) return
       onPlayerUsedActionCard({ peerId, title })
+      return
+    }
+    if (rec.type === EAT_FIRST_TIMER_PRESET_SELECT_SIGNAL) {
+      const payload =
+        rec.payload != null && typeof rec.payload === 'object'
+          ? (rec.payload as Record<string, unknown>)
+          : null
+      const ms = payload?.durationMs
+      if (typeof ms === 'number' && Number.isFinite(ms)) {
+        eatFirstShell.setEatFirstSelectedTimerDurationMs(Math.floor(ms))
+      }
       return
     }
     if (rec.type !== EAT_FIRST_FORCE_MUTE_ALL_SIGNAL || rec.payload == null || typeof rec.payload !== 'object') return

@@ -323,6 +323,25 @@ function parseMafiaTimerStop(data: unknown): MafiaTimerStopPayload | null {
   return {}
 }
 
+function parseMafiaTimerPresetSelect(data: unknown): number | null {
+  if (!data || typeof data !== 'object') {
+    return null
+  }
+  const o = data as { type?: unknown; payload?: unknown }
+  if (o.type !== MafiaWs.timerPresetSelect) {
+    return null
+  }
+  const p = o.payload
+  if (!p || typeof p !== 'object') {
+    return null
+  }
+  const ms = (p as { durationMs?: unknown }).durationMs
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) {
+    return null
+  }
+  return Math.floor(ms)
+}
+
 function parseMafiaPlayerKick(data: unknown): MafiaPlayerKickPayload | null {
   if (!data || typeof data !== 'object') {
     return null
@@ -428,6 +447,7 @@ export function useMafiaHostSignaling(
     applyingPlayersUpdateFromSignaling,
     timerStartBroadcastPayload,
     timerStopBroadcastPayload,
+    timerPresetSelectBroadcastPayload,
     kickBroadcastPayload,
     reviveBroadcastPayload,
     eatFirstCallEliminationHost,
@@ -496,6 +516,10 @@ export function useMafiaHostSignaling(
     }
     if (parseMafiaTimerStop(data) != null) {
       mafia.applyMafiaTimerStopFromSignaling()
+    }
+    const presetParsed = parseMafiaTimerPresetSelect(data)
+    if (presetParsed != null) {
+      mafia.applyMafiaTimerPresetSelectFromSignaling(presetParsed)
     }
     const kickParsed = parseMafiaPlayerKick(data)
     if (kickParsed) {
@@ -799,6 +823,33 @@ export function useMafiaHostSignaling(
       }
       sendSignalingMessage({ type: MafiaWs.timerStop, payload: {} })
       mafia.clearTimerStopBroadcastPayload()
+    },
+    { flush: 'post' },
+  )
+
+  watch(
+    timerPresetSelectBroadcastPayload,
+    (durationMs) => {
+      if (durationMs == null) {
+        return
+      }
+      if (!inCall.value) {
+        mafia.clearTimerPresetSelectBroadcastPayload()
+        return
+      }
+      if (wsStatus.value !== 'open') {
+        mafia.clearTimerPresetSelectBroadcastPayload()
+        return
+      }
+      if (!isMafiaHost.value) {
+        mafia.clearTimerPresetSelectBroadcastPayload()
+        return
+      }
+      sendSignalingMessage({
+        type: MafiaWs.timerPresetSelect,
+        payload: { durationMs },
+      })
+      mafia.clearTimerPresetSelectBroadcastPayload()
     },
     { flush: 'post' },
   )

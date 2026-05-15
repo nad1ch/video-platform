@@ -44,7 +44,7 @@ const isViewLayout = computed(() => Boolean(props.viewMode ?? props.streamView))
 
 const { t } = useI18n()
 const mafiaGame = useMafiaGameStore()
-const { isMafiaHost, mafiaTimer, oldMafiaMode } = storeToRefs(mafiaGame)
+const { isMafiaHost, mafiaTimer, mafiaSelectedTimerDurationMs, oldMafiaMode } = storeToRefs(mafiaGame)
 
 const showTimerPanel = computed(() => !oldMafiaMode.value || isMafiaHost.value)
 const showTimerControls = computed(() => isMafiaHost.value && !isViewLayout.value)
@@ -79,6 +79,10 @@ function onStart(durationMs: number): void {
 function onStop(): void {
   mafiaGame.stopTimer()
 }
+
+function onSelectDuration(durationMs: number): void {
+  mafiaGame.selectTimerPreset(durationMs)
+}
 </script>
 
 <template>
@@ -91,9 +95,11 @@ function onStop(): void {
       :compact="useCompactTimer"
       :preset-ms-list="MAFIA_TIMER_PRESET_MS"
       :default-duration-ms="MAFIA_DEFAULT_TIMER_MS"
+      :selected-duration-ms="mafiaSelectedTimerDurationMs"
       :labels="timerLabels"
       @start="onStart"
       @stop="onStop"
+      @select-duration="onSelectDuration"
     />
   </div>
 </template>

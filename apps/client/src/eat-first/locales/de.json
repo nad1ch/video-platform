@@ -54,6 +54,8 @@
     "speakingQueueClearAllTitle": "Rednerliste leeren",
     "speakingQueueChipViewOnly": "Nominierung: Sitz {by} → {target}",
     "speakingQueueRemoveTitle": "Nominierung entfernen: Sitz {by} → {target}",
+    "speakingByAlreadyNominatedToast": "Platz #{by} hat bereits Platz #{target} nominiert.",
+    "speakingTargetAlreadyNominatedToast": "Platz #{target} ist bereits nominiert (von Platz #{by}).",
     "reshuffleOrderTitle": "Spielerreihenfolge mischen",
     "reshuffleOrderHint": "Mindestens 5 Spieler erforderlich",
     "reshuffleConfirmTitle": "Neu austeilen?",

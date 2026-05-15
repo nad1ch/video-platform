@@ -65,6 +65,14 @@ export const GameRoomWs = {
 
   timerStop: 'gameroom:timer-stop',
 
+  /**
+   * Host-only: broadcast the next-Start preset selection so non-host
+   * peers see the same idle duration the host has picked. Replayed on
+   * join. Mirrors `mafia:timer-preset-select` and `eat:timer-preset-select`;
+   * gated by `isGameRoomHostPeer` server-side.
+   */
+  timerPresetSelect: 'gameroom:timer-preset-select',
+
   playerKick: 'gameroom:player-kick',
 
   playerRevive: 'gameroom:player-revive',

@@ -28,14 +28,25 @@ function meRoleFromAllowlistAndDb(allowlistRole: UserRole, dbRole: string | null
   return 'user'
 }
 
-export function sessionToGlobalAuthUser(session: SessionPayload, dbRole?: string | null): GlobalAuthUser {
+export function sessionToGlobalAuthUser(
+  session: SessionPayload,
+  dbRole?: string | null,
+  dbEmailVerified?: boolean | null,
+): GlobalAuthUser {
   const provider = session.provider
   const p =
     provider === 'twitch' || provider === 'google' || provider === 'apple' || provider === 'email'
       ? provider
       : null
   const trimmed = session.profile_image_url.trim()
-  const role = meRoleFromAllowlistAndDb(effectiveSessionRole(session), dbRole)
+  // Email-provider admin authority requires `emailVerified === true` from the
+  // DB; this guards the surfaced role against (a) a pre-fix-exploited DB row
+  // that still carries `role: 'admin'` and (b) the env allowlist path that
+  // `effectiveSessionRole` no longer grants without a verified email anyway.
+  const emailUnverified = p === 'email' && dbEmailVerified !== true
+  const allowlistRole = emailUnverified ? 'user' : effectiveSessionRole(session)
+  const safeDbRole = emailUnverified ? null : dbRole
+  const role = meRoleFromAllowlistAndDb(allowlistRole, safeDbRole)
   const twitchId =
     p === 'twitch' ? (session.twitch_id ?? session.id) : undefined
   return {

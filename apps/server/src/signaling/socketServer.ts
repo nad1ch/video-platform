@@ -28,6 +28,7 @@ import {
   handleMafiaAudioMixUpdate,
   handleMafiaTimerStart,
   handleMafiaTimerStop,
+  handleMafiaTimerPresetSelect,
   handleMafiaPlayerKick,
   handleMafiaPlayerRevive,
   handleMafiaForceCameraOff,
@@ -45,6 +46,7 @@ import {
   handleGameRoomAudioMixUpdate,
   handleGameRoomTimerStart,
   handleGameRoomTimerStop,
+  handleGameRoomTimerPresetSelect,
   handleGameRoomPlayerKick,
   handleGameRoomPlayerRevive,
   handleGameRoomForceCameraOff,
@@ -62,6 +64,7 @@ import {
   handleEatFirstTableRoundDeal,
   handleEatFirstTimerStart,
   handleEatFirstTimerStop,
+  handleEatFirstTimerPresetSelect,
   handleProduce,
   handleProducerVideoSource,
   handleSetOutboundVideoPaused,
@@ -358,6 +361,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               handleMafiaTimerStop(socket, deps)
               break
             }
+            case 'mafia:timer-preset-select': {
+              handleMafiaTimerPresetSelect(socket, parsed.data.payload, deps)
+              break
+            }
             case 'mafia:player-kick': {
               await handleMafiaPlayerKick(socket, parsed.data.payload, deps)
               break
@@ -414,6 +421,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'gameroom:timer-stop': {
               handleGameRoomTimerStop(socket, deps)
+              break
+            }
+            case 'gameroom:timer-preset-select': {
+              handleGameRoomTimerPresetSelect(socket, parsed.data.payload, deps)
               break
             }
             case 'gameroom:player-kick': {
@@ -482,6 +493,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'eat:timer-stop': {
               await handleEatFirstTimerStop(socket, deps)
+              break
+            }
+            case 'eat:timer-preset-select': {
+              await handleEatFirstTimerPresetSelect(socket, parsed.data.payload, deps)
               break
             }
             case 'request-producer-sync': {
