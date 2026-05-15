@@ -125,68 +125,80 @@ describe('CallPage.css — hovered unpinned tile is layered above the timer chip
 })
 
 // ---------------------------------------------------------------------------
-//  Problem 2b — the GRID itself must lift to escape its own stacking context
+//  Problem 2b — the grid must NOT lift as a whole, and must NOT be a
+//               stacking context (so individual tile z-indexes can compete
+//               with the timer overlay in the root stacking context)
 // ---------------------------------------------------------------------------
 //
-//  `.call-page__grid` creates a stacking context via `contain: layout`,
-//  which traps every z-index applied to `.call-page__tile-wrap` inside the
-//  grid's SC. The tile-wrap can never compete with the timer overlay's
-//  z-index 42 in the PARENT context unless the grid itself is also lifted.
-//  This block guards the `:has()` rule that promotes the grid above the
-//  chip when an unpinned tile inside it is in an interactive state.
+//  An earlier attempt promoted the entire grid above the timer via
+//  `.call-page__grid:has(.call-page__tile-wrap:hover:not(--pinned))
+//  { z-index: 44 }`. That mechanically escaped the grid's stacking
+//  context (created by `contain: layout`) but lifted every tile inside
+//  the grid as a single layer — the timer ended up behind ALL cards, not
+//  just the hovered one.
+//
+//  The real fix is to remove `contain: layout` from `.call-page__grid` so
+//  it no longer establishes a stacking context. Each
+//  `.call-page__tile-wrap` then resolves its own z-index in the root
+//  stacking context (the same one the timer overlay wrappers live in),
+//  and the hover lift `z-index: 44` rule on the tile-wrap competes
+//  directly with the timer's `z-index: 42` — at the individual-tile
+//  level, not the whole-grid level. Pinned tile (z-index 35) and base
+//  tiles (z-index 0) stay below the timer.
 
-describe('CallPage.css — grid lifts above the timer chip when an unpinned tile is interactive', () => {
-  it('declares a `:has()` rule on `.call-page__grid` gated by @media (hover: hover)', () => {
-    // The block opens with `@media (hover: hover)` and closes with the
-    // `z-index: 44` body. Assert the @media wrapper presence first.
-    expect(callCss).toMatch(/@media \(hover: hover\)\s*\{[\s\S]*?\.call-page__grid:has\(/)
+describe('CallPage.css — grid is NOT a stacking context (so tile z-index escapes individually)', () => {
+  it('.call-page__grid rule does NOT declare `contain: layout`', () => {
+    // `contain: layout` would create a stacking context that traps
+    // tile-wrap z-indexes inside the grid. Without it, each tile-wrap's
+    // own z-index resolves at the same level as the timer overlay
+    // wrapper, so only the hovered tile lifts above the timer.
+    //
+    // The docstring inside the rule explains why `contain: layout` was
+    // removed; strip block comments before searching so the explanation
+    // text doesn't trip the negative regex.
+    const gridRule = callCss.match(/\.call-page__grid\s*\{[\s\S]*?\n\}/)
+    expect(gridRule, '.call-page__grid base rule not found').not.toBeNull()
+    const stripped = gridRule![0].replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(stripped).not.toMatch(/contain:\s*layout/)
   })
 
-  it('matches `:has(.call-page__tile-wrap:hover:not(--pinned))` on the grid', () => {
-    expect(callCss).toMatch(
-      /\.call-page__grid:has\(\.call-page__tile-wrap:hover:not\(\.call-page__tile-wrap--pinned\)\)/,
-    )
+  it('.call-page__grid rule does NOT declare any other stacking-context-creating containment', () => {
+    // `contain: paint`, `contain: strict`, `contain: content` would all
+    // create a stacking context too. None of them is allowed here.
+    const gridRule = callCss.match(/\.call-page__grid\s*\{[\s\S]*?\n\}/)
+    expect(gridRule, '.call-page__grid base rule not found').not.toBeNull()
+    const stripped = gridRule![0].replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(stripped).not.toMatch(/contain:\s*(paint|strict|content)/)
   })
 
-  it('matches `:has(.call-page__tile-wrap:focus-within:not(--pinned))` on the grid', () => {
-    expect(callCss).toMatch(
-      /\.call-page__grid:has\(\.call-page__tile-wrap:focus-within:not\(\.call-page__tile-wrap--pinned\)\)/,
-    )
+  it('no `:has()` rule on the grid lifts the whole grid above the timer', () => {
+    // The previous `.call-page__grid:has(.call-page__tile-wrap...) { z-index: 44 }`
+    // selector lifted every tile inside the grid as a single layer.
+    // Any future revival of that pattern would re-trigger the
+    // "timer behind all cards" regression. Block both shapes — with and
+    // without the `:not(--pinned)` filter — for ANY interactive state.
+    expect(callCss).not.toMatch(/\.call-page__grid:has\(\.call-page__tile-wrap:hover/)
+    expect(callCss).not.toMatch(/\.call-page__grid:has\(\.call-page__tile-wrap:focus-within/)
+    expect(callCss).not.toMatch(/\.call-page__grid:has\(\.call-page__tile-wrap--over/)
+    expect(callCss).not.toMatch(/\.call-page__grid:has\(\.call-page__tile-wrap--speaking/)
   })
 
-  it('matches `:has(.call-page__tile-wrap--over:not(--pinned))` on the grid', () => {
-    expect(callCss).toMatch(
-      /\.call-page__grid:has\(\.call-page__tile-wrap--over:not\(\.call-page__tile-wrap--pinned\)\)/,
-    )
-  })
-
-  it(`promotes the grid to z-index ${UNPINNED_HOVER_Z_INDEX} (strictly above the chip's ${TIMER_OVERLAY_Z_INDEX})`, () => {
-    // The three `:has()` selectors share a single body; the block must
-    // resolve to `z-index: 44`. The selectors and the value live in one
-    // CSS rule, so a single regex covering the three-selector list and the
-    // body is the strict assertion.
-    expect(callCss).toMatch(
-      new RegExp(
-        `\\.call-page__grid:has\\(\\.call-page__tile-wrap:hover:not\\(\\.call-page__tile-wrap--pinned\\)\\),[\\s\\S]*?\\.call-page__grid:has\\(\\.call-page__tile-wrap:focus-within:not\\(\\.call-page__tile-wrap--pinned\\)\\),[\\s\\S]*?\\.call-page__grid:has\\(\\.call-page__tile-wrap--over:not\\(\\.call-page__tile-wrap--pinned\\)\\)\\s*\\{[\\s\\S]*?z-index:\\s*${UNPINNED_HOVER_Z_INDEX}`,
-      ),
-    )
-  })
-
-  it(`leaves the grid at its default position when only a --pinned tile is hovered (so chip stays on top of pinned card)`, () => {
-    // A future regression that drops `:not(.call-page__tile-wrap--pinned)`
-    // from any of the three `:has()` selectors would lift the grid on
-    // pinned-only hovers and put the pinned card above the chip — exactly
-    // the rule the user said must NOT change. Assert the unfiltered shape
-    // never appears.
-    expect(callCss).not.toMatch(
-      /\.call-page__grid:has\(\.call-page__tile-wrap:hover\)/,
-    )
-    expect(callCss).not.toMatch(
-      /\.call-page__grid:has\(\.call-page__tile-wrap:focus-within\)/,
-    )
-    expect(callCss).not.toMatch(
-      /\.call-page__grid:has\(\.call-page__tile-wrap--over\)/,
-    )
+  it('no global `:has()` rule on the grid promotes it to a z-index above 42', () => {
+    // Catch-all guard: any `:has(...)` selector on the grid that sets
+    // a z-index higher than the timer overlay would re-introduce the
+    // whole-grid lift regression regardless of which inner selector is
+    // used.
+    const gridHasRules = callCss.match(/\.call-page__grid:has\([^{]*\{[^}]*\}/g) ?? []
+    for (const rule of gridHasRules) {
+      const m = rule.match(/z-index:\s*(\d+)/)
+      if (m) {
+        const zIndex = Number(m[1])
+        expect(
+          zIndex,
+          `Grid :has() rule sets z-index ${zIndex} (>= timer ${TIMER_OVERLAY_Z_INDEX}); this lifts the whole grid above the timer — exactly the regression that was fixed by removing contain: layout from the grid.`,
+        ).toBeLessThan(TIMER_OVERLAY_Z_INDEX)
+      }
+    }
   })
 })
 

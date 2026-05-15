@@ -2,7 +2,7 @@
 
 This document specifies how to use git worktrees and multiple AI agents safely on StreamAssist — without mixing scopes, branches, or file ownership.
 
-For a short quick-orchestrator prompt focused on the git-worktree mechanics only, see the sibling [`/ai/PROMPTS/worktree-parallel-agents.md`](PROMPTS/worktree-parallel-agents.md). For the copy-paste prompt that exercises this full workflow, see [`/ai/PROMPTS/worktrees-parallel-agents-workflow.md`](PROMPTS/worktrees-parallel-agents-workflow.md).
+A shorter / older orchestrator companion prompt is retained at [`/ai/PROMPTS/worktree-parallel-agents.md`](PROMPTS/worktree-parallel-agents.md) for quick workflows and backward compatibility — there is overlap with the full version below; this document is the canonical source of truth. For the copy-paste prompt that exercises this full workflow, see [`/ai/PROMPTS/worktrees-parallel-agents-workflow.md`](PROMPTS/worktrees-parallel-agents-workflow.md).
 
 ## Core principle
 
@@ -144,12 +144,15 @@ Each role has a single primary responsibility. Roles can be assigned at the mode
 
 ## Merge / integration order
 
-Recommended order, lowest-risk first:
+Recommended order, lowest-risk first. Note the two distinct test classes (per [`/ai/REGRESSION_TEST_WORKFLOW.md`](REGRESSION_TEST_WORKFLOW.md)):
+
+- **Coverage-extension tests** — tests for already-correct behavior; must pass against current code. Safe to land independently of any runtime change.
+- **Failing-before-fix regression tests** — intentionally fail on the current bug; must stay in the same bug-fix workstream / PR as the minimal fix; **must not be merged to `main` by themselves** — a failing test on `main` breaks CI for every other branch.
 
 1. **Docs / rules.** Land first. Other workstreams reference them.
-2. **Pure tests.** New consistency tests with no runtime change.
-3. **Pure helpers / refactors.** Behavior-preserving extractions and helper introductions; no behavior change.
-4. **Runtime fixes** for bugs already covered by tests landed in step 2.
+2. **Coverage-extension tests.** New `packages/*-consistency` tests for already-correct behavior, passing against current code. May land independently of runtime changes.
+3. **Pure helpers / refactors** — only if approved as a separate behavior-preserving prep PR (per [`/ai/AI_RULES.md`](AI_RULES.md) §2, "No refactor + behavior change in one diff").
+4. **Bug-fix workstreams.** Each PR contains its failing-before-fix regression test **plus** the minimal fix, landing together — see [`/ai/REGRESSION_TEST_WORKFLOW.md`](REGRESSION_TEST_WORKFLOW.md). Never split the regression test from its fix; never merge the failing test alone.
 5. **UI integrations** that consume helpers landed in step 3 or fixes landed in step 4.
 6. **High-risk WebRTC / WS / auth / billing changes.** Land last and on their own.
 7. **Final integration QA.** Manual rows from `/ai/QA_CHECKLIST.md` matching every surface touched.
