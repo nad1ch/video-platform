@@ -13,7 +13,11 @@
       "Bash(git -C \"D:\\\\Stream staff\\\\video-platform\" log --oneline -20)",
       "Bash(git -C \"D:\\\\Stream staff\\\\video-platform\" log --oneline main..feat/mediasoup-core)",
       "Bash(git -C \"D:\\\\Stream staff\\\\video-platform\" log --oneline main --all)",
-      "Bash(git -C \"D:\\\\Stream staff\\\\video-platform\" branch -v)"
+      "Bash(git -C \"D:\\\\Stream staff\\\\video-platform\" branch -v)",
+      "Bash(npx eslint *)",
+      "Bash(npm install *)",
+      "Bash(echo \"tsc-exit=$?\")",
+      "Bash(echo \"eslint-exit=$?\")"
     ]
   }
 }

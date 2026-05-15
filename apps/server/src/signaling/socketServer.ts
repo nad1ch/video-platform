@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http'
+import { randomUUID } from 'node:crypto'
 import type { WebSocketServer } from 'ws'
 import type { DtlsParameters } from 'mediasoup/types'
 import type { RoomManager } from '../rooms/RoomManager'
@@ -7,6 +8,7 @@ import WebSocket from 'ws'
 import { readSessionFromCookie } from '../auth/session/sessionJwt'
 import { resolvePrismaUserIdFromSession } from '../auth/resolvePrismaUserFromSession'
 import { attachWsHeartbeat } from '../utils/wsHeartbeat'
+import { createRateLimiter } from '../utils/rateLimit'
 import { newDiagnosticEventId, recordDiagnosticEvent } from './roomDiagnosticsBus'
 import type { SignalingDeps } from './messageHandlers'
 import {
@@ -82,8 +84,75 @@ const WS_PING_INTERVAL_MS = 45_000
 
 const WS_JSON_PING_INTERVAL_MS = 25_000
 
+// Audit R1: conservative per-socket rate limits for the signaling dispatch path.
+// Liveness frames bypass — the WS frame-level ping/pong and these JSON ping/pong
+// must remain noise-free. All other parsed messages flow through the default
+// limiter; expensive categories add a stricter limiter on top.
+const WS_LIMIT_BYPASS_TYPES: ReadonlySet<string> = new Set(['client-ping', 'pong'])
+
+const WS_SNAPSHOT_TYPES: ReadonlySet<string> = new Set([
+  'mafia:request-snapshot',
+  'gameroom:request-snapshot',
+])
+
+const WS_AUDIO_MIX_TYPES: ReadonlySet<string> = new Set([
+  'mafia:audio-mix-update',
+  'gameroom:audio-mix-update',
+])
+
+const WS_SETTINGS_TYPES: ReadonlySet<string> = new Set([
+  'mafia:settings-update',
+  'mafia:page-background-settings',
+])
+
+const WS_EAT_MUTATE_TYPES: ReadonlySet<string> = new Set([
+  'eat:trait-reveal-request',
+  'eat:trait-regenerate-request',
+  'eat:trait-type-reroll-request',
+  'eat:action-card-reroll-request',
+  'eat:players-update',
+  'eat:table-round-deal',
+])
+
 export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManager): SignalingDeps {
   const socketPeer = new Map<WebSocket, Peer>()
+
+  // Audit R1: per-socket WS message rate limiters. Keys are a server-generated
+  // UUID per socket — never anything client-controlled (userId / roomId / payload).
+  // Buckets are reset eagerly on disconnect; limiters are stopped on wss close.
+  const wsDefaultLimiter = createRateLimiter({
+    windowMs: 1_000,
+    limit: 60,
+    label: 'ws-signaling-default',
+  })
+  const wsSnapshotLimiter = createRateLimiter({
+    windowMs: 1_000,
+    limit: 1,
+    label: 'ws-signaling-snapshot',
+  })
+  const wsAudioMixLimiter = createRateLimiter({
+    windowMs: 1_000,
+    limit: 2,
+    label: 'ws-signaling-audio-mix',
+  })
+  const wsSettingsLimiter = createRateLimiter({
+    windowMs: 1_000,
+    limit: 1,
+    label: 'ws-signaling-settings',
+  })
+  const wsEatMutateLimiter = createRateLimiter({
+    windowMs: 1_000,
+    limit: 5,
+    label: 'ws-signaling-eat-mutate',
+  })
+  const wsNoticeLimiter = createRateLimiter({
+    windowMs: 1_000,
+    limit: 1,
+    label: 'ws-signaling-notice',
+  })
+
+  const socketLimiterKey = new WeakMap<WebSocket, string>()
+
   // Server-authoritative userId per socket, resolved from the HTTP-upgrade
 
 
@@ -166,9 +235,19 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
 
   wss.on('close', () => {
     clearInterval(jsonPing)
+    wsDefaultLimiter.stop()
+    wsSnapshotLimiter.stop()
+    wsAudioMixLimiter.stop()
+    wsSettingsLimiter.stop()
+    wsEatMutateLimiter.stop()
+    wsNoticeLimiter.stop()
   })
 
   wss.on('connection', (socket, req) => {
+    // Audit R1: assign a server-generated rate-limit key for this socket. Never
+    // derived from client input. Used only as opaque limiter bucket key.
+    const limiterKey = randomUUID()
+    socketLimiterKey.set(socket, limiterKey)
 
 
 
@@ -199,6 +278,18 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
     }
 
     const onDisconnect = (): void => {
+      // Audit R1: drop per-socket limiter buckets eagerly so disconnected
+      // sockets don't keep keys alive until the next reap interval.
+      const key = socketLimiterKey.get(socket)
+      if (key) {
+        wsDefaultLimiter.reset(`def:${key}`)
+        wsSnapshotLimiter.reset(`snap:${key}`)
+        wsAudioMixLimiter.reset(`amix:${key}`)
+        wsSettingsLimiter.reset(`set:${key}`)
+        wsEatMutateLimiter.reset(`eat:${key}`)
+        wsNoticeLimiter.reset(`notice:${key}`)
+        socketLimiterKey.delete(socket)
+      }
       handleDisconnect(socket, deps)
     }
 
@@ -217,6 +308,45 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
         }
 
         const messageType = parsed.data.type
+
+        // Audit R1: per-socket rate limit. Liveness frames bypass; everything
+        // else flows through the default limiter, then a stricter category
+        // limiter for expensive message types. Drop denied messages before the
+        // dispatch switch — do not close the socket.
+        if (!WS_LIMIT_BYPASS_TYPES.has(messageType)) {
+          const key = socketLimiterKey.get(socket)
+          if (key !== undefined) {
+            const def = wsDefaultLimiter.tryConsume(`def:${key}`)
+            let categoryAllowed = true
+            if (def.allowed) {
+              if (WS_SNAPSHOT_TYPES.has(messageType)) {
+                categoryAllowed = wsSnapshotLimiter.tryConsume(`snap:${key}`).allowed
+              } else if (WS_AUDIO_MIX_TYPES.has(messageType)) {
+                categoryAllowed = wsAudioMixLimiter.tryConsume(`amix:${key}`).allowed
+              } else if (WS_SETTINGS_TYPES.has(messageType)) {
+                categoryAllowed = wsSettingsLimiter.tryConsume(`set:${key}`).allowed
+              } else if (WS_EAT_MUTATE_TYPES.has(messageType)) {
+                categoryAllowed = wsEatMutateLimiter.tryConsume(`eat:${key}`).allowed
+              }
+            }
+            if (!def.allowed || !categoryAllowed) {
+              if (wsNoticeLimiter.tryConsume(`notice:${key}`).allowed) {
+                try {
+                  if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                      type: 'rate-limited',
+                      payload: {},
+                    }))
+                  }
+                } catch {
+                  /* socket may have closed mid-send */
+                }
+              }
+              return
+            }
+          }
+        }
+
         try {
           switch (parsed.data.type) {
             case 'client-ping': {
