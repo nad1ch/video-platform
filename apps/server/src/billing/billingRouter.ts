@@ -219,6 +219,12 @@ let warnedMissingMonoWebhookSecret = false
 /**
  * Verify the Monobank webhook secret.
  *
+ * Accept-path: header-only. The secret MUST arrive in the `X-Mono-Secret`
+ * request header. The previous `?secret=…` query-string accept path was
+ * removed (audit S2): query strings are logged by Cloudflare, the in-process
+ * access log, and any reverse proxy in front of the server, so accepting the
+ * secret there leaks it into every log layer in the request path.
+ *
  * Production semantics (fail-closed): when `MONO_WEBHOOK_SECRET` is unset or
  * empty in production, the webhook is REJECTED. Without the secret there is
  * no way to distinguish a real Monobank callback from a forged one, and a
@@ -241,7 +247,7 @@ function verifyMonoWebhookSecret(req: Request): boolean {
         console.error(
           '[billing] MONO_WEBHOOK_SECRET is not set — REJECTING all mono-personal webhook ' +
             'requests in production. Configure MONO_WEBHOOK_SECRET and re-register the webhook ' +
-            'URL with `?secret=<value>` or send `X-Mono-Secret`.',
+            'in Monobank to send the value via the `X-Mono-Secret` header.',
         )
       }
       return false
@@ -256,10 +262,6 @@ function verifyMonoWebhookSecret(req: Request): boolean {
         ? (headerRaw[0] ?? '')
         : ''
   if (header.length > 0 && constantTimeEqual(header, expected)) {
-    return true
-  }
-  const query = typeof req.query.secret === 'string' ? req.query.secret : ''
-  if (query.length > 0 && constantTimeEqual(query, expected)) {
     return true
   }
   if (process.env.NODE_ENV !== 'production') {

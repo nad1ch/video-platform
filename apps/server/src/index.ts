@@ -30,6 +30,15 @@ import { mountBillingRoutes } from './billing/billingRouter'
 import { mountBillingAdminRoutes } from './billing/billingAdminRouter'
 import { LOCAL_DEV_API_PORT } from './config/localDevApiPort'
 
+/**
+ * Replace `[?&]secret=<value>` with `[?&]secret=[REDACTED]` in a URL for safe
+ * logging (audit S2). Narrowly scoped to the `secret` parameter — broader
+ * sensitive-field redaction for analytics ingest lives in `clientEventsRouter`.
+ */
+function redactUrlSecrets(url: string): string {
+  return url.replace(/([?&]secret=)[^&#]*/gi, '$1[REDACTED]')
+}
+
 async function bootstrap(): Promise<void> {
   let shuttingDown = false
   const services: { roomManager?: RoomManager } = {}
@@ -56,6 +65,12 @@ async function bootstrap(): Promise<void> {
    * One-line JSON access log per HTTP request. Captures `cf-ray` so any 4xx/5xx
    * in Cloudflare analytics can be correlated to a server log line. Intentionally
    * minimal — no body, no headers — to avoid leaking PII.
+   *
+   * `?secret=…` query params are redacted before logging (audit S2): the Mono
+   * webhook URL used to be registerable with the secret as a query parameter,
+   * and historical/external callers may still send it that way. Stripping it
+   * here ensures the value cannot land in stdout, Cloudflare access logs, or
+   * any reverse-proxy log even if a stray request includes it.
    */
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.url === '/health') {
@@ -67,7 +82,7 @@ async function bootstrap(): Promise<void> {
       console.log(JSON.stringify({
         t: new Date().toISOString(),
         m: req.method,
-        p: req.originalUrl,
+        p: redactUrlSecrets(req.originalUrl),
         s: res.statusCode,
         ms: Date.now() - start,
         ip: req.ip,

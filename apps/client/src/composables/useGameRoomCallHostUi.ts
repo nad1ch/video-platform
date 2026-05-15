@@ -1,10 +1,8 @@
 import { computed, type Ref } from 'vue'
 import { GameRoomWs } from '@/composables/gameRoomWsProtocol'
 import type { useGameTemplateGameStore } from '@/stores/gameTemplateGame'
-import {
-  decodeSpeakingNominationFlat,
-  nominationTargetSeatsFromSpeakingFlat,
-} from '@/utils/speakingNominationQueue'
+import { nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
+import { decideSpeakingTileClick } from '@/utils/speakingNominationController'
 
 /**
  * Generic game-room call-host UI composable (Phase 3B).
@@ -177,51 +175,54 @@ export function useGameRoomCallHostUi(
       return
     }
     if (gameStore.hostInteractionMode === 'speaking') {
-      const draft = gameStore.speakingNominationDraftBySeat
-      const segments = decodeSpeakingNominationFlat(gameStore.speakingQueue)
-      if (draft == null) {
-        const existingBy = segments.find((seg) => seg.bySeat === seat)
-        if (existingBy) {
+      // Route the tile click through the shared speaking-nomination state
+      // machine. The controller was extracted from Mafia (the behavioral
+      // source of truth); Game Template's prior inline state machine was
+      // a verbatim copy, so this migration is a pure refactor. The
+      // `'speaking'` mode literal is hard-coded here because the enclosing
+      // `if` already proved we're in speaking mode — passing the Game
+      // Template mode through the controller's `'idle' | 'speaking' |
+      // 'swap'` type without conversion.
+      const intent = decideSpeakingTileClick({
+        mode: 'speaking',
+        seat,
+        draft: gameStore.speakingNominationDraftBySeat,
+        queue: gameStore.speakingQueue,
+      })
+      switch (intent.kind) {
+        case 'set-draft':
+          gameStore.setSpeakingNominationDraftBySeat(intent.seat)
+          break
+        case 'clear-draft':
+          gameStore.setSpeakingNominationDraftBySeat(null)
+          break
+        case 'append-pair':
+          gameStore.appendSpeakingNominationPair(intent.by, intent.target)
+          break
+        case 'reject-duplicate-by':
           pushCallToast(
             t('gameRoom.speakingByAlreadyNominatedToast', {
-              by: seat,
-              target: existingBy.targetSeat,
+              by: intent.bySeat,
+              target: intent.existingTarget,
             }),
             'leave',
           )
-          ev.stopPropagation()
-          return
-        }
-        gameStore.setSpeakingNominationDraftBySeat(seat)
-      } else if (draft === seat) {
-        gameStore.setSpeakingNominationDraftBySeat(null)
-      } else {
-        const existingTarget = segments.find((seg) => seg.targetSeat === seat)
-        if (existingTarget) {
+          if (intent.clearDraftAfter) {
+            gameStore.setSpeakingNominationDraftBySeat(null)
+          }
+          break
+        case 'reject-duplicate-target':
           pushCallToast(
             t('gameRoom.speakingTargetAlreadyNominatedToast', {
-              target: seat,
-              by: existingTarget.bySeat ?? '?',
+              target: intent.targetSeat,
+              by: intent.existingBySeat ?? '?',
             }),
             'leave',
           )
-          ev.stopPropagation()
-          return
-        }
-        const existingBy = segments.find((seg) => seg.bySeat === draft)
-        if (existingBy) {
-          pushCallToast(
-            t('gameRoom.speakingByAlreadyNominatedToast', {
-              by: draft,
-              target: existingBy.targetSeat,
-            }),
-            'leave',
-          )
-          gameStore.setSpeakingNominationDraftBySeat(null)
-          ev.stopPropagation()
-          return
-        }
-        gameStore.appendSpeakingNominationPair(draft, seat)
+          break
+        case 'ignore':
+        default:
+          break
       }
     }
     // Mafia's `else { ... assignOrClearNightActionForActiveRole ... }` branch

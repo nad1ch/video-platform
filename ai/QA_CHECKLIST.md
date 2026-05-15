@@ -2,6 +2,8 @@
 
 Pick the rows that apply to your change. Document which you ran and which you skipped (and why) in the "After editing" output.
 
+> For any WebRTC / UI fix, capture browser evidence using [`/ai/BROWSER_DEBUG_WORKFLOW.md`](BROWSER_DEBUG_WORKFLOW.md) §A–§K **before** the fix and **after** the fix; attach both to the QA report. "It looks right now" is not evidence.
+
 ## 1. Call / realtime (any change touching `call-core`, `CallPage`, signaling, Mafia)
 
 | # | Scenario | Pass criteria |

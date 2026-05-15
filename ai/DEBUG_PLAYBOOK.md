@@ -2,6 +2,8 @@
 
 Use this any time the user reports a bug. Do not skip steps.
 
+> When the bug is observable in a running browser (black tile, stuck UI, failed network call, redirect loop, stale overlay), pair this playbook with [`/ai/BROWSER_DEBUG_WORKFLOW.md`](BROWSER_DEBUG_WORKFLOW.md). It specifies the read-only browser snippets to capture *before* forming hypotheses, and the confidence levels Claude must meet before proposing a fix on high-risk surfaces.
+
 ## 1. The seven-step loop
 
 1. **Reproduce** — get a deterministic recipe. If you cannot reproduce, say so; do not guess.
