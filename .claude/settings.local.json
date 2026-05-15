@@ -17,7 +17,9 @@
       "Bash(npx eslint *)",
       "Bash(npm install *)",
       "Bash(echo \"tsc-exit=$?\")",
-      "Bash(echo \"eslint-exit=$?\")"
+      "Bash(echo \"eslint-exit=$?\")",
+      "Bash(echo \"exit=$?\")",
+      "Bash(git *)"
     ]
   }
 }

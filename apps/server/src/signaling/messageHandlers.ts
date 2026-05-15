@@ -2235,7 +2235,15 @@ export async function handleEatFirstForceMuteAll(
 
   for (const target of room.getPeers()) {
     if (target.id === peer.id) continue
-    target.forcedAudioMuted = muted
+    // Soft mute, mirroring Mafia's `handleMafiaForceMuteAll`: write the
+    // recoverable `audioMuted` field instead of the hard host-enforcement
+    // `forcedAudioMuted`. The hard flag is gated by `handleSetAudioMuted`
+    // (`!peer.forcedAudioMuted`) and would prevent a participant from
+    // self-unmuting via the normal `set-audio-muted: false` flow after the
+    // host's "mute all". Using `audioMuted` keeps host action visible
+    // (paused producer + `peer-audio-muted` broadcast) while leaving
+    // self-recovery available, matching Mafia.
+    target.audioMuted = muted
     for (const p of target.getProducers()) {
       if (p.kind !== 'audio' || p.closed) continue
       try {
