@@ -1485,7 +1485,7 @@ if (import.meta.env.DEV) {
         @audio-stall="(p) => emit('audio-stall', p)"
       />
       <div
-        v-if="showVideo"
+        v-show="showVideo"
         class="tile-video-wrap"
         :class="{ 'tile-video-wrap--mafia-dead': deadShade }"
       >
@@ -1503,7 +1503,7 @@ if (import.meta.env.DEV) {
             "
             fill
             :fill-cover="Boolean(videoFillCover)"
-            :playback-suppressed="Boolean(videoPlaybackSuppressed)"
+            :playback-suppressed="!showVideo || Boolean(videoPlaybackSuppressed)"
             :target-playback-fps="videoTargetPlaybackFps"
             @remote-playback-stall="(p) => emit('remote-playback-stall', p)"
             @video-stall="(p) => emit('video-stall', p)"
