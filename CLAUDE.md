@@ -19,6 +19,8 @@ Deeper architecture and risk rules live in `.cursor/rules/streamassist-engineeri
 
 ## Core rule
 
+**Slot first.** Identify the correct worktree slot before starting any task — `sa-docs`, `sa-fix`, `sa-feature`, or `sa-review`. See [`/ai/WORKTREE_SLOTS.md`](ai/WORKTREE_SLOTS.md).
+
 **Step 0 — branch first.** Create a new logical git branch before editing code. Do not edit on `main` or any shared integration branch. Naming format and allowed types are canonical in [`.cursor/rules/ai-superpower-workflow.mdc`](.cursor/rules/ai-superpower-workflow.mdc) §1 — follow it.
 
 Then do not start implementation before all five are complete:

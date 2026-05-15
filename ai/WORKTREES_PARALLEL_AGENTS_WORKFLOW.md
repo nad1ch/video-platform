@@ -4,6 +4,8 @@ This document specifies how to use git worktrees and multiple AI agents safely o
 
 A shorter / older orchestrator companion prompt is retained at [`/ai/PROMPTS/worktree-parallel-agents.md`](PROMPTS/worktree-parallel-agents.md) for quick workflows and backward compatibility — there is overlap with the full version below; this document is the canonical source of truth. For the copy-paste prompt that exercises this full workflow, see [`/ai/PROMPTS/worktrees-parallel-agents-workflow.md`](PROMPTS/worktrees-parallel-agents-workflow.md).
 
+For simple day-to-day work, prefer the 4-slot model in [`/ai/WORKTREE_SLOTS.md`](WORKTREE_SLOTS.md). Use this full parallel-agent workflow only when multiple independent workstreams are truly needed.
+
 ## Core principle
 
 > **Parallel agents are useful only when scopes are independent. If scopes overlap, use one agent and one branch.**
