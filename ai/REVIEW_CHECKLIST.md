@@ -55,6 +55,7 @@ Use for every diff before claiming "done", and for every PR you review.
 - [ ] Rate limits considered for any new HTTP / WS mutation entry point.
 - [ ] OAuth redirects sanitized via existing helper.
 - [ ] Admin / host gating uses server checks (`resolveUserRole`, ownership helpers), not client flags.
+- [ ] If the diff introduces or uses an MCP / connector / tool integration (browser MCP, repo connector, logs / Sentry, DB, internal API, docs platform, design tool), the reviewer verified: permissions (least privilege), data exposure (no secrets / PII), production access (read-only or HITL-gated), and the fallback path (the workflow still works without the connector). See [`/ai/MCP_CONNECTORS_WORKFLOW.md`](MCP_CONNECTORS_WORKFLOW.md).
 
 ### Known production risk surfaces — re-verify when touched
 

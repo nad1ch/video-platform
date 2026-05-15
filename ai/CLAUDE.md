@@ -110,6 +110,7 @@ When opening this repo cold, read these in order:
 8. `/ai/WORKTREES_PARALLEL_AGENTS_WORKFLOW.md` — when running multiple agents or worktrees in parallel
 9. `/ai/REVIEW_CHECKLIST.md` — when reviewing a diff
 10. `/ai/QA_CHECKLIST.md` — before claiming done
+11. `/ai/MCP_CONNECTORS_WORKFLOW.md` — when planning MCP / connector / browser / repo / log / tool access for a task
 
 For copy-paste prompts, see `/ai/PROMPTS/`.
 

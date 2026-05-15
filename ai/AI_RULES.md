@@ -121,3 +121,4 @@ For security-sensitive work, also output the risk block from §6 above (`Risk / 
 - Russian-language strings in code, docs, or tests.
 - Claiming "tests pass" without running them.
 - Force-pushing, `git reset --hard`, merging, or pushing without explicit user request.
+- Using, calling, or planning workflows against any MCP / connector / browser / repo / log / tool integration before classifying it `candidate` → `enabled` → `approved-for-task`, and without read-only and least-privilege first. See [`/ai/MCP_CONNECTORS_WORKFLOW.md`](MCP_CONNECTORS_WORKFLOW.md).
