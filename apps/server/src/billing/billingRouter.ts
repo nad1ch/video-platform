@@ -219,11 +219,26 @@ let warnedMissingMonoWebhookSecret = false
 /**
  * Verify the Monobank webhook secret.
  *
- * Accept-path: header-only. The secret MUST arrive in the `X-Mono-Secret`
- * request header. The previous `?secret=…` query-string accept path was
- * removed (audit S2): query strings are logged by Cloudflare, the in-process
- * access log, and any reverse proxy in front of the server, so accepting the
- * secret there leaks it into every log layer in the request path.
+ * Accept-paths (in order): `?secret=…` query parameter, then `X-Mono-Secret`
+ * header. Both are compared with `constantTimeEqual` against
+ * `MONO_WEBHOOK_SECRET`.
+ *
+ * The Monobank Personal API does NOT document support for custom callback
+ * headers (only the Acquiring/Corporate API does, via `X-Sign` ECDSA). The
+ * intended authentication mechanism for `/personal/webhook` is the secrecy
+ * of the registered `webHookUrl` itself — operators bake the secret into the
+ * URL (query parameter is the convention) and the merchant verifies it on
+ * callback. The header accept-path is retained as a defense-in-depth option
+ * for setups that terminate Monobank traffic through a reverse proxy that
+ * injects the header before reaching this server; it is NOT what real
+ * Monobank Personal API callbacks send.
+ *
+ * Because the secret must travel in the URL, it would otherwise leak into
+ * every log layer in the request path (Cloudflare, reverse proxies, our own
+ * stdout). The in-process access log in `index.ts` redacts `?secret=…`
+ * before logging (audit S2). Upstream log layers are an operations concern:
+ * scrub the secret in Cloudflare/Nginx logs or rotate `MONO_WEBHOOK_SECRET`
+ * on a schedule. See `docs/qa-mono-webhook.md` (TODO follow-up).
  *
  * Production semantics (fail-closed): when `MONO_WEBHOOK_SECRET` is unset or
  * empty in production, the webhook is REJECTED. Without the secret there is
@@ -247,11 +262,15 @@ function verifyMonoWebhookSecret(req: Request): boolean {
         console.error(
           '[billing] MONO_WEBHOOK_SECRET is not set — REJECTING all mono-personal webhook ' +
             'requests in production. Configure MONO_WEBHOOK_SECRET and re-register the webhook ' +
-            'in Monobank to send the value via the `X-Mono-Secret` header.',
+            'URL with `?secret=<value>` (Monobank Personal API does not deliver custom headers).',
         )
       }
       return false
     }
+    return true
+  }
+  const query = typeof req.query.secret === 'string' ? req.query.secret : ''
+  if (query.length > 0 && constantTimeEqual(query, expected)) {
     return true
   }
   const headerRaw = req.headers['x-mono-secret']

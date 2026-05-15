@@ -6,6 +6,19 @@ export class Peer {
   readonly socket: WebSocket
   readonly roomId: string
   readonly userId: string
+  /**
+   * Server-authoritative Prisma `User.id` resolved from the WS-upgrade session
+   * cookie via `resolvePrismaUserIdFromSession`. Empty string for anonymous
+   * sockets or sockets where DB lookup is unavailable. Used by Eat First host
+   * authority to compare `peer.prismaUserId === room.ownerUserId` (audit R3).
+   *
+   * Distinct from `userId`: `userId` is the session JWT `id` (e.g. Twitch
+   * profile id for Twitch users), while `prismaUserId` is the internal Prisma
+   * row id. For Twitch users they differ; for email users they may coincide.
+   * Mafia/GameRoom continue to authorize by `userId` (session id) and are
+   * unaffected by this field.
+   */
+  readonly prismaUserId: string
   /** Shown to other participants (from join-room / update-display-name). */
   displayName: string
   /** HTTPS profile URL from join-room (opaque to SFU). */
@@ -70,11 +83,20 @@ export class Peer {
    */
   private readonly consumersByProducerId = new Map<string, Set<Consumer>>()
 
-  constructor(id: string, socket: WebSocket, roomId: string, displayName: string, avatarUrl = '', userId = '') {
+  constructor(
+    id: string,
+    socket: WebSocket,
+    roomId: string,
+    displayName: string,
+    avatarUrl = '',
+    userId = '',
+    prismaUserId = '',
+  ) {
     this.id = id
     this.socket = socket
     this.roomId = roomId
     this.userId = userId
+    this.prismaUserId = prismaUserId
     this.displayName = displayName
     this.avatarUrl = avatarUrl
   }

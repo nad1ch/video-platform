@@ -89,6 +89,8 @@ These are existing, currently-live trust boundaries called out in `.cursor/rules
 ## 9. Tests / QA
 
 - [ ] If touching pure rules (Nadle, Checkers, call-core policies, Eat First), a `packages/*-consistency` test exists or was added.
+- [ ] **If the PR fixes a bug**, a regression test that *failed before the fix* is included — OR the PR documents a clear "not automatable" reason and attaches manual QA evidence (browser before / after, QA rows). See [`/ai/REGRESSION_TEST_WORKFLOW.md`](REGRESSION_TEST_WORKFLOW.md).
+- [ ] No existing test was rewritten, weakened, or deleted to make CI green or to hide the bug.
 - [ ] If touching realtime / UI, manual QA steps are listed (see `/ai/QA_CHECKLIST.md`).
 - [ ] No test was modified to make it pass.
 - [ ] `npm run test:ci` mentioned and run if pure logic changed.

@@ -5,6 +5,7 @@ import type { RoomManager } from '../rooms/RoomManager'
 import type { Peer } from '../peers/Peer'
 import WebSocket from 'ws'
 import { readSessionFromCookie } from '../auth/session/sessionJwt'
+import { resolvePrismaUserIdFromSession } from '../auth/resolvePrismaUserFromSession'
 import { attachWsHeartbeat } from '../utils/wsHeartbeat'
 import { newDiagnosticEventId, recordDiagnosticEvent } from './roomDiagnosticsBus'
 import type { SignalingDeps } from './messageHandlers'
@@ -84,25 +85,47 @@ const WS_JSON_PING_INTERVAL_MS = 25_000
 export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManager): SignalingDeps {
   const socketPeer = new Map<WebSocket, Peer>()
   // Server-authoritative userId per socket, resolved from the HTTP-upgrade
-  
-  
+
+
   const socketSessionUserId = new WeakMap<WebSocket, string>()
-  const deps: SignalingDeps = { roomManager, socketPeer, socketSessionUserId }
+  /**
+   * Server-authoritative Prisma `User.id` per socket, resolved asynchronously
+   * from the HTTP-upgrade session cookie via `resolvePrismaUserIdFromSession`.
+   * Distinct from `socketSessionUserId` (which holds the session JWT `id`,
+   * e.g. Twitch profile id) — see `Peer.prismaUserId` for context.
+   *
+   * Stored as a `Promise<string>` so `handleJoinRoom` can `await` the value
+   * race-free: by the time the first `join-room` message is dispatched, the
+   * lookup has typically completed; if it has not, the await suspends until
+   * it does. The promise resolves to `''` for anonymous sockets, sockets
+   * without a Prisma user, or any lookup failure (never rejects).
+   *
+   * Used by Eat First host authority (audit R3); other namespaces ignore it.
+   */
+  const socketSessionPrismaUserId = new WeakMap<WebSocket, Promise<string>>()
+  const deps: SignalingDeps = {
+    roomManager,
+    socketPeer,
+    socketSessionUserId,
+    socketSessionPrismaUserId,
+  }
   roomManager.bindSignalingDeps(deps)
 
-  function resolveSessionUserIdFromUpgrade(req: IncomingMessage): string {
+  function readUpgradeSession(req: IncomingMessage): ReturnType<typeof readSessionFromCookie> {
     try {
-      const session = readSessionFromCookie(req.headers.cookie)
-      if (session && typeof session.id === 'string' && session.id.trim().length > 0) {
-        return session.id.trim()
-      }
+      return readSessionFromCookie(req.headers.cookie)
     } catch (err) {
-      
-      
-      
       if (process.env.NODE_ENV !== 'production') {
         console.warn('[signaling] readSessionFromCookie threw on upgrade', err)
       }
+      return null
+    }
+  }
+
+  function resolveSessionUserIdFromUpgrade(req: IncomingMessage): string {
+    const session = readUpgradeSession(req)
+    if (session && typeof session.id === 'string' && session.id.trim().length > 0) {
+      return session.id.trim()
     }
     return ''
   }
@@ -146,13 +169,33 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
   })
 
   wss.on('connection', (socket, req) => {
-    
-    
-    
+
+
+
     // of this socket to avoid host-flapping mid-game.
     const sessionUserId = resolveSessionUserIdFromUpgrade(req)
     if (sessionUserId.length > 0) {
       socketSessionUserId.set(socket, sessionUserId)
+    }
+    // Audit R3: also resolve the Prisma `User.id` (different identity namespace
+    // from the session JWT `id` for OAuth users) so Eat First host authority can
+    // compare `peer.prismaUserId === room.ownerUserId` without falling back to
+    // "first peer wins". Stored as a Promise so `handleJoinRoom` can await it
+    // race-free — by the time `join-room` is dispatched, the lookup has
+    // typically already completed.
+    const upgradeSession = readUpgradeSession(req)
+    if (upgradeSession) {
+      const prismaUserIdPromise = resolvePrismaUserIdFromSession(upgradeSession)
+        .then((prismaUserId) =>
+          typeof prismaUserId === 'string' && prismaUserId.length > 0 ? prismaUserId : '',
+        )
+        .catch((err: unknown) => {
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn('[signaling] resolvePrismaUserIdFromSession failed at upgrade', err)
+          }
+          return ''
+        })
+      socketSessionPrismaUserId.set(socket, prismaUserIdPromise)
     }
 
     const onDisconnect = (): void => {

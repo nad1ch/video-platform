@@ -384,6 +384,22 @@ export type SignalingDeps = {
    * minimal `SignalingDeps`; real production wiring always sets it.
    */
   socketSessionUserId?: WeakMap<WsSocket, string>
+  /**
+   * Server-authoritative Prisma `User.id` per socket (audit R3). Populated
+   * asynchronously in `attachSocketServer` from the HTTP-upgrade session
+   * cookie via `resolvePrismaUserIdFromSession`. Stored as a `Promise<string>`
+   * so {@link handleJoinRoom} can `await` the value race-free; the promise
+   * resolves to `''` for anonymous sockets, sockets without a Prisma user,
+   * or any lookup failure (never rejects).
+   *
+   * Used by {@link handleJoinRoom} to stamp `peer.prismaUserId` so Eat First
+   * host authority can compare against `room.ownerUserId` (a Prisma row id)
+   * without falling back to "first peer wins".
+   *
+   * Optional at module-interface level for test harnesses; real production
+   * wiring always sets it.
+   */
+  socketSessionPrismaUserId?: WeakMap<WsSocket, Promise<string>>
 }
 
 export function sendServerMessage(socket: WsSocket, message: ServerMessage): void {
@@ -647,16 +663,23 @@ function eatFirstHostPeerId(room: Room): string | null {
  *
  *   - server broadcasts `eat:host-updated { hostPeerId }`
  *   - client sets `isEatFirstRoomHost` when `hostPeerId === selfPeerId`
- *   - server now gates host actions on `peer.id === hostPeerId`
+ *   - server gates host actions on `peer.id === hostPeerId`
  *
- * The DB `EatFirstGame.room.ownerUserId` (internal Prisma user id) is NOT
- * compared to `peer.userId` (the WS-session external id, e.g. Twitch sub)
- * here — those are different identity namespaces and the comparison would
- * always fail in production. DB owner remains the source of truth for
- * game ownership / ensure / admin / persistence; it is still consulted
- * inside `resolveEatFirstHostPeerId` to PICK which peer is the host when
- * a peer with matching `userId` is present, with a longest-lived-peer
- * fallback when not.
+ * The DB `EatFirstGame.room.ownerUserId` is the internal Prisma `User.id`.
+ * It is compared inside `resolveEatFirstHostPeerId` against the new
+ * `peer.prismaUserId` field (stamped at `handleJoinRoom` from the upgrade
+ * session via `resolvePrismaUserIdFromSession`) — NOT against `peer.userId`
+ * which is the session JWT `id` (e.g. Twitch profile id for OAuth users)
+ * and lives in a different identity namespace. Without `peer.prismaUserId`
+ * the previous code fell through to a "first peer wins" fallback, letting
+ * any joiner gain host authority when the real owner was offline (audit R3).
+ *
+ * When no peer's `prismaUserId` matches `ownerUserId`, host actions are
+ * rejected — no fallback host. The narrow exception is a legacy Eat First
+ * room with `ownerUserId == null` in the DB row (pre-dates the ownership
+ * stamp); such rooms still fall back to the longest-lived peer so dev/local
+ * flows are not broken. New rooms always get `ownerUserId` stamped on the
+ * first `eatFirstEnsureGame` call.
  */
 function isEatFirstHostPeer(room: Room, peer: Peer): boolean {
   const hostPeerId = eatFirstHostPeerId(room)
@@ -983,7 +1006,15 @@ export async function handleJoinRoom(
       })
     }
   }
-  const peer = new Peer(peerId, socket, room.id, name, avatarUrlSafe, userId)
+  // Audit R3: resolve the Prisma `User.id` from the upgrade-stamped promise so
+  // Eat First host authority can compare against `room.ownerUserId` (Prisma id)
+  // without the "first peer wins" fallback. Awaiting here is race-free; for
+  // sockets without a session the WeakMap miss yields `''` and the peer
+  // simply is not Eat First host-eligible. Mafia/GameRoom never read this
+  // field and are unaffected.
+  const prismaUserIdPromise = deps.socketSessionPrismaUserId?.get(socket)
+  const prismaUserId = prismaUserIdPromise ? await prismaUserIdPromise : ''
+  const peer = new Peer(peerId, socket, room.id, name, avatarUrlSafe, userId, prismaUserId)
   
   // resets on every new socket, so the room remembers the active state and
   
@@ -4270,7 +4301,23 @@ export function handleGameRoomAudioMixUpdate(
   if (!rp) return
   const { peer, room } = rp
   if (!isGameRoomHostPeer(room, peer)) return
-  const applied = room.applyGameRoomAudioMixEntries(payload.entries)
+  // Never trust the client-supplied `userId`. Resolve each entry's userId from
+  // the target peer's server-side identity so a malicious host cannot store a
+  // mix entry under a victim's userId (which would persist across rebinds via
+  // `rebindGameRoomAudioMixEntryPeerId`). Mirrors the hardened Mafia path in
+  // `handleMafiaAudioMixUpdate` (audit R2).
+  const serverAuthoritativeEntries = payload.entries.map((entry) => {
+    const targetPeerId = typeof entry.peerId === 'string' ? entry.peerId.trim() : ''
+    const target = targetPeerId.length > 0 ? room.getPeer(targetPeerId) : null
+    const serverUserId = typeof target?.userId === 'string' ? target.userId.trim() : ''
+    return {
+      peerId: entry.peerId,
+      userId: serverUserId.length > 0 ? serverUserId : null,
+      volume: entry.volume,
+      muted: entry.muted,
+    }
+  })
+  const applied = room.applyGameRoomAudioMixEntries(serverAuthoritativeEntries)
   if (applied.length < 1) return
   broadcastServerMessageToRoom(room, {
     type: GameRoomWs.audioMixUpdate,

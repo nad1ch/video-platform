@@ -109,7 +109,9 @@ Open DevTools → Network. For each suspicious request, capture:
 })();
 ```
 
-Capture alongside (from URL / query):
+> **Warning — `ws.url` may carry sensitive query parameters.** StreamAssist's WebSocket URLs can include `roomId`, `streamerId`, JWTs, session-like tokens, auth handshakes, or other identifiers in the query string. **Before pasting evidence, redact every query parameter that is not strictly needed** and replace token-shaped values with `<redacted>` (e.g. `wss://example/ws?streamerId=<redacted>&authJwt=<redacted>`). When in doubt, share only the scheme + host + path and describe the query shape (`?streamerId=…&mode=…`) instead of the literal URL.
+
+Capture alongside (from URL / query — redacted as above):
 
 - `roomId` from path
 - `streamerId` from path / query
@@ -255,13 +257,26 @@ Replace `SELECTOR_HERE` with the element under investigation (e.g. `.participant
 (async () => {
   const r = await fetch('/api/auth/me', { credentials: 'include' });
   let body = null;
-  try { body = await r.json(); } catch { body = '<non-JSON>'; }
+  let bodyKind = '<non-JSON>';
+  try {
+    body = await r.json();
+    bodyKind = body === null
+      ? 'null'
+      : Array.isArray(body) ? 'array' : typeof body; // 'object' | 'string' | 'number' | 'boolean'
+  } catch { /* keep bodyKind = '<non-JSON>' */ }
+  // Intentional safety: if the body is NOT a JSON object we expose only its
+  // kind, never the raw value. A response that is a bare string (e.g. an
+  // opaque token, a redirect URL, a JWT, or a raw error message) must not
+  // be printed verbatim. Reading the shape of a JSON object is fine because
+  // we map values to `typeof v` only.
+  const bodyShape = body && typeof body === 'object' && !Array.isArray(body)
+    ? Object.fromEntries(Object.entries(body).map(([k, v]) => [k, typeof v]))
+    : null;
   return {
     route: location.pathname,
     status: r.status,
-    bodyShape: body && typeof body === 'object'
-      ? Object.fromEntries(Object.entries(body).map(([k, v]) => [k, typeof v]))
-      : body,
+    bodyKind,
+    bodyShape,
     cookieNames: document.cookie.split(';').map(c => c.split('=')[0].trim()).filter(Boolean),
     credentialsIncluded: true,
   };
@@ -270,7 +285,7 @@ Replace `SELECTOR_HERE` with the element under investigation (e.g. `.participant
 
 For redirect-loop bugs, also note in DevTools → Network the chain of 30x responses and which `Location` headers were followed.
 
-**Never print cookie values, OAuth codes, signed tokens, or secrets.**
+**Never print cookie values, OAuth codes, signed tokens, redirect URLs, opaque strings, or raw error messages.** The snippet above is built so that non-object responses surface only as a `bodyKind` tag (`'string'`, `'number'`, `'<non-JSON>'`, etc.); do not modify it to print the raw value.
 
 ### K. Economy / billing / leaderboard evidence
 
@@ -320,15 +335,23 @@ End your message with:
 | **Likely** | Evidence is consistent with the cause but does not exclude alternatives. | Propose targeted additional evidence to confirm before fixing. |
 | **Not confirmed** | Insufficient evidence; multiple plausible causes. | **Stop. Request more evidence.** Do not patch by guess. |
 
-**Rule:** Claude must not implement a fix when root cause is *Not confirmed* on any of these high-risk surfaces:
+**Rule:** Claude must not implement a fix when root cause is *Not confirmed* on any high-risk surface. The canonical high-risk list lives in [`/ai/CLAUDE.md`](CLAUDE.md) §3 "Model split" — keep this list in sync with it.
 
-- `packages/call-core/**` (any media stack change)
-- WebRTC transport / signaling
-- WS protocols (`/ws`, `/nadle-ws`, `/eat-first-ws`, `/nadraw-show-ws`, `/checkers-ws`)
-- `apps/server/src/auth/**`
-- `apps/server/src/leaderboardRouter.ts`, `apps/server/src/coinHub/**`, `apps/server/src/billing/**`
+High-risk surfaces (must be *Confirmed* before patching):
 
-For low-risk UI surfaces (landing copy, layout polish, label changes), *Likely* may be enough if the change is reversible and observable.
+- `packages/call-core/**` — any WebRTC / media-stack change
+- WebRTC transport / signaling (any layer that talks to mediasoup)
+- WS protocols: `/ws` (call signaling + Mafia), `/nadle-ws`, `/eat-first-ws`, `/nadraw-show-ws`, `/checkers-ws` — including their protocol-constants files
+- `apps/server/src/mediasoup/**` — server-side mediasoup workers, routers, transports
+- `apps/server/src/signaling/**` — server signaling handlers, schemas, room state
+- `apps/server/src/rooms/Room.ts` — Mafia host-lock and room authority
+- `apps/server/src/eatFirst/**` — Eat First service, snapshot, broadcast, router
+- `apps/server/src/auth/**` — session, OAuth, role resolution, email verification
+- `apps/server/src/leaderboardRouter.ts` — wins / leaderboard writes
+- `apps/server/src/coinHub/**` — claim / spin / open-case / economy
+- `apps/server/src/billing/**` — billing handlers and webhooks
+
+For low-risk UI surfaces (landing copy, layout polish, label changes, non-critical CSS), *Likely* may be enough if the change is reversible and observable. *Not confirmed* on a low-risk surface still means "do not patch by guess" — but the evidence threshold may be lighter than on the high-risk list above.
 
 ## StreamAssist-specific high-risk browser debug flows
 
@@ -392,7 +415,13 @@ Each flow lists: evidence to collect → likely layer → do-not-touch-before-co
 
 - Evidence: §C web-guess request vs Twitch ingest path; §D WS frames on `/nadle-ws` for guess events; server logs for `streamerActiveGame.ts` / Nadle ingest; casing differences in streamer username.
 - Likely layer: Server / API (Twitch ingest), product logic (streamer-ID normalization).
-- Do not touch before confirmed: `apps/server/src/nadle/*`, Twitch ingest helpers.
+- Do not touch before confirmed: `apps/server/src/nadle/*`, Twitch ingest helpers (`apps/server/src/streamerActiveGame.ts`).
+
+### F10b. Nadraw Twitch chat sync not landing
+
+- Evidence: §D WS frames on `/nadraw-show-ws` for chat-sync events (host vs viewer); §C any HTTP requests around the Nadraw chat path; server logs for the Nadraw ingest path and `streamerActiveGame.ts` chat plumbing; casing differences in the streamer's Twitch username; check whether viewer payloads accidentally leak the prompt (separate concern but caught at the same time).
+- Likely layer: Server / API (Twitch ingest), product logic (streamer-ID normalization), WebSocket (broadcast scope).
+- Do not touch before confirmed: `apps/server/src/nadraw-show/*`, Twitch ingest helpers (`apps/server/src/streamerActiveGame.ts`), `apps/client/src/features/nadraw-show/orchestrator/*`.
 
 ### F11. Leaderboard / wins not submitted (or submitted twice)
 

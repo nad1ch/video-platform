@@ -624,6 +624,61 @@
   /* overflow: hidden; */
 }
 
+/*
+ * Hover lift across the timer chip overlay.
+ *
+ * Why this lives on the GRID and not on the tile-wrap:
+ *
+ * `.call-page__grid` creates its own stacking context via `contain: layout`
+ * (see the docstring on the base rule above). That stacking context is the
+ * actual wall preventing a hovered tile from rising above the centered
+ * timer chip (`.mafia-overlay` / `.game-template-overlay` /
+ * `.eat-first-call-timer`, each `z-index: 42` in the parent stacking
+ * context). Any z-index applied to `.call-page__tile-wrap` is sandboxed
+ * INSIDE the grid's stacking context — it can re-order tiles among
+ * themselves but it cannot compete with the chip's z-index 42 in the
+ * parent context. Earlier attempts on the tile-wrap (z-index 35 → 44 → 50
+ * across `CallPage.css`, `GameRoomPageShell.vue`, and `EatFirstCallPage.vue`)
+ * all failed for this reason.
+ *
+ * The fix is to lift the GRID itself above the chip when an unpinned tile
+ * inside it enters an interactive state (`:hover`, `:focus-within`, or the
+ * drag `--over` modifier). The grid is a flex item of `.call-page__stage`
+ * (`display: flex`), so `z-index` applies without changing `position`.
+ * `:has()` is already used elsewhere in this project
+ * (`ParticipantTile.vue`, `CheckersPage.vue`, `LandingPage.vue`), so the
+ * support baseline is established. `@media (hover: hover)` keeps the rule
+ * a no-op on touch devices where `:hover` is unreliable.
+ *
+ * Pinned-tile semantics:
+ *   - When ONLY a pinned tile is hovered, this rule does NOT fire (the
+ *     `:not(.call-page__tile-wrap--pinned)` clause excludes it). The grid
+ *     stays at its flow position in the parent stacking context, so the
+ *     chip continues to paint above the pinned card — matching the
+ *     product rule "timer remains above pinned card".
+ *   - When an unpinned tile is hovered while a pinned tile is also
+ *     visible (spotlight mode + strip-tile hover), the whole grid lifts;
+ *     the pinned card is incidentally carried up with it for that one
+ *     hover. The user isn't interacting with the pinned card at that
+ *     moment, and the lift reverts on pointer-leave. Eliminating this
+ *     side effect strictly would require teleporting the pinned tile out
+ *     of the grid — a structural change the current diff intentionally
+ *     avoids.
+ *
+ * Numbers:
+ *   - 44 > 42 (the three timer wrappers' z-index) → hovered grid above chip.
+ *   - 44 < 45 (`.call-page__toasts`) < 50 (`.call-page__device-pop`) <
+ *     55 (`.call-page__join-error`) < 110 / 120 (speak-hint / chat-toasts)
+ *     → all page-level transient chrome remains above the lifted grid.
+ */
+@media (hover: hover) {
+  .call-page__grid:has(.call-page__tile-wrap:hover:not(.call-page__tile-wrap--pinned)),
+  .call-page__grid:has(.call-page__tile-wrap:focus-within:not(.call-page__tile-wrap--pinned)),
+  .call-page__grid:has(.call-page__tile-wrap--over:not(.call-page__tile-wrap--pinned)) {
+    z-index: 44;
+  }
+}
+
 .call-page__tile-wrap--spotlight-main {
   grid-column: 1;
   grid-row: 1 / -1;
@@ -715,11 +770,53 @@
   cursor: pointer;
 }
 
-/* Сусідня клітина сітки інакше перекриває тінь попередньої (порядок малювання в DOM). */
+/*
+ * Сусідня клітина сітки інакше перекриває тінь попередньої (порядок
+ * малювання в DOM).
+ *
+ * IMPORTANT: this rule orders tile-wraps INSIDE the grid's stacking
+ * context only — it does NOT (and cannot) lift a hovered tile above the
+ * centered timer chip overlay (`.mafia-overlay` / `.game-template-overlay`
+ * / `.eat-first-call-timer`, each `z-index: 42` in the parent context).
+ * `.call-page__grid` creates its own stacking context via `contain:
+ * layout`, which traps every z-index applied here. The actual chip-vs-tile
+ * layering is handled by the `.call-page__grid:has(...)` rule above, which
+ * lifts the GRID above the chip when an unpinned tile is in an
+ * interactive state. Do not bump the value here to try to escape the
+ * stacking context — it cannot work, and it has been tried before.
+ *
+ * Within the grid SC, the order is:
+ *   - 0  → non-hovered unpinned tile (base `.call-page__tile-wrap`)
+ *   - 35 → pinned tile (always, including on hover — see `--pinned` rule below)
+ *   - 44 → unpinned tile on `:hover` / `:focus-within` / `--over` / `--speaking`
+ */
 .call-page__tile-wrap:hover,
 .call-page__tile-wrap:focus-within,
 .call-page__tile-wrap--over,
 .call-page__tile-wrap--speaking {
+  z-index: 44;
+}
+
+/*
+ * Pinned tile (`pinnedPeerId === peerId`, applied to the
+ * `--spotlight-main` slot in spotlight layouts) stays at z-index 35 inside
+ * the grid stacking context so it floats above non-hovered unpinned
+ * siblings (base z-index 0) without competing with the hovered unpinned
+ * tile (z-index 44 above).
+ *
+ * The "pinned stays below the timer" product rule is enforced one layer
+ * up by the `.call-page__grid:has(... :not(--pinned))` rule above: hover
+ * on a pinned tile alone does NOT lift the grid, so the chip overlay
+ * (parent SC z-index 42) continues to paint on top.
+ *
+ * The compound selector wins over the unpinned hover rule above by
+ * specificity (two classes vs one class + a pseudo-class).
+ */
+.call-page__tile-wrap--pinned,
+.call-page__tile-wrap--pinned:hover,
+.call-page__tile-wrap--pinned:focus-within,
+.call-page__tile-wrap--pinned.call-page__tile-wrap--over,
+.call-page__tile-wrap--pinned.call-page__tile-wrap--speaking {
   z-index: 35;
 }
 

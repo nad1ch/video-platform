@@ -34,6 +34,15 @@ import { LOCAL_DEV_API_PORT } from './config/localDevApiPort'
  * Replace `[?&]secret=<value>` with `[?&]secret=[REDACTED]` in a URL for safe
  * logging (audit S2). Narrowly scoped to the `secret` parameter — broader
  * sensitive-field redaction for analytics ingest lives in `clientEventsRouter`.
+ *
+ * Why this matters: the Monobank Personal API webhook (`/personal/webhook`)
+ * authenticates by URL-token, not by a custom callback header — that is the
+ * actual mechanism the Personal API tier supports, so operators register the
+ * `webHookUrl` with `?secret=<value>` baked in and Monobank POSTs back to
+ * that exact URL. Without this redaction the secret would land in our
+ * application stdout (and any tail/aggregator reading it). Upstream layers
+ * (Cloudflare, reverse proxies) still see the raw URL; scrubbing those is an
+ * ops-level mitigation tracked as a follow-up.
  */
 function redactUrlSecrets(url: string): string {
   return url.replace(/([?&]secret=)[^&#]*/gi, '$1[REDACTED]')
@@ -66,11 +75,13 @@ async function bootstrap(): Promise<void> {
    * in Cloudflare analytics can be correlated to a server log line. Intentionally
    * minimal — no body, no headers — to avoid leaking PII.
    *
-   * `?secret=…` query params are redacted before logging (audit S2): the Mono
-   * webhook URL used to be registerable with the secret as a query parameter,
-   * and historical/external callers may still send it that way. Stripping it
-   * here ensures the value cannot land in stdout, Cloudflare access logs, or
-   * any reverse-proxy log even if a stray request includes it.
+   * `?secret=…` query params are redacted before logging (audit S2). The
+   * Monobank Personal API webhook authenticates by URL-token (it does not
+   * support custom callback headers), so the secret must live in the URL.
+   * This redaction keeps it out of our own stdout. Cloudflare and any
+   * reverse proxies in front still see the raw URL; mitigating those is an
+   * ops-level concern (Cloudflare Logpush filters or scheduled secret
+   * rotation) tracked as a follow-up — see `verifyMonoWebhookSecret`.
    */
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.url === '/health') {

@@ -161,6 +161,17 @@ const props = withDefaults(
 const gameRoomViewUi = computed(() => isGameRoomRoute.value && props.gameRoomStreamView)
 
 /**
+ * HTML5 drag-and-drop tile reorder is intentionally disabled inside Game
+ * Template (host uses the swap-mode click flow); the drag affordance and
+ * its "Drag to reorder" tooltip must stay in lock-step. Bind
+ * `:draggable`, `:title`, and `:aria-label` to this single computed so a
+ * future change to the gate is impossible to apply to just one of them.
+ */
+const canReorderTiles = computed(
+  () => !gameRoomViewUi.value && !isGameRoomRoute.value,
+)
+
+/**
  * Game Template `?mode=view`: recv-only in call-core — no camera/mic publish
  * (`wireCallMediaAfterRoomState` skips send transport for `viewer`).
  */
@@ -1483,9 +1494,9 @@ watch(joining, (j) => {
               :ref="(el) => setTileWrapRef(row.tile.peerId, el)"
               class="call-page__tile-wrap"
               :style="tileLayoutStyle(row)"
-              :draggable="!gameRoomViewUi && !isGameRoomRoute"
-              :title="t('callPage.dragReorder')"
-              :aria-label="t('callPage.dragReorder')"
+              :draggable="canReorderTiles"
+              :title="canReorderTiles ? t('callPage.dragReorder') : undefined"
+              :aria-label="canReorderTiles ? t('callPage.dragReorder') : undefined"
               :class="{
                 'call-page__tile-wrap--spotlight-main':
                   layoutMode === 'spotlight' && row.tile.peerId === spotlightPeerId,

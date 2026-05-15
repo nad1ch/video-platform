@@ -124,6 +124,19 @@ const mafiaViewUi = computed(() => isMafiaRoute.value && props.mafiaStreamView)
 const eatFirstViewUi = computed(() => isEatFirstRoute.value && props.eatFirstStreamView)
 
 /**
+ * HTML5 drag-and-drop tile reorder is only meaningful on the plain `'call'`
+ * route. On Mafia / Eat First the host uses an explicit click-to-swap mode
+ * driven by `hostInteractionMode === 'swap'`, and OBS / `?mode=view` is
+ * display-only. Bind `:draggable`, `:title`, and `:aria-label` to this
+ * single computed so the drag affordance and its tooltip stay in lock-step
+ * — non-reorder routes (Mafia, Eat First, view-only) render no
+ * "Перетягніть, щоб змінити порядок" tooltip on hover.
+ */
+const canReorderTiles = computed(
+  () => !mafiaViewUi.value && !isMafiaRoute.value && !isEatFirstRoute.value,
+)
+
+/**
  * Mafia `?mode=view` and Eat First `?mode=view`: recv-only in call-core — no camera/mic publish
  * (`wireCallMediaAfterRoomState` skips send transport for `viewer`). `/app/call` stays `participant`.
  */
@@ -2202,9 +2215,9 @@ watch(joining, (j) => {
               :ref="(el) => setTileWrapRef(row.tile.peerId, el)"
               class="call-page__tile-wrap"
               :style="tileLayoutStyle(row)"
-              :draggable="!mafiaViewUi && !isMafiaRoute && !isEatFirstRoute"
-              :title="t('callPage.dragReorder')"
-              :aria-label="t('callPage.dragReorder')"
+              :draggable="canReorderTiles"
+              :title="canReorderTiles ? t('callPage.dragReorder') : undefined"
+              :aria-label="canReorderTiles ? t('callPage.dragReorder') : undefined"
               :class="{
                 'call-page__tile-wrap--spotlight-main':
                   layoutMode === 'spotlight' && row.tile.peerId === spotlightPeerId,

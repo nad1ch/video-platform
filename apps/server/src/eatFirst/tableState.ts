@@ -741,7 +741,31 @@ export function assignEatFirstSlotsToUnclaimedPeers(room: Room, ownerUserId: str
   return changed
 }
 
-/** Eat First "host": the room owner peer if known, else the longest-lived peer. */
+/**
+ * Eat First "host" resolver.
+ *
+ * When `ownerUserId` is set (the normal production path — stamped on first
+ * `eatFirstEnsureGame` from the authenticated operator's Prisma `User.id`),
+ * the host is the peer whose server-stamped `prismaUserId` matches. If no
+ * such peer is in the room, the resolver returns `null` and `isEatFirstHostPeer`
+ * rejects every host-only action — there is no "first peer wins" fallback
+ * (audit R3). Anonymous viewers and non-owner joiners therefore cannot gain
+ * host authority just by being first.
+ *
+ * The previous code compared `peer.userId` (session JWT `id`, e.g. Twitch
+ * profile id) against `ownerUserId` (Prisma `User.id`) — different identity
+ * namespaces, so the match always failed for OAuth users in production and
+ * the `peers[0]` fallback was the de-facto host every time. `peer.prismaUserId`
+ * (populated at `handleJoinRoom` via `resolvePrismaUserIdFromSession`) lives
+ * in the same namespace as `ownerUserId` and makes the comparison meaningful.
+ *
+ * Legacy fallback: when `ownerUserId == null` (DB row was created before the
+ * per-game ownership stamp existed, or is being used in a non-production dev
+ * flow that never ensures ownership), the resolver returns the longest-lived
+ * peer so local development is not broken. Production `eatFirstEnsureGame`
+ * stamps `ownerUserId` on first call, so legacy rooms migrate transparently
+ * the next time an authorized operator touches them.
+ */
 export function resolveEatFirstHostPeerId(
   room: Room,
   ownerUserId: string | null,
@@ -749,9 +773,13 @@ export function resolveEatFirstHostPeerId(
   const peers = room.getPeers()
   if (peers.length === 0) return null
   if (ownerUserId != null && ownerUserId.length > 0) {
-    const owner = peers.find((p: Peer) => p.userId === ownerUserId)
-    if (owner) return owner.id
+    const owner = peers.find((p: Peer) => p.prismaUserId === ownerUserId)
+    return owner ? owner.id : null
   }
+  // Legacy-only path: no per-game ownership has been stamped yet. Keep the
+  // longest-lived-peer fallback so dev/local flows without a real DB owner
+  // continue to work; production rooms get `ownerUserId` stamped on first
+  // ensure and never reach this branch.
   return peers[0]!.id
 }
 
