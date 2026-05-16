@@ -21,7 +21,7 @@
   padding-block: 0;
 }
 
-.call-page.app-container {
+.app-container.app-container--flush.call-page {
   max-width: 100%;
   width: 100%;
 }
