@@ -131,12 +131,14 @@ export type ExistingProducerInfo = {
 export type RoomPeerInfo = {
   peerId: string
   displayName: string
-  
+
   userId?: string
-  
+
   avatarUrl?: string
-  
+
   audioMuted?: boolean
+
+  cameraMirror?: boolean
 }
 
 export type ServerMessage =
@@ -152,6 +154,7 @@ export type ServerMessage =
   | { type: 'peer-display-name'; payload: { peerId: string; displayName: string } }
   | { type: 'peer-left'; payload: { peerId: string } }
   | { type: 'peer-audio-muted'; payload: { peerId: string; muted: boolean } }
+  | { type: 'peer-camera-mirror'; payload: { peerId: string; mirrored: boolean } }
   | {
       type: 'transport-created'
       payload: { direction: 'send' | 'recv'; transportOptions: TransportOptionsPayload }
@@ -967,6 +970,9 @@ function roomPeerRow(p: Peer): RoomPeerInfo {
   if (p.audioMuted) {
     row.audioMuted = true
   }
+  if (p.cameraMirror) {
+    row.cameraMirror = true
+  }
   return row
 }
 
@@ -1501,6 +1507,34 @@ export function handleRaiseHand(socket: WsSocket, raised: boolean, deps: Signali
   broadcastUntypedJsonToRoom(room, {
     type: 'raise-hand',
     payload: { peerId: peer.id, raised },
+  })
+}
+
+/**
+ * Pure UI/render preference. Server stores `peer.cameraMirror` and broadcasts
+ * `peer-camera-mirror` so every recipient (incl. OBS browser sources) updates
+ * the per-peer flag map. New joiners / OBS reloads pick the current value up
+ * from `room-state.peers[].cameraMirror`. Modeled byte-for-byte on
+ * `handleSetAudioMuted`'s broadcast half — no producer / track mutation, no
+ * media-pipeline side effects.
+ */
+export function handleSetCameraMirror(
+  socket: WsSocket,
+  mirrored: boolean,
+  deps: SignalingDeps,
+): void {
+  const peer = getPeerForSocket(socket, deps)
+  if (!peer) {
+    return
+  }
+  peer.cameraMirror = mirrored
+  const room = deps.roomManager.getRoom(peer.roomId)
+  if (!room) {
+    return
+  }
+  broadcastServerMessageToRoom(room, {
+    type: 'peer-camera-mirror',
+    payload: { peerId: peer.id, mirrored },
   })
 }
 

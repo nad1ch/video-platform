@@ -97,10 +97,17 @@ export type CallTile = {
   remoteListenMuted?: boolean
   
   handRaised?: boolean
-  
+
   videoPresentation?: 'camera' | 'screen' | 'none'
   /** Profile image when video is off (`join-room` for local; server roster for remotes). */
   avatarUrl?: string
+  /**
+   * Per-peer UI/render preference broadcast room-wide via `set-camera-mirror`
+   * → `peer-camera-mirror` (and seeded for new joiners from
+   * `room-state.peers[].cameraMirror`). Render code must additionally gate by
+   * `videoPresentation === 'camera'` so screen share is never mirrored.
+   */
+  cameraMirror?: boolean
 }
 
 export type CallChatLine = {
@@ -324,7 +331,17 @@ export function useCallEngine(options?: CallEngineOptions) {
   const callChatMessages = ref<CallChatLine[]>([])
   const peerHandRaised = ref<Record<string, boolean>>({})
   const remoteAudioMutedByPeerId = ref<Record<string, boolean>>({})
-  
+  /**
+   * Local mirror preference (self) and per-peer mirror map (everyone, incl.
+   * self, indexed by `peerId`). Server-authoritative: hydrated from
+   * `room-state.peers[].cameraMirror` and updated by `peer-camera-mirror`
+   * broadcasts. UI applies CSS `transform: scaleX(-1)` to the local tile from
+   * `cameraMirror.value` and to remote tiles from `peerCameraMirror.value[peerId]`,
+   * always gated by `videoPresentation === 'camera'` so screen share is unaffected.
+   */
+  const cameraMirror = ref(false)
+  const peerCameraMirror = ref<Record<string, boolean>>({})
+
   const handRaised = ref(false)
 
   /**
@@ -654,6 +671,11 @@ export function useCallEngine(options?: CallEngineOptions) {
         delete nextMuted[peerId]
         remoteAudioMutedByPeerId.value = nextMuted
       }
+      if (peerCameraMirror.value[peerId]) {
+        const nextMirror = { ...peerCameraMirror.value }
+        delete nextMirror[peerId]
+        peerCameraMirror.value = nextMirror
+      }
     }
   })
 
@@ -666,16 +688,28 @@ export function useCallEngine(options?: CallEngineOptions) {
       const peers = (m.payload as { peers?: unknown }).peers
       if (Array.isArray(peers)) {
         const next: Record<string, boolean> = {}
+        const nextMirror: Record<string, boolean> = {}
         for (const p of peers) {
           if (!p || typeof p !== 'object') {
             continue
           }
           const peerId = (p as { peerId?: unknown }).peerId
-          if (typeof peerId === 'string' && (p as { audioMuted?: unknown }).audioMuted === true) {
+          if (typeof peerId !== 'string') {
+            continue
+          }
+          if ((p as { audioMuted?: unknown }).audioMuted === true) {
             next[peerId] = true
+          }
+          if ((p as { cameraMirror?: unknown }).cameraMirror === true) {
+            nextMirror[peerId] = true
           }
         }
         remoteAudioMutedByPeerId.value = next
+        peerCameraMirror.value = nextMirror
+        const selfId = selfPeerId.value
+        if (selfId.length > 0) {
+          cameraMirror.value = nextMirror[selfId] === true
+        }
       }
       return
     }
@@ -725,6 +759,24 @@ export function useCallEngine(options?: CallEngineOptions) {
         delete next[peerId]
       }
       remoteAudioMutedByPeerId.value = next
+    }
+    if (m.type === 'peer-camera-mirror' && m.payload && typeof m.payload === 'object') {
+      const p = m.payload as Record<string, unknown>
+      const peerId = typeof p.peerId === 'string' ? p.peerId : ''
+      if (!peerId) {
+        return
+      }
+      const mirrored = p.mirrored === true
+      const next = { ...peerCameraMirror.value }
+      if (mirrored) {
+        next[peerId] = true
+      } else {
+        delete next[peerId]
+      }
+      peerCameraMirror.value = next
+      if (peerId === selfPeerId.value) {
+        cameraMirror.value = mirrored
+      }
     }
   })
 
@@ -934,6 +986,13 @@ export function useCallEngine(options?: CallEngineOptions) {
         /* ws closed */
       }
     }
+    if (cameraMirror.value) {
+      try {
+        sendJson({ type: 'set-camera-mirror', payload: { mirrored: true } })
+      } catch {
+        /* ws closed */
+      }
+    }
   }
 
   /**
@@ -1092,6 +1151,7 @@ export function useCallEngine(options?: CallEngineOptions) {
           ((remoteListenPrefs.value.get(remoteListenPrefsKey(peerId)) ?? remoteListenPrefs.value.get(peerId))?.muted ??
             false),
         handRaised: Boolean(peerHandRaised.value[peerId]),
+        cameraMirror: peerCameraMirror.value[peerId] === true,
       })
     }
 
@@ -1113,6 +1173,7 @@ export function useCallEngine(options?: CallEngineOptions) {
         videoPresentation: outboundVideoSource.value,
         playRev: localPlayRev.value,
         handRaised: handRaised.value,
+        cameraMirror: cameraMirror.value,
       },
     ]
     list.push(...remoteTiles)
@@ -1352,6 +1413,33 @@ export function useCallEngine(options?: CallEngineOptions) {
     setRaiseHand(!handRaised.value)
   }
 
+  /**
+   * Toggle / set the room-wide camera-mirror flag for this peer.
+   *
+   * Pure UI/render preference. The local ref is updated optimistically so the
+   * dropdown reflects state immediately; server echoes back via
+   * `peer-camera-mirror` and the reducer above reconciles. Modeled on
+   * `setRaiseHand`; no producer/track mutation, no media-pipeline side
+   * effects. Persisted preferences should be re-applied by app-layer code
+   * after `inCall` flips true.
+   */
+  function setCameraMirror(mirrored: boolean): void {
+    if (!inCall.value) {
+      cameraMirror.value = mirrored
+      return
+    }
+    try {
+      sendJson({ type: 'set-camera-mirror', payload: { mirrored } })
+      cameraMirror.value = mirrored
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function toggleCameraMirror(): void {
+    setCameraMirror(!cameraMirror.value)
+  }
+
   function teardownMedia(): void {
     callDeafened.value = false
     deafenListenPrefsSnapshot.value = null
@@ -1361,6 +1449,8 @@ export function useCallEngine(options?: CallEngineOptions) {
     callChatMessages.value = []
     peerHandRaised.value = {}
     remoteAudioMutedByPeerId.value = {}
+    peerCameraMirror.value = {}
+    cameraMirror.value = false
     handRaised.value = false
     lastWirePeerCount.value = 0
     lastWireVideoSimulcast.value = false
@@ -1604,6 +1694,10 @@ export function useCallEngine(options?: CallEngineOptions) {
     peerHandRaised,
     handRaised,
     toggleRaiseHand,
+    cameraMirror,
+    peerCameraMirror,
+    setCameraMirror,
+    toggleCameraMirror,
     screenSharing,
     isCameraActive,
     isScreenActive,

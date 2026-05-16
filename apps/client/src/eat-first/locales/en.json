@@ -699,6 +699,8 @@
     "chooseCamera": "Camera",
     "micInputMenu": "Select microphone",
     "cameraInputMenu": "Select camera",
+    "mirrorCamera": "Mirror camera",
+    "mirrorCameraHint": "Flip your camera horizontally (visible to everyone and OBS)",
     "speakerOutputMenu": "Select speaker output",
     "deafenOnAria": "Deafen: mute everyone for you and mute your mic for others",
     "deafenOffAria": "Undeafen: restore your mic and per-participant volume",
