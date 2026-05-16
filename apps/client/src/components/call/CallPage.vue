@@ -704,6 +704,16 @@ function onEatFirstReshuffle(): void {
 
 function attemptEatFirstSlotClaim(): void {
   if (!isEatFirstRoute.value) return
+  // OBS / `?mode=view` is recv-only. Even if the OBS tab shares storage
+  // with the host tab (same Chrome profile / Browser Source running on
+  // the same Chromium origin), the stored slot token must NOT be replayed
+  // — sending `eat:slot-claim` would steal the slot from the real host
+  // and the server would broadcast `eat:host-updated` with the OBS tab's
+  // peerId, flipping `isEatFirstRoomHost` true on the viewer. Mafia
+  // never had this hazard because its host claim is an explicit user
+  // action, not an auto-replay of stored tokens; gate parity is enforced
+  // here so the EF viewer is genuinely viewer-only end-to-end.
+  if (eatFirstViewUi.value) return
   const gid = (() => {
     const q = route.query?.game
     return typeof q === 'string' ? q.trim() : ''
