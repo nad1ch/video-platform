@@ -3,10 +3,17 @@ import { Router } from 'express'
 import {
   signOAuthReturnPath,
   signSession,
-  verifyOAuthReturnPath,
+  verifyOAuthState,
   NADLE_SESSION_MAX_AGE_SEC,
 } from './session/sessionJwt'
 import { clearGlobalSessionCookie, setGlobalSessionCookie } from './session/cookies'
+import {
+  clearOAuthNonceCookie,
+  hashOAuthNonce,
+  issueOAuthNonce,
+  nonceHashMatches,
+  readOAuthNonceCookie,
+} from './session/oauthNonce'
 import { handleGetApiAuthMe, handleGetApiMeLegacy } from './session/me'
 import { clientPublicOrigin } from './clientOrigin'
 import { exchangeCodeForToken, getGoogleAuthUrl, getUserProfile, resolveGoogleOAuthRedirectUri } from './googleOAuth'
@@ -110,7 +117,8 @@ oauthRouter.get('/twitch', (req: Request, res: Response) => {
   )
   let state: string
   try {
-    state = signOAuthReturnPath(returnPath)
+    const nonce = issueOAuthNonce(res)
+    state = signOAuthReturnPath(returnPath, hashOAuthNonce(nonce))
   } catch (e) {
     console.error('[auth][twitch] authorize: cannot sign OAuth state (JWT secret?)', e)
     const msg = e instanceof Error ? e.message : 'Failed to sign OAuth state'
@@ -138,6 +146,18 @@ oauthRouter.get('/twitch/callback', async (req: Request, res: Response) => {
     res.status(400).type('text/plain').send('Missing code')
     return
   }
+  const verified = verifyOAuthState(state)
+  const cookieNonce = readOAuthNonceCookie(req)
+  clearOAuthNonceCookie(res)
+  if (
+    !verified.ok ||
+    typeof verified.nonceHash !== 'string' ||
+    !cookieNonce ||
+    !nonceHashMatches(verified.nonceHash, cookieNonce)
+  ) {
+    res.status(400).type('text/plain').send('Invalid OAuth state')
+    return
+  }
   try {
     const redirectUri = twitchAppRedirectUri()
     const accessToken = await twitchExchangeCode(code, redirectUri)
@@ -147,12 +167,11 @@ oauthRouter.get('/twitch/callback', async (req: Request, res: Response) => {
       return null
     })
     await persistTwitchOAuthUser(profile, { streamStatus })
-    
+
     const finalUser = withSessionRole(profile)
     const token = signSession(finalUser, NADLE_SESSION_MAX_AGE_SEC)
     setGlobalSessionCookie(res, token)
-    const path = verifyOAuthReturnPath(state)
-    res.redirect(302, buildPostLoginRedirectUrl(path))
+    res.redirect(302, buildPostLoginRedirectUrl(verified.redirectPath))
   } catch (e) {
     console.error('[auth][twitch] callback error', e)
     res.status(500).type('text/plain').send('OAuth failed')
@@ -177,7 +196,8 @@ oauthRouter.get('/google', (req: Request, res: Response) => {
   )
   let state: string
   try {
-    state = signOAuthReturnPath(returnPath)
+    const nonce = issueOAuthNonce(res)
+    state = signOAuthReturnPath(returnPath, hashOAuthNonce(nonce))
   } catch (e) {
     console.error('[auth][google] authorize: cannot sign OAuth state (JWT secret?)', e)
     const msg = e instanceof Error ? e.message : 'Failed to sign OAuth state'
@@ -197,6 +217,18 @@ oauthRouter.get('/google/callback', async (req: Request, res: Response) => {
     res.status(400).type('text/plain').send('Missing code')
     return
   }
+  const verified = verifyOAuthState(state)
+  const cookieNonce = readOAuthNonceCookie(req)
+  clearOAuthNonceCookie(res)
+  if (
+    !verified.ok ||
+    typeof verified.nonceHash !== 'string' ||
+    !cookieNonce ||
+    !nonceHashMatches(verified.nonceHash, cookieNonce)
+  ) {
+    res.status(400).type('text/plain').send('Invalid OAuth state')
+    return
+  }
   try {
     const accessToken = await exchangeCodeForToken(code)
     const profile = await getUserProfile(accessToken)
@@ -204,8 +236,7 @@ oauthRouter.get('/google/callback', async (req: Request, res: Response) => {
     const finalUser = withSessionRole(profile)
     const token = signSession(finalUser, NADLE_SESSION_MAX_AGE_SEC)
     setGlobalSessionCookie(res, token)
-    const path = verifyOAuthReturnPath(state)
-    res.redirect(302, buildPostLoginRedirectUrl(path))
+    res.redirect(302, buildPostLoginRedirectUrl(verified.redirectPath))
   } catch (e) {
     console.error('[auth][google] callback error', e)
     res.status(500).type('text/plain').send('OAuth failed')

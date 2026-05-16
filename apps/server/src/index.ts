@@ -227,9 +227,40 @@ async function bootstrap(): Promise<void> {
   attachNadrawShowSocketServer(wssNadrawShow)
   attachCheckersSocketServer(wssCheckers)
 
+  /**
+   * Origin allowlist for known WS endpoints (audit S4). Browsers always send
+   * `Origin` on WS handshakes, so a missing or unknown origin on a known
+   * endpoint is treated as cross-site WS hijacking and rejected with HTTP
+   * 403 before any handler runs. Unknown paths fall through to the existing
+   * 404 path; that response does not leak whether the endpoint exists.
+   */
+  const knownWsPaths: ReadonlySet<string> = new Set([
+    '/eat-first-ws',
+    '/nadle-ws',
+    '/nadraw-show-ws',
+    '/checkers-ws',
+    '/ws',
+    '/',
+  ])
+
   server.on('upgrade', (request, socket, head) => {
     const host = request.headers.host ?? 'localhost'
     const pathname = new URL(request.url ?? '/', `http://${host}`).pathname
+
+    if (knownWsPaths.has(pathname)) {
+      const originHeader = request.headers.origin
+      const origin = typeof originHeader === 'string' ? originHeader.trim() : ''
+      const allowed = corsAllowedOrigins()
+      if (origin.length === 0 || !allowed.includes(origin)) {
+        try {
+          socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
+        } catch {
+          /* socket already broken — fall through to destroy */
+        }
+        socket.destroy()
+        return
+      }
+    }
 
     if (pathname === '/eat-first-ws') {
       wssEatFirst.handleUpgrade(request, socket, head, (ws) => {

@@ -81,20 +81,11 @@ const OAUTH_STATE_TYP = 'oauth_return'
 const OAUTH_STATE_MAX_AGE_SEC = 600
 const OAUTH_STATE_MAX_AGE_MS = OAUTH_STATE_MAX_AGE_SEC * 1000
 
-export function signOAuthReturnPath(redirectPath: string): string {
-  return jwt.sign({ typ: OAUTH_STATE_TYP, r: redirectPath }, authJwtSecret(), {
-    expiresIn: OAUTH_STATE_MAX_AGE_SEC,
-  })
-}
-
 /**
- * Single-use marker for `verifyOAuthReturnPath`. A state that validates once
- * is recorded here with its expiry; a second verify of the same string falls
- * back to the default redirect (treated as an invalid state).
- *
- * The map is bounded: a periodic reaper drops expired entries, and the map
- * would reach steady state at ~one entry per concurrent in-flight OAuth
- * login within the 10-minute window.
+ * Single-use marker for {@link verifyOAuthState}. A state that validates once
+ * is recorded here with its expiry; a second verify of the same string is
+ * rejected. The map is bounded by the 10-minute state JWT TTL and reaped on
+ * a 60s interval.
  */
 const seenOAuthStates = new Map<string, number>()
 
@@ -111,36 +102,62 @@ if (typeof oauthStateReaper.unref === 'function') {
   oauthStateReaper.unref()
 }
 
-export function verifyOAuthReturnPath(state: string | undefined): string {
+export function signOAuthReturnPath(redirectPath: string, nonceHash?: string): string {
+  const payload: { typ: string; r: string; n?: string } = { typ: OAUTH_STATE_TYP, r: redirectPath }
+  if (typeof nonceHash === 'string' && nonceHash.length > 0) {
+    payload.n = nonceHash
+  }
+  return jwt.sign(payload, authJwtSecret(), {
+    expiresIn: OAUTH_STATE_MAX_AGE_SEC,
+  })
+}
+
+export type VerifiedOAuthState =
+  | { ok: true; redirectPath: string; nonceHash: string | undefined }
+  | { ok: false }
+
+/**
+ * Strict verifier used by the OAuth callbacks (audit S5). Returns
+ * `{ ok: false }` for any of: missing state, bad signature/expiry, wrong
+ * `typ`, missing path, or replay. Callers must reject the request with 400
+ * in that case.
+ *
+ * Nonce-cookie binding is enforced *outside* this function — the router
+ * reads the nonce cookie, hashes it, and compares against `nonceHash`
+ * from the returned state. We surface `nonceHash` here rather than
+ * passing the cookie in to keep this module pure and testable.
+ */
+export function verifyOAuthState(state: string | undefined): VerifiedOAuthState {
   if (!state || typeof state !== 'string') {
-    return '/'
+    return { ok: false }
   }
   try {
     const decoded = jwt.verify(state, authJwtSecret(), { algorithms: ['HS256'] }) as {
       typ?: string
       r?: unknown
+      n?: unknown
       exp?: number
     }
     if (decoded.typ !== OAUTH_STATE_TYP || typeof decoded.r !== 'string') {
-      return '/'
+      return { ok: false }
     }
-    
-    
-    
-    
     if (seenOAuthStates.has(state)) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('[auth][oauth] rejected state replay')
       }
-      return '/'
+      return { ok: false }
     }
     const expMs =
       typeof decoded.exp === 'number'
         ? decoded.exp * 1000
         : Date.now() + OAUTH_STATE_MAX_AGE_MS
     seenOAuthStates.set(state, expMs)
-    return decoded.r
+    return {
+      ok: true,
+      redirectPath: decoded.r,
+      nonceHash: typeof decoded.n === 'string' ? decoded.n : undefined,
+    }
   } catch {
-    return '/'
+    return { ok: false }
   }
 }
