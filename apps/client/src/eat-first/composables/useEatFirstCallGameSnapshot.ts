@@ -16,7 +16,7 @@ type EatFirstSnapshotShape = {
   display?: unknown
 }
 
-export function useEatFirstCallGameSnapshot(gameId: Ref<string>) {
+export function useEatFirstCallGameSnapshot(gameId: Ref<string>, isStreamView?: Ref<boolean>) {
   const snapshot = shallowRef<EatFirstSnapshotShape | null>(null)
   const loading = ref(false)
   let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -39,25 +39,42 @@ export function useEatFirstCallGameSnapshot(gameId: Ref<string>) {
     }
   }
 
-  watch(
-    () => gameId.value,
-    () => {
-      if (pollTimer != null) {
-        clearInterval(pollTimer)
-        pollTimer = null
-      }
-      void refresh()
-      pollTimer = setInterval(() => void refresh(), 4000)
-    },
-    { immediate: true },
-  )
-
-  onUnmounted(() => {
+  function stopPoll(): void {
     if (pollTimer != null) {
       clearInterval(pollTimer)
       pollTimer = null
     }
-  })
+  }
+
+  function startPollIfEligible(): void {
+    if (pollTimer != null) return
+    if (isStreamView?.value === true) return
+    if (gameId.value.trim().length < 1) return
+    pollTimer = setInterval(() => void refresh(), 4000)
+  }
+
+  watch(
+    () => gameId.value,
+    () => {
+      stopPoll()
+      void refresh()
+      // OBS / `mode=view` relies on WS `eat:table-state-sync` replay; skip the 4s REST poll.
+      startPollIfEligible()
+    },
+    { immediate: true },
+  )
+
+  if (isStreamView != null) {
+    watch(
+      () => isStreamView.value,
+      (next) => {
+        if (next) stopPoll()
+        else startPollIfEligible()
+      },
+    )
+  }
+
+  onUnmounted(stopPoll)
 
   const room = computed((): Record<string, unknown> => {
     const r = snapshot.value?.room

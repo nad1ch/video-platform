@@ -32,7 +32,10 @@
       "Read(//d/d/Stream staff/video-platform-sa-fix/apps/client/src/eat-first/services/**)",
       "Bash(netstat -ano)",
       "Bash(npx vite *)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4173)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4173)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(grep -B0 -A 5 \"EatFirstCallPage\\\\.vue$\\\\|useEatFirstCallGameSnapshot\\\\.ts$\\\\|ParticipantTile\\\\.vue$\")",
+      "Bash(grep \"\\\\.vue\\\\.js$\")"
     ]
   }
 }

@@ -1,0 +1,31 @@
+const ROOM_CODE_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
+const ELLIPSIS = '\u22EF';
+export function formatCallRoomChip(roomId) {
+    const t = typeof roomId === 'string' ? roomId.trim() : '';
+    if (!t) {
+        return ELLIPSIS;
+    }
+    if (t.length <= 2) {
+        return `${t[0] ?? ''}${ELLIPSIS}`;
+    }
+    if (t.length <= 5) {
+        return `${t[0]}${ELLIPSIS}${t[t.length - 1]}`;
+    }
+    return `${t.slice(0, 2)}${ELLIPSIS}${t.slice(-2)}`;
+}
+export function generateCallRoomCode() {
+    const bytes = new Uint8Array(8);
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        crypto.getRandomValues(bytes);
+    }
+    else {
+        for (let i = 0; i < bytes.length; i++) {
+            bytes[i] = Math.floor(Math.random() * 256);
+        }
+    }
+    let out = '';
+    for (let i = 0; i < bytes.length; i++) {
+        out += ROOM_CODE_ALPHABET[bytes[i] % ROOM_CODE_ALPHABET.length];
+    }
+    return out;
+}
