@@ -1,0 +1,200 @@
+/*
+ * Shared OBS / view-mode proportional UI scaling.
+ *
+ * Active whenever `AppShellLayout` mounts with `.app-shell-layout--obs-view`,
+ * which is bound to the existing `hideMafiaObsHeaderControls` gate. That gate
+ * already covers:
+ *   - /app/mafia?mode=view
+ *   - /app/game-template?mode=view
+ *   - /app/eat?mode=view
+ * Mafia OBS, Game Template OBS, and Eat First OBS therefore scale through one
+ * shared CSS file — no game-specific divergence is possible.
+ *
+ * Design baseline is 1920x1080. The scale factor is the smaller of the two
+ * viewport ratios so the chrome never grows past the smaller axis:
+ *   - 1920x1080 -> 1
+ *   - 2560x1440 -> 1.333
+ *   - 3840x2160 -> 2
+ * Floored at 1 (no down-scaling below FullHD) and capped at 2 (deterministic
+ * sizing at and above 4K — above-4K OBS canvases are rare and we do not want
+ * runaway dimensions there).
+ *
+ * Two-part implementation:
+ *
+ * 1. Lift the html root font-size while the OBS shell is mounted, using a
+ *    pure-CSS `:has()` selector. Scales every rem-based dimension in the
+ *    OBS chrome (the AppLandingHeader logo + bar, ParticipantTile trait
+ *    card font-sizes, display-name typography, anything else using rem).
+ *    Reverts automatically when the OBS class disappears on route nav.
+ *    `:has()` ships in Chromium 105+ / WebKit 15.4+ / Firefox 121+; OBS
+ *    Browser Source runs on a recent Chromium build, so this is safe in
+ *    production. On a browser without `:has()` support the html root
+ *    font-size stays at its default — same OBS chrome size as today.
+ *
+ * 2. Explicit `var(--sa-obs-ui-scale)` overrides for the shared
+ *    `GameTimerOverlay` chip, which is fully fixed-pixel sized (width
+ *    343px / min-height 42px / grid columns 24px 54px / font-size 21px /
+ *    etc.) and therefore is not reached by the html font-size lift in
+ *    part 1. Both Mafia and Eat First mount this chip via their
+ *    respective `*Overlay` adapter, so a single override here scales
+ *    both routes' timer identically.
+ *
+ * The variable uses `<length> / <length>` arithmetic (CSS Values 4) to
+ * produce a unitless scale, which is then usable as a plain multiplier
+ * in any `calc()`. Supported in Chromium 109+ / Safari 16.4+ / Firefox
+ * 116+. Each consumer uses `var(--sa-obs-ui-scale, 1)` so an older
+ * engine falls back to 1 (no scale) instead of an invalid declaration.
+ *
+ * Deliberately NOT touched:
+ *   - `transform: scale` — fights the existing `translateX(-50%)`
+ *     centering on the timer chip and is the property the task contract
+ *     explicitly warned against on video.
+ *   - `zoom` — non-standard, scales the video element's layout box and
+ *     would interact unpredictably with `CallPage`'s tile grid.
+ *   - Anything outside the OBS chrome (video elements, call-core,
+ *     server, normal routes).
+ */
+
+.app-shell-layout--obs-view {
+  --sa-obs-ui-scale: clamp(
+    1,
+    min(calc(100vw / 1920px), calc(100vh / 1080px)),
+    2
+  );
+}
+
+html:has(.app-shell-layout--obs-view) {
+  font-size: calc(
+    16px *
+      clamp(
+        1,
+        min(calc(100vw / 1920px), calc(100vh / 1080px)),
+        2
+      )
+  );
+}
+
+.app-shell-layout--obs-view .game-timer-overlay {
+  /* Scale the chip's top offset together with its size. Without this, the
+   * chip grows 2x at 4K but stays at top: 6px from the shell, which puts
+   * it visually glued to the (now also 2x taller) AppLandingHeader and
+   * crowding the first row of camera tiles. Scaling `top` keeps the chip
+   * floating with the same proportional headroom at every resolution.
+   * `env(safe-area-inset-top, 0px)` is preserved inside the multiplied
+   * expression so OBS Browser Source environments that report a notch
+   * inset still account for it. */
+  top: calc(
+    (max(0px, env(safe-area-inset-top, 0px)) + 6px) *
+      var(--sa-obs-ui-scale, 1)
+  );
+  width: calc(343px * var(--sa-obs-ui-scale, 1));
+  min-height: calc(42px * var(--sa-obs-ui-scale, 1));
+  border-radius: calc(27px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .game-timer-overlay--compact {
+  width: calc(112px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .game-timer-overlay__main {
+  grid-template-columns:
+    calc(24px * var(--sa-obs-ui-scale, 1))
+    calc(54px * var(--sa-obs-ui-scale, 1))
+    minmax(0, 1fr);
+  column-gap: calc(8px * var(--sa-obs-ui-scale, 1));
+  height: calc(42px * var(--sa-obs-ui-scale, 1));
+  padding: 0 calc(12px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .game-timer-overlay__main--compact {
+  grid-template-columns:
+    calc(24px * var(--sa-obs-ui-scale, 1))
+    calc(54px * var(--sa-obs-ui-scale, 1));
+  column-gap: calc(8px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .game-timer-overlay__stopwatch {
+  width: calc(24px * var(--sa-obs-ui-scale, 1));
+  height: calc(24px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .game-timer-overlay__text {
+  font-size: calc(21px * var(--sa-obs-ui-scale, 1));
+}
+
+/*
+ * Eat First trait card OBS scaling.
+ *
+ * The trait card *text* uses rem (`0.46rem` / `0.66rem`) and therefore
+ * scales automatically through the html font-size lift above. Everything
+ * else — card min-height/border-radius/border, the trait icon, the
+ * crossed-eye marker, the reveal/dice action buttons + their SVG
+ * children, and the gap/padding inside the card — is hard-pixel sized
+ * and does not pick up the lift. Result without these rules: text doubles
+ * at 4K but icons stay tiny and the card shape no longer fits the larger
+ * text. The block below scales every fixed-pixel dimension on the card
+ * and its descendants by `--sa-obs-ui-scale` so the visual proportions
+ * stay consistent at every OBS resolution.
+ *
+ * Selectors scope only `.tile-eat-first-card` (Eat First-only class —
+ * never rendered on Mafia / Game Template tiles), so Mafia OBS is not
+ * affected. ParticipantTile source is unchanged.
+ */
+
+.app-shell-layout--obs-view .tile-eat-first-card {
+  min-height: calc(42px * var(--sa-obs-ui-scale, 1));
+  border-radius: calc(12px * var(--sa-obs-ui-scale, 1));
+  border-width: calc(1px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card--mini {
+  min-height: calc(40px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card--sealed.tile-eat-first-card--mini {
+  padding: calc(4px * var(--sa-obs-ui-scale, 1)) calc(6px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__icon {
+  width: calc(16px * var(--sa-obs-ui-scale, 1));
+  height: calc(16px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__main {
+  gap: calc(1px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__peer-hidden-eye {
+  width: calc(17px * var(--sa-obs-ui-scale, 1));
+  height: calc(17px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__actions {
+  gap: calc(3px * var(--sa-obs-ui-scale, 1));
+}
+
+/*
+ * Eye + dice action buttons. Hidden in OBS view (`!streamViewMode` gate
+ * inside `ParticipantTile`), but scaling them anyway keeps the rules
+ * symmetric with the trait card block, and protects against future
+ * code paths that might surface a read-only chip in view mode.
+ */
+.app-shell-layout--obs-view .tile-eat-first-card__eye-btn {
+  width: calc(22px * var(--sa-obs-ui-scale, 1));
+  height: calc(22px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__eye-btn svg {
+  width: calc(14px * var(--sa-obs-ui-scale, 1));
+  height: calc(14px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__action-btn {
+  width: calc(18px * var(--sa-obs-ui-scale, 1));
+  height: calc(18px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__action-btn svg {
+  width: calc(12px * var(--sa-obs-ui-scale, 1));
+  height: calc(12px * var(--sa-obs-ui-scale, 1));
+}

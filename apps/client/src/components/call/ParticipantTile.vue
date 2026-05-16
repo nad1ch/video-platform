@@ -407,8 +407,16 @@ const eatFirstTraitValues = computed<Partial<Record<EatFirstTraitKey, string>>>(
   return out
 })
 
+/**
+ * Render the Eat First trait overlay whenever at least one trait has a value.
+ * Partial state is legitimate (trait-type reroll mid-round, cold join before
+ * `eat:table-state-sync` has hydrated every key); requiring all 8 keys hid the
+ * whole overlay during normal play. Per-cell renderers already handle empty
+ * values gracefully — host/owner via `'Невідомо'`, OBS viewers via the
+ * crossed-eye marker.
+ */
 const hasEatFirstTraits = computed(() =>
-  (Object.keys(EAT_FIRST_TRAIT_LABELS) as EatFirstTraitKey[]).every((key) => {
+  (Object.keys(EAT_FIRST_TRAIT_LABELS) as EatFirstTraitKey[]).some((key) => {
     const value = eatFirstTraitValues.value[key]
     return typeof value === 'string' && value.length > 0
   }),
@@ -434,29 +442,14 @@ const eatFirstTraitsBySection = computed(() => {
   }
 })
 
-// Build a stable identity string from peerId + the 8 known trait values,
-// joined with a U+0001 separator (built at runtime via String.fromCharCode
-// so no control char appears in source). U+0001 cannot occur in legitimate
-// peerIds or trait text, so the joined string uniquely identifies content.
-// Returning a primitive lets Vue compare with Object.is, avoiding the JSON
-// encode and the spurious re-fires of the previous JSON.stringify source.
-const EAT_FIRST_TILE_TRAIT_WATCH_SEP = String.fromCharCode(1)
+// Local reveal animation state is keyed by `traitKey`, not by trait value — the
+// only meaningful invalidation is the tile binding to a different peer. Avoid
+// `JSON.stringify` here: at 8–12 cameras × every `eat:table-state-sync` it is
+// the hottest per-tile work and contributes to render churn without changing
+// behavior (server-authoritative reveal state arrives via
+// `props.eatFirstRevealedTraitKeys`, which is already reactive per-cell).
 watch(
-  () => {
-    const v = eatFirstTraitValues.value
-    const s = EAT_FIRST_TILE_TRAIT_WATCH_SEP
-    return (
-      props.peerId + s +
-      (v.gender ?? '') + s +
-      (v.age ?? '') + s +
-      (v.profession ?? '') + s +
-      (v.health ?? '') + s +
-      (v.hobby ?? '') + s +
-      (v.phobia ?? '') + s +
-      (v.fact ?? '') + s +
-      (v.baggage ?? '')
-    )
-  },
+  () => props.peerId,
   () => {
     clearEatFirstTimers()
     eatFirstRevealState.value = {}

@@ -32,7 +32,17 @@
       "Read(//d/d/Stream staff/video-platform-sa-fix/apps/client/src/eat-first/services/**)",
       "Bash(netstat -ano)",
       "Bash(npx vite *)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4173)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4173)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(grep -B0 -A 5 \"EatFirstCallPage\\\\.vue$\\\\|useEatFirstCallGameSnapshot\\\\.ts$\\\\|ParticipantTile\\\\.vue$\")",
+      "Bash(grep \"\\\\.vue\\\\.js$\")",
+      "Bash(tee /tmp/vue_js_files.txt)",
+      "Read(//tmp/**)",
+      "Bash(xargs head -3)",
+      "Bash(xargs -0 git rm --quiet)",
+      "Bash(npx --no-install eslint \"apps/client/src/**/*.{js,ts,vue}\")",
+      "Bash(echo \"---EXIT=$?---\")",
+      "Bash(grep -vE '^\\\\.gitignore$|^apps/client/src/.*\\\\.vue\\\\.js$')"
     ]
   }
 }
