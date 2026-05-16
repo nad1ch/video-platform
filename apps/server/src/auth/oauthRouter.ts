@@ -23,6 +23,25 @@ import { handleSendEmailVerification, handleVerifyEmail } from './email/emailVer
 import { handleConfirmPasswordReset, handleSendPasswordReset } from './email/passwordResetHandlers'
 import { persistGoogleOAuthUser, persistTwitchOAuthUser } from './persistOAuthUser'
 import { withSessionRole } from './session/withSessionRole'
+import { createIpRateLimitMiddleware } from '../utils/rateLimitMiddleware'
+
+/**
+ * Per-IP cap on OAuth authorize/callback endpoints (audit S7). These are
+ * unauthenticated and trigger upstream RPCs to Twitch / Google. A scripted
+ * abuser could otherwise pin a lot of outbound capacity. Legitimate users
+ * hit these a few times per session at most; 30/min is generous.
+ */
+const oauthRateLimit = createIpRateLimitMiddleware({
+  label: 'http:oauth',
+  windowMs: 60 * 1000,
+  limit: 30,
+}).middleware
+
+const oauthLogoutRateLimit = createIpRateLimitMiddleware({
+  label: 'http:oauth:logout',
+  windowMs: 60 * 1000,
+  limit: 30,
+}).middleware
 
 const isProd = process.env.NODE_ENV === 'production'
 const isDev = process.env.NODE_ENV !== 'production'
@@ -86,7 +105,7 @@ export const oauthRouter = Router()
 
 oauthRouter.get('/me', handleGetApiAuthMe)
 
-oauthRouter.post('/logout', (_req: Request, res: Response) => {
+oauthRouter.post('/logout', oauthLogoutRateLimit, (_req: Request, res: Response) => {
   clearGlobalSessionCookie(res)
   res.status(204).end()
 })
@@ -98,7 +117,7 @@ oauthRouter.get('/email-verification/verify', handleVerifyEmail)
 oauthRouter.post('/password-reset/send', handleSendPasswordReset)
 oauthRouter.post('/password-reset/confirm', handleConfirmPasswordReset)
 
-oauthRouter.get('/twitch', (req: Request, res: Response) => {
+oauthRouter.get('/twitch', oauthRateLimit, (req: Request, res: Response) => {
   if (!twitchConfigured()) {
     res.status(503).type('text/plain').send('Twitch OAuth is not configured (TWITCH_CLIENT_ID / SECRET).')
     return
@@ -139,7 +158,7 @@ oauthRouter.get('/twitch', (req: Request, res: Response) => {
   res.redirect(302, `https://id.twitch.tv/oauth2/authorize?${p.toString()}`)
 })
 
-oauthRouter.get('/twitch/callback', async (req: Request, res: Response) => {
+oauthRouter.get('/twitch/callback', oauthRateLimit, async (req: Request, res: Response) => {
   const code = typeof req.query.code === 'string' ? req.query.code : ''
   const state = typeof req.query.state === 'string' ? req.query.state : undefined
   if (!code) {
@@ -178,7 +197,7 @@ oauthRouter.get('/twitch/callback', async (req: Request, res: Response) => {
   }
 })
 
-oauthRouter.get('/google', (req: Request, res: Response) => {
+oauthRouter.get('/google', oauthRateLimit, (req: Request, res: Response) => {
   if (!googleConfigured()) {
     res.status(503).type('text/plain').send('Google OAuth is not configured.')
     return
@@ -210,7 +229,7 @@ oauthRouter.get('/google', (req: Request, res: Response) => {
   res.redirect(302, getGoogleAuthUrl(state))
 })
 
-oauthRouter.get('/google/callback', async (req: Request, res: Response) => {
+oauthRouter.get('/google/callback', oauthRateLimit, async (req: Request, res: Response) => {
   const code = typeof req.query.code === 'string' ? req.query.code : ''
   const state = typeof req.query.state === 'string' ? req.query.state : undefined
   if (!code) {

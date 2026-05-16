@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from 'express'
 import { resolvePrismaUserIdFromSession } from '../auth/resolvePrismaUserFromSession'
 import { readSessionFromCookie } from '../auth/session/sessionJwt'
+import { createIpRateLimitMiddleware } from '../utils/rateLimitMiddleware'
 import {
   createOrReusePaymentRequest,
   getBillingConfigDto,
@@ -32,6 +33,19 @@ import { BillingHttpError } from './httpError'
  *
  * Admin routes (`/api/admin/billing/*`) live in `billingAdminRouter.ts`.
  */
+/**
+ * Per-IP cap for user-initiated billing mutations (audit S7). Real users
+ * tap "Pay" / "Mark paid" / "Update email" a handful of times per session;
+ * 30 / minute is well above legitimate use and well below scripted abuse.
+ * The Monobank webhook endpoint is exempt — Monobank can legitimately
+ * deliver bursts of `StatementItem` events for one account.
+ */
+const billingUserMutationRateLimit = createIpRateLimitMiddleware({
+  label: 'http:billing:user-mutate',
+  windowMs: 60 * 1000,
+  limit: 30,
+}).middleware
+
 export function mountBillingRoutes(app: Express): void {
   const base = '/api/billing'
 
@@ -74,7 +88,7 @@ export function mountBillingRoutes(app: Express): void {
     })()
   })
 
-  app.post(`${base}/jar/create-payment-request`, (req, res) => {
+  app.post(`${base}/jar/create-payment-request`, billingUserMutationRateLimit, (req, res) => {
     void (async () => {
       try {
         const userId = await resolveUserIdOr401(req, res)
@@ -87,7 +101,7 @@ export function mountBillingRoutes(app: Express): void {
     })()
   })
 
-  app.post(`${base}/jar/mark-paid`, (req, res) => {
+  app.post(`${base}/jar/mark-paid`, billingUserMutationRateLimit, (req, res) => {
     void (async () => {
       try {
         const userId = await resolveUserIdOr401(req, res)
@@ -135,7 +149,7 @@ export function mountBillingRoutes(app: Express): void {
   
   
   
-  app.post(`${base}/billing-email`, (req, res) => {
+  app.post(`${base}/billing-email`, billingUserMutationRateLimit, (req, res) => {
     void (async () => {
       try {
         const userId = await resolveUserIdOr401(req, res)

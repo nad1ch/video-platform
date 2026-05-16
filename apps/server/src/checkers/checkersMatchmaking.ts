@@ -7,6 +7,19 @@ import {
   checkersRatingsForUsers,
   recordCheckersMatchResult,
 } from '../leaderboardRouter'
+import { createIpRateLimitMiddleware } from '../utils/rateLimitMiddleware'
+
+/**
+ * Per-IP cap for matchmaking mutations (audit S7). `/join` long-polls (up
+ * to ~30s), so legitimate users do not retry it often; the cap blunts
+ * queue-flood attacks. `/result` is recorded once per match, so a 60/min
+ * cap is well above legitimate usage.
+ */
+const matchmakingMutationRateLimit = createIpRateLimitMiddleware({
+  label: 'http:checkers:matchmaking',
+  windowMs: 60 * 1000,
+  limit: 60,
+}).middleware
 
 const MATCH_WAIT_TIMEOUT_MS = 30_000
 const PREFERRED_RATING_DIFF = 200
@@ -154,7 +167,7 @@ async function ratingForUser(userId: string | null): Promise<number> {
 }
 
 export function mountCheckersMatchmakingRoutes(app: Express): void {
-  app.post('/api/matchmaking/join', async (req: Request, res: Response) => {
+  app.post('/api/matchmaking/join', matchmakingMutationRateLimit, async (req: Request, res: Response) => {
     const clientId = cleanClientId((req.body as { clientId?: unknown } | undefined)?.clientId)
     if (!clientId) {
       res.status(400).json({ error: 'client_id_required' })
@@ -193,7 +206,7 @@ export function mountCheckersMatchmakingRoutes(app: Express): void {
     queuePlayer(clientId, userId, rating, res)
   })
 
-  app.post('/api/matchmaking/leave', (req: Request, res: Response) => {
+  app.post('/api/matchmaking/leave', matchmakingMutationRateLimit, (req: Request, res: Response) => {
     const clientId = cleanClientId((req.body as { clientId?: unknown } | undefined)?.clientId)
     if (clientId) {
       for (const player of [...waitingPlayers]) {
@@ -206,7 +219,7 @@ export function mountCheckersMatchmakingRoutes(app: Express): void {
     res.json({ left: false })
   })
 
-  app.post('/api/matchmaking/result', async (req: Request, res: Response) => {
+  app.post('/api/matchmaking/result', matchmakingMutationRateLimit, async (req: Request, res: Response) => {
     const body = req.body as { roomId?: unknown; revision?: unknown } | undefined
     const roomId = typeof body?.roomId === 'string' ? body.roomId.trim().slice(0, 80) : ''
     const revision = typeof body?.revision === 'number' && Number.isFinite(body.revision) ? Math.floor(body.revision) : 0

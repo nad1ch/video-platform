@@ -6,6 +6,7 @@ import {
   resolveEatFirstEnsureOwnerUserId,
   resolveEatFirstOperatorUserId,
 } from './sessionGate'
+import { createIpRateLimitMiddleware } from '../utils/rateLimitMiddleware'
 import {
   eatFirstClearVotesAdmin,
   eatFirstClaimSlot,
@@ -93,8 +94,28 @@ function sendErr(res: Response, err: unknown): void {
   res.status(status).type('text/plain').send(e.message || 'Error')
 }
 
+/**
+ * Per-IP cap on Eat First mutating routes (audit S7). Eat First gameplay is
+ * highly interactive — a single host can issue 30–60 mutations per minute
+ * across hand/ready/vote/reshuffle endpoints in a typical round — so the
+ * cap is generous. The cap is here to blunt scripted abuse, not legitimate
+ * play. Reads (`/snapshot`, public state) are intentionally not throttled.
+ */
+const eatFirstMutationRateLimit = createIpRateLimitMiddleware({
+  label: 'http:eat-first:mutate',
+  windowMs: 60 * 1000,
+  limit: 240,
+}).middleware
+
 export function mountEatFirstRoutes(app: Express): void {
   const base = '/api/eat-first'
+  app.use(`${base}`, (req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+      next()
+      return
+    }
+    eatFirstMutationRateLimit(req, res, next)
+  })
 
   app.get(`${base}/games/:gameId/snapshot`, (req, res) => {
     void (async () => {

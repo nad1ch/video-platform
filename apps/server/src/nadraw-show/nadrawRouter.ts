@@ -3,6 +3,19 @@ import { isDatabaseConfigured, prisma } from '../prisma'
 import { readSessionFromCookie } from '../auth/session/sessionJwt'
 import { canUserControlNadrawRoom } from './nadrawAccess'
 import { normalizeNadrawPromptKey } from './nadrawGuess'
+import { createIpRateLimitMiddleware } from '../utils/rateLimitMiddleware'
+
+/**
+ * Per-IP cap for Nadraw prompt mutations (audit S7). Streamer admin UI
+ * approves / edits / deletes a handful of prompts per minute at most;
+ * 120/min is well above that. Keeps prompt-spam churn from a stolen
+ * cookie bounded.
+ */
+const nadrawMutationRateLimit = createIpRateLimitMiddleware({
+  label: 'http:nadraw:mutate',
+  windowMs: 60 * 1000,
+  limit: 120,
+}).middleware
 
 function badJson(res: Response, code: string, status = 400): void {
   res.status(status).json({ error: code })
@@ -46,7 +59,7 @@ export function mountNadrawShowRoutes(app: Express): void {
     }
   })
 
-  app.patch('/api/nadraw-show/prompts/:id', async (req: Request, res: Response) => {
+  app.patch('/api/nadraw-show/prompts/:id', nadrawMutationRateLimit, async (req: Request, res: Response) => {
     if (!isDatabaseConfigured()) {
       badJson(res, 'database_unconfigured', 503)
       return
@@ -126,7 +139,7 @@ export function mountNadrawShowRoutes(app: Express): void {
     }
   })
 
-  app.delete('/api/nadraw-show/prompts/:id', async (req: Request, res: Response) => {
+  app.delete('/api/nadraw-show/prompts/:id', nadrawMutationRateLimit, async (req: Request, res: Response) => {
     if (!isDatabaseConfigured()) {
       badJson(res, 'database_unconfigured', 503)
       return
