@@ -976,6 +976,12 @@ export function useCallEngine(options?: CallEngineOptions) {
       stopSignalingKeepAlive()
       stopRemoteMedia()
       closeSendTransport()
+      // M1: drop the cached mediasoup Device before reconnecting so the
+      // next `wireCallMediaAfterRoomState` re-loads it with the fresh
+      // `routerRtpCapabilities` from the new `room-state`. Without this,
+      // `loadDevice` early-returns on `loaded === true` and the Device
+      // keeps stale caps after a server restart / worker swap.
+      deviceReset()
 
       await roomConnect()
       const p = callJoinRoomPayload()
