@@ -1,30 +1,32 @@
-import { computed, type ComputedRef } from 'vue'
-import { useRoute, type LocationQueryValue, type RouteLocationNormalizedLoaded } from 'vue-router'
-
-/** Dispatched after copying the Eat First `mode=view` call URL (shell header action). */
-export const EAT_FIRST_OBS_URL_TOAST_EVENT = 'stream-assist:eat-first-obs-url-copied'
+import { type ComputedRef } from 'vue'
+import { createStreamViewRouteHelpers } from '@/composables/game-room/createStreamViewRouteHelpers'
 
 /**
- * OBS / browser-source style receive-only mode for Eat First on `/app/eat`,
- * aligned with Mafia (`?mode=view`) but scoped to the `eat` route.
+ * Eat First route helpers for OBS `?mode=view` detection. Structurally
+ * mirrors `mafiaStreamViewRoute.ts`: behaviour is produced by the generic
+ * `createStreamViewRouteHelpers` factory (one source of OBS view-mode
+ * truth shared with Mafia), this file owns the Eat First route-name
+ * binding (`'eat'`) and the Eat First-only DOM event constant.
+ *
+ * `EAT_FIRST_OBS_URL_TOAST_EVENT` is intentionally Eat First-only — the
+ * OBS-URL copy toast is dispatched from `AppShellLayout`'s Eat First
+ * header action and is not mirrored to the generic helpers.
  */
-export function eatFirstStreamViewQueryIsView(mode: LocationQueryValue | LocationQueryValue[] | undefined): boolean {
-  if (mode === 'view') {
-    return true
-  }
-  return Array.isArray(mode) && mode[0] === 'view'
-}
+export const EAT_FIRST_OBS_URL_TOAST_EVENT = 'stream-assist:eat-first-obs-url-copied'
 
-export function eatFirstStreamViewFromRoute(route: RouteLocationNormalizedLoaded): boolean {
-  if (route.name !== 'eat') {
-    return false
-  }
-  return eatFirstStreamViewQueryIsView(route.query.mode)
-}
+const eatFirstStreamView = createStreamViewRouteHelpers('eat')
 
+export const eatFirstStreamViewQueryIsView = eatFirstStreamView.viewQueryIsView
+
+export const eatFirstStreamViewFromRoute = eatFirstStreamView.streamViewFromRoute
+
+/**
+ * Returns `{ isStreamView }` for `EatFirstCallPage`. Delegates to the
+ * shared factory so Eat First and Mafia share one OBS view-mode
+ * implementation; the legacy result-key name `isStreamView` is preserved
+ * for the existing consumer.
+ */
 export function useEatFirstCallStreamView(): { isStreamView: ComputedRef<boolean> } {
-  const route = useRoute()
-  return {
-    isStreamView: computed(() => eatFirstStreamViewFromRoute(route)),
-  }
+  const { isStreamView } = eatFirstStreamView.useStreamViewFromRoute()
+  return { isStreamView }
 }
