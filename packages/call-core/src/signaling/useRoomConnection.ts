@@ -23,6 +23,15 @@ export type RoomPeerInfo = {
   userId?: string
   avatarUrl?: string
   audioMuted?: boolean
+  /**
+   * Pure UI/render preference broadcast as a room flag. When true, every
+   * client renders this peer's CAMERA tile with `transform: scaleX(-1)`. Set
+   * via `set-camera-mirror` and propagated by the server as `peer-camera-mirror`
+   * runtime broadcasts; included in `room-state.peers[]` so late joiners /
+   * OBS reloads see the current value immediately (same convention as
+   * `audioMuted`).
+   */
+  cameraMirror?: boolean
 }
 
 export type RoomStatePayload = {
@@ -135,6 +144,9 @@ function parseRoomPeerList(raw: unknown): RoomPeerInfo[] | null {
         }
         if ((p as { audioMuted?: unknown }).audioMuted === true) {
           row.audioMuted = true
+        }
+        if ((p as { cameraMirror?: unknown }).cameraMirror === true) {
+          row.cameraMirror = true
         }
         out.push(row)
       }

@@ -170,6 +170,12 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     }),
   }),
   z.object({
+    type: z.literal('set-camera-mirror'),
+    payload: z.object({
+      mirrored: z.boolean(),
+    }),
+  }),
+  z.object({
     type: z.literal('request-producer-sync'),
     payload: z
       .object({

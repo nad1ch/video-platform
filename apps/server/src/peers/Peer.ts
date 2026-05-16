@@ -26,6 +26,16 @@ export class Peer {
   
   audioMuted = false
   /**
+   * Pure UI/render preference: when true, every client (including OBS browser
+   * sources) renders this peer's CAMERA video tile with `transform: scaleX(-1)`.
+   * Server stores it so late joiners and OBS reloads see the current value via
+   * `room-state.peers[].cameraMirror` (same convention as `audioMuted`). The
+   * SFU does not mutate tracks or producers based on this flag — the published
+   * media stays unchanged; only render is affected. Screen-share is never
+   * mirrored because clients gate the CSS transform by `videoPresentation`.
+   */
+  cameraMirror = false
+  /**
    * Mafia host enforcement: when true, the SFU keeps this peer's audio
    * producers paused regardless of the peer's own `set-audio-muted`. UI
    * mute icon reflects `audioMuted || forcedAudioMuted` so remote peers

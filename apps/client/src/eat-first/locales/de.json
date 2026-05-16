@@ -697,6 +697,8 @@
     "chooseCamera": "Kamera",
     "micInputMenu": "Mikrofon wählen",
     "cameraInputMenu": "Kamera wählen",
+    "mirrorCamera": "Kamera spiegeln",
+    "mirrorCameraHint": "Kamerabild horizontal spiegeln (für alle Teilnehmer und OBS sichtbar)",
     "speakerOutputMenu": "Lautsprecher wählen",
     "deafenOnAria": "Taubstellen: alle für dich stumm, dein Mikrofon für andere stumm",
     "deafenOffAria": "Taubstellen beenden: Mikrofon und Lautstärken wiederherstellen",

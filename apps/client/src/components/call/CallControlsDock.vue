@@ -45,6 +45,8 @@ defineProps<{
   localAudioInputDeviceId?: string | null
   localVideoInputDeviceId?: string | null
   localAudioOutputDeviceId?: string | null
+  /** Current room-visible camera-mirror flag for the local peer. */
+  videoMirrorEnabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -61,6 +63,8 @@ const emit = defineEmits<{
   'pick-audio-input': [deviceId: string]
   'pick-video-input': [deviceId: string]
   'pick-audio-output': [deviceId: string]
+  /** User toggled the room-visible camera-mirror flag in the camera popover. */
+  'toggle-video-mirror': []
 }>()
 
 const { t } = useI18n()
@@ -309,6 +313,24 @@ defineExpose({ containsDevicePickerTarget })
         :aria-label="t('callPage.cameraInputMenu')"
       >
         <p class="call-page__device-pop__title">{{ t('callPage.chooseCamera') }}</p>
+        <!--
+          Mirror toggle is a pure render/UI preference applied as CSS `transform: scaleX(-1)`
+          on this peer's CAMERA tile across every client in the room (incl. OBS browser
+          sources). Decoupled from the device list so screen-share never picks it up; the
+          tile gates the transform by `videoPresentation === 'camera'`. The list of input
+          devices (OBS Virtual Camera / DroidCam / etc.) renders below.
+        -->
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          class="call-page__device-pop__opt call-page__device-pop__opt--toggle"
+          :aria-checked="Boolean(videoMirrorEnabled)"
+          :class="{ 'call-page__device-pop__opt--active': videoMirrorEnabled }"
+          :title="t('callPage.mirrorCameraHint')"
+          @click="emit('toggle-video-mirror')"
+        >
+          {{ t('callPage.mirrorCamera') }}
+        </button>
         <button
           v-for="d in videoInputDevices"
           :key="d.deviceId"

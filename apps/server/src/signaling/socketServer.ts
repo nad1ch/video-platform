@@ -72,6 +72,7 @@ import {
   handleProducerVideoSource,
   handleSetOutboundVideoPaused,
   handleSetAudioMuted,
+  handleSetCameraMirror,
   handleRaiseHand,
   handleRequestProducerSync,
   handleSetConsumerPaused,
@@ -484,6 +485,11 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             case 'raise-hand': {
               const { raised } = parsed.data.payload
               handleRaiseHand(socket, raised, deps)
+              break
+            }
+            case 'set-camera-mirror': {
+              const { mirrored } = parsed.data.payload
+              handleSetCameraMirror(socket, mirrored, deps)
               break
             }
             case 'mafia:claim-host': {

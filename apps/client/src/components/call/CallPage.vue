@@ -62,6 +62,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppFullPageLoader from '@/components/ui/AppFullPageLoader.vue'
 import mafiaTilePinIcon from '@/assets/mafia/ui/tile-pin.svg'
 import { generateCallRoomCode } from '@/utils/callRoomUi'
+import { readStorageJson, writeStorageJson } from '@/utils/storageJson'
 import { useCallRoomHeaderJoinStore } from '@/stores/callRoomHeaderJoin'
 import { useMafiaHostSignaling } from '@/composables/useMafiaHostSignaling'
 import { useMafiaCallHostUi } from '@/composables/useMafiaCallHostUi'
@@ -187,6 +188,8 @@ const {
   localVideoInputDeviceId,
   setCallAudioInputDevice,
   setCallVideoInputDevice,
+  cameraMirror,
+  setCameraMirror,
   wsStatus,
   callDebugSnapshot,
   refreshInboundVideoDebugStats,
@@ -208,6 +211,54 @@ const {
   requestForcedProducerResync,
   requestHardProducerResync,
 } = useCallOrchestrator({ allowManualVideoQuality, joinAvatarUrl, joinUserId, role: callEngineRole })
+
+/**
+ * Persisted "room-visible camera mirror" preference.
+ *
+ * - Local SSOT for the user's choice across sessions (so the toggle survives
+ *   reload). The room-wide propagation is owned by call-core via
+ *   `setCameraMirror()` → `set-camera-mirror` WS → `peer-camera-mirror`
+ *   broadcast → `peerCameraMirror[peerId]` reducer; this is purely the local
+ *   preference replay on join.
+ * - View-mode tabs (`mafia ?mode=view`, `eat ?mode=view`) do not publish media
+ *   and must not toggle the room state. They are role=viewer and don't even
+ *   render the dock, but we additionally avoid replay here for safety.
+ */
+const CAMERA_MIRROR_STORAGE_KEY = 'call.cameraMirror'
+
+function readPersistedCameraMirror(): boolean {
+  if (typeof localStorage === 'undefined') return false
+  return readStorageJson(localStorage, CAMERA_MIRROR_STORAGE_KEY, false) === true
+}
+
+function writePersistedCameraMirror(value: boolean): void {
+  if (typeof localStorage === 'undefined') return
+  writeStorageJson(localStorage, CAMERA_MIRROR_STORAGE_KEY, value === true)
+}
+
+const cameraMirrorPref = ref<boolean>(readPersistedCameraMirror())
+
+function onToggleVideoMirror(): void {
+  if (mafiaViewUi.value || eatFirstViewUi.value) {
+    return
+  }
+  const next = !(cameraMirror.value === true)
+  cameraMirrorPref.value = next
+  writePersistedCameraMirror(next)
+  setCameraMirror(next)
+}
+
+watch(
+  () => session.inCall,
+  (inCall) => {
+    if (!inCall) return
+    if (mafiaViewUi.value || eatFirstViewUi.value) return
+    if (cameraMirrorPref.value === true && cameraMirror.value !== true) {
+      setCameraMirror(true)
+    }
+  },
+  { immediate: true },
+)
 
 /** Dev-only: gate for the floating `<MediaDiagnosticsPanel>` and the `__MEDIA_DEBUG__` console helpers. */
 const mediaDebugPanelEnabled = isMediaDebugEnabled()
@@ -2321,7 +2372,7 @@ watch(joining, (j) => {
                 :mafia-elimination-icon-src="mafiaEliminatedPlayerIconForTile(row.tile.peerId)"
                 :mafia-elimination-background="mafiaGameStore.eliminationBackgroundForPeer(row.tile.peerId)"
                 :mafia-dead-background-url="
-                  isMafiaRoute || isEatFirstRoute ? mafiaGameStore.activeDeadBackgroundUrl() : null
+                  isMafiaRoute ? mafiaGameStore.activeDeadBackgroundUrl() : null
                 "
                 :mafia-host-show-life-toggle="
                   (isMafiaRoute && !mafiaViewUi && mafiaGameStore.isMafiaHost) ||
@@ -2332,6 +2383,7 @@ watch(joining, (j) => {
                   !row.tile.isLocal && videoPlaybackSuppressedForPeer(row.tile.peerId)
                 "
                 :video-target-playback-fps="remoteVideoTargetPlaybackFpsForPeer(row.tile.peerId)"
+                :camera-mirror="row.tile.cameraMirror === true"
                 @update:listen-volume="(v) => remoteListenVolumeHandler(row.tile.peerId)(v)"
                 @update:listen-muted="(v) => remoteListenMutedHandler(row.tile.peerId)(v)"
                 @commit-local-display-name="onCommitLocalTileDisplayName"
@@ -2412,6 +2464,7 @@ watch(joining, (j) => {
               :local-audio-input-device-id="localAudioInputDeviceId"
               :local-video-input-device-id="localVideoInputDeviceId"
               :local-audio-output-device-id="localAudioOutputDeviceId"
+              :video-mirror-enabled="cameraMirror"
               @toggle-mic="toggleMic"
               @toggle-cam="toggleCam"
               @toggle-deafen="toggleCallDeafen"
@@ -2421,6 +2474,7 @@ watch(joining, (j) => {
               @pick-audio-input="pickAudioInput"
               @pick-video-input="pickVideoInput"
               @pick-audio-output="pickAudioOutput"
+              @toggle-video-mirror="onToggleVideoMirror"
             />
           </template>
           <template #speaking-queue>

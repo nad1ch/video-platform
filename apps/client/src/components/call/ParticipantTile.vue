@@ -169,8 +169,16 @@ const props = withDefaults(
 
 
     videoPlaybackSuppressed?: boolean
-    
+
     videoTargetPlaybackFps?: number
+    /**
+     * Room-visible camera-mirror flag for THIS peer (from
+     * `peerCameraMirror[peerId]` for remotes, `cameraMirror` for the local
+     * tile). Applies `transform: scaleX(-1)` to the inner `.tile-video-clip`,
+     * gated by `videoPresentation === 'camera'` so screen share is never
+     * mirrored.
+     */
+    cameraMirror?: boolean
   }>(),
   {
     streamViewMode: false,
@@ -181,6 +189,7 @@ const props = withDefaults(
     mafiaHostShowLifeToggle: false,
     mafiaLayerViewportObserve: false,
     videoPlaybackSuppressed: false,
+    cameraMirror: false,
     rowSpeaking: false,
     eatFirstTraitHostView: false,
     eatFirstTraitOwnerView: false,
@@ -796,6 +805,15 @@ const streamVideoStableKey = computed(() =>
 
 const isSpeaking = computed(() => props.rowSpeaking)
 
+/**
+ * Apply CSS mirror only to actual camera video. Screen share and the `none`
+ * presentation are never mirrored regardless of the peer's mirror flag, so the
+ * room-wide flag is safe to set even while the peer is screen-sharing.
+ */
+const applyCameraMirror = computed(
+  () => Boolean(props.cameraMirror) && props.videoPresentation === 'camera',
+)
+
 /** Memo deps for the video subtree — label/mic/row speaking can change without patching WebRTC. */
 const streamVideoMemoDeps = computed(() => [
   props.stream,
@@ -808,6 +826,7 @@ const streamVideoMemoDeps = computed(() => [
   props.mafiaLifeState,
   Boolean(props.videoPlaybackSuppressed),
   props.videoTargetPlaybackFps ?? null,
+  applyCameraMirror.value,
 ])
 
 function onVolumeSliderInput(ev: Event): void {
@@ -1503,7 +1522,11 @@ if (import.meta.env.DEV) {
         class="tile-video-wrap"
         :class="{ 'tile-video-wrap--mafia-dead': deadShade }"
       >
-        <div class="tile-video-clip" v-memo="streamVideoMemoDeps">
+        <div
+          class="tile-video-clip"
+          :class="{ 'tile-video-clip--mirror': applyCameraMirror }"
+          v-memo="streamVideoMemoDeps"
+        >
           <StreamVideo
             :key="streamVideoStableKey"
             :stream="stream"
@@ -1991,6 +2014,23 @@ if (import.meta.env.DEV) {
 .tile-video-wrap--mafia-dead .tile-video-clip {
   filter: grayscale(0.9) brightness(0.5);
   transition: filter 0.32s ease;
+}
+
+/*
+ * Room-visible camera mirror. Pure CSS, applied only when the parent
+ * `<ParticipantTile>` has `cameraMirror === true` AND
+ * `videoPresentation === 'camera'` (gated in `applyCameraMirror`). Wraps the
+ * existing `.tile-video-clip`'s `<StreamVideo>` so the playback element is
+ * never remounted — same DOM identity, just a different transform — which
+ * matches the project rule against media-lifecycle changes for UI tweaks.
+ *
+ * Scoped to `.tile-video-clip` only; `.tile-placeholder` (initials / avatar /
+ * elimination mark) is intentionally not mirrored so names and badges stay
+ * readable. Combines harmlessly with the speaking-row `transform: scale(1.02)`
+ * on the outer `.tile-video-wrap`.
+ */
+.tile-video-clip--mirror {
+  transform: scaleX(-1);
 }
 
 .tile--mafia-elim-bg-dark .tile-media {

@@ -697,6 +697,8 @@
     "chooseCamera": "Kamera",
     "micInputMenu": "Wybierz mikrofon",
     "cameraInputMenu": "Wybierz kamerę",
+    "mirrorCamera": "Lustrzane odbicie kamery",
+    "mirrorCameraHint": "Odwróć obraz kamery w poziomie (widzą wszyscy uczestnicy i OBS)",
     "speakerOutputMenu": "Wybierz wyjście audio",
     "deafenOnAria": "Wycisz wszystkich u siebie i wycisz swój mikrofon dla innych",
     "deafenOffAria": "Przywróć mikrofon i głośność uczestników",
