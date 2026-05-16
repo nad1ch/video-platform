@@ -1,23 +1,14 @@
-import { HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from '../config/access.js'
-import { eatViewFromRoute } from '../state/eatFirstRouteUtils.js'
 import { readStorageJson, writeStorageJson } from '@/utils/storageJson.js'
 
 const STORAGE_KEY = 'eat-first:onboarding-dismissed:v1'
 
-
-
-
-
+/**
+ * After the legacy `view=overlay|control|admin` panels were removed there is
+ * only one Eat First onboarding tour ("call"). The route param is no longer
+ * inspected here.
+ */
 export function resolveOnboardingTourKeyFromRoute(route) {
-  const v = eatViewFromRoute(route)
-  if (v === 'call') return 'call'
-  if (v === 'overlay') return 'overlay'
-  if (v === 'control') {
-    const host = route.query[HOST_PANEL_QUERY_KEY]
-    const hostStr = Array.isArray(host) ? host[0] : host
-    return String(hostStr ?? '') === HOST_PANEL_QUERY_VALUE ? 'controlHost' : 'controlPlayer'
-  }
-  return null
+  return route?.path && String(route.path).startsWith('/app/eat') ? 'call' : null
 }
 
 

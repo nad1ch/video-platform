@@ -5,30 +5,24 @@ import {
   normalizeEatView,
 } from '@/eat-first/state/eatFirstRouteUtils.js'
 
-describe('eatFirstRouteUtils', () => {
-  it('normalizeEatView accepts known views', () => {
+describe('eatFirstRouteUtils (post legacy view= cleanup)', () => {
+  it('normalizeEatView always reports the canonical "call" surface', () => {
+    expect(normalizeEatView()).toBe('call')
     expect(normalizeEatView('call')).toBe('call')
-    expect(normalizeEatView('join')).toBe('call')
-    expect(normalizeEatView('admin')).toBe('admin')
-    expect(normalizeEatView('control')).toBe('control')
-    expect(normalizeEatView('overlay')).toBe('overlay')
-  })
-
-  it('normalizeEatView is case-insensitive and trimmed', () => {
-    expect(normalizeEatView('  CONTROL  ')).toBe('control')
-    expect(normalizeEatView('Overlay')).toBe('overlay')
-  })
-
-  it('normalizeEatView falls back to call for unknown', () => {
-    expect(normalizeEatView('')).toBe('call')
+    expect(normalizeEatView('overlay')).toBe('call')
+    expect(normalizeEatView('control')).toBe('call')
+    expect(normalizeEatView('admin')).toBe('call')
     expect(normalizeEatView('lobby')).toBe('call')
+    expect(normalizeEatView('')).toBe('call')
     expect(normalizeEatView(null)).toBe('call')
+    expect(normalizeEatView(undefined)).toBe('call')
   })
 
-  it('eatViewFromRoute reads query.view', () => {
-    expect(eatViewFromRoute({ query: { view: 'overlay' } })).toBe('overlay')
+  it('eatViewFromRoute ignores query.view (legacy panels are gone)', () => {
     expect(eatViewFromRoute({ query: {} })).toBe('call')
-    expect(eatViewFromRoute({ query: { view: 'bad' } })).toBe('call')
+    expect(eatViewFromRoute({ query: { view: 'overlay' } })).toBe('call')
+    expect(eatViewFromRoute({ query: { view: 'control' } })).toBe('call')
+    expect(eatViewFromRoute({ query: { view: 'admin' } })).toBe('call')
   })
 
   it('EAT_FIRST_ROUTE_NAME is stable', () => {

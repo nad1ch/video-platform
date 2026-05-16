@@ -1,65 +1,18 @@
-import { ref } from 'vue'
-import { HOST_PANEL_QUERY_KEY, HOST_PANEL_QUERY_VALUE } from './config/access.js'
-import { getPersistedGameId } from './utils/persistedGameId.js'
 import { trackPageView } from './analytics/bootstrap.js'
-import { normalizeEatView } from './state/eatFirstRouteUtils.js'
 
-
-export const adminControlTransitionInstant = ref(false)
-
-function resolveAdminGateGameId(query) {
-  const g = query?.game
-  if (g != null && String(g).trim()) return String(g).trim()
-  const p = getPersistedGameId()
-  if (p) return p
-  return 'test1'
-}
-
+/**
+ * Eat First router guards — kept narrow after the legacy
+ * `view=overlay|control|admin` panels were removed. Today this only emits an
+ * analytics page-view event for `/app/eat*` navigations; legacy redirect /
+ * admin-gate logic is gone and lives nowhere in this file.
+ */
 function isEatPath(p) {
   return typeof p === 'string' && (p === '/app/eat' || p.startsWith('/app/eat/'))
 }
 
-function isAdminOrControlQuery(query) {
-  const v = normalizeEatView(query?.view)
-  return v === 'admin' || v === 'control'
-}
-
-
-
-
 export function registerEatFirstRouterGuards(router) {
-  router.beforeEach((to, from) => {
-    if (!isEatPath(to.path) && !isEatPath(from.path)) return
-    adminControlTransitionInstant.value =
-      Boolean(from.path) &&
-      isAdminOrControlQuery(from.query) &&
-      isAdminOrControlQuery(to.query)
-  })
-
   router.afterEach((to) => {
     if (!isEatPath(to.path)) return
     trackPageView(to.fullPath)
-  })
-}
-
-/**
- * When URL has view=admin but host session is already valid, jump to control (same as former beforeEnter).
- * Call from EatFirstPage with watch(immediate).
- *
- * @param {import('vue-router').Router} router
- * @param {import('vue-router').RouteLocationNormalizedLoaded} route
- * @param {boolean} canEatFirstHost — admin or Eat First operator permission from GET /api/auth/me
- */
-export function redirectAdminToControlIfAuthed(router, route, canEatFirstHost) {
-  if (normalizeEatView(route.query.view) !== 'admin') return
-  if (!canEatFirstHost) return
-  router.replace({
-    name: 'eat',
-    query: {
-      ...route.query,
-      view: 'control',
-      game: resolveAdminGateGameId(route.query),
-      [HOST_PANEL_QUERY_KEY]: HOST_PANEL_QUERY_VALUE,
-    },
   })
 }

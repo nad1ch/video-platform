@@ -3,12 +3,11 @@ import '@/eat-first/style.css'
 import '@/eat-first/styles/theme.css'
 import { storeToRefs } from 'pinia'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RouterView, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
+import { RouterView, useRoute, type RouteLocationRaw } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppLandingHeader from '@/pages/app/components/AppHeader.vue'
 import AppLandingFooter from '@/pages/app/components/AppFooter.vue'
 import { eatViewFromRoute, useSeoApp, useTheme } from '@/eat-first'
-import { hostControlChromeStore } from '@/eat-first/composables/hostControlChrome.js'
 import { persistLocale, LOCALE_OPTIONS } from '@/eat-first/i18n'
 import {
   dismissOnboardingTour,
@@ -28,7 +27,6 @@ import {
   CALL_ROOM_POPOVER_PANEL_ID,
   useCallRoomHeaderJoinStore,
 } from '@/stores/callRoomHeaderJoin'
-import { redirectAdminToControlIfAuthed } from '@/eat-first/router.js'
 import {
   BRAND_LOGO_LIGHT_SVG,
   STREAM_APP_BRAND_NAME,
@@ -60,7 +58,6 @@ const OnboardingTourModal = defineAsyncComponent({
 })
 
 const route = useRoute()
-const router = useRouter()
 const { t, locale } = useI18n()
 const callRoomHeaderJoin = useCallRoomHeaderJoinStore()
 const auth = useAuth()
@@ -103,9 +100,6 @@ const {
  */
 const gameTemplateGame = useGameTemplateGameStore()
 const { isGameRoomHost: isCurrentGameTemplateHost } = storeToRefs(gameTemplateGame)
-const canEatFirstHost = computed(() => {
-  return auth.user.value?.role === 'admin' || auth.user.value?.permissions?.includes('EAT_FIRST_OPERATOR') === true
-})
 const { theme, setTheme } = useTheme()
 
 const isEatRoute = computed(() => route.path.startsWith('/app/eat'))
@@ -207,9 +201,11 @@ const streamTitle = computed(() => {
   return STREAM_APP_BRAND_NAME
 })
 
-const hostChromeOn = computed(() => hostControlChromeStore.active === true)
-
-const eatBrand = computed(() => (hostChromeOn.value ? t('app.brandHost') : t('game.title')))
+/**
+ * Host-control showdesk chrome has been removed alongside the legacy
+ * `view=control` panel. The brand stays on the player/viewer title.
+ */
+const eatBrand = computed(() => t('game.title'))
 
 const headerTitle = computed(() => (isEatRoute.value ? eatBrand.value : streamTitle.value))
 const appLandingHeaderBrand = computed(() =>
@@ -319,15 +315,6 @@ function onOnboardingDismissSave() {
   const k = onboardingTourKey.value
   if (k) dismissOnboardingTour(k)
 }
-
-watch(
-  [() => route.fullPath, () => auth.loaded.value, () => auth.user.value?.role, () => auth.user.value?.permissions?.join('|')],
-  () => {
-    if (!isEatRoute.value || !auth.loaded.value) return
-    redirectAdminToControlIfAuthed(router, route, canEatFirstHost.value)
-  },
-  { immediate: true },
-)
 
 watch(() => route.fullPath, tryAutoOnboarding, { immediate: true })
 

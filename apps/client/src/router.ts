@@ -282,28 +282,28 @@ export const router = createRouter({
       path: '/eat/join',
       redirect: (to: RouteLocationGeneric) => ({
         path: '/app/eat',
-        query: { ...to.query, view: 'call' },
+        query: eatGameOnlyQuery(to.query as Record<string, unknown>),
       }),
     },
     {
       path: '/eat/admin',
       redirect: (to: RouteLocationGeneric) => ({
         path: '/app/eat',
-        query: { ...to.query, view: 'admin' },
+        query: eatGameOnlyQuery(to.query as Record<string, unknown>),
       }),
     },
     {
       path: '/eat/control',
       redirect: (to: RouteLocationGeneric) => ({
         path: '/app/eat',
-        query: { ...to.query, view: 'control' },
+        query: eatGameOnlyQuery(to.query as Record<string, unknown>),
       }),
     },
     {
       path: '/eat/overlay',
       redirect: (to: RouteLocationGeneric) => ({
         path: '/app/eat',
-        query: { ...to.query, view: 'overlay' },
+        query: { ...eatGameOnlyQuery(to.query as Record<string, unknown>), mode: 'view' },
       }),
     },
     {
@@ -335,10 +335,73 @@ export const router = createRouter({
 installRouteNavLoadingGuards(router)
 registerEatFirstRouterGuards(router)
 
-function eatViewNeedsStreamAuth(query: Record<string, unknown>): boolean {
-  const v = query.view
-  const s = Array.isArray(v) ? v[0] : v
-  return s === 'admin' || s === 'control'
+/**
+ * Build a query object containing only the safe `game` carry-over for the
+ * top-level `/eat/*` legacy redirects. Drops any legacy query keys
+ * (`view`, `host`, `player`, `token`, `mode`) so the canonical URL stays
+ * clean; callers can layer canonical keys (e.g. `mode: 'view'`) on top.
+ */
+function eatGameOnlyQuery(query: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {}
+  const raw = query.game
+  const value = Array.isArray(raw) ? raw[0] : raw
+  if (typeof value === 'string' && value.trim().length > 0) {
+    out.game = value.trim()
+  }
+  return out
+}
+
+const LEGACY_EAT_VIEW_VALUES = new Set(['overlay', 'control', 'admin'])
+
+/**
+ * Normalize legacy `/app/eat` query params to the canonical surface:
+ * - `view=overlay` → `mode=view` (canonical OBS receive-only)
+ * - `view=control` / `view=admin` → drop `view` (no panel left to render)
+ * - `host=…` / `player=…` / `token=…` (legacy admin/control/personal-overlay) → drop
+ * Returns `null` when the URL is already canonical so we don't loop on `replace`.
+ */
+function normalizeEatLegacyQuery(
+  to: RouteLocationGeneric,
+): { path: string; query: Record<string, string> } | null {
+  if (to.name !== 'eat') return null
+  const query = to.query as Record<string, unknown>
+
+  const rawView = Array.isArray(query.view) ? query.view[0] : query.view
+  const view = typeof rawView === 'string' ? rawView.toLowerCase() : ''
+  const isLegacyView = LEGACY_EAT_VIEW_VALUES.has(view)
+  const hasLegacyView = isLegacyView || view === 'call' || view === 'join' || view.length > 0
+  const hasLegacyHost = 'host' in query
+  const hasLegacyPlayer = 'player' in query
+  const hasLegacyToken = 'token' in query
+  if (!hasLegacyView && !hasLegacyHost && !hasLegacyPlayer && !hasLegacyToken) {
+    return null
+  }
+
+  const next: Record<string, string> = eatGameOnlyQuery(query)
+
+  if (isLegacyView) {
+    if (view === 'overlay') {
+      next.mode = 'view'
+    }
+    // view=control / view=admin → drop view entirely (panel removed).
+  } else {
+    // For unknown/call/join view values: preserve any existing canonical `mode`
+    // (e.g. someone passed `?mode=view&view=call`) but drop `view`.
+    const rawMode = Array.isArray(query.mode) ? query.mode[0] : query.mode
+    if (typeof rawMode === 'string' && rawMode.length > 0) {
+      next.mode = rawMode
+    }
+  }
+
+  // Preserve email-verification carry-over (used by the verify-email gate).
+  for (const k of ['emailVerified', 'emailVerification'] as const) {
+    const v = query[k]
+    if (typeof v === 'string' && v.length > 0) {
+      next[k] = v
+    }
+  }
+
+  return { path: '/app/eat', query: next }
 }
 
 function isMafiaObsViewRoute(to: RouteLocationGeneric): boolean {
@@ -411,6 +474,18 @@ function emailVerificationQuery(query: Record<string, unknown>): Record<string, 
  * stays on (e.g. after redirect to `/auth`). Same for admin → `/app` redirect.
  */
 router.beforeEach(async (to) => {
+  /**
+   * Legacy Eat First panel cleanup: the old `view=overlay|control|admin`
+   * surface (and `host=…` / `player=…` / `token=…` query params) is gone.
+   * Normalize before any auth/beta check so the rest of the guard sees the
+   * canonical URL.
+   */
+  const eatLegacyRedirect = normalizeEatLegacyQuery(to)
+  if (eatLegacyRedirect != null) {
+    releaseRouteNavLoading()
+    return eatLegacyRedirect
+  }
+
   const isAppRoute = to.path === '/app' || to.path.startsWith('/app/')
   const isVerifyEmailRoute = to.name === 'verify-email'
   if (isAppRoute) {
@@ -443,9 +518,8 @@ router.beforeEach(async (to) => {
 
   const obsView = isMafiaObsViewRoute(to) || isEatFirstObsViewRoute(to)
   const needMeta = Boolean(to.meta.requiresAuth) && !obsView
-  const needEatStaff = to.name === 'eat' && eatViewNeedsStreamAuth(to.query as Record<string, unknown>)
   const needBetaAccess = routeNeedsBetaAccess(to) && !obsView
-  if (!needMeta && !needEatStaff && !needBetaAccess) {
+  if (!needMeta && !needBetaAccess) {
     return true
   }
 

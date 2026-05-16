@@ -304,7 +304,13 @@ export function useRemoteMedia() {
   >({})
 
   const recvTransport = shallowRef<Transport | null>(null)
-  
+  // M3: single-flight cache for `ensureRecvTransport`. Parallel `consumeProducer`
+  // callers that race past the null/closed check would otherwise each send
+  // `create-transport` and orphan all but the last transport server-side.
+  // Cleared in `finally` so a failed creation does not get cached, and in
+  // `stopRemoteMedia` so a teardown does not leave a stale pending promise.
+  let recvTransportPromise: Promise<Transport> | null = null
+
   const streamsByPeerId = new Map<string, MediaStream>()
   
   const remotePeerStreamsMap = shallowRef(new Map<string, MediaStream>())
@@ -952,52 +958,64 @@ export function useRemoteMedia() {
     if (recvTransport.value && !recvTransport.value.closed) {
       return recvTransport.value
     }
-
-    room.sendJson({ type: 'create-transport', payload: { direction: 'recv' } })
-
-    const created = await waitForSignalingMessage(
-      room.addMessageListener,
-      (d) => isTransportCreatedRecv(d),
-      TIMEOUT_MS,
-    )
-
-    const transport = device.createRecvTransport(created.payload.transportOptions)
-
-    transport.on('connectionstatechange', (state: ConnectionState) => {
-      console.log('[recvTransport] connectionState:', state, { id: transport.id })
-      onRecvConnectionStateChange(state)
-      if (state === 'failed') {
-        console.error('[ICE] recv transport FAILED', { id: transport.id })
-      }
-    })
-
-    transport.on('connect', ({ dtlsParameters }: { dtlsParameters: DtlsParameters }, success, fail) => {
-      try {
-        room.sendJson({
-          type: 'connect-transport',
-          payload: { transportId: transport.id, dtlsParameters },
-        })
-      } catch (err) {
-        fail(err instanceof Error ? err : new Error(String(err)))
-        return
-      }
-
-      void waitForSignalingMessage(
-        room.addMessageListener,
-        (d) => isTransportConnectedMessage(d, transport.id),
-        TIMEOUT_MS,
-      )
-        .then(() => {
-          success()
-        })
-        .catch((err) => fail(err instanceof Error ? err : new Error(String(err))))
-    })
-
-    recvTransport.value = transport
-    if (transport.connectionState === 'connected') {
-      onRecvConnectionStateChange('connected')
+    if (recvTransportPromise) {
+      return recvTransportPromise
     }
-    return transport
+
+    const promise = (async (): Promise<Transport> => {
+      try {
+        room.sendJson({ type: 'create-transport', payload: { direction: 'recv' } })
+
+        const created = await waitForSignalingMessage(
+          room.addMessageListener,
+          (d) => isTransportCreatedRecv(d),
+          TIMEOUT_MS,
+        )
+
+        const transport = device.createRecvTransport(created.payload.transportOptions)
+
+        transport.on('connectionstatechange', (state: ConnectionState) => {
+          console.log('[recvTransport] connectionState:', state, { id: transport.id })
+          onRecvConnectionStateChange(state)
+          if (state === 'failed') {
+            console.error('[ICE] recv transport FAILED', { id: transport.id })
+          }
+        })
+
+        transport.on('connect', ({ dtlsParameters }: { dtlsParameters: DtlsParameters }, success, fail) => {
+          try {
+            room.sendJson({
+              type: 'connect-transport',
+              payload: { transportId: transport.id, dtlsParameters },
+            })
+          } catch (err) {
+            fail(err instanceof Error ? err : new Error(String(err)))
+            return
+          }
+
+          void waitForSignalingMessage(
+            room.addMessageListener,
+            (d) => isTransportConnectedMessage(d, transport.id),
+            TIMEOUT_MS,
+          )
+            .then(() => {
+              success()
+            })
+            .catch((err) => fail(err instanceof Error ? err : new Error(String(err))))
+        })
+
+        recvTransport.value = transport
+        if (transport.connectionState === 'connected') {
+          onRecvConnectionStateChange('connected')
+        }
+        return transport
+      } finally {
+        recvTransportPromise = null
+      }
+    })()
+
+    recvTransportPromise = promise
+    return promise
   }
 
   /**
@@ -1713,6 +1731,7 @@ export function useRemoteMedia() {
       t.close()
     }
     recvTransport.value = null
+    recvTransportPromise = null
     recvApplyQueue.reset()
   }
 
