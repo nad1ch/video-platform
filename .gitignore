@@ -8,6 +8,8 @@ build/
 *.tsbuildinfo
 # Legacy: server `tsc` output — build in CI/Docker, do not commit
 apps/server/dist/
+# Volar/VLS generated `.vue.js` mirror files (template type-check artifacts; never commit)
+apps/client/src/**/*.vue.js
 
 # Env and secrets
 .env
