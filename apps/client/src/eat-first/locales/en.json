@@ -72,6 +72,8 @@
     "playerUsedActionCardToast": "{name} used action card: «{card}»",
     "useActionCardAria": "Tell the host you are using this action card",
     "actionCardAlreadyUsedAria": "This action card has already been used",
+    "actionCardGroupAria": "Player's active action card",
+    "rerollActionCardTitle": "Reroll the active action card",
     "traitLabels": {
       "gender": "Gender",
       "age": "Age",

@@ -94,6 +94,7 @@ import { EAT_FIRST_OBS_URL_TOAST_EVENT } from '@/composables/eatFirstCallStreamV
 import { MAFIA_OBS_URL_TOAST_EVENT, MAFIA_SETTINGS_TOAST_EVENT } from '@/composables/mafiaStreamViewRoute'
 import { MafiaWs } from '@/composables/mafiaWsProtocol'
 import { useMafiaAudioMixSignaling } from '@/composables/useMafiaAudioMixSignaling'
+import { useEatFirstAudioMixSignaling } from '@/composables/useEatFirstAudioMixSignaling'
 import mafiaTilePinActiveIcon from '@/assets/mafia/ui/tile-pin-active.svg'
 import { nominationTargetSeatsFromSpeakingFlat } from '@/utils/speakingNominationQueue'
 import { decideSpeakingTileClick } from '@/utils/speakingNominationController'
@@ -519,18 +520,24 @@ const remoteListenVolumeByPeer = new Map<string, (v: number) => void>()
 const remoteListenMutedByPeer = new Map<string, (v: boolean) => void>()
 
 /**
- * Deferred slot: assigned by `useMafiaAudioMixSignaling` further down the
- * setup script (it depends on `mafiaGameStore` which is initialized later).
- * Handlers below reference the slot lazily so the host's slider/mute toggle
- * also fans out a `mafia:audio-mix-update` to the room (OBS view applies it).
- * No-op for non-host or non-Mafia routes.
+ * Deferred slots: assigned by `useMafiaAudioMixSignaling` /
+ * `useEatFirstAudioMixSignaling` further down the setup script (they depend
+ * on `mafiaGameStore` / `eatFirstShell` which are initialized later).
+ * Handlers below reference the slots lazily so the host's slider/mute toggle
+ * also fans out a `mafia:audio-mix-update` / `eat:audio-mix-update` to the
+ * room (OBS view applies it). Each composable's `broadcast*Delta` is a no-op
+ * outside its route + host gate, so calling both from one tile handler is safe.
  */
 const mafiaAudioMixBroadcasterSlot: { broadcast: ((delta: { peerId: string; volume: number; muted: boolean }) => void) | null } = {
   broadcast: null,
 }
+const eatFirstAudioMixBroadcasterSlot: { broadcast: ((delta: { peerId: string; volume: number; muted: boolean }) => void) | null } = {
+  broadcast: null,
+}
 
-function broadcastMafiaAudioMixDeltaForTile(peerId: string, volume: number, muted: boolean): void {
+function broadcastAudioMixDeltaForTile(peerId: string, volume: number, muted: boolean): void {
   mafiaAudioMixBroadcasterSlot.broadcast?.({ peerId, volume, muted })
+  eatFirstAudioMixBroadcasterSlot.broadcast?.({ peerId, volume, muted })
 }
 
 function readTileMutedForPeer(peerId: string): boolean {
@@ -551,7 +558,7 @@ function remoteListenVolumeHandler(peerId: string) {
       setRemoteListenVolume(peerId, v)
       // Read companion (muted) AFTER apply so the broadcast carries the
       // engine-resolved entry — `setRemoteListenVolume` does not change muted.
-      broadcastMafiaAudioMixDeltaForTile(peerId, readTileVolumeForPeer(peerId), readTileMutedForPeer(peerId))
+      broadcastAudioMixDeltaForTile(peerId, readTileVolumeForPeer(peerId), readTileMutedForPeer(peerId))
     }
     remoteListenVolumeByPeer.set(peerId, h)
   }
@@ -565,7 +572,7 @@ function remoteListenMutedHandler(peerId: string) {
       setRemoteListenMuted(peerId, v)
       // Engine may bump volume from 0 → nz on unmute; reading after apply
       // mirrors what the host's UI now shows so OBS sees the same state.
-      broadcastMafiaAudioMixDeltaForTile(peerId, readTileVolumeForPeer(peerId), readTileMutedForPeer(peerId))
+      broadcastAudioMixDeltaForTile(peerId, readTileVolumeForPeer(peerId), readTileMutedForPeer(peerId))
     }
     remoteListenMutedByPeer.set(peerId, h)
   }
@@ -1059,6 +1066,27 @@ const { broadcastMafiaAudioMixDelta } = useMafiaAudioMixSignaling({
   setRemoteListenMuted,
 })
 mafiaAudioMixBroadcasterSlot.broadcast = broadcastMafiaAudioMixDelta
+
+// Eat First parity for the OBS audio-mix mirror. Identical wiring shape to
+// the Mafia block above — see `useEatFirstAudioMixSignaling` for the design
+// notes. Both composables are no-ops outside their route + host gate, so
+// `broadcastAudioMixDeltaForTile` calling both is safe.
+const {
+  isEatFirstRoomHost: isEatFirstHostRef,
+  hostPeerId: eatFirstHostPeerIdRef,
+} = storeToRefs(eatFirstShell)
+const { broadcastEatFirstAudioMixDelta } = useEatFirstAudioMixSignaling({
+  sendSignalingMessage,
+  subscribeSignalingMessage,
+  wsStatus,
+  isEatFirstRoute,
+  isViewMode: eatFirstViewUi,
+  isEatFirstHost: isEatFirstHostRef,
+  hostPeerId: eatFirstHostPeerIdRef,
+  setRemoteListenVolume,
+  setRemoteListenMuted,
+})
+eatFirstAudioMixBroadcasterSlot.broadcast = broadcastEatFirstAudioMixDelta
 
 
 function displayCallOrMafiaRoomCode(): string {

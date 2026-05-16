@@ -72,6 +72,8 @@
     "playerUsedActionCardToast": "{name}: використано карту «{card}»",
     "useActionCardAria": "Повідомити ведучого, що ви використали цю карту",
     "actionCardAlreadyUsedAria": "Цю карту вже використано",
+    "actionCardGroupAria": "Активна карта гравця",
+    "rerollActionCardTitle": "Перекинути активну карту",
     "traitLabels": {
       "gender": "Стать",
       "age": "Вік",

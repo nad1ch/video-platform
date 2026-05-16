@@ -1435,7 +1435,7 @@ if (import.meta.env.DEV) {
               isEatFirstTraitHostView() && eatFirstActionCard.used === true,
           }"
           role="group"
-          aria-label="Активна карта гравця"
+          :aria-label="t('eatFirstCall.actionCardGroupAria')"
         >
           <button
             v-if="isEatFirstTraitOwnerView() && !isEatFirstTraitHostView()"
@@ -1458,8 +1458,8 @@ if (import.meta.env.DEV) {
             v-if="isEatFirstTraitHostView()"
             type="button"
             class="tile-eat-first-action-card__btn"
-            :title="'Перекинути активну карту'"
-            :aria-label="'Перекинути активну карту'"
+            :title="t('eatFirstCall.rerollActionCardTitle')"
+            :aria-label="t('eatFirstCall.rerollActionCardTitle')"
             @click.stop="onEatFirstRerollActionCard"
           >
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">

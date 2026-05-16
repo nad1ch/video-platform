@@ -72,6 +72,8 @@
     "playerUsedActionCardToast": "{name} hat Aktionskarte gespielt: «{card}»",
     "useActionCardAria": "Dem Host mitteilen, dass du diese Aktionskarte nutzt",
     "actionCardAlreadyUsedAria": "Diese Aktionskarte wurde bereits verwendet",
+    "actionCardGroupAria": "Aktive Aktionskarte des Spielers",
+    "rerollActionCardTitle": "Aktive Aktionskarte neu würfeln",
     "traitLabels": {
       "gender": "Geschlecht",
       "age": "Alter",

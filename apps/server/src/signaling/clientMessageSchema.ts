@@ -473,6 +473,28 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       muted: z.boolean().optional(),
     }).strict(),
   }),
+  /**
+   * Host-only per-participant audio mix (volume + mute). Mirrors
+   * `mafia:audio-mix-update`. Server validates host authority via
+   * `isEatFirstHostPeer`, normalizes entries, stores under a stable userId
+   * (peerId fallback), and replays to late joiners (notably `?mode=view`).
+   */
+  z.object({
+    type: z.literal('eat:audio-mix-update'),
+    payload: z.object({
+      entries: z
+        .array(
+          z.object({
+            peerId: z.string().min(1).max(128),
+            userId: z.string().min(1).max(128).nullable().optional(),
+            volume: z.number().min(0).max(2),
+            muted: z.boolean(),
+          }).strict(),
+        )
+        .min(1)
+        .max(32),
+    }).strict(),
+  }),
   z.object({
     type: z.literal('eat:trait-reveal-request'),
     payload: z.object({

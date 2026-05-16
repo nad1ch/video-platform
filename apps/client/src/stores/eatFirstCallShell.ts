@@ -81,6 +81,18 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
    */
   const speakingQueue = ref<number[]>([])
 
+  /**
+   * Server-authoritative host "mute all" toggle, fed by `eat:force-mute-all`
+   * and replayed via `eat:table-state-sync.forceMuteAllActive`. The host
+   * action bar reads this instead of a local ref so reloaded host tabs,
+   * late joiners, and OBS / `?mode=view` reflect the current state.
+   */
+  const forceMuteAllActive = ref(false)
+
+  function setForceMuteAllActiveFromSignaling(active: boolean): void {
+    forceMuteAllActive.value = active === true
+  }
+
   /** When true, tile clicks use two-step nomination (nominator, then nominated). */
   const speakingMode = ref(false)
 
@@ -429,6 +441,8 @@ export const useEatFirstCallShellStore = defineStore('eatFirstCallShell', () => 
     playerCount,
     connectedPlayerCount,
     speakingQueue,
+    forceMuteAllActive,
+    setForceMuteAllActiveFromSignaling,
     speakingMode,
     speakingNominationDraftBySeat,
     hostInteractionMode,

@@ -19,6 +19,7 @@ import {
 import { createWebRtcTransport } from '../mediasoup/createWebRtcTransport'
 import { Peer } from '../peers/Peer'
 import type {
+  EatFirstAudioMixEntry,
   GameRoomAudioMixEntry,
   GameRoomPlayerLifeState,
   MafiaAudioMixEntry,
@@ -320,6 +321,7 @@ export type ServerMessage =
     }
   | { type: 'eat:table-state-sync'; payload: EatFirstTableSyncPayload }
   | { type: 'eat:timer-preset-select'; payload: { durationMs: number } }
+  | { type: 'eat:audio-mix-update'; payload: { entries: EatFirstAudioMixEntry[] } }
 
 /**
  * Best-effort diagnostics emit from server signaling code. Type is `string`
@@ -860,6 +862,11 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
     }
   }
   if (isEatFirstRoomId(room.id)) {
+    // Drop the leaver's audio-mix `byPeerId` orphan so the snapshot getter
+    // (which does not filter by live peers) stops re-broadcasting dead peerIds
+    // to every late-joining OBS view. The `byUserId` mirror is preserved across
+    // peer-left so a reload re-attaches via `rebindEatFirstAudioMixEntryPeerId`.
+    room.clearEatFirstAudioMixForPeerId(peer.id)
     const changed = room.pruneEatFirstSpeakingQueueToMaxSeat(11)
     if (changed) {
       broadcastEatFirstSpeakingQueueUpdate(room)
@@ -1240,6 +1247,19 @@ export async function handleJoinRoom(
   if (isEatFirstRoomId(room.id)) {
     await hydrateEatFirstOwnerUserIdFromDb(room.id)
     await hydrateEatFirstTableStateFromDb(room.id)
+    // Rebind any prior Eat First audio-mix entry keyed by this user's stable
+    // userId to the new peerId so a host page reload / participant reload
+    // keeps the host's mix visible to OBS without re-clicking the slider.
+    // Mirrors the Mafia/Game-Room rebind blocks above.
+    if (userId.length > 0) {
+      const rebound = room.rebindEatFirstAudioMixEntryPeerId(peerId, userId)
+      if (rebound) {
+        broadcastServerMessageToRoom(room, {
+          type: 'eat:audio-mix-update',
+          payload: { entries: [{ ...rebound }] },
+        })
+      }
+    }
     broadcastEatFirstHostUpdated(room)
     // Fan-out table sync to every peer (not only the joiner). Otherwise remotes keep a stale
     // peerId→slot map after someone reconnects — tiles jump to the end and traits vanish.
@@ -1257,6 +1277,31 @@ export async function handleJoinRoom(
       sendServerMessage(socket, {
         type: 'eat:timer-preset-select',
         payload: { durationMs: eSel },
+      })
+    }
+    // Replay host-controlled per-participant audio mix to this socket only.
+    // The OBS `?mode=view` viewer applies it via existing
+    // `setRemoteListenVolume` / `setRemoteListenMuted` keyed by peerId; entries
+    // for users who reloaded since the host last set them have already been
+    // rebound to the current peerId by `rebindEatFirstAudioMixEntryPeerId` above.
+    const eatAudioMixSnap = room.getEatFirstAudioMixSnapshot()
+    if (eatAudioMixSnap.length > 0) {
+      sendServerMessage(socket, {
+        type: 'eat:audio-mix-update',
+        payload: { entries: eatAudioMixSnap },
+      })
+    }
+    // Replay the active force-mute-all toggle to this socket only so a
+    // late joiner / reload during an active mute-all gets their mic muted
+    // via the existing `eat:force-mute-all` client path. Only sent when
+    // active — toggle-off does NOT cascade to late joiners (preserves the
+    // pre-fix "no signal on late-join → no toggle on late-join" semantic).
+    // Host self-reload is safe: client parser short-circuits via
+    // `isEatFirstRoomHost` before any `toggleMic()` call.
+    if (room.getEatFirstForceMuteAllActive()) {
+      sendServerMessage(socket, {
+        type: 'eat:force-mute-all',
+        payload: { muted: true },
       })
     }
   }
@@ -2232,6 +2277,10 @@ export async function handleEatFirstForceMuteAll(
   if (!isEatFirstHostPeer(room, peer)) return
 
   const muted = payload.muted !== false
+  // Persist the toggle so reloaded host tabs, late joiners, and OBS /
+  // `?mode=view` reflect the current state via `eat:table-state-sync`.
+  // The peer-by-peer audio pause/unpause below is unchanged.
+  room.setEatFirstForceMuteAllActive(muted)
 
   for (const target of room.getPeers()) {
     if (target.id === peer.id) continue
@@ -2267,6 +2316,49 @@ export async function handleEatFirstForceMuteAll(
   }
 
   broadcastServerMessageToRoom(room, { type: 'eat:force-mute-all', payload: { muted } })
+}
+
+/**
+ * Host-only Eat First audio mix delta. Strict mirror of
+ * {@link handleMafiaAudioMixUpdate}: validates Eat First host authority,
+ * resolves each entry's `userId` from the target peer's server-side identity
+ * (never trusts client-supplied `userId`), normalizes via the room store, and
+ * broadcasts the resolved entries so the OBS `?mode=view` viewer applies via
+ * existing `setRemoteListenVolume` / `setRemoteListenMuted`. Other peers
+ * ignore inbound updates client-side (filtered in `useEatFirstAudioMixSignaling`).
+ */
+export function handleEatFirstAudioMixUpdate(
+  socket: WsSocket,
+  payload: {
+    entries: Array<{ peerId: string; userId?: string | null; volume: number; muted: boolean }>
+  },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveEatFirstPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  if (!isEatFirstHostPeer(room, peer)) return
+  // Never trust the client-supplied `userId`. Resolve each entry's userId from
+  // the target peer's server-side identity so a malicious host cannot store a
+  // mix entry under a victim's userId (which would persist across rebinds via
+  // `rebindEatFirstAudioMixEntryPeerId`).
+  const serverAuthoritativeEntries = payload.entries.map((entry) => {
+    const targetPeerId = typeof entry.peerId === 'string' ? entry.peerId.trim() : ''
+    const target = targetPeerId.length > 0 ? room.getPeer(targetPeerId) : null
+    const serverUserId = typeof target?.userId === 'string' ? target.userId.trim() : ''
+    return {
+      peerId: entry.peerId,
+      userId: serverUserId.length > 0 ? serverUserId : null,
+      volume: entry.volume,
+      muted: entry.muted,
+    }
+  })
+  const resolved = room.applyEatFirstAudioMixEntries(serverAuthoritativeEntries)
+  if (resolved.length === 0) return
+  broadcastServerMessageToRoom(room, {
+    type: 'eat:audio-mix-update',
+    payload: { entries: resolved },
+  })
 }
 
 /** Strip the `eat:` signaling prefix; the remainder is the persistent Eat First gameId. */

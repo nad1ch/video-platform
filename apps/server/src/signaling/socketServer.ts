@@ -55,6 +55,7 @@ import {
   handleGameRoomForceCameraOff,
   handleGameRoomForceMuteAll,
   handleGameRoomRequestSnapshot,
+  handleEatFirstAudioMixUpdate,
   handleEatFirstForceMuteAll,
   handleEatFirstSlotClaim,
   handleEatFirstTraitRevealRequest,
@@ -98,6 +99,7 @@ const WS_SNAPSHOT_TYPES: ReadonlySet<string> = new Set([
 const WS_AUDIO_MIX_TYPES: ReadonlySet<string> = new Set([
   'mafia:audio-mix-update',
   'gameroom:audio-mix-update',
+  'eat:audio-mix-update',
 ])
 
 const WS_SETTINGS_TYPES: ReadonlySet<string> = new Set([
@@ -622,6 +624,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'eat:force-mute-all': {
               await handleEatFirstForceMuteAll(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'eat:audio-mix-update': {
+              handleEatFirstAudioMixUpdate(socket, parsed.data.payload, deps)
               break
             }
             case 'eat:slot-claim': {

@@ -47,4 +47,13 @@ export const EatFirstWs = {
   timerPresetSelect: 'eat:timer-preset-select',
   traitStateSync: 'eat:trait-state-sync',
   tableStateSync: 'eat:table-state-sync',
+  /**
+   * Host-only per-participant audio mix (volume + mute). Mirrors
+   * `mafia:audio-mix-update`: client→server is one delta entry from the host's
+   * slider/mute toggle; server validates host authority, stores under stable
+   * `userId` (peerId fallback), and re-broadcasts to every peer. The OBS
+   * `?mode=view` viewer applies via existing call-core listening prefs
+   * (`setRemoteListenVolume` / `setRemoteListenMuted`).
+   */
+  audioMixUpdate: 'eat:audio-mix-update',
 } as const

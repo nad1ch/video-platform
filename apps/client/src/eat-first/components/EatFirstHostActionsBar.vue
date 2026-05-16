@@ -12,10 +12,13 @@
  *
  * Eat First-specific carry-over (preserved 1:1 from the inline form):
  *
- *   - The mute-all flag is **local** (no server-authoritative
- *     `forceMuteAllActive` like Mafia / Game Template). Clicking
- *     flips a local ref AND emits `force-mute-all` so CallPage can
- *     dispatch `eat:force-mute-all`.
+ *   - The mute-all flag is **server-authoritative** (audit parity
+ *     finding B). The shell store's `forceMuteAllActive` is fed by
+ *     `eat:force-mute-all` and replayed via `eat:table-state-sync` so
+ *     reloaded host tabs, late joiners, and OBS reflect the current
+ *     state. Clicking emits `force-mute-all`; CallPage dispatches
+ *     `eat:force-mute-all`; the inbound server echo flips the store
+ *     flag this component reads.
  *
  *   - The reshuffle gate uses
  *     `Math.max(playerOrder, playerCount, connectedPlayerCount) >= 2`
@@ -41,7 +44,7 @@
  *   - `reshuffle []`
  */
 
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useEatFirstCallShellStore } from '@/stores/eatFirstCallShell'
@@ -62,15 +65,17 @@ const {
   playerCount,
   connectedPlayerCount,
   hostInteractionMode,
+  forceMuteAllActive,
 } = storeToRefs(eatFirstShell)
 
 /**
- * Local mute-all state — Eat First does NOT carry a
- * server-authoritative mute-all flag like Mafia's
- * `mafiaForceMuteAllActive`. The original inline component flipped a
- * local ref on each click; preserved 1:1 here.
+ * Server-authoritative mute-all flag. Mirrors Mafia / Game Template,
+ * fed by `eat:force-mute-all` and `eat:table-state-sync.forceMuteAllActive`
+ * (parity finding B). The host action bar shows "active" while the toggle
+ * is on; the inbound server echo is what flips it, so reloaded host tabs
+ * and late joiners both reflect the current room state.
  */
-const muteAllActive = ref(false)
+const muteAllActive = computed(() => forceMuteAllActive.value)
 
 const canReshuffle = computed(
   () =>
@@ -94,7 +99,8 @@ const labels = computed<GameHostActionsLabels>(() => ({
 
 function onSetMuteAll(muted: boolean): void {
   if (!isEatFirstRoomHost.value) return
-  muteAllActive.value = muted
+  // `muteAllActive` is now a computed mirror of the server-authoritative
+  // store flag; the inbound `eat:force-mute-all` echo flips it.
   emit('force-mute-all', muted)
 }
 

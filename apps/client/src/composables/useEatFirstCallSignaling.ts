@@ -267,6 +267,12 @@ export function useEatFirstCallSignaling(
       } else {
         eatFirstShell.setLastUsedActionCard(null)
       }
+      if (Object.prototype.hasOwnProperty.call(payload, 'forceMuteAllActive')) {
+        // Server-authoritative `forceMuteAllActive` is mirrored into the shell
+        // store so host tabs, reloads, late joiners, and OBS reflect the same
+        // state. Audit parity finding B (no longer a local-only ref).
+        eatFirstShell.setForceMuteAllActiveFromSignaling(payload.forceMuteAllActive === true)
+      }
       if (Object.prototype.hasOwnProperty.call(payload, 'timer')) {
         const timerRaw = payload.timer
         let nextCallTimer: { startedAt: number; durationMs: number; isRunning: boolean } | null = null
@@ -530,9 +536,13 @@ export function useEatFirstCallSignaling(
       return
     }
     if (rec.type !== EAT_FIRST_FORCE_MUTE_ALL_SIGNAL || rec.payload == null || typeof rec.payload !== 'object') return
-    if (eatFirstShell.isEatFirstRoomHost) return
     const payload = rec.payload as Record<string, unknown>
     const muted = payload.muted !== false
+    // Update the server-authoritative store flag for every peer (including the
+    // host's own tab) so reloaded host tabs and OBS reflect the toggle state
+    // without waiting on the next `eat:table-state-sync`. Audit parity B.
+    eatFirstShell.setForceMuteAllActiveFromSignaling(muted)
+    if (eatFirstShell.isEatFirstRoomHost) return
     if (muted && micEnabled.value) {
       void toggleMic()
     } else if (!muted && !micEnabled.value) {

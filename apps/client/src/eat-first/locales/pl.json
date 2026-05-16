@@ -72,6 +72,8 @@
     "playerUsedActionCardToast": "{name} używa karty akcji: «{card}»",
     "useActionCardAria": "Powiadom prowadzącego, że używasz tej karty akcji",
     "actionCardAlreadyUsedAria": "Ta karta akcji została już użyta",
+    "actionCardGroupAria": "Aktywna karta akcji gracza",
+    "rerollActionCardTitle": "Przerzuć aktywną kartę akcji",
     "traitLabels": {
       "gender": "Płeć",
       "age": "Wiek",

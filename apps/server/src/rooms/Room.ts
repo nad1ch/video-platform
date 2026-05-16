@@ -66,6 +66,19 @@ export type GameRoomAudioMixEntry = {
   muted: boolean
 }
 
+/**
+ * Eat First audio mix entry. Same shape as {@link MafiaAudioMixEntry} (the wire
+ * format is identical because the client applies via the same call-core
+ * listening prefs), kept as a distinct alias so Eat First state evolution does
+ * not entangle with Mafia.
+ */
+export type EatFirstAudioMixEntry = {
+  peerId: string
+  userId: string | null
+  volume: number
+  muted: boolean
+}
+
 /** Generic game-room player life-state (Phase 3A). Mirrors Mafia’s subset
  * without the role-based `civilian` / `mafia` / `don` / `sheriff` / `doctor`
  * vocabulary, which is intentionally not part of the generic protocol. */
@@ -218,6 +231,14 @@ export class Room {
   private gameRoomPlayersUpdateSnapshot: GameRoomPlayersUpdateSnapshot | null = null
   private gameRoomAudioMixByUserId = new Map<string, GameRoomAudioMixEntry>()
   private gameRoomAudioMixByPeerId = new Map<string, GameRoomAudioMixEntry>()
+
+  // --- Eat First call state (audio-mix + host force-mute-all) -------------
+  // Strict mirror of the Mafia audio-mix model above. `forceMuteAllActive` is
+  // the server-authoritative host "mute all" toggle so it survives reload /
+  // late-join and is re-broadcast via `eat:table-state-sync`.
+  private eatFirstAudioMixByUserId = new Map<string, EatFirstAudioMixEntry>()
+  private eatFirstAudioMixByPeerId = new Map<string, EatFirstAudioMixEntry>()
+  private eatFirstForceMuteAllActive = false
 
   private constructor(id: string, router: Router, pooledWorker: PooledWorker) {
     this.id = id
@@ -1256,5 +1277,72 @@ export class Room {
     const id = peerId.trim()
     if (!id) return
     this.gameRoomAudioMixByPeerId.delete(id)
+  }
+
+  // ─── Eat First audio-mix + force-mute-all accessors ─────────────────────
+  // Strict mirror of the Mafia equivalents above. Wire format and semantics
+  // (clamps, userId preference, byPeerId fallback, peer-left cleanup, rebind
+  // on rejoin) match exactly so the OBS view applies via the same call-core
+  // listening prefs without a new code path.
+
+  applyEatFirstAudioMixEntries(
+    entries: ReadonlyArray<{ peerId: string; userId?: string | null; volume: number; muted: boolean }>,
+  ): EatFirstAudioMixEntry[] {
+    const out: EatFirstAudioMixEntry[] = []
+    for (const raw of entries) {
+      const peerId = typeof raw.peerId === 'string' ? raw.peerId.trim() : ''
+      if (!peerId) continue
+      const userIdRaw = typeof raw.userId === 'string' ? raw.userId.trim() : ''
+      const userId = userIdRaw.length > 0 ? userIdRaw : null
+      const volumeRaw = typeof raw.volume === 'number' && Number.isFinite(raw.volume) ? raw.volume : 1
+      const volume = Math.min(2, Math.max(0, volumeRaw))
+      const muted = raw.muted === true
+      const entry: EatFirstAudioMixEntry = { peerId, userId, volume, muted }
+      if (userId != null) {
+        this.eatFirstAudioMixByUserId.set(userId, entry)
+        this.eatFirstAudioMixByPeerId.delete(peerId)
+      } else {
+        this.eatFirstAudioMixByPeerId.set(peerId, entry)
+      }
+      out.push(entry)
+    }
+    return out
+  }
+
+  rebindEatFirstAudioMixEntryPeerId(peerId: string, userId: string): EatFirstAudioMixEntry | null {
+    const trimmedPeer = peerId.trim()
+    const trimmedUser = userId.trim()
+    if (!trimmedPeer || !trimmedUser) return null
+    const prev = this.eatFirstAudioMixByUserId.get(trimmedUser)
+    if (!prev) return null
+    if (prev.peerId === trimmedPeer) return prev
+    const next: EatFirstAudioMixEntry = { ...prev, peerId: trimmedPeer }
+    this.eatFirstAudioMixByUserId.set(trimmedUser, next)
+    return next
+  }
+
+  getEatFirstAudioMixSnapshot(): EatFirstAudioMixEntry[] {
+    const out: EatFirstAudioMixEntry[] = []
+    for (const e of this.eatFirstAudioMixByUserId.values()) {
+      out.push({ ...e })
+    }
+    for (const e of this.eatFirstAudioMixByPeerId.values()) {
+      out.push({ ...e })
+    }
+    return out
+  }
+
+  clearEatFirstAudioMixForPeerId(peerId: string): void {
+    const id = peerId.trim()
+    if (!id) return
+    this.eatFirstAudioMixByPeerId.delete(id)
+  }
+
+  getEatFirstForceMuteAllActive(): boolean {
+    return this.eatFirstForceMuteAllActive
+  }
+
+  setEatFirstForceMuteAllActive(active: boolean): void {
+    this.eatFirstForceMuteAllActive = active === true
   }
 }

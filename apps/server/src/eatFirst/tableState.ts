@@ -558,6 +558,13 @@ export type EatFirstTableSyncPayload = {
   lastUsedActionCard: EatFirstLastUsedCard | null
   timer: { startedAt: number; duration: number; isRunning: boolean } | null
   hostPeerId: string | null
+  /**
+   * Server-authoritative mirror of the host "mute all" toggle, written by
+   * `handleEatFirstForceMuteAll`. Replayed on every join so reloaded host
+   * tabs, late joiners, and OBS / `?mode=view` reflect the current state
+   * instead of relying on the host tab's local ref (audit parity finding B).
+   */
+  forceMuteAllActive: boolean
 }
 
 export function buildEatFirstTableSyncPayload(
@@ -641,6 +648,7 @@ export function buildEatFirstTableSyncPayload(
     lastUsedActionCard: state.lastUsedActionCard,
     timer,
     hostPeerId,
+    forceMuteAllActive: room.getEatFirstForceMuteAllActive(),
   }
 }
 
