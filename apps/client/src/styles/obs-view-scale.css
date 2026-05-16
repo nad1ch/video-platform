@@ -75,6 +75,18 @@ html:has(.app-shell-layout--obs-view) {
 }
 
 .app-shell-layout--obs-view .game-timer-overlay {
+  /* Scale the chip's top offset together with its size. Without this, the
+   * chip grows 2x at 4K but stays at top: 6px from the shell, which puts
+   * it visually glued to the (now also 2x taller) AppLandingHeader and
+   * crowding the first row of camera tiles. Scaling `top` keeps the chip
+   * floating with the same proportional headroom at every resolution.
+   * `env(safe-area-inset-top, 0px)` is preserved inside the multiplied
+   * expression so OBS Browser Source environments that report a notch
+   * inset still account for it. */
+  top: calc(
+    (max(0px, env(safe-area-inset-top, 0px)) + 6px) *
+      var(--sa-obs-ui-scale, 1)
+  );
   width: calc(343px * var(--sa-obs-ui-scale, 1));
   min-height: calc(42px * var(--sa-obs-ui-scale, 1));
   border-radius: calc(27px * var(--sa-obs-ui-scale, 1));
@@ -108,4 +120,81 @@ html:has(.app-shell-layout--obs-view) {
 
 .app-shell-layout--obs-view .game-timer-overlay__text {
   font-size: calc(21px * var(--sa-obs-ui-scale, 1));
+}
+
+/*
+ * Eat First trait card OBS scaling.
+ *
+ * The trait card *text* uses rem (`0.46rem` / `0.66rem`) and therefore
+ * scales automatically through the html font-size lift above. Everything
+ * else — card min-height/border-radius/border, the trait icon, the
+ * crossed-eye marker, the reveal/dice action buttons + their SVG
+ * children, and the gap/padding inside the card — is hard-pixel sized
+ * and does not pick up the lift. Result without these rules: text doubles
+ * at 4K but icons stay tiny and the card shape no longer fits the larger
+ * text. The block below scales every fixed-pixel dimension on the card
+ * and its descendants by `--sa-obs-ui-scale` so the visual proportions
+ * stay consistent at every OBS resolution.
+ *
+ * Selectors scope only `.tile-eat-first-card` (Eat First-only class —
+ * never rendered on Mafia / Game Template tiles), so Mafia OBS is not
+ * affected. ParticipantTile source is unchanged.
+ */
+
+.app-shell-layout--obs-view .tile-eat-first-card {
+  min-height: calc(42px * var(--sa-obs-ui-scale, 1));
+  border-radius: calc(12px * var(--sa-obs-ui-scale, 1));
+  border-width: calc(1px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card--mini {
+  min-height: calc(40px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card--sealed.tile-eat-first-card--mini {
+  padding: calc(4px * var(--sa-obs-ui-scale, 1)) calc(6px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__icon {
+  width: calc(16px * var(--sa-obs-ui-scale, 1));
+  height: calc(16px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__main {
+  gap: calc(1px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__peer-hidden-eye {
+  width: calc(17px * var(--sa-obs-ui-scale, 1));
+  height: calc(17px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__actions {
+  gap: calc(3px * var(--sa-obs-ui-scale, 1));
+}
+
+/*
+ * Eye + dice action buttons. Hidden in OBS view (`!streamViewMode` gate
+ * inside `ParticipantTile`), but scaling them anyway keeps the rules
+ * symmetric with the trait card block, and protects against future
+ * code paths that might surface a read-only chip in view mode.
+ */
+.app-shell-layout--obs-view .tile-eat-first-card__eye-btn {
+  width: calc(22px * var(--sa-obs-ui-scale, 1));
+  height: calc(22px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__eye-btn svg {
+  width: calc(14px * var(--sa-obs-ui-scale, 1));
+  height: calc(14px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__action-btn {
+  width: calc(18px * var(--sa-obs-ui-scale, 1));
+  height: calc(18px * var(--sa-obs-ui-scale, 1));
+}
+
+.app-shell-layout--obs-view .tile-eat-first-card__action-btn svg {
+  width: calc(12px * var(--sa-obs-ui-scale, 1));
+  height: calc(12px * var(--sa-obs-ui-scale, 1));
 }
