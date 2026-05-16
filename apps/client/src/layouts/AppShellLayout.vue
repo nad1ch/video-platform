@@ -32,6 +32,7 @@ import {
   STREAM_APP_BRAND_NAME,
 } from '@/eat-first/constants/brand.js'
 import '@/eat-first/styles/host-chrome.css'
+import '@/styles/obs-view-scale.css'
 import LandingCloudBackdrop from '@/components/ui/LandingCloudBackdrop.vue'
 import EconomyComingSoonModal from '@/pages/app/components/EconomyComingSoonModal.vue'
 import AppLandingFooterActions from '@/pages/app/components/AppLandingFooterActions.vue'
@@ -362,9 +363,19 @@ const isMafiaViewMode = computed(() => mafiaViewQueryIsView(route.query.mode))
  * underlying `isMafiaViewMode` predicate is purely `route.query.mode === 'view'`,
  * so the only change is the route gate. Mafia OBS view behaviour is
  * unchanged when `route.name === 'mafia'`.
+ *
+ * Eat First OBS parity: also `true` for `/app/eat?mode=view`. The route
+ * is gated on `isEatFirstCallGameView` (route name `'eat'` + canonical
+ * `call` view) so the legacy `?view=overlay` path — which the router
+ * normalizes to `mode=view` — keeps reaching this gate, while non-call
+ * Eat First sub-views are untouched. Mafia/Game Template paths are
+ * byte-for-byte unchanged: the OR branch only adds `true` outcomes on
+ * the `eat` route.
  */
 const hideMafiaObsHeaderControls = computed(
-  () => isMafiaLikeShellRoute.value && isMafiaViewMode.value,
+  () =>
+    (isMafiaLikeShellRoute.value && isMafiaViewMode.value) ||
+    (isEatFirstCallGameView.value && eatFirstStreamViewFromRoute(route)),
 )
 
 function mafiaQueryAsStringRecord(
@@ -893,7 +904,11 @@ async function copyEatFirstCallObsUrl(): Promise<void> {
 </script>
 
 <template>
-  <div class="app-shell-layout eat-first-root page-stack" :data-theme="theme">
+  <div
+    class="app-shell-layout eat-first-root page-stack"
+    :class="{ 'app-shell-layout--obs-view': hideMafiaObsHeaderControls }"
+    :data-theme="theme"
+  >
     <LandingCloudBackdrop
       v-if="isHeavyVisualRoute"
       class="app-shell-layout__backdrop"
