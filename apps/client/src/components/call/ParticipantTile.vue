@@ -434,8 +434,29 @@ const eatFirstTraitsBySection = computed(() => {
   }
 })
 
+// Build a stable identity string from peerId + the 8 known trait values,
+// joined with a U+0001 separator (built at runtime via String.fromCharCode
+// so no control char appears in source). U+0001 cannot occur in legitimate
+// peerIds or trait text, so the joined string uniquely identifies content.
+// Returning a primitive lets Vue compare with Object.is, avoiding the JSON
+// encode and the spurious re-fires of the previous JSON.stringify source.
+const EAT_FIRST_TILE_TRAIT_WATCH_SEP = String.fromCharCode(1)
 watch(
-  () => [props.peerId, JSON.stringify(eatFirstTraitValues.value)] as const,
+  () => {
+    const v = eatFirstTraitValues.value
+    const s = EAT_FIRST_TILE_TRAIT_WATCH_SEP
+    return (
+      props.peerId + s +
+      (v.gender ?? '') + s +
+      (v.age ?? '') + s +
+      (v.profession ?? '') + s +
+      (v.health ?? '') + s +
+      (v.hobby ?? '') + s +
+      (v.phobia ?? '') + s +
+      (v.fact ?? '') + s +
+      (v.baggage ?? '')
+    )
+  },
   () => {
     clearEatFirstTimers()
     eatFirstRevealState.value = {}

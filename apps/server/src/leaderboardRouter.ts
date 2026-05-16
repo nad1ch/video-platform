@@ -85,9 +85,62 @@ function maxConsecutiveWinStreakChronological(rows: { isWinner: boolean }[]): nu
   return best
 }
 
-async function winsLeaderboardForStreamer(
+/**
+ * Short-TTL cache for streamer-scoped leaderboard reads.
+ *
+ * Each `/api/leaderboard/{wins,streak,rating}?streamer=...` request previously
+ * ran a fresh DB scan — `userStreamerStats.findMany` for wins/rating, and a
+ * `GameResult ⋈ GameRound` raw join for streak. Dashboards, OBS overlays, and
+ * multi-tab viewers all poll these endpoints, so the same streamer's snapshot
+ * is recomputed many times per second under load.
+ *
+ * 5 s TTL is short enough that a stale snapshot is never user-visible for more
+ * than one poll interval, and the single streamer write path
+ * (`persistNadleRound`) calls `invalidateStreamerLeaderboardCache(streamerId)`
+ * so a just-finished round appears without delay.
+ *
+ * Keyed by `streamerId`; per-streamer kinds (`wins`/`streak`/`rating`) share
+ * the same expiry slot so they invalidate together.
+ */
+const STREAMER_LEADERBOARD_CACHE_TTL_MS = 5_000
+
+type StreamerWinsEntry = { rank: number; userId: string; displayName: string; avatarUrl: string | null; wins: number }
+type StreamerStreakEntry = { rank: number; userId: string; displayName: string; avatarUrl: string | null; streak: number }
+type StreamerRatingEntry = {
+  rank: number
+  userId: string
+  displayName: string
+  avatarUrl: string | null
+  rating: number
+  wins: number
+  losses: number
+}
+type StreamerCacheSlot = {
+  at: number
+  wins?: Promise<StreamerWinsEntry[]>
+  streak?: Promise<StreamerStreakEntry[]>
+  rating?: Promise<StreamerRatingEntry[]>
+}
+const streamerLeaderboardCache = new Map<string, StreamerCacheSlot>()
+
+function getStreamerCacheSlot(streamerId: string): StreamerCacheSlot {
+  const now = Date.now()
+  const existing = streamerLeaderboardCache.get(streamerId)
+  if (existing && now - existing.at < STREAMER_LEADERBOARD_CACHE_TTL_MS) {
+    return existing
+  }
+  const fresh: StreamerCacheSlot = { at: now }
+  streamerLeaderboardCache.set(streamerId, fresh)
+  return fresh
+}
+
+export function invalidateStreamerLeaderboardCache(streamerId: string): void {
+  streamerLeaderboardCache.delete(streamerId)
+}
+
+async function winsLeaderboardForStreamerUncached(
   streamerId: string,
-): Promise<Array<{ rank: number; userId: string; displayName: string; avatarUrl: string | null; wins: number }>> {
+): Promise<StreamerWinsEntry[]> {
   const rows = await prisma.userStreamerStats.findMany({
     where: { streamerId, wins: { gt: 0 } },
     orderBy: [{ wins: 'desc' }, { userId: 'asc' }],
@@ -103,9 +156,24 @@ async function winsLeaderboardForStreamer(
   }))
 }
 
-async function streakLeaderboardForStreamer(
+async function winsLeaderboardForStreamer(streamerId: string): Promise<StreamerWinsEntry[]> {
+  const slot = getStreamerCacheSlot(streamerId)
+  let pending = slot.wins
+  if (!pending) {
+    pending = winsLeaderboardForStreamerUncached(streamerId)
+    slot.wins = pending
+    pending.catch(() => {
+      if (streamerLeaderboardCache.get(streamerId) === slot) {
+        streamerLeaderboardCache.delete(streamerId)
+      }
+    })
+  }
+  return pending
+}
+
+async function streakLeaderboardForStreamerUncached(
   streamerId: string,
-): Promise<Array<{ rank: number; userId: string; displayName: string; avatarUrl: string | null; streak: number }>> {
+): Promise<StreamerStreakEntry[]> {
   const flat = await prisma.$queryRaw<Array<{ userId: string; isWinner: boolean; createdAt: Date }>>(
     Prisma.sql`
       SELECT gr."userId", gr."isWinner", g."createdAt" AS "createdAt"
@@ -120,6 +188,21 @@ async function streakLeaderboardForStreamer(
     round: { createdAt: r.createdAt },
   }))
   return streakFromRows(raw)
+}
+
+async function streakLeaderboardForStreamer(streamerId: string): Promise<StreamerStreakEntry[]> {
+  const slot = getStreamerCacheSlot(streamerId)
+  let pending = slot.streak
+  if (!pending) {
+    pending = streakLeaderboardForStreamerUncached(streamerId)
+    slot.streak = pending
+    pending.catch(() => {
+      if (streamerLeaderboardCache.get(streamerId) === slot) {
+        streamerLeaderboardCache.delete(streamerId)
+      }
+    })
+  }
+  return pending
 }
 
 async function streakFromRows(
@@ -207,17 +290,9 @@ async function viewerMaxWinStreakForStreamer(streamerId: string, prismaUserId: s
   return maxConsecutiveWinStreakChronological(merged)
 }
 
-async function ratingLeaderboardForStreamer(streamerId: string): Promise<
-  Array<{
-    rank: number
-    userId: string
-    displayName: string
-    avatarUrl: string | null
-    rating: number
-    wins: number
-    losses: number
-  }>
-> {
+async function ratingLeaderboardForStreamerUncached(
+  streamerId: string,
+): Promise<StreamerRatingEntry[]> {
   const rows = await prisma.userStreamerStats.findMany({
     where: { streamerId, gamesPlayed: { gt: 0 } },
     include: { user: { select: { displayName: true, avatarUrl: true } } },
@@ -253,6 +328,21 @@ async function ratingLeaderboardForStreamer(streamerId: string): Promise<
     wins: x.wins,
     losses: x.losses,
   }))
+}
+
+async function ratingLeaderboardForStreamer(streamerId: string): Promise<StreamerRatingEntry[]> {
+  const slot = getStreamerCacheSlot(streamerId)
+  let pending = slot.rating
+  if (!pending) {
+    pending = ratingLeaderboardForStreamerUncached(streamerId)
+    slot.rating = pending
+    pending.catch(() => {
+      if (streamerLeaderboardCache.get(streamerId) === slot) {
+        streamerLeaderboardCache.delete(streamerId)
+      }
+    })
+  }
+  return pending
 }
 
 /**

@@ -27,7 +27,7 @@ export function signSession(user: SessionUser, maxAgeSec: number): string {
 
 export function verifySessionToken(token: string): SessionPayload | null {
   try {
-    const decoded = jwt.verify(token, authJwtSecret()) as SessionPayload
+    const decoded = jwt.verify(token, authJwtSecret(), { algorithms: ['HS256'] }) as SessionPayload
     if (
       typeof decoded.id !== 'string' ||
       typeof decoded.display_name !== 'string' ||
@@ -116,7 +116,7 @@ export function verifyOAuthReturnPath(state: string | undefined): string {
     return '/'
   }
   try {
-    const decoded = jwt.verify(state, authJwtSecret()) as {
+    const decoded = jwt.verify(state, authJwtSecret(), { algorithms: ['HS256'] }) as {
       typ?: string
       r?: unknown
       exp?: number

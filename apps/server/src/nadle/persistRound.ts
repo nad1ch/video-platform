@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { isDatabaseConfigured, prisma } from '../prisma'
+import { invalidateStreamerLeaderboardCache } from '../leaderboardRouter'
 
 export type NadleRoundPlayer = {
   userId: string
@@ -93,6 +94,10 @@ export async function persistNadleRound(input: PersistNadleRoundInput): Promise<
         })
       }
     })
+    // Round committed — drop any cached leaderboard snapshot for this
+    // streamer so the next read recomputes against fresh stats and the
+    // just-finished round appears without waiting out the TTL.
+    invalidateStreamerLeaderboardCache(streamerId)
   } catch (e) {
     console.error('[nadle][persist] persistNadleRound failed', e)
   }

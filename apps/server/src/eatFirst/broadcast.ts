@@ -29,6 +29,17 @@ export function attachEatFirstSocketServer(wss: WebSocketServer): void {
 
   wss.on('connection', (ws) => {
     let subscribedId: string | null = null
+    /**
+     * Per-socket rolling-window subscribe limiter. Each subscribe runs a DB
+     * snapshot read, so a spammy client could amplify DB load across all
+     * subscribers of the same gameId. Normal clients send one subscribe on
+     * mount and at most one re-subscribe on gameId change — 2 per second is
+     * generous. Reconnects use a fresh socket and therefore a fresh counter.
+     */
+    const SUBSCRIBE_WINDOW_MS = 1000
+    const SUBSCRIBE_LIMIT_PER_WINDOW = 2
+    let subscribeWindowStart = 0
+    let subscribeCount = 0
     ws.on('message', (raw) => {
       void (async () => {
         try {
@@ -36,6 +47,15 @@ export function attachEatFirstSocketServer(wss: WebSocketServer): void {
           if (msg.type === 'subscribe' && typeof msg.gameId === 'string') {
             const gameId = msg.gameId.trim().slice(0, 80)
             if (!gameId) {
+              return
+            }
+            const now = Date.now()
+            if (now - subscribeWindowStart >= SUBSCRIBE_WINDOW_MS) {
+              subscribeWindowStart = now
+              subscribeCount = 0
+            }
+            subscribeCount += 1
+            if (subscribeCount > SUBSCRIBE_LIMIT_PER_WINDOW) {
               return
             }
             if (subscribedId && subscribedId !== gameId) {

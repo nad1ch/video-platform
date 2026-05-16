@@ -203,11 +203,23 @@ async function bootstrap(): Promise<void> {
 
   const server = http.createServer(app)
 
-  const wssSignaling = new WebSocketServer({ noServer: true })
-  const wssNadle = new WebSocketServer({ noServer: true })
-  const wssEatFirst = new WebSocketServer({ noServer: true })
-  const wssNadrawShow = new WebSocketServer({ noServer: true })
-  const wssCheckers = new WebSocketServer({ noServer: true })
+  /**
+   * Per-endpoint WS frame caps. Anything above the cap closes the socket with
+   * code 1009 (Message Too Big). The signaling endpoint allows Mafia background
+   * uploads (`mafia:settings-update` / `mafia:page-background-settings`), which
+   * `clientMessageSchema.ts` already bounds at 20 MB of total URL bytes across
+   * the backgrounds array; 24 MB leaves headroom for JSON / WS framing without
+   * permitting unbounded payloads. Game endpoints exchange small JSON messages
+   * (state snapshots, chat, actions) and never legitimately approach 256 KB.
+   */
+  const WS_MAX_PAYLOAD_SIGNALING_BYTES = 24 * 1024 * 1024
+  const WS_MAX_PAYLOAD_GAME_BYTES = 256 * 1024
+
+  const wssSignaling = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_SIGNALING_BYTES })
+  const wssNadle = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_GAME_BYTES })
+  const wssEatFirst = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_GAME_BYTES })
+  const wssNadrawShow = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_GAME_BYTES })
+  const wssCheckers = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_GAME_BYTES })
 
   attachSocketServer(wssSignaling, roomManager)
   attachNadleSocketServer(wssNadle)
