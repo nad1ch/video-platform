@@ -2,8 +2,8 @@
 import { computed, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
-import { useI18n } from 'vue-i18n'
 import CallPage from '@/components/call/CallPage.vue'
+import GameRoomPageShell from '@/components/game-room/GameRoomPageShell.vue'
 import { useEatFirstCallStreamView } from '@/composables/eatFirstCallStreamView'
 import EatFirstCallHostPanel from '@/eat-first/components/EatFirstCallHostPanel.vue'
 import EatFirstCallTimerStrip from '@/eat-first/components/EatFirstCallTimerStrip.vue'
@@ -18,7 +18,6 @@ import { createLogger } from '@/utils/logger'
 const log = createLogger('eat-first:call-page')
 
 const route = useRoute()
-const { t } = useI18n()
 const { isStreamView } = useEatFirstCallStreamView()
 const eatFirstShell = useEatFirstCallShellStore()
 const { eatFirstCallTimerFromTableSync, selectedTimerDurationMs: eatFirstSelectedTimerDurationMs } =
@@ -39,7 +38,10 @@ type EatFirstTraitKey =
   | 'fact'
   | 'baggage'
 
-const { snapshot, room, display, speakingTimer, timerRoomFields, gamePhase } = useEatFirstCallGameSnapshot(gameId)
+const { snapshot, room, display, speakingTimer, timerRoomFields, gamePhase } = useEatFirstCallGameSnapshot(
+  gameId,
+  isStreamView,
+)
 
 watch(
   () => gameId.value,
@@ -130,28 +132,6 @@ function parseRoomTraitLines(lines: string[]): Partial<Record<'profession' | 'he
   return out
 }
 
-function seatTraitsForPlayer(row: Record<string, unknown>, roomTraits: string[]): string[] {
-  const fromRoom = parseRoomTraitLines(roomTraits)
-  const profession = normalizedTraitValue(row, 'profession') || fromRoom.profession || 'Невідомо'
-  const health = normalizedTraitValue(row, 'health') || fromRoom.health || 'Невідомо'
-  const hobby = normalizedTraitValue(row, 'quirk') || fromRoom.hobby || 'Невідомо'
-  const phobia = normalizedTraitValue(row, 'phobia') || fromRoom.phobia || 'Невідомо'
-  const fact = normalizedTraitValue(row, 'fact') || fromRoom.fact || 'Невідомо'
-  const baggage = normalizedTraitValue(row, 'luggage') || fromRoom.baggage || 'Невідомо'
-  const age = typeof row.age === 'string' && row.age.trim().length > 0 ? row.age.trim() : 'Невідомо'
-  const gender = typeof row.gender === 'string' && row.gender.trim().length > 0 ? row.gender.trim() : 'Невідомо'
-  return [
-    `Стать: ${gender}`,
-    `Вік: ${age}`,
-    `${t('traits.profession')}: ${profession}`,
-    `${t('traits.health')}: ${health}`,
-    `${t('traits.hobby')}: ${hobby}`,
-    `${t('traits.phobia')}: ${phobia}`,
-    `${t('traits.fact')}: ${fact}`,
-    `${t('traits.luggage')}: ${baggage}`,
-  ]
-}
-
 function slotTraitsForPlayer(
   row: Record<string, unknown>,
   roomTraits: string[],
@@ -207,7 +187,6 @@ watch(
       if (!id) continue
       byId.set(id, row as Record<string, unknown>)
     }
-    const nextSeat: Record<number, string[]> = {}
     const nextSlot: Record<string, Record<EatFirstTraitKey, string>> = {}
     const nextActionCard: Record<
       string,
@@ -225,8 +204,6 @@ watch(
           .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
           .map((x) => normalizeLegacyTraitText(x))
       })()
-      const traits = seatTraitsForPlayer(row, fromRoom)
-      nextSeat[index + 1] = traits
       const structuredTraits = slotTraitsForPlayer(row, fromRoom)
       if (structuredTraits) {
         nextSlot[slotId] = structuredTraits
@@ -239,9 +216,6 @@ watch(
         }
       }
     })
-    if (Object.keys(nextSeat).length > 0) {
-      eatFirstShell.setTraitsBySeat(nextSeat)
-    }
     if (Object.keys(nextSlot).length > 0 && Object.keys(eatFirstShell.traitsBySlot).length < 1) {
       eatFirstShell.setTraitsBySlot(nextSlot)
     }
@@ -250,25 +224,6 @@ watch(
     }
     if (eatFirstShell.lastUsedActionCard == null && lastUsed != null) {
       eatFirstShell.setLastUsedActionCard(lastUsed)
-    }
-  },
-  { immediate: true },
-)
-
-watch(
-  () => room.value.callTraitsBySeat,
-  (raw) => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
-    const normalized: Record<number, string[]> = {}
-    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-      const seat = Number(k)
-      if (!Number.isFinite(seat) || seat < 1 || !Array.isArray(v)) continue
-      normalized[seat] = v
-        .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
-        .map((x) => normalizeLegacyTraitText(x))
-    }
-    if (Object.keys(normalized).length > 0) {
-      eatFirstShell.setTraitsBySeat(normalized)
     }
   },
   { immediate: true },
@@ -300,60 +255,50 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div
-    class="eat-first-call-page"
-    data-eat-first-call="1"
-    :class="{ 'eat-first-call-page--stream-view': isStreamView }"
+  <!--
+    Mafia-parity shell: `GameRoomPageShell` owns the flex layout, the
+    `route-class` plus `--view-mode` / `--stream-view` modifier classes, and
+    the call-tile hover override. Eat First-specific slots:
+      stage      → <CallPage>
+      host-panel → <EatFirstCallHostPanel> (host-only, hidden in `mode=view`)
+      overlays   → <EatFirstCallTimerStrip> (visible in both modes;
+                   `EatFirstCallTimerStrip` adapts via `:view-mode`)
+    The host panel and timer strip are both `position: fixed`, so the slot
+    order between them does not affect visual position.
+  -->
+  <GameRoomPageShell
+    route-class="eat-first-call-page"
+    :is-view-mode="isStreamView"
+    :signaling-warning-visible="false"
+    signaling-warning-text=""
   >
-    <div class="eat-first-call-page__call">
+    <template #stage>
       <CallPage :eat-first-stream-view="isStreamView" />
-    </div>
-    <EatFirstCallTimerStrip
-      :view-mode="isStreamView"
-      :is-eat-first-host="showHostPanel"
-      :speaking-total-sec="eatFirstTimerStripModel.speakingTotalSec"
-      :timer-started-at="eatFirstTimerStripModel.timerStartedAt"
-      :timer-paused="eatFirstTimerStripModel.timerPaused"
-      :frozen-remaining-sec="eatFirstTimerStripModel.frozenRemainingSec"
-      :game-id="gameId"
-      :selected-timer-duration-ms="eatFirstSelectedTimerDurationMs"
-    />
-    <EatFirstCallHostPanel
-      v-if="showHostPanel"
-      :game-id="gameId"
-      :host-display-seat="display.hostDisplaySeat"
-      :player-count="display.playerCount"
-      :game-phase="gamePhase"
-      :timer-speaking-total-sec="eatFirstTimerStripModel.speakingTotalSec"
-      :timer-started-at="eatFirstTimerStripModel.timerStartedAt"
-      :timer-paused="eatFirstTimerStripModel.timerPaused"
-      :timer-frozen-remaining-sec="eatFirstTimerStripModel.frozenRemainingSec"
-    />
-  </div>
+    </template>
+    <template #host-panel>
+      <EatFirstCallHostPanel
+        v-if="showHostPanel"
+        :game-id="gameId"
+        :host-display-seat="display.hostDisplaySeat"
+        :player-count="display.playerCount"
+        :game-phase="gamePhase"
+        :timer-speaking-total-sec="eatFirstTimerStripModel.speakingTotalSec"
+        :timer-started-at="eatFirstTimerStripModel.timerStartedAt"
+        :timer-paused="eatFirstTimerStripModel.timerPaused"
+        :timer-frozen-remaining-sec="eatFirstTimerStripModel.frozenRemainingSec"
+      />
+    </template>
+    <template #overlays>
+      <EatFirstCallTimerStrip
+        :view-mode="isStreamView"
+        :is-eat-first-host="showHostPanel"
+        :speaking-total-sec="eatFirstTimerStripModel.speakingTotalSec"
+        :timer-started-at="eatFirstTimerStripModel.timerStartedAt"
+        :timer-paused="eatFirstTimerStripModel.timerPaused"
+        :frozen-remaining-sec="eatFirstTimerStripModel.frozenRemainingSec"
+        :game-id="gameId"
+        :selected-timer-duration-ms="eatFirstSelectedTimerDurationMs"
+      />
+    </template>
+  </GameRoomPageShell>
 </template>
-
-<style scoped>
-.eat-first-call-page {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-height: 100%;
-  overflow: hidden;
-}
-
-.eat-first-call-page__call {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-@media (hover: hover) {
-  .eat-first-call-page :deep(.call-page__tile-wrap:hover:not(.call-page__tile-wrap--pinned)) {
-    z-index: 50;
-  }
-}
-</style>

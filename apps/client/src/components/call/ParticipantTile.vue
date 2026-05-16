@@ -407,8 +407,16 @@ const eatFirstTraitValues = computed<Partial<Record<EatFirstTraitKey, string>>>(
   return out
 })
 
+/**
+ * Render the Eat First trait overlay whenever at least one trait has a value.
+ * Partial state is legitimate (trait-type reroll mid-round, cold join before
+ * `eat:table-state-sync` has hydrated every key); requiring all 8 keys hid the
+ * whole overlay during normal play. Per-cell renderers already handle empty
+ * values gracefully — host/owner via `'Невідомо'`, OBS viewers via the
+ * crossed-eye marker.
+ */
 const hasEatFirstTraits = computed(() =>
-  (Object.keys(EAT_FIRST_TRAIT_LABELS) as EatFirstTraitKey[]).every((key) => {
+  (Object.keys(EAT_FIRST_TRAIT_LABELS) as EatFirstTraitKey[]).some((key) => {
     const value = eatFirstTraitValues.value[key]
     return typeof value === 'string' && value.length > 0
   }),
@@ -434,8 +442,14 @@ const eatFirstTraitsBySection = computed(() => {
   }
 })
 
+// Local reveal animation state is keyed by `traitKey`, not by trait value — the
+// only meaningful invalidation is the tile binding to a different peer. Avoid
+// `JSON.stringify` here: at 8–12 cameras × every `eat:table-state-sync` it is
+// the hottest per-tile work and contributes to render churn without changing
+// behavior (server-authoritative reveal state arrives via
+// `props.eatFirstRevealedTraitKeys`, which is already reactive per-cell).
 watch(
-  () => [props.peerId, JSON.stringify(eatFirstTraitValues.value)] as const,
+  () => props.peerId,
   () => {
     clearEatFirstTimers()
     eatFirstRevealState.value = {}
