@@ -201,157 +201,47 @@ html:has(.app-shell-layout--obs-view) {
 
 /*
  * ─────────────────────────────────────────────────────────────────────────
- * Eat First OBS-only readability bumps (4K).
+ * Eat First OBS-only tweaks.
  * ─────────────────────────────────────────────────────────────────────────
  *
- * The shared baseline above caps `--sa-obs-ui-scale` at 2x so Mafia/Game
- * Template OBS keep their existing 1080→4K sizing. Eat First viewers report
- * the trait card, top-left logo, mic/cam indicators, seat marker, and
- * nicknames look small at 4K — the existing 2x is not enough proportional
- * weight for those overlays. The block below ONLY raises sizes when the
- * Eat First view-mode shell is mounted (`.eat-first-call-page--view-mode`,
- * added by `GameRoomPageShell` from `EatFirstCallPage.vue` whenever
- * `isStreamView` is true). Mafia / Game Template OBS routes never get this
- * class so their sizing is byte-identical to before.
+ * EF OBS reuses the shared `--sa-obs-ui-scale` (clamp 1..2 above) and the
+ * shared `html:has(.app-shell-layout--obs-view)` font-size lift verbatim —
+ * one scale source for every OBS route. An earlier iteration introduced an
+ * EF-only `--sa-ef-obs-ui-scale` capped at 2.6 plus a stronger html
+ * font-size lift, which interacted badly with the trait card's fixed
+ * `padding: 5px 7px` / `gap: 6px` (declared in `ParticipantTile.vue`,
+ * unscaled at any resolution): the rem-driven max-width and the explicit
+ * px-driven min-height / icon both grew ~2.6x while padding stayed
+ * literally 5/7/6px, so icons looked like they were bursting out of the
+ * card's inner spacing at 4K. The two surgical EF-only rules below address
+ * the only things the shared block cannot cover and are *positioning*
+ * tweaks, not size multipliers:
  *
- * Two-layer strategy mirrors the shared baseline:
+ *  1. Mic indicator SVG inside `ParticipantTile.tile-overlay__icons` is
+ *     authored with HTML width/height attributes (`width="15" height="15"`),
+ *     so the rem lift does not reach it and the shared CSS block has no
+ *     rule for it today. Scaled here via the SHARED `--sa-obs-ui-scale`
+ *     so EF OBS at 4K shows a 30px mic icon (vs the unscaled 15px
+ *     baseline). Same scale as the rest of the OBS chrome — no double
+ *     scaling.
+ *  2. Eat First timer chip top offset. The shared chip sits at
+ *     `top: calc((safe-area + 6px) * scale)`. EF viewers want the chip
+ *     a touch higher to clear the row of camera tiles below — we drop
+ *     the +6px baseline so the chip pins to the top edge of the page-shell
+ *     area (which is itself already below the AppLandingHeader). Width,
+ *     height, text size, and grid columns are intentionally LEFT to the
+ *     shared rule so EF and Mafia chips render at identical dimensions.
  *
- *  1. **Stronger html font-size lift**, scoped to EF OBS via `:has()`.
- *     `html:has(.eat-first-call-page--view-mode)` is more specific *intent*
- *     than the baseline `html:has(.app-shell-layout--obs-view)` (the
- *     baseline still matches first, this overrides it on EF only because
- *     this rule comes later with equal specificity). Lifts every rem-based
- *     dimension inside the EF OBS shell — display name, seat badge, role
- *     chip, AppLandingHeader logo, trait card text, the raise-hand emoji.
- *  2. **`--sa-ef-obs-ui-scale`** for the few sub-elements that are still
- *     hard-pixel (mic / hand SVGs inside ParticipantTile have `width=""` /
- *     `height=""` HTML attributes the rem lift does not reach). One CSS
- *     class wraps every EF-specific override.
- *
- * Cap is `2.6` instead of the baseline `2.0`. At 4K (3840×2160) that yields
- *   - html font-size: 16px × 2.6 = 41.6px (vs 32px today)
- *   - AppLandingHeader logo: 2.45rem × 41.6 = ~102px (vs 78px today)
- *   - tile mic icon: 15px × 2.6 = 39px (vs 30px today via no-lift)
- *   - trait card text (0.66rem at 1x): ~27px (vs ~21px today)
- *
- * Floored at 1 so 1080p OBS is unchanged. The cap is well below the
- * runaway-at-8K threshold and matches the design baseline target.
- */
-.eat-first-call-page--view-mode {
-  --sa-ef-obs-ui-scale: clamp(
-    1,
-    min(calc(100vw / 1920px), calc(100vh / 1080px)),
-    2.6
-  );
-}
-
-html:has(.eat-first-call-page--view-mode) {
-  font-size: calc(
-    16px *
-      clamp(
-        1,
-        min(calc(100vw / 1920px), calc(100vh / 1080px)),
-        2.6
-      )
-  );
-}
-
-/*
- * Hard-pixel SVG sub-elements that the rem lift does not reach. The HTML
- * `width=""` / `height=""` attributes on the inline `<svg>` set the element's
- * intrinsic size; CSS width/height here wins because attribute presentation
- * hints have specificity 0. Scoped to `.tile-overlay__mic` / `.tile-overlay__hand`
- * inside the EF OBS shell so Mafia OBS tiles stay byte-identical.
+ * Mafia / Game Template OBS routes never get `.eat-first-call-page--view-mode`,
+ * so this whole block is inert there. Normal /app/eat (no `mode=view`)
+ * never gets `.app-shell-layout--obs-view`, so the block is inert there
+ * too.
  */
 .app-shell-layout--obs-view .eat-first-call-page--view-mode .tile-overlay__mic svg {
-  width: calc(15px * var(--sa-ef-obs-ui-scale, 1));
-  height: calc(15px * var(--sa-ef-obs-ui-scale, 1));
+  width: calc(15px * var(--sa-obs-ui-scale, 1));
+  height: calc(15px * var(--sa-obs-ui-scale, 1));
 }
 
-/*
- * Lift the rem-based EF trait card text by the EF-only scale on top of the
- * html font-size lift. The trait card text uses tiny rems (0.46rem /
- * 0.66rem) so an extra multiplier keeps the chip readable on a 3840px-wide
- * canvas without bumping the chip's enclosing card dimensions (those still
- * scale through the shared `--sa-obs-ui-scale` block above and stay in
- * proportion with Mafia's trait-free OBS chrome).
- */
-.app-shell-layout--obs-view .eat-first-call-page--view-mode .tile-eat-first-card {
-  /* Lift card height/border bumps by the EF scale ON TOP of the shared
-   * `--sa-obs-ui-scale`. The shared rules above already set min-height /
-   * border-radius / border-width based on the shared scale, so multiplying
-   * here would double-apply; instead we re-declare with the EF scale, which
-   * supersedes the shared rule (same selector cascade, EF rule wins by
-   * coming later). */
-  min-height: calc(42px * var(--sa-ef-obs-ui-scale, 1));
-  border-radius: calc(12px * var(--sa-ef-obs-ui-scale, 1));
-  border-width: calc(1px * var(--sa-ef-obs-ui-scale, 1));
-}
-
-.app-shell-layout--obs-view .eat-first-call-page--view-mode .tile-eat-first-card--mini {
-  min-height: calc(40px * var(--sa-ef-obs-ui-scale, 1));
-}
-
-.app-shell-layout--obs-view .eat-first-call-page--view-mode .tile-eat-first-card__icon {
-  width: calc(16px * var(--sa-ef-obs-ui-scale, 1));
-  height: calc(16px * var(--sa-ef-obs-ui-scale, 1));
-}
-
-.app-shell-layout--obs-view .eat-first-call-page--view-mode .tile-eat-first-card__peer-hidden-eye {
-  width: calc(17px * var(--sa-ef-obs-ui-scale, 1));
-  height: calc(17px * var(--sa-ef-obs-ui-scale, 1));
-}
-
-/*
- * Eat First OBS timer placement (P2).
- *
- * The shared chip sits at `top: calc((safe-area + 6px) * scale)`. At 4K with
- * the EF scale that's ~16px down from the top, but with the giant 4K header
- * the chip ends up squashed between the AppLandingHeader and the camera
- * tiles. Eat First viewers want the chip higher — closer to the top edge of
- * the canvas, following Mafia OBS feel (Mafia OBS keeps its chip in this
- * same shared rule; we don't touch Mafia by scoping to the EF view-mode
- * class). We reduce the base offset from `6px → 0px` and use the EF-only
- * scale so the chip stays proportional to the rest of the EF chrome. The
- * `safe-area-inset-top` env() is preserved inside the multiplied expression
- * so OBS sources that report a notch inset still respect it.
- */
 .app-shell-layout--obs-view .eat-first-call-page--view-mode .game-timer-overlay {
-  top: calc(
-    max(0px, env(safe-area-inset-top, 0px)) *
-      var(--sa-ef-obs-ui-scale, 1)
-  );
-  width: calc(343px * var(--sa-ef-obs-ui-scale, 1));
-  min-height: calc(42px * var(--sa-ef-obs-ui-scale, 1));
-  border-radius: calc(27px * var(--sa-ef-obs-ui-scale, 1));
-}
-
-.app-shell-layout--obs-view .eat-first-call-page--view-mode .game-timer-overlay--compact {
-  width: calc(112px * var(--sa-ef-obs-ui-scale, 1));
-}
-
-.app-shell-layout--obs-view .eat-first-call-page--view-mode .game-timer-overlay__main {
-  grid-template-columns:
-    calc(24px * var(--sa-ef-obs-ui-scale, 1))
-    calc(54px * var(--sa-ef-obs-ui-scale, 1))
-    minmax(0, 1fr);
-  column-gap: calc(8px * var(--sa-ef-obs-ui-scale, 1));
-  height: calc(42px * var(--sa-ef-obs-ui-scale, 1));
-  padding: 0 calc(12px * var(--sa-ef-obs-ui-scale, 1));
-}
-
-.app-shell-layout--obs-view .eat-first-call-page--view-mode .game-timer-overlay__main--compact {
-  grid-template-columns:
-    calc(24px * var(--sa-ef-obs-ui-scale, 1))
-    calc(54px * var(--sa-ef-obs-ui-scale, 1));
-  column-gap: calc(8px * var(--sa-ef-obs-ui-scale, 1));
-}
-
-.app-shell-layout--obs-view .eat-first-call-page--view-mode .game-timer-overlay__stopwatch {
-  width: calc(24px * var(--sa-ef-obs-ui-scale, 1));
-  height: calc(24px * var(--sa-ef-obs-ui-scale, 1));
-}
-
-.app-shell-layout--obs-view .eat-first-call-page--view-mode .game-timer-overlay__text {
-  font-size: calc(21px * var(--sa-ef-obs-ui-scale, 1));
+  top: calc(max(0px, env(safe-area-inset-top, 0px)) * var(--sa-obs-ui-scale, 1));
 }
