@@ -1,3 +1,5 @@
+import { apiUrl } from '@/utils/apiUrl'
+
 const PREFIX = '/api/eat-first'
 
 // X-Requested-With accompanies every mutation so the server's CSRF guard accepts
@@ -5,14 +7,14 @@ const PREFIX = '/api/eat-first'
 const CSRF_HEADER = { 'X-Requested-With': 'streamassist-fetch' }
 
 async function jfetch(path, init = {}) {
-  const res = await fetch(`${PREFIX}${path}`, {
+  const res = await fetch(apiUrl(`${PREFIX}${path}`), {
+    ...init,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...CSRF_HEADER,
       ...(init.headers || {}),
     },
-    ...init,
   })
   if (res.status === 204) return null
   const text = await res.text()
