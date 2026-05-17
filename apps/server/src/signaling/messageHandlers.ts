@@ -39,6 +39,7 @@ import {
 } from './gameRoomOwnerStore'
 import { MafiaWs } from './mafiaWsProtocol'
 import { GameRoomWs } from './gameRoomWsProtocol'
+import { runPeerAudioMuteOp } from './peerAudioMuteChain'
 import {
   newDiagnosticEventId,
   recordDiagnosticEvent,
@@ -1549,43 +1550,47 @@ export async function handleSetAudioMuted(
   if (!peer) {
     return
   }
-  peer.audioMuted = muted
   const room = deps.roomManager.getRoom(peer.roomId)
   if (!room) {
     return
   }
-  // After the host's `force-mute-all` is lifted, the audio producer may be
-  
-  
-  // signal; we only touch the producer when both: (1) user is unmuting,
-  
-  
-  if (!muted && !peer.forcedAudioMuted) {
-    // Snapshot the paused audio producers BEFORE awaiting `p.resume()` —
-    // `peer.getProducers()` is a live collection; an audio producer swap
-    // (`handleProduce`) racing with this loop would otherwise mutate the
-    // iteration mid-flight, skipping or double-resuming entries.
-    const pausedAudioProducers = peer
-      .getProducers()
-      .filter((p) => p.kind === 'audio' && !p.closed && p.paused)
-    for (const p of pausedAudioProducers) {
-      try {
-        await p.resume()
-      } catch (e) {
-        console.warn('[signaling] audio producer resume on unmute failed', {
-          peerId: peer.id,
-          producerId: p.id,
-        }, e)
+  // Audit R9: serialize per-peer audio mute mutations so a normal
+  // `set-audio-muted` cannot race a `force-mute-all` / `force-peer-mic`
+  // and leave the producer state inconsistent with the final flag values.
+  await runPeerAudioMuteOp(peer.id, async () => {
+    peer.audioMuted = muted
+    // Forced mute always wins over normal unmute. If the host's force-mute
+    // landed (in any namespace) while this op was queued, do not resume the
+    // producer; just emit a broadcast that reflects the effective state.
+    if (!muted && !peer.forcedAudioMuted) {
+      // Snapshot the paused audio producers BEFORE awaiting `p.resume()` —
+      // `peer.getProducers()` is a live collection; an audio producer swap
+      // (`handleProduce`) racing with this loop would otherwise mutate the
+      // iteration mid-flight, skipping or double-resuming entries.
+      const pausedAudioProducers = peer
+        .getProducers()
+        .filter((p) => p.kind === 'audio' && !p.closed && p.paused)
+      for (const p of pausedAudioProducers) {
+        // Re-check forced flag after each await in case a force-mute
+        // landed between resumes; bail out so we never leave producers
+        // half-resumed against current force state.
+        if (peer.forcedAudioMuted) break
+        try {
+          await p.resume()
+        } catch (e) {
+          console.warn('[signaling] audio producer resume on unmute failed', {
+            peerId: peer.id,
+            producerId: p.id,
+          }, e)
+        }
       }
     }
-  }
-  
-  
-  
-  const effectiveMuted = peer.audioMuted || peer.forcedAudioMuted
-  broadcastServerMessageToRoom(room, {
-    type: 'peer-audio-muted',
-    payload: { peerId: peer.id, muted: effectiveMuted },
+
+    const effectiveMuted = peer.audioMuted || peer.forcedAudioMuted
+    broadcastServerMessageToRoom(room, {
+      type: 'peer-audio-muted',
+      payload: { peerId: peer.id, muted: effectiveMuted },
+    })
   })
 }
 
@@ -2053,16 +2058,23 @@ export async function handleMafiaPlayerKick(
   // flicker). Setting it here makes the post-revive effective state
   // unambiguously `muted: true`; the user must explicitly unmute after
   // revive to be heard again.
-  target.audioMuted = true
-  if (!target.forcedAudioMuted) {
-    target.forcedAudioMuted = true
-    room.setMafiaPeerForcedMicMuted(targetId, true)
-    await pauseAllPeerAudioProducers(target, 'mafia:player-kick')
-    broadcastPeerEffectiveAudioMuted(room, target)
-  } else if (!room.isMafiaPeerForcedMicMuted(targetId)) {
-    room.setMafiaPeerForcedMicMuted(targetId, true)
-  }
-  room.setMafiaUserForcedMicMuted(target.userId, true)
+  // Audit R9: serialize the per-peer force-mic write with any concurrent
+  // `set-audio-muted` so the producer pause and the flag update land in a
+  // consistent order. The synchronous flag write outside the chain would be
+  // visible to a racing `handleSetAudioMuted`, but the producer pause +
+  // broadcast may not — running both inside the chain keeps state in sync.
+  await runPeerAudioMuteOp(target.id, async () => {
+    target.audioMuted = true
+    if (!target.forcedAudioMuted) {
+      target.forcedAudioMuted = true
+      room.setMafiaPeerForcedMicMuted(targetId, true)
+      await pauseAllPeerAudioProducers(target, 'mafia:player-kick')
+      broadcastPeerEffectiveAudioMuted(room, target)
+    } else if (!room.isMafiaPeerForcedMicMuted(targetId)) {
+      room.setMafiaPeerForcedMicMuted(targetId, true)
+    }
+    room.setMafiaUserForcedMicMuted(target.userId, true)
+  })
 
   // Tell the target's own client to flip its local mic UI off via the
   // existing `toggleMic` action (CallPage listener). The camera UI is
@@ -2258,52 +2270,50 @@ export async function handleMafiaForceMuteAll(
   
   
   
-  for (const target of room.getPeers()) {
-    if (target.id === hostPeer.id) {
-      continue
-    }
-    // Soft mute (vs. kick's hard `forcedAudioMuted`): write `audioMuted` so a
-    // player can self-unmute via the normal `set-audio-muted: false` flow
-    // without the server hard-blocking the producer resume. Without this,
-    // the player's local mic UI showed "on" after click but other peers
-    // never heard them, because `handleSetAudioMuted` gates resume on
-    // `!peer.forcedAudioMuted`. Host's "mute all" button derivation
-    // (`mafiaForceMuteAllActive && everyNonHostEffectivelyMuted`) flips
-    // back to "available" via the per-peer `peer-audio-muted: false`
-    // broadcast and one click re-asserts mute-all for the room.
-    target.audioMuted = muted
-    for (const p of target.getProducers()) {
-      if (p.kind !== 'audio' || p.closed) {
-        continue
-      }
-      try {
-        if (muted) {
-          if (!p.paused) {
-            await p.pause()
+  // Audit R9: serialize per-peer audio mutations against any concurrent
+  // `set-audio-muted` / per-peer `force-peer-mic` on the same peer. Different
+  // peers run in parallel; we collect their promises and `await` them all
+  // before broadcasting the room-wide toggle so observers see the per-peer
+  // states settle before the aggregate event.
+  await Promise.all(
+    room.getPeers()
+      .filter((t) => t.id !== hostPeer.id)
+      .map((target) =>
+        runPeerAudioMuteOp(target.id, async () => {
+          // Soft mute (vs. kick's hard `forcedAudioMuted`): write `audioMuted`
+          // so a player can self-unmute via the normal `set-audio-muted: false`
+          // flow without the server hard-blocking the producer resume.
+          target.audioMuted = muted
+          for (const p of target.getProducers()) {
+            if (p.kind !== 'audio' || p.closed) {
+              continue
+            }
+            try {
+              if (muted) {
+                if (!p.paused) {
+                  await p.pause()
+                }
+              } else if (p.paused && !target.audioMuted) {
+                await p.resume()
+              }
+            } catch (e) {
+              console.warn('[signaling] mafia:force-mute-all pause/resume failed', {
+                peerId: target.id,
+                producerId: p.id,
+              }, e)
+            }
           }
-        } else if (p.paused && !target.audioMuted) {
-          
-          
-          await p.resume()
-        }
-      } catch (e) {
-        console.warn('[signaling] mafia:force-mute-all pause/resume failed', {
-          peerId: target.id,
-          producerId: p.id,
-        }, e)
-      }
-    }
-    
-    
-    const effectiveMuted = target.audioMuted || target.forcedAudioMuted
-    const audioMsg: ServerMessage = {
-      type: 'peer-audio-muted',
-      payload: { peerId: target.id, muted: effectiveMuted },
-    }
-    for (const observer of room.getPeers()) {
-      observer.sendJson(audioMsg)
-    }
-  }
+          const effectiveMuted = target.audioMuted || target.forcedAudioMuted
+          const audioMsg: ServerMessage = {
+            type: 'peer-audio-muted',
+            payload: { peerId: target.id, muted: effectiveMuted },
+          }
+          for (const observer of room.getPeers()) {
+            observer.sendJson(audioMsg)
+          }
+        }),
+      ),
+  )
 
   broadcastMafiaForceMuteAll(room, { muted })
 }
@@ -2324,38 +2334,42 @@ export async function handleEatFirstForceMuteAll(
   // The peer-by-peer audio pause/unpause below is unchanged.
   room.setEatFirstForceMuteAllActive(muted)
 
-  for (const target of room.getPeers()) {
-    if (target.id === peer.id) continue
-    // Soft mute, mirroring Mafia's `handleMafiaForceMuteAll`: write the
-    // recoverable `audioMuted` field instead of the hard host-enforcement
-    // `forcedAudioMuted`. The hard flag is gated by `handleSetAudioMuted`
-    // (`!peer.forcedAudioMuted`) and would prevent a participant from
-    // self-unmuting via the normal `set-audio-muted: false` flow after the
-    // host's "mute all". Using `audioMuted` keeps host action visible
-    // (paused producer + `peer-audio-muted` broadcast) while leaving
-    // self-recovery available, matching Mafia.
-    target.audioMuted = muted
-    for (const p of target.getProducers()) {
-      if (p.kind !== 'audio' || p.closed) continue
-      try {
-        if (muted) {
-          if (!p.paused) await p.pause()
-        } else if (p.paused && !target.audioMuted) {
-          await p.resume()
-        }
-      } catch (e) {
-        console.warn('[signaling] eat:force-mute-all pause/resume failed', { peerId: target.id }, e)
-      }
-    }
-    const effectiveMuted = target.audioMuted || target.forcedAudioMuted
-    const audioMsg: ServerMessage = {
-      type: 'peer-audio-muted',
-      payload: { peerId: target.id, muted: effectiveMuted },
-    }
-    for (const observer of room.getPeers()) {
-      observer.sendJson(audioMsg)
-    }
-  }
+  // Audit R9: same per-peer serialization as `handleMafiaForceMuteAll`.
+  await Promise.all(
+    room.getPeers()
+      .filter((t) => t.id !== peer.id)
+      .map((target) =>
+        runPeerAudioMuteOp(target.id, async () => {
+          // Soft mute, mirroring Mafia's `handleMafiaForceMuteAll`: write the
+          // recoverable `audioMuted` field instead of the hard host-enforcement
+          // `forcedAudioMuted`. The hard flag is gated by `handleSetAudioMuted`
+          // (`!peer.forcedAudioMuted`) and would prevent a participant from
+          // self-unmuting via the normal `set-audio-muted: false` flow after
+          // the host's "mute all".
+          target.audioMuted = muted
+          for (const p of target.getProducers()) {
+            if (p.kind !== 'audio' || p.closed) continue
+            try {
+              if (muted) {
+                if (!p.paused) await p.pause()
+              } else if (p.paused && !target.audioMuted) {
+                await p.resume()
+              }
+            } catch (e) {
+              console.warn('[signaling] eat:force-mute-all pause/resume failed', { peerId: target.id }, e)
+            }
+          }
+          const effectiveMuted = target.audioMuted || target.forcedAudioMuted
+          const audioMsg: ServerMessage = {
+            type: 'peer-audio-muted',
+            payload: { peerId: target.id, muted: effectiveMuted },
+          }
+          for (const observer of room.getPeers()) {
+            observer.sendJson(audioMsg)
+          }
+        }),
+      ),
+  )
 
   broadcastServerMessageToRoom(room, { type: 'eat:force-mute-all', payload: { muted } })
 }
@@ -4763,39 +4777,45 @@ export async function handleGameRoomForceMuteAll(
 
   room.setGameRoomForceMuteAllActive(muted)
 
-  for (const target of room.getPeers()) {
-    if (target.id === hostPeer.id) continue
-    // Soft mute (same shape as Mafia equivalent): write `audioMuted` so a
-    // player can self-unmute through the normal `set-audio-muted: false`
-    // path. Host UI derives the "mute all" button state from
-    // `gameRoomForceMuteAllActive && everyNonHostEffectivelyMuted`.
-    target.audioMuted = muted
-    for (const p of target.getProducers()) {
-      if (p.kind !== 'audio' || p.closed) continue
-      try {
-        if (muted) {
-          if (!p.paused) {
-            await p.pause()
+  // Audit R9: same per-peer serialization as Mafia / Eat First.
+  await Promise.all(
+    room.getPeers()
+      .filter((t) => t.id !== hostPeer.id)
+      .map((target) =>
+        runPeerAudioMuteOp(target.id, async () => {
+          // Soft mute (same shape as Mafia equivalent): write `audioMuted` so
+          // a player can self-unmute through the normal `set-audio-muted:
+          // false` path. Host UI derives the "mute all" button state from
+          // `gameRoomForceMuteAllActive && everyNonHostEffectivelyMuted`.
+          target.audioMuted = muted
+          for (const p of target.getProducers()) {
+            if (p.kind !== 'audio' || p.closed) continue
+            try {
+              if (muted) {
+                if (!p.paused) {
+                  await p.pause()
+                }
+              } else if (p.paused && !target.audioMuted) {
+                await p.resume()
+              }
+            } catch (e) {
+              console.warn('[signaling] gameroom:force-mute-all pause/resume failed', {
+                peerId: target.id,
+                producerId: p.id,
+              }, e)
+            }
           }
-        } else if (p.paused && !target.audioMuted) {
-          await p.resume()
-        }
-      } catch (e) {
-        console.warn('[signaling] gameroom:force-mute-all pause/resume failed', {
-          peerId: target.id,
-          producerId: p.id,
-        }, e)
-      }
-    }
-    const effectiveMuted = target.audioMuted || target.forcedAudioMuted
-    const audioMsg: ServerMessage = {
-      type: 'peer-audio-muted',
-      payload: { peerId: target.id, muted: effectiveMuted },
-    }
-    for (const observer of room.getPeers()) {
-      observer.sendJson(audioMsg)
-    }
-  }
+          const effectiveMuted = target.audioMuted || target.forcedAudioMuted
+          const audioMsg: ServerMessage = {
+            type: 'peer-audio-muted',
+            payload: { peerId: target.id, muted: effectiveMuted },
+          }
+          for (const observer of room.getPeers()) {
+            observer.sendJson(audioMsg)
+          }
+        }),
+      ),
+  )
 
   broadcastGameRoomForceMuteAll(room, { muted })
 }
