@@ -142,26 +142,14 @@ async function bootstrap(): Promise<void> {
     next()
   })
 
-  
-  // CSRF defense-in-depth for cookie-authenticated mutations.
-  
-  
-  
-  
-  
-  
-  // CSRF, some Safari same-site cases, server-side fetches with cookies).
-  
-  
-  //   - an allow-listed `Origin` header (the CORS layer already validated it
-  
-  
-  //     without triggering a preflight, which the CORS layer 403s for
-  
-  
-  
-  
-  
+  /**
+   * CSRF defense-in-depth for cookie-authenticated mutations. A request is
+   * allowed past this guard if it carries either an allow-listed `Origin`
+   * header (the CORS layer above already validated it) or an
+   * `X-Requested-With` header (forces a preflight, which the CORS layer
+   * 403s for non-allow-listed origins). The Monobank webhook endpoint is
+   * exempt because it authenticates by URL-token, not cookie.
+   */
   const CSRF_WEBHOOK_ALLOWLIST: ReadonlySet<string> = new Set([
     '/api/billing/mono-personal/webhook',
   ])
