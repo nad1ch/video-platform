@@ -5,6 +5,7 @@ import {
   eatFirstSessionCanOperateGame,
   resolveEatFirstEnsureOwnerUserId,
   resolveEatFirstOperatorUserId,
+  resolveEatFirstViewerMode,
 } from './sessionGate'
 import { createIpRateLimitMiddleware } from '../utils/rateLimitMiddleware'
 import {
@@ -125,7 +126,8 @@ export function mountEatFirstRoutes(app: Express): void {
           res.status(400).json({ error: 'bad game id' })
           return
         }
-        const snap = await eatFirstSnapshot(prisma, gameId)
+        const viewerMode = await resolveEatFirstViewerMode(req.headers.cookie, gameId)
+        const snap = await eatFirstSnapshot(prisma, gameId, viewerMode)
         res.json(snap)
       } catch (err) {
         sendErr(res, err)

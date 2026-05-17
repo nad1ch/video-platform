@@ -127,3 +127,22 @@ export async function resolveEatFirstEnsureOwnerUserId(
   const ctx = await resolveSessionContext(cookieHeader)
   return ctx?.prismaUserId ?? null
 }
+
+export type EatFirstViewerMode = 'host' | 'public'
+
+/**
+ * Resolve the snapshot visibility a caller should receive for `gameId`
+ * (audit R14). Mirrors `eatFirstSessionCanOperateGame` but returns a
+ * mode instead of a boolean so a single helper can be reused by both the
+ * HTTP snapshot route and the WS subscribe path.
+ *
+ * Returns `'host'` only when the caller is the admin, the room owner, or
+ * (legacy) a global staff host role with no per-game owner set. Anonymous
+ * sockets, viewers, and non-owner authenticated users get `'public'`.
+ */
+export async function resolveEatFirstViewerMode(
+  cookieHeader: string | undefined,
+  gameId: string,
+): Promise<EatFirstViewerMode> {
+  return (await eatFirstSessionCanOperateGame(cookieHeader, gameId)) ? 'host' : 'public'
+}
