@@ -156,6 +156,44 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
 
   const socketLimiterKey = new WeakMap<WebSocket, string>()
 
+  /**
+   * Audit R17: per-socket error-frequency eviction. A misbehaving / malicious
+   * peer can otherwise trip handler exceptions repeatedly (malformed
+   * payload, transport mutation under teardown, etc.) — each one is logged
+   * and ignored but no policy ever closes the offender. Tracking the rate
+   * here lets us cut a socket loose when its handlers fail more than
+   * {@link WS_SOCKET_ERROR_LIMIT} times in {@link WS_SOCKET_ERROR_WINDOW_MS}.
+   *
+   * Bucket is dropped on disconnect via the normal cleanup path; if the
+   * limit is exceeded, the socket is closed with code 1008 (policy
+   * violation) so reverse proxies can distinguish it from a normal close.
+   */
+  const WS_SOCKET_ERROR_WINDOW_MS = 60_000
+  const WS_SOCKET_ERROR_LIMIT = 20
+  const socketErrorBudget = new WeakMap<WebSocket, { windowStart: number; count: number }>()
+  function noteSocketHandlerError(socket: WebSocket): boolean {
+    const now = Date.now()
+    const existing = socketErrorBudget.get(socket)
+    const entry =
+      existing && now - existing.windowStart < WS_SOCKET_ERROR_WINDOW_MS
+        ? existing
+        : { windowStart: now, count: 0 }
+    entry.count += 1
+    socketErrorBudget.set(socket, entry)
+    return entry.count > WS_SOCKET_ERROR_LIMIT
+  }
+  function evictMisbehavingSocket(socket: WebSocket, reason: string): void {
+    try {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.close(1008, `signaling_evicted: ${reason}`)
+      } else {
+        socket.terminate()
+      }
+    } catch {
+      /* ignore — close path already best-effort */
+    }
+  }
+
   // Server-authoritative userId per socket, resolved from the HTTP-upgrade
 
 
@@ -692,9 +730,6 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
               break
           }
         } catch (err) {
-
-
-
           const peer = socketPeer.get(socket)
           console.error('[signaling] handler failed', {
             messageType,
@@ -702,6 +737,15 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             roomId: peer?.roomId,
             err: err instanceof Error ? err.message : String(err),
           })
+          if (noteSocketHandlerError(socket)) {
+            console.warn('[signaling] evicting socket: handler error budget exceeded', {
+              peerId: peer?.id,
+              roomId: peer?.roomId,
+              limit: WS_SOCKET_ERROR_LIMIT,
+              windowMs: WS_SOCKET_ERROR_WINDOW_MS,
+            })
+            evictMisbehavingSocket(socket, 'handler_error_budget')
+          }
         }
       })()
     })
