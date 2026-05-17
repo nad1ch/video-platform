@@ -55,6 +55,27 @@ const dtlsParametersSchema = z
   })
   .passthrough()
 
+/**
+ * Audit R13: rtpParameters / rtpCapabilities were typed as `z.unknown()`,
+ * which accepted literally any value (including `null`, primitives, or
+ * arbitrary nested junk). The mediasoup client always sends an object
+ * with at minimum a `codecs` array, so a loose structural guard rejects
+ * obviously malformed payloads without overconstraining valid mediasoup
+ * shapes. `.passthrough()` preserves every other field mediasoup-client
+ * populates so the server can still hand it straight to mediasoup.
+ */
+const rtpCodecMinShape = z.object({}).passthrough()
+const rtpParametersSchema = z
+  .object({
+    codecs: z.array(rtpCodecMinShape).min(1),
+  })
+  .passthrough()
+const rtpCapabilitiesSchema = z
+  .object({
+    codecs: z.array(rtpCodecMinShape).optional(),
+  })
+  .passthrough()
+
 export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('join-room'),
@@ -91,7 +112,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     payload: z.object({
       transportId: z.string().min(1),
       kind: z.enum(['audio', 'video']),
-      rtpParameters: z.unknown(),
+      rtpParameters: rtpParametersSchema,
       requestId: z.string().min(1),
       
       videoSource: z.enum(['camera', 'screen']).optional(),
@@ -123,7 +144,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     payload: z.object({
       transportId: z.string().min(1),
       producerId: z.string().min(1),
-      rtpCapabilities: z.unknown(),
+      rtpCapabilities: rtpCapabilitiesSchema,
     }),
   }),
   z.object({
