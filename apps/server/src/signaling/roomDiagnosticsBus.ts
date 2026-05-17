@@ -260,7 +260,25 @@ function getRoomBuffer(bucketKey: string): RoomBuffer {
   }
   if (rooms.size >= MAX_TRACKED_ROOMS) {
     const oldestKey = rooms.keys().next()
-    if (!oldestKey.done) rooms.delete(oldestKey.value)
+    if (!oldestKey.done) {
+      /**
+       * Audit R18: finalize the evicted bucket before dropping it. The
+       * previous `rooms.delete(oldestKey.value)` discarded every event
+       * collected for that room — so under sustained pressure (≥
+       * MAX_TRACKED_ROOMS rooms churning) the LRU silently lost
+       * reports that would otherwise have been persisted by the
+       * empty-grace timer.
+       *
+       * `finalizeRoomBucket` runs the registered persistence finalizer
+       * inline (a `void prisma.create().catch(...)`), so the eviction
+       * loop is bounded: a write-storm under heavy churn is still
+       * limited to one persistence call per evicted bucket. Pending
+       * empty-grace timers for the same key are cleared first so they
+       * cannot re-fire after we evict.
+       */
+      cancelRoomFinalization(oldestKey.value, 'lru_eviction')
+      finalizeRoomBucket(oldestKey.value, 'lru_eviction')
+    }
   }
   const buffer: RoomBuffer = {
     events: [],
@@ -396,7 +414,15 @@ export function clearRoomDiagnostics(roomId: string): void {
 // finalized + cleared, a fresh `room_created` for the same roomId starts
 // a brand new bucket (and therefore a brand new report).
 
-export type RoomDiagnosticsFinalizationReason = 'empty_grace_elapsed' | 'forced'
+export type RoomDiagnosticsFinalizationReason =
+  | 'empty_grace_elapsed'
+  | 'forced'
+  /**
+   * Audit R18: bucket persisted because the live LRU evicted it before
+   * the empty-grace timer fired. Logged on the row so reports persisted
+   * via this path are distinguishable from the natural-expiry shape.
+   */
+  | 'lru_eviction'
 
 export interface RoomDiagnosticsFinalizationMeta {
   bucketKey: string

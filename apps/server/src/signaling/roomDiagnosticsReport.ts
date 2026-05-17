@@ -44,7 +44,7 @@ const CLIENT_EVENTS_MISSING_MIN_DURATION_MS = 5 * 60 * 1000
 const ROOM_DIAGNOSTICS_EMPTY_GRACE_MS_LOCAL = 60_000
 
 /** Subset of finalize reasons recognised by the report builder. */
-type FinalizedReason = 'empty_grace_elapsed' | 'forced'
+type FinalizedReason = 'empty_grace_elapsed' | 'forced' | 'lru_eviction'
 
 export interface RoomDiagnosticReportParticipant {
   peerId: string
@@ -115,7 +115,7 @@ export interface BuildGameSessionReportOptions {
   exportedBy?: 'admin' | 'self-export'
   /** Optional finalization context — only set when called from persistence. */
   finalizedAt?: Date
-  finalizedReason?: 'empty_grace_elapsed' | 'forced'
+  finalizedReason?: 'empty_grace_elapsed' | 'forced' | 'lru_eviction'
 }
 
 function isoOrNull(ms: number | null | undefined): string | undefined {
@@ -570,7 +570,9 @@ function resolveFinalizedReason(
   for (const e of events) {
     if (e.type !== 'room_report_finalized' || e.source !== 'server') continue
     const reason = asNonEmptyString(e.context?.reason)
-    if (reason === 'empty_grace_elapsed' || reason === 'forced') return reason
+    if (reason === 'empty_grace_elapsed' || reason === 'forced' || reason === 'lru_eviction') {
+      return reason
+    }
   }
   return null
 }
