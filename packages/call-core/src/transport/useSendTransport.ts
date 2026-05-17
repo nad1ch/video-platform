@@ -11,6 +11,8 @@ import { onUnmounted, shallowRef } from 'vue'
 import {
   CALL_VIDEO_MAX_FRAMERATE,
   CALL_VIDEO_TARGET_BITRATE_BPS,
+  SCREEN_SHARE_MAX_BITRATE_BPS,
+  SCREEN_SHARE_MAX_FRAMERATE,
   clampCallVideoBitrate,
   getOutgoingVideoEncodings,
   type VideoPublishTier,
@@ -117,10 +119,19 @@ type ProducerWithRtpSender = Producer & { rtpSender?: RTCRtpSender | null }
  * encoder-internal fields that mediasoup-client populated at produce time
  * (`active`, `priority`, etc.). Encodings with unknown rids are passed
  * through untouched so we never silently drop a layer.
+ *
+ * Audit M6: when `source === 'screen'` the encoding is rewritten with the
+ * display-capture caps (2 Mbps / 30 fps / scale=1) instead of the camera
+ * caps. Display-capture content is starved at the camera bitrate and the
+ * 20 fps cap is visibly choppy for scrolling. RTC architecture remains
+ * "one producer + replaceTrack" — the simulcast branch is intentionally
+ * skipped because screen share is published as a single high encoding
+ * (see `shouldUsePublisherSimulcast(isScreenSharingAtWire)`).
  */
 async function forceOutboundVideoSenderParameters(
   producer: Producer,
   snapshot: OutboundVideoPublishSnapshot,
+  source: 'camera' | 'screen' = 'camera',
 ): Promise<void> {
   const sender = (producer as ProducerWithRtpSender).rtpSender
   if (!sender) {
@@ -128,6 +139,20 @@ async function forceOutboundVideoSenderParameters(
   }
   const params = sender.getParameters()
   const liveEncodings = params.encodings ?? []
+
+  if (source === 'screen') {
+    const first = liveEncodings[0] ?? {}
+    params.encodings = [
+      {
+        ...first,
+        maxBitrate: SCREEN_SHARE_MAX_BITRATE_BPS,
+        maxFramerate: SCREEN_SHARE_MAX_FRAMERATE,
+        scaleResolutionDownBy: 1,
+      },
+    ]
+    await sender.setParameters(params)
+    return
+  }
 
   if (snapshot.videoSimulcast) {
     const desired = getOutgoingVideoEncodings(snapshot.videoPublishTier, true)
@@ -250,6 +275,17 @@ export function useSendTransport() {
     })
 
     transport.on('produce', ({ kind, rtpParameters }, resolve, reject) => {
+      /**
+       * Audit RB7: hard-coding `videoSource: 'camera'` here is intentional
+       * given the current single-producer architecture. The first (and only)
+       * video producer is created from a camera track in
+       * `publishLocalMedia`; screen-share switches use `replaceTrack` on the
+       * same producer rather than a fresh `transport.produce`. Source
+       * changes are signaled out-of-band via
+       * `notifyProducerVideoSource(producerId, 'screen' | 'camera')` so the
+       * server can update its view. If we ever publish a second producer
+       * for screen, this branch must thread the per-call source through.
+       */
       const requestId = crypto.randomUUID()
       try {
         room.sendJson({
@@ -378,7 +414,10 @@ export function useSendTransport() {
     }
   }
 
-  async function createOutboundVideoProducerFromTrack(track: MediaStreamTrack): Promise<Producer> {
+  async function createOutboundVideoProducerFromTrack(
+    track: MediaStreamTrack,
+    source: 'camera' | 'screen' = 'camera',
+  ): Promise<Producer> {
     const transport = sendTransport.value
     if (!transport || transport.closed) {
       throw new Error('Send transport required to recreate video producer')
@@ -386,7 +425,7 @@ export function useSendTransport() {
     const { videoSimulcast, videoPublishTier } = lastOutboundVideoPublish
     const encodings = getOutgoingVideoEncodings(videoPublishTier, videoSimulcast)
     if (import.meta.env.DEV) {
-      console.log('[produce] recreate outbound video producer', { trackId: track.id, videoPublishTier, videoSimulcast })
+      console.log('[produce] recreate outbound video producer', { trackId: track.id, videoPublishTier, videoSimulcast, source })
     }
     const producer = await transport.produce({
       track,
@@ -395,29 +434,32 @@ export function useSendTransport() {
         videoGoogleStartBitrate: outboundVideoGoogleStartBitrateKbps(videoPublishTier),
       },
     })
-    await forceOutboundVideoSenderParameters(producer, lastOutboundVideoPublish)
+    await forceOutboundVideoSenderParameters(producer, lastOutboundVideoPublish, source)
     outboundVideoProducer.value = producer
     return producer
   }
 
-  async function replaceOutboundVideoTrack(track: MediaStreamTrack | null): Promise<string> {
+  async function replaceOutboundVideoTrack(
+    track: MediaStreamTrack | null,
+    source: 'camera' | 'screen' = 'camera',
+  ): Promise<string> {
     const job = outboundVideoReplaceChain.then(async (): Promise<string> => {
       let p = outboundVideoProducer.value
 
       if (track && track.kind === 'video') {
         if (!p || p.closed) {
-          p = await createOutboundVideoProducerFromTrack(track)
+          p = await createOutboundVideoProducerFromTrack(track, source)
           ensureDisplayCaptureVideoTrackEnabled(track)
           if (import.meta.env.DEV) {
-            console.log('[produce] replaceOutboundVideoTrack (recreated producer)', { producerId: p.id, trackId: track.id })
+            console.log('[produce] replaceOutboundVideoTrack (recreated producer)', { producerId: p.id, trackId: track.id, source })
           }
           return p.id
         }
         if (import.meta.env.DEV) {
-          console.log('[produce] replaceOutboundVideoTrack', { producerId: p.id, trackId: track.id })
+          console.log('[produce] replaceOutboundVideoTrack', { producerId: p.id, trackId: track.id, source })
         }
         await p.replaceTrack({ track })
-        await forceOutboundVideoSenderParameters(p, lastOutboundVideoPublish)
+        await forceOutboundVideoSenderParameters(p, lastOutboundVideoPublish, source)
         ensureDisplayCaptureVideoTrackEnabled(track)
         if (import.meta.env.DEV) {
           console.log('[produce] replaceTrack applied', p.id)

@@ -391,3 +391,32 @@ export function getOutgoingVideoEncodings(
   }
   return getSingleLayerEncodingsForPreset(tier)
 }
+
+/**
+ * Audit M6: screen-share-specific sender parameters. The existing single
+ * camera encoding caps at 1.15 Mbps / 20 fps / scaleResolutionDownBy 1
+ * (480p). Display capture content (slides, code editors, full-screen
+ * video) benefits from a higher bitrate and a higher frame-rate cap —
+ * 20 fps is visibly choppy on scrolling content and the camera bitrate
+ * starves slide detail.
+ *
+ * Bitrate (~2 Mbps): matches the `SCREEN_SHARE_GET_DISPLAY_MEDIA`
+ * `frameRate: { ideal: 15, max: 30 }` constraint at typical 1080p
+ * capture and stays inside the receiver budget for an 8–12 camera room
+ * (we have at most one screen-share publisher at a time).
+ *
+ * `scaleResolutionDownBy: 1` because display capture is normally already
+ * at the share-source resolution and the receiver expects sharp text.
+ */
+export const SCREEN_SHARE_MAX_BITRATE_BPS = 2_000_000
+export const SCREEN_SHARE_MAX_FRAMERATE = 30
+
+export const SCREEN_SHARE_SINGLE_LAYER_ENCODING: RtpEncodingParameters = {
+  maxBitrate: SCREEN_SHARE_MAX_BITRATE_BPS,
+  maxFramerate: SCREEN_SHARE_MAX_FRAMERATE,
+  scaleResolutionDownBy: 1,
+} as const
+
+export function getScreenShareEncoding(): RtpEncodingParameters {
+  return { ...SCREEN_SHARE_SINGLE_LAYER_ENCODING }
+}
