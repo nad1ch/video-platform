@@ -543,9 +543,16 @@ export function useEatFirstCallSignaling(
     // without waiting on the next `eat:table-state-sync`. Audit parity B.
     eatFirstShell.setForceMuteAllActiveFromSignaling(muted)
     if (eatFirstShell.isEatFirstRoomHost) return
+    /**
+     * Audit RB2: only flip the local mic OFF when the host enforces mute.
+     * Auto-unmuting on `muted: false` is inconsistent with hard-mute
+     * semantics (a per-peer kick may still have the user `forcedAudioMuted`
+     * server-side) and also breaks the user's own choice to stay muted
+     * after the room-wide mute lifts. Mafia / GameRoom use the same rule:
+     * server `force-peer-mic muted: false` is a UI-hint clear, not an
+     * auto-unmute. The player must opt back in manually.
+     */
     if (muted && micEnabled.value) {
-      void toggleMic()
-    } else if (!muted && !micEnabled.value) {
       void toggleMic()
     }
   })
