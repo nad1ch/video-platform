@@ -1690,17 +1690,23 @@ export function handleMafiaTransferHost(
   if (nextUserId.length < 1) {
     return
   }
-  // Owner-lock guard (P0 Bug 3): only transfer host to a userId that is
-  // actually present in the room. Rejects transfers to OBS/view tabs that
-  // are not currently in-room as participants, and to stale identities.
-  const candidatePresent = room
-    .getPeers()
-    .some((p) => p.userId === nextUserId)
-  if (!candidatePresent) {
+  /**
+   * Owner-lock guard (P0 Bug 3): only transfer host to a userId that is
+   * actually present in the room. Rejects transfers to OBS/view tabs that
+   * are not currently in-room as participants, and to stale identities.
+   *
+   * Audit R5: additionally require the target user to have a non-empty
+   * `mafiaSessionId` on at least one of their peers. Without this guard
+   * a host could blindly hand ownership to an OBS / spectator peer that
+   * has never opened the Mafia UI, who would then receive the host
+   * panel out of the blue. This is the minimal safe server-side guard
+   * — the full two-phase offer/accept consent flow is a follow-up.
+   */
+  const nextSessionId = room.getFirstMafiaSessionIdForUser(nextUserId)
+  if (nextSessionId == null) {
     return
   }
   room.setMafiaHostUserId(nextUserId)
-  const nextSessionId = room.getFirstMafiaSessionIdForUser(nextUserId)
   room.setMafiaHostSessionId(nextSessionId)
   room.setMafiaHostPeerId(room.getFirstMafiaPeerIdForUserSession(nextUserId, nextSessionId))
   // Persist the new owner identity so it survives `Room` finalization.
@@ -3292,6 +3298,15 @@ export function handleMafiaTimerStart(
   if (startedAt < serverNow - 120_000) {
     return
   }
+  /**
+   * Audit G3: reject expired timer starts (`elapsed >= duration`). Matches
+   * the guard in `handleEatFirstTimerStart` so a host clock skew or a stale
+   * frame cannot accept a timer that would immediately expire — clients
+   * would then render `0:00` and treat the round as already over.
+   */
+  if (serverNow - startedAt >= duration) {
+    return
+  }
   room.setMafiaTimer({ startedAt, duration })
   broadcastMafiaTimerStart(room, { startedAt, duration, isRunning: true })
   diagEmit('timer_started', 'info', 'game', room.id, peer, {
@@ -4259,12 +4274,17 @@ export function handleGameRoomTransferHost(
   if (nextUserId.length < 1) {
     return
   }
-  const candidatePresent = room.getPeers().some((p) => p.userId === nextUserId)
-  if (!candidatePresent) {
+  /**
+   * Audit R5: same minimal consent guard as `handleMafiaTransferHost` —
+   * require the target user to have a non-empty `gameRoomSessionId` on
+   * at least one of their peers, so a blind transfer cannot land on an
+   * OBS / spectator that has never opened the game-room UI.
+   */
+  const nextSessionId = room.getFirstGameRoomSessionIdForUser(nextUserId)
+  if (nextSessionId == null) {
     return
   }
   room.setGameRoomHostUserId(nextUserId)
-  const nextSessionId = room.getFirstGameRoomSessionIdForUser(nextUserId)
   room.setGameRoomHostSessionId(nextSessionId)
   room.setGameRoomHostPeerId(room.getFirstGameRoomPeerIdForUserSession(nextUserId, nextSessionId))
   setGameRoomOwnerUserId(room.id, nextUserId)
