@@ -473,6 +473,74 @@ export async function eatFirstMergePlayerAdmin(
   broadcast(gameId)
 }
 
+/**
+ * Audit R7: batched variant of {@link eatFirstMergePlayerAdmin} used by the
+ * "reroll all action cards" path on the host panel. The naive per-slot loop
+ * runs N Serializable transactions and N reconcile-after-update calls; for
+ * an 11-player room that is 22+ DB roundtrips per click. This helper
+ * upserts every slot inside a single Serializable transaction and runs the
+ * player-order reconcile exactly once at the end, then triggers a single
+ * coalesced WS broadcast.
+ *
+ * Slots whose normalized id is not a valid player slot are silently
+ * skipped — the caller is expected to validate; we keep belt-and-braces.
+ */
+export async function eatFirstMergePlayerCardsBatch(
+  gameId: string,
+  entries: ReadonlyArray<{ slotId: string; patch: unknown }>,
+  ownerUserId?: string | null,
+): Promise<void> {
+  if (!isValidGameId(gameId)) {
+    const e = new Error('Bad game id')
+    ;(e as Error & { status?: number }).status = 400
+    throw e
+  }
+  const normalized: Array<{ slotId: string; patch: Record<string, unknown> }> = []
+  for (const e of entries) {
+    const pid = normalizeEatFirstSlot(e.slotId)
+    if (!isEatFirstPlayerSlotId(pid)) continue
+    normalized.push({ slotId: pid, patch: stripAdminKeyFromPatch(e.patch) })
+  }
+  if (normalized.length === 0) {
+    return
+  }
+  await eatFirstEnsureGame(gameId, ownerUserId)
+  await prisma.$transaction(
+    async (tx) => {
+      const slots = normalized.map((n) => n.slotId)
+      const existing = await tx.eatFirstPlayer.findMany({
+        where: { gameId, slotId: { in: slots } },
+      })
+      const prevBySlot = new Map<string, Record<string, unknown>>()
+      for (const row of existing) {
+        const data =
+          typeof row.data === 'object' && row.data !== null && !Array.isArray(row.data)
+            ? (row.data as Record<string, unknown>)
+            : {}
+        prevBySlot.set(row.slotId, data)
+      }
+      for (const n of normalized) {
+        const prev = prevBySlot.get(n.slotId) ?? {}
+        const nextData = mergeEatFirstPlayerData(prev, n.patch) as object
+        await tx.eatFirstPlayer.upsert({
+          where: { gameId_slotId: { gameId, slotId: n.slotId } },
+          create: { gameId, slotId: n.slotId, data: nextData },
+          update: { data: nextData },
+        })
+      }
+      const gameAfter = await tx.eatFirstGame.findUnique({
+        where: { id: gameId },
+        include: { players: true },
+      })
+      if (gameAfter) {
+        await eatFirstPersistPlayerOrderReconcile(tx, gameAfter)
+      }
+    },
+    { isolationLevel: 'Serializable' },
+  )
+  broadcast(gameId)
+}
+
 export async function eatFirstDeletePlayerAdmin(gameId: string, slot: string): Promise<void> {
   if (!isValidGameId(gameId)) {
     const e = new Error('Bad game id')

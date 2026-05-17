@@ -149,6 +149,56 @@ export async function persistEatFirstCallSignalingSnapshot(
   await eatFirstMergeRoomAdmin(gameId, { callSignalingSnapshot: snapshot }, ownerUserId ?? null)
 }
 
+/**
+ * Audit R8: coalesce overlay-persist requests per room. Each `eat:trait-reveal`
+ * call previously ran a full `eatFirstMergeRoomAdmin` (Serializable + reconcile
+ * + broadcast) — a host opening all 8 traits in quick succession produced
+ * eight separate DB writes. The trailing-edge debouncer collapses bursts into
+ * one write, keyed by roomId. Final-state-wins semantics are safe because the
+ * persisted snapshot is regenerated from `getEatFirstTableState(roomId)`
+ * at flush time, so the latest in-memory state is always what lands in DB.
+ */
+const PERSIST_DEBOUNCE_MS = 250
+const pendingPersistTimers = new Map<
+  string,
+  { timer: ReturnType<typeof setTimeout>; ownerUserId: string | null }
+>()
+
+export function schedulePersistEatFirstCallSignalingSnapshot(
+  roomId: string,
+  ownerUserId?: string | null,
+): void {
+  const existing = pendingPersistTimers.get(roomId)
+  if (existing) {
+    clearTimeout(existing.timer)
+  }
+  const ownerNormalized =
+    typeof ownerUserId === 'string' && ownerUserId.trim().length > 0 ? ownerUserId.trim() : null
+  const timer = setTimeout(() => {
+    pendingPersistTimers.delete(roomId)
+    persistEatFirstCallSignalingSnapshot(roomId, ownerNormalized).catch((err) => {
+      console.error('[eat-first] scheduled persistEatFirstCallSignalingSnapshot failed', {
+        roomId,
+        err: err instanceof Error ? err.message : String(err),
+      })
+    })
+  }, PERSIST_DEBOUNCE_MS)
+  if (typeof timer.unref === 'function') {
+    timer.unref()
+  }
+  pendingPersistTimers.set(roomId, { timer, ownerUserId: ownerNormalized })
+}
+
+/** Flush a pending debounced persist immediately. Used on room teardown so we
+ *  do not lose the last few in-flight reveals. */
+export function flushPendingEatFirstCallSignalingPersist(roomId: string): Promise<void> {
+  const existing = pendingPersistTimers.get(roomId)
+  if (!existing) return Promise.resolve()
+  clearTimeout(existing.timer)
+  pendingPersistTimers.delete(roomId)
+  return persistEatFirstCallSignalingSnapshot(roomId, existing.ownerUserId)
+}
+
 function applyEatFirstCallSignalingSnapshotFromRoom(
   state: EatFirstTableState,
   room: Record<string, unknown>,

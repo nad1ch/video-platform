@@ -64,6 +64,7 @@ import {
   eatFirstAdminPatchForFullCharacterDeal,
   eatFirstHostReshuffleAdmin,
   eatFirstMergePlayerAdmin,
+  eatFirstMergePlayerCardsBatch,
   eatFirstMergeRoomAdmin,
   eatFirstPlayerSlotRowExists,
   verifyEatFirstSlotAuth,
@@ -90,6 +91,7 @@ import {
   hydrateEatFirstOwnerUserIdFromDb,
   hydrateEatFirstTableStateFromDb,
   persistEatFirstCallSignalingSnapshot,
+  schedulePersistEatFirstCallSignalingSnapshot,
   resetEatFirstTableRoundDealConsumables,
   resolveEatFirstHostPeerId,
   setEatFirstActionCard,
@@ -1375,38 +1377,38 @@ function sendMafiaSnapshotToSocket(socket: WsSocket, room: Room, peer: Peer): vo
     type: MafiaWs.forceMuteAll,
     payload: { muted: room.isMafiaForceMuteAllActive() },
   })
-  // `room-state.peers[].audioMuted` only carries user-self-mute. Force-mute
-  // (per-peer kick or `mafia:force-mute-all`) lives in `Peer.forcedAudioMuted`
-  // and is not encoded there. On host reload during an active mute-all this
-  // would leave the host's effective-mute map empty for force-only-muted peers
-  // and the "mute all" button would render as inactive. Replay per-peer
-  // effective state so the host UI derives the correct button state and tile
-  // badges from the server snapshot. OBS/view and late joiners benefit too.
+  /**
+   * Audit R10: collapsed per-peer replay into a single `room.getPeers()`
+   * pass. Two loops over the same peer list (audio-muted + outbound-video-
+   * paused) ran the host snapshot at 2N iterations for N peers, repeated
+   * across N joining sockets. Bundling into one pass halves that, while
+   * preserving the existing two-message wire format so the client receiver
+   * needs no changes. A bundled snapshot envelope is intentionally left
+   * as a follow-up to avoid a contract migration in this audit batch.
+   *
+   * `peer-audio-muted` carries effective mute (self OR forced) so a host
+   * reload during an active `force-mute-all` still derives the correct
+   * "mute all" button state and tile badges from server state.
+   *
+   * `peer-outbound-video-paused` is published only for `forcedCameraOff`
+   * because user self-pause is already reflected by the producer state
+   * (`track.muted = true`) which `StreamVideo.hasUsableVideoTrack`
+   * observes.
+   */
   for (const other of room.getPeers()) {
     if (other.id === peer.id) continue
-    const effectiveMuted = other.audioMuted || other.forcedAudioMuted
-    if (!effectiveMuted) continue
-    sendServerMessage(socket, {
-      type: 'peer-audio-muted',
-      payload: { peerId: other.id, muted: true },
-    })
-  }
-  // Replay per-peer outbound video pause state. The existing
-  // `peer-outbound-video-paused` deltas (host force-camera-off, target
-  // self-pause) update receivers in real time, but a late joiner / OBS
-  // reconnect that missed the deltas previously had no way to know which
-  // tiles should render the "camera off" placeholder. We use `forcedCameraOff`
-  // as the conservative source: it covers Mafia kill enforcement; user
-  // self-pause is intentionally excluded here because the existing producer
-  // state (consumer `track.muted = true` for paused producers) keeps the
-  // tile in the right visual state via StreamVideo's `hasUsableVideoTrack`.
-  for (const other of room.getPeers()) {
-    if (other.id === peer.id) continue
-    if (!other.forcedCameraOff) continue
-    sendServerMessage(socket, {
-      type: 'peer-outbound-video-paused',
-      payload: { peerId: other.id, paused: true },
-    })
+    if (other.audioMuted || other.forcedAudioMuted) {
+      sendServerMessage(socket, {
+        type: 'peer-audio-muted',
+        payload: { peerId: other.id, muted: true },
+      })
+    }
+    if (other.forcedCameraOff) {
+      sendServerMessage(socket, {
+        type: 'peer-outbound-video-paused',
+        payload: { peerId: other.id, paused: true },
+      })
+    }
   }
   const mt = room.getMafiaTimer()
   if (mt != null) {
@@ -2581,11 +2583,11 @@ export async function handleEatFirstTraitRevealRequest(
     type: 'eat:trait-revealed',
     payload: { slotId, traitKey, openedBy, ...(close ? { closed: true } : {}) },
   })
-  try {
-    await persistEatFirstCallSignalingSnapshot(room.id, peer.userId?.trim() || null)
-  } catch {
-    /* overlay persistence must not block UX; joins may miss latest overlay until retry */
-  }
+  // Audit R8: coalesce overlay-persist writes per room rather than awaiting
+  // one full DB write per click. The debouncer always picks up the latest
+  // in-memory state when it fires; if a server tears down before the flush,
+  // `flushPendingEatFirstCallSignalingPersist` is the escape hatch.
+  schedulePersistEatFirstCallSignalingSnapshot(room.id, peer.userId?.trim() || null)
   await broadcastEatFirstTableState(room)
 }
 
@@ -2703,14 +2705,39 @@ export async function handleEatFirstActionCardRerollRequest(
       stateBefore.lastUsedActionCard = null
     }
   }
+  /**
+   * Audit R7: pick the new cards up front, then persist them as a single
+   * batch DB write (one Serializable transaction + one player-order
+   * reconcile instead of N) before broadcasting per-slot updates. The
+   * `broadcast(gameId)` inside the batch helper is microtask-coalesced,
+   * so the final snapshot broadcast still fires exactly once.
+   */
+  const cardsBySlot = new Map<string, ReturnType<typeof pickRandomEatFirstActiveCard>>()
   for (const slotId of targetSlots) {
-    const card = pickRandomEatFirstActiveCard()
-    try {
-      await eatFirstMergePlayerAdmin(gameId, slotId, { activeCard: card }, peer.userId || null)
-    } catch {
-      // Persistence failure should not block the rest of a "reroll all" loop.
-      continue
-    }
+    cardsBySlot.set(slotId, pickRandomEatFirstActiveCard())
+  }
+  if (cardsBySlot.size === 0) {
+    return
+  }
+  try {
+    await eatFirstMergePlayerCardsBatch(
+      gameId,
+      [...cardsBySlot.entries()].map(([slotId, card]) => ({
+        slotId,
+        patch: { activeCard: card },
+      })),
+      peer.userId || null,
+    )
+  } catch (err) {
+    console.error('[eat-first] eatFirstMergePlayerCardsBatch failed', {
+      gameId,
+      slots: cardsBySlot.size,
+      err: err instanceof Error ? err.message : String(err),
+    })
+    // Even on DB failure, fall through and update in-memory state +
+    // signaling broadcast so the next snapshot poll reconciles.
+  }
+  for (const [slotId, card] of cardsBySlot) {
     setEatFirstActionCard(room.id, slotId, card)
     broadcastServerMessageToRoom(room, {
       type: 'eat:action-card-rerolled',
@@ -3019,12 +3046,69 @@ function broadcastMafiaModeUpdate(room: Room, payload: { mode: 'old' | 'new' }):
   broadcastServerMessageToRoom(room, { type: MafiaWs.modeUpdate, payload })
 }
 
+/**
+ * Audit R11: per-room debounce for Mafia settings / page-background
+ * broadcasts. Each host edit previously fanned the full backgrounds
+ * payload (potentially MB of image data when avatars are inlined) to
+ * every peer, including OBS/view tabs. The host UI flushes one update
+ * per drag/keystroke, so a single rename produces 5–10 broadcasts.
+ *
+ * Behavior preserved:
+ *  - Room state is set synchronously so any subsequent join-snapshot
+ *    replay (via `sendMafiaSnapshotToSocket`) sees the latest values.
+ *  - The trailing broadcast carries the latest room state, so the wire
+ *    format is unchanged from the client's perspective — it just fires
+ *    fewer times under burst.
+ */
+const MAFIA_SETTINGS_BROADCAST_DEBOUNCE_MS = 150
+
+const pendingMafiaSettingsBroadcast = new Map<string, ReturnType<typeof setTimeout>>()
+const pendingMafiaPageBackgroundBroadcast = new Map<string, ReturnType<typeof setTimeout>>()
+
+function scheduleMafiaSettingsBroadcast(room: Room, selectedBackgroundIdOverride?: string | null): void {
+  const existing = pendingMafiaSettingsBroadcast.get(room.id)
+  if (existing) clearTimeout(existing)
+  const timer = setTimeout(() => {
+    pendingMafiaSettingsBroadcast.delete(room.id)
+    broadcastServerMessageToRoom(room, {
+      type: MafiaWs.settingsUpdate,
+      payload: {
+        deadBackgrounds: room.getMafiaDeadBackgrounds(),
+        activeBackgroundId:
+          selectedBackgroundIdOverride !== undefined
+            ? selectedBackgroundIdOverride
+            : room.getMafiaActiveBackgroundId(),
+      },
+    })
+  }, MAFIA_SETTINGS_BROADCAST_DEBOUNCE_MS)
+  if (typeof timer.unref === 'function') timer.unref()
+  pendingMafiaSettingsBroadcast.set(room.id, timer)
+}
+
+function scheduleMafiaPageBackgroundBroadcast(room: Room): void {
+  const existing = pendingMafiaPageBackgroundBroadcast.get(room.id)
+  if (existing) clearTimeout(existing)
+  const timer = setTimeout(() => {
+    pendingMafiaPageBackgroundBroadcast.delete(room.id)
+    broadcastServerMessageToRoom(room, {
+      type: MafiaWs.pageBackgroundSettings,
+      payload: {
+        backgrounds: room.getMafiaPageBackgrounds(),
+        selectedBackgroundId: null,
+        forcedBackgroundId: room.getMafiaForcedPageBackgroundId(),
+      },
+    })
+  }, MAFIA_SETTINGS_BROADCAST_DEBOUNCE_MS)
+  if (typeof timer.unref === 'function') timer.unref()
+  pendingMafiaPageBackgroundBroadcast.set(room.id, timer)
+}
+
 function broadcastMafiaSettingsUpdate(
   room: Room,
   payload: { deadBackgrounds: MafiaBackgroundItem[]; activeBackgroundId: string | null },
 ): void {
   room.setMafiaDeadBackgroundSettings(payload.deadBackgrounds, payload.activeBackgroundId)
-  broadcastServerMessageToRoom(room, { type: MafiaWs.settingsUpdate, payload })
+  scheduleMafiaSettingsBroadcast(room, payload.activeBackgroundId)
 }
 
 function broadcastMafiaPageBackgroundSettings(
@@ -3036,7 +3120,7 @@ function broadcastMafiaPageBackgroundSettings(
   },
 ): void {
   room.setMafiaPageBackgroundSettings(payload.backgrounds, payload.forcedBackgroundId)
-  broadcastServerMessageToRoom(room, { type: MafiaWs.pageBackgroundSettings, payload })
+  scheduleMafiaPageBackgroundBroadcast(room)
 }
 
 
