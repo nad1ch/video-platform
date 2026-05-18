@@ -54,6 +54,19 @@ async function actorAuditId(req: Request, actorUserId: string | null): Promise<s
   return session?.id ?? 'unknown'
 }
 
+/**
+ * Parse an ISO datetime query param. Returns `undefined` when the value
+ * is missing or invalid so callers can skip the where clause rather than
+ * crashing on `new Date(NaN)`.
+ */
+function parseAdminDateParam(value: unknown): Date | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const ms = Date.parse(trimmed)
+  return Number.isFinite(ms) ? new Date(ms) : undefined
+}
+
 async function logAdminAudit(
   req: Request,
   input: {
@@ -467,6 +480,219 @@ export function mountAdminRoutes(app: Express): void {
       })
     } catch (e) {
       console.error('[admin] GET /api/admin/stats', e)
+      res.status(500).json({ error: 'server_error' })
+    }
+  })
+
+  /**
+   * Anonymous-visitor analytics over existing `UserActivityEvent` rows
+   * where `userId IS NULL` (signed-out sessions). NO new event capture is
+   * introduced — this endpoint only aggregates what the client already
+   * sends to `/api/events/client` (allowlisted events: route_change,
+   * game_opened, …). The `sessionId` is the sessionStorage-scoped
+   * pseudonym from `clientAnalytics.ts`; admins see only aggregates.
+   *
+   * Range defaults to last 7 days; clamped to 90 days to match the
+   * existing retention reaper (`clientEventsRouter.ts:RETENTION_DAYS`).
+   *
+   * Returns `databaseConfigured: false` when the DB is offline,
+   * mirroring the rest of the admin handlers.
+   */
+  app.get('/api/admin/analytics/anonymous', async (req: Request, res: Response) => {
+    if (!(await requireAdmin(req, res))) {
+      return
+    }
+    if (!isDatabaseConfigured()) {
+      res.json({
+        databaseConfigured: false,
+        range: { from: null, to: null },
+        sessions: { total: 0, bounceRate: 0, avgDurationSec: 0 },
+        visitors24h: 0,
+        visitors7d: 0,
+        visitors30d: 0,
+        activeNow: 0,
+        topRoutes: [],
+        topEvents: [],
+      })
+      return
+    }
+    const now = Date.now()
+    const ANALYTICS_MAX_RANGE_MS = 90 * 24 * 60 * 60 * 1000
+    const ANALYTICS_DEFAULT_RANGE_MS = 7 * 24 * 60 * 60 * 1000
+    const ACTIVE_NOW_WINDOW_MS = 5 * 60 * 1000
+    const SHORT_SESSION_MAX_MS = 30 * 1000
+
+    const fromRaw = parseAdminDateParam(req.query.dateFrom)
+    const toRaw = parseAdminDateParam(req.query.dateTo)
+    /**
+     * Range derivation: both / from-only / to-only / neither — always
+     * clamped to a 90-day window. Invalid input is ignored, not 400'd, so
+     * a partially-typed `datetime-local` value never bricks the panel.
+     */
+    let toMs = toRaw ? toRaw.getTime() : now
+    let fromMs = fromRaw ? fromRaw.getTime() : toMs - ANALYTICS_DEFAULT_RANGE_MS
+    if (fromMs > toMs) {
+      const swap = fromMs
+      fromMs = toMs
+      toMs = swap
+    }
+    if (toMs - fromMs > ANALYTICS_MAX_RANGE_MS) {
+      fromMs = toMs - ANALYTICS_MAX_RANGE_MS
+    }
+    const from = new Date(fromMs)
+    const to = new Date(toMs)
+
+    const topRoutesRaw = req.query.topRoutes
+    const topRoutesN = (() => {
+      const parsed =
+        typeof topRoutesRaw === 'string' ? Number.parseInt(topRoutesRaw, 10) : Number.NaN
+      if (!Number.isFinite(parsed)) return 10
+      return Math.max(1, Math.min(50, Math.floor(parsed)))
+    })()
+
+    const baseWhere: Prisma.UserActivityEventWhereInput = {
+      userId: null,
+      sessionId: { not: null },
+      createdAt: { gte: from, lte: to },
+    }
+    const cutoff24h = new Date(now - 24 * 60 * 60 * 1000)
+    const cutoff7d = new Date(now - 7 * 24 * 60 * 60 * 1000)
+    const cutoff30d = new Date(now - 30 * 24 * 60 * 60 * 1000)
+    const activeCutoff = new Date(now - ACTIVE_NOW_WINDOW_MS)
+
+    try {
+      /**
+       * Per-session aggregates: each anonymous session contributes one row
+       * with min/max `createdAt` (= session start/end) and event count.
+       * `groupBy` on `sessionId` uses the existing `@@index([createdAt])`
+       * scan with the `userId IS NULL` predicate applied as a filter.
+       *
+       * For very large ranges this could return many session rows; the
+       * 90-day clamp + existing 90-day retention keep this bounded under
+       * realistic traffic. If scale ever requires it, swap this for a raw
+       * SQL aggregate that returns only the four numbers below.
+       */
+      const sessionAgg = await prisma.userActivityEvent.groupBy({
+        by: ['sessionId'],
+        where: baseWhere,
+        _min: { createdAt: true },
+        _max: { createdAt: true },
+        _count: { _all: true },
+      })
+
+      let totalSessions = 0
+      let totalDurationMs = 0
+      let bounces = 0
+      let activeNow = 0
+      for (const row of sessionAgg) {
+        if (!row.sessionId) continue
+        totalSessions += 1
+        const min = row._min.createdAt
+        const max = row._max.createdAt
+        const durationMs = min && max ? Math.max(0, max.getTime() - min.getTime()) : 0
+        totalDurationMs += durationMs
+        const eventCount = row._count._all
+        if (eventCount <= 1 || durationMs <= SHORT_SESSION_MAX_MS) {
+          bounces += 1
+        }
+        if (max && max.getTime() >= activeCutoff.getTime()) {
+          activeNow += 1
+        }
+      }
+      const avgDurationSec =
+        totalSessions > 0 ? Math.round(totalDurationMs / totalSessions / 1000) : 0
+      const bounceRate = totalSessions > 0 ? bounces / totalSessions : 0
+
+      /**
+       * Visitor windows (24h / 7d / 30d) regardless of the user-selected
+       * range. Raw SQL with PostgreSQL `FILTER` so all three counts come
+       * back in one round trip. Anonymous + non-null sessionId predicate
+       * applied uniformly; broadest window (30d) bounds the scan.
+       */
+      const visitorRows = await prisma.$queryRaw<
+        Array<{ v24h: number | bigint; v7d: number | bigint; v30d: number | bigint }>
+      >(Prisma.sql`
+        SELECT
+          COUNT(DISTINCT "sessionId") FILTER (WHERE "createdAt" >= ${cutoff24h}) AS "v24h",
+          COUNT(DISTINCT "sessionId") FILTER (WHERE "createdAt" >= ${cutoff7d}) AS "v7d",
+          COUNT(DISTINCT "sessionId") FILTER (WHERE "createdAt" >= ${cutoff30d}) AS "v30d"
+        FROM "UserActivityEvent"
+        WHERE "userId" IS NULL
+          AND "sessionId" IS NOT NULL
+          AND "createdAt" >= ${cutoff30d}
+      `)
+      const visitorRow = visitorRows[0]
+      const toInt = (v: number | bigint | undefined): number =>
+        typeof v === 'bigint' ? Number(v) : typeof v === 'number' ? v : 0
+      const visitors24h = toInt(visitorRow?.v24h)
+      const visitors7d = toInt(visitorRow?.v7d)
+      const visitors30d = toInt(visitorRow?.v30d)
+
+      /**
+       * Top routes by event volume within the selected range. `sessions`
+       * is `COUNT(DISTINCT sessionId)` per path — same predicate as the
+       * session aggregate above. Limit clamped to 1..50.
+       */
+      const topRoutesRows = await prisma.$queryRaw<
+        Array<{ path: string | null; events: number | bigint; sessions: number | bigint }>
+      >(Prisma.sql`
+        SELECT
+          "path",
+          COUNT(*) AS "events",
+          COUNT(DISTINCT "sessionId") AS "sessions"
+        FROM "UserActivityEvent"
+        WHERE "userId" IS NULL
+          AND "sessionId" IS NOT NULL
+          AND "createdAt" >= ${from}
+          AND "createdAt" <= ${to}
+          AND "path" IS NOT NULL
+        GROUP BY "path"
+        ORDER BY "events" DESC
+        LIMIT ${topRoutesN}
+      `)
+      const topRoutes = topRoutesRows
+        .filter((r) => typeof r.path === 'string' && r.path.length > 0)
+        .map((r) => ({
+          path: r.path as string,
+          events: toInt(r.events),
+          sessions: toInt(r.sessions),
+        }))
+
+      /**
+       * Top events by count within the selected range. Plain Prisma
+       * `groupBy` is enough — `event` is the allowlisted enum-ish field
+       * (route_change, game_opened, …) and there are at most a handful.
+       */
+      const topEventsAgg = await prisma.userActivityEvent.groupBy({
+        by: ['event'],
+        where: baseWhere,
+        _count: { _all: true },
+        orderBy: { _count: { event: 'desc' } },
+        take: 20,
+      })
+      const topEvents = topEventsAgg.map((r) => ({
+        event: r.event,
+        count: r._count._all,
+      }))
+
+      res.setHeader('Cache-Control', 'no-store')
+      res.json({
+        databaseConfigured: true,
+        range: { from: from.toISOString(), to: to.toISOString() },
+        sessions: {
+          total: totalSessions,
+          bounceRate,
+          avgDurationSec,
+        },
+        visitors24h,
+        visitors7d,
+        visitors30d,
+        activeNow,
+        topRoutes,
+        topEvents,
+      })
+    } catch (e) {
+      console.error('[admin] GET /api/admin/analytics/anonymous', e)
       res.status(500).json({ error: 'server_error' })
     }
   })
