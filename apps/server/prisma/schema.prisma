@@ -99,6 +99,9 @@ model User {
   caseOpenings            CaseOpening[]
   predictionsCreated      Prediction[]             @relation("PredictionCreatedBy")
   predictionEntries       PredictionEntry[]
+  userBadges              UserBadge[]
+  userCosmetics           UserCosmetic[]
+  equippedCosmetics       EquippedCosmetic[]
   activityEvents          UserActivityEvent[]
   clientErrors            ClientErrorEvent[]
   emailVerificationTokens EmailVerificationToken[]
@@ -553,6 +556,76 @@ model PredictionEntry {
   @@unique([predictionId, userId])
   @@index([optionId])
   @@index([userId])
+}
+
+/// Catalog of badge cosmetics (visible chips earned via cases / events).
+model Badge {
+  slug        String      @id
+  displayName String
+  iconUrl     String?
+  rarityTier  String      @default("common")
+  isActive    Boolean     @default(true)
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  ownedBy     UserBadge[]
+}
+
+/// Per-user owned badges. Acquisition is idempotent — re-granting the same
+/// `(userId, badgeSlug)` is a no-op (composite PK).
+model UserBadge {
+  userId     String
+  badgeSlug  String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge      Badge    @relation(fields: [badgeSlug], references: [slug], onDelete: Cascade)
+  acquiredAt DateTime @default(now())
+
+  @@id([userId, badgeSlug])
+  @@index([userId])
+}
+
+/// Catalog of cosmetic items (chat colors, frames, chat effects, nickname
+/// colors, etc.). Cosmetics are distinct from badges so the inventory UI
+/// can render them with kind-specific affordances (equip vs display).
+model Cosmetic {
+  slug        String             @id
+  displayName String
+  /// `frame` | `chat_color` | `chat_effect` | `nickname_color` | `…`.
+  kind        String
+  rarityTier  String             @default("common")
+  isActive    Boolean            @default(true)
+  metadata    Json?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  ownedBy     UserCosmetic[]
+  equippedBy  EquippedCosmetic[]
+}
+
+model UserCosmetic {
+  userId       String
+  cosmeticSlug String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cosmetic     Cosmetic @relation(fields: [cosmeticSlug], references: [slug], onDelete: Cascade)
+  acquiredAt   DateTime @default(now())
+
+  @@id([userId, cosmeticSlug])
+  @@index([userId])
+}
+
+/// One row per (user, kind) — the cosmetic currently equipped in that slot
+/// (e.g. one chat color, one frame). A user equipping a different cosmetic
+/// in the same kind overwrites this row.
+model EquippedCosmetic {
+  userId       String
+  kind         String
+  cosmeticSlug String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cosmetic     Cosmetic @relation(fields: [cosmeticSlug], references: [slug], onDelete: Cascade)
+  updatedAt    DateTime @updatedAt
+
+  @@id([userId, kind])
+  @@index([userId])
+  @@index([cosmeticSlug])
 }
 
 /// One row per user per hub case (ids: `luck-0`…`luck-3`, `free`, `subscriber`). Named `CoinCase` so Prisma client is valid (`Case` would emit `prisma.case`).
