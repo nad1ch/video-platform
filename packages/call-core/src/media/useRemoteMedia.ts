@@ -33,8 +33,8 @@ import {
 import {
   applyReceiveQualityPressureToLayers,
   evaluateInboundVideoStatsForPressure,
+  getReceivePressurePollInterval,
   RECEIVE_PRESSURE_GOOD_STREAK_UP,
-  RECEIVE_PRESSURE_POLL_MS,
   RECEIVE_PRESSURE_UPGRADE_COOLDOWN_MS,
   type ReceiveQualityPressure,
   type VideoInboundStatsRow,
@@ -537,9 +537,17 @@ export function useRemoteMedia() {
 
   function startReceivePressureMonitor(): void {
     stopReceivePressureMonitor()
+    // Audit P2 perf: when adaptive spatial-layer signaling is off, the
+    // downgrade verdict path inside `tickReceiveQualityPressure` short-circuits
+    // and only the FPS-pressure UI map consumes `consumer.getStats()` results.
+    // That consumer tolerates a coarser sample, so we run the cadence picker
+    // here to cut per-tile getStats work in 8–12 camera rooms. `setupReceivePath`
+    // sets `videoSpatialLayerSignalingEnabled` before calling this, so the
+    // value below is the authoritative session-time decision.
+    const intervalMs = getReceivePressurePollInterval(videoSpatialLayerSignalingEnabled.value)
     receivePressurePollTimer = setInterval(() => {
       void tickReceiveQualityPressure()
-    }, RECEIVE_PRESSURE_POLL_MS)
+    }, intervalMs)
   }
 
   function updatePlaybackRenderFpsPressureFromInboundRows(rows: InboundVideoDebugRow[]): void {

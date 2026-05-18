@@ -165,3 +165,23 @@ export const RECEIVE_PRESSURE_POLL_MS = 2_200
 export const RECEIVE_PRESSURE_BAD_STREAK_DOWN = 3
 export const RECEIVE_PRESSURE_GOOD_STREAK_UP = 7
 export const RECEIVE_PRESSURE_UPGRADE_COOLDOWN_MS = 4_500
+
+/**
+ * Slower polling cadence used when adaptive video spatial-layer signaling is
+ * disabled. In that mode `tickReceiveQualityPressure` short-circuits the
+ * downgrade verdict path (no `set-consumer-preferred-layers` is ever sent) and
+ * the remaining consumer of `consumer.getStats()` is the FPS-pressure UI map,
+ * which tolerates a coarser sample. Tuning down the cadence here reduces
+ * per-tile `getStats` work in 8–12 camera rooms where the cost is highest.
+ */
+export const RECEIVE_PRESSURE_POLL_MS_FPS_ONLY = 6_000
+
+/**
+ * Pick the receive-pressure poll interval based on whether adaptive spatial
+ * layer signaling is currently enabled. Pure, sync, side-effect free —
+ * extracted so `useRemoteMedia` can choose the right cadence at monitor start
+ * without bringing the decision into the consumer module.
+ */
+export function getReceivePressurePollInterval(adaptiveLayersEnabled: boolean): number {
+  return adaptiveLayersEnabled ? RECEIVE_PRESSURE_POLL_MS : RECEIVE_PRESSURE_POLL_MS_FPS_ONLY
+}
