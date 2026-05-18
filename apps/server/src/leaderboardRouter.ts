@@ -4,6 +4,7 @@ import { isDatabaseConfigured, prisma } from './prisma'
 import { resolvePrismaUserIdFromSession } from './auth/resolvePrismaUserFromSession'
 import { readSessionFromCookie } from './auth/session/sessionJwt'
 import { normalizeTwitchLogin } from './streamerIdentity'
+import { grantParticipationReward } from './economy/earn/participationReward'
 
 const CHECKERS_ELO_INITIAL = 1200
 const CHECKERS_ELO_K = 20
@@ -478,8 +479,22 @@ export async function recordCheckersMatchResult(input: {
         },
       ],
     })
+    // Viewer Economy: idempotent per-player participation reward keyed on
+    // (roundId, userId). Replaying recordCheckersMatchResult is safe.
+    await grantParticipationReward(tx, {
+      roundId: round.id,
+      game: 'checkers',
+      userId: input.player1UserId,
+      isWinner: input.player1UserId === input.winnerUserId,
+    })
+    await grantParticipationReward(tx, {
+      roundId: round.id,
+      game: 'checkers',
+      userId: input.player2UserId,
+      isWinner: input.player2UserId === input.winnerUserId,
+    })
   })
-  
+
   // just-played match appears without a 5 s stale cache window.
   invalidateCheckersEloCache()
 }

@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { isDatabaseConfigured, prisma } from '../prisma'
 import { invalidateStreamerLeaderboardCache } from '../leaderboardRouter'
+import { grantParticipationReward } from '../economy/earn/participationReward'
 
 export type NadleRoundPlayer = {
   userId: string
@@ -91,6 +92,16 @@ export async function persistNadleRound(input: PersistNadleRoundInput): Promise<
             wins: p.isWinner ? 1 : 0,
           },
           update,
+        })
+        // Viewer Economy: idempotent participation reward (PendingReward
+        // kind='game_participation'). Keyed on (roundId, userId) so re-running
+        // this persistence call cannot double-reward.
+        await grantParticipationReward(tx, {
+          roundId: round.id,
+          game: 'nadle',
+          userId: dbUserId,
+          streamerId,
+          isWinner: p.isWinner,
         })
       }
     })
