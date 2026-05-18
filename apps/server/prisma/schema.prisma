@@ -10,51 +10,51 @@ datasource db {
 }
 
 model Streamer {
-  id        String   @id @default(cuid())
+  id                String              @id @default(cuid())
   /// Public slug for `/nadle/:name` (Twitch-style login, lowercase).
-  name      String   @unique
-  twitchId  String   @unique
-  username  String   @unique
-  displayName      String?
-  profileImageUrl  String?
-  broadcasterType  String?
-  followersCount   Int?
-  currentOnline    Int?
-  avgOnline7d      Int?
-  isLive           Boolean  @default(false)
-  lastSyncAt       DateTime?
-  tier             String?
+  name              String              @unique
+  twitchId          String              @unique
+  username          String              @unique
+  displayName       String?
+  profileImageUrl   String?
+  broadcasterType   String?
+  followersCount    Int?
+  currentOnline     Int?
+  avgOnline7d       Int?
+  isLive            Boolean             @default(false)
+  lastSyncAt        DateTime?
+  tier              String?
   /// User who may administer this streamer row (admin-created).
-  ownerId   String?
-  owner     User?    @relation("StreamerOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  isActive  Boolean  @default(true)
-  members   User[]   @relation("StreamerMembers")
-  ownerMemberships   StreamerMember[]
-  gameRounds          GameRound[]
-  userStreamerStats   UserStreamerStats[]
-  nadrawPrompts       NadrawPrompt[]
-  nadleLiveGame       NadleLiveGame?
-  nadrawLiveRoom      NadrawLiveRoom?
+  ownerId           String?
+  owner             User?               @relation("StreamerOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  isActive          Boolean             @default(true)
+  members           User[]              @relation("StreamerMembers")
+  ownerMemberships  StreamerMember[]
+  gameRounds        GameRound[]
+  userStreamerStats UserStreamerStats[]
+  nadrawPrompts     NadrawPrompt[]
+  nadleLiveGame     NadleLiveGame?
+  nadrawLiveRoom    NadrawLiveRoom?
 
   @@index([ownerId])
 }
 
 /// Crowdsourced drawing-game prompts; `!add` creates unapproved rows for the streamer to moderate.
 model NadrawPrompt {
-  id          String   @id @default(cuid())
-  streamerId  String
-  streamer    Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
-  text        String
+  id             String   @id @default(cuid())
+  streamerId     String
+  streamer       Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+  text           String
   /// Normalized key for deduplication (lowercase, punctuation stripped, etc.).
   normalizedText String?
   /// `chat` = `!add`; `streamer` = host UI; `system` = seeded rows.
-  source      String   @default("chat")
+  source         String   @default("chat")
   /// Twitch user id (IRC) of chatter who submitted via `!add`, when known.
-  createdBy   String?
-  approved    Boolean  @default(false)
-  usageCount  Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdBy      String?
+  approved       Boolean  @default(false)
+  usageCount     Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([streamerId, approved])
   @@index([streamerId, normalizedText])
@@ -62,39 +62,39 @@ model NadrawPrompt {
 }
 
 model User {
-  id                 String              @id @default(cuid())
-  provider           String
-  providerUserId     String
-  email              String?             @unique
-  emailVerified      Boolean             @default(false)
-  emailVerifiedAt    DateTime?
+  id                      String                   @id @default(cuid())
+  provider                String
+  providerUserId          String
+  email                   String?                  @unique
+  emailVerified           Boolean                  @default(false)
+  emailVerifiedAt         DateTime?
   /// Optional notification address used for billing emails (Pro activated /
   /// rejected / cancelled / expired). Lets Twitch sign-ups (which often have
   /// no auth `email`) still receive billing confirmations. Falls back to
   /// `email` when null. Not unique — a user may share an ops/manager inbox.
-  billingEmail       String?
-  displayName        String
-  avatarUrl          String?
-  role               String
-  twitchId           String?             @unique
-  streamerId         String?
-  streamer           Streamer?           @relation("StreamerMembers", fields: [streamerId], references: [id], onDelete: SetNull)
-  ownedStreamers     Streamer[]          @relation("StreamerOwner")
-  streamerMemberships StreamerMember[]
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  stats              UserStats?
-  userStreamerStats  UserStreamerStats[]
-  coinHubBalance     CoinBalance?
-  coinHubPending     Pending?
-  coinHubSpin        Spin?
-  coinHubCases       CoinCase[]
-  activityEvents     UserActivityEvent[]
-  clientErrors       ClientErrorEvent[]
+  billingEmail            String?
+  displayName             String
+  avatarUrl               String?
+  role                    String
+  twitchId                String?                  @unique
+  streamerId              String?
+  streamer                Streamer?                @relation("StreamerMembers", fields: [streamerId], references: [id], onDelete: SetNull)
+  ownedStreamers          Streamer[]               @relation("StreamerOwner")
+  streamerMemberships     StreamerMember[]
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  stats                   UserStats?
+  userStreamerStats       UserStreamerStats[]
+  coinHubBalance          CoinBalance?
+  coinHubPending          Pending?
+  coinHubSpin             Spin?
+  coinHubCases            CoinCase[]
+  activityEvents          UserActivityEvent[]
+  clientErrors            ClientErrorEvent[]
   emailVerificationTokens EmailVerificationToken[]
-  passwordResetTokens PasswordResetToken[]
-  paymentRequests    PaymentRequest[]
-  subscription       Subscription?
+  passwordResetTokens     PasswordResetToken[]
+  paymentRequests         PaymentRequest[]
+  subscription            Subscription?
 
   @@unique([provider, providerUserId])
   @@index([streamerId])
@@ -127,27 +127,27 @@ model PasswordResetToken {
 }
 
 model StreamerMember {
-  id          String   @id @default(cuid())
-  userId      String
-  streamerId  String
-  role        String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  streamer    Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  userId     String
+  streamerId String
+  role       String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamer   Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@unique([userId, streamerId])
   @@index([streamerId, role])
 }
 
 model AdminAuditLog {
-  id                String   @id @default(cuid())
-  actorUserId       String
-  targetUserId      String?
-  targetStreamerId  String?
-  action            String
-  metadata          Json?
-  createdAt         DateTime @default(now())
+  id               String   @id @default(cuid())
+  actorUserId      String
+  targetUserId     String?
+  targetStreamerId String?
+  action           String
+  metadata         Json?
+  createdAt        DateTime @default(now())
 
   @@index([actorUserId, createdAt])
   @@index([targetUserId, createdAt])
@@ -215,13 +215,13 @@ model Spin {
 
 /// One row per user per hub case (ids: `luck-0`…`luck-3`, `free`, `subscriber`). Named `CoinCase` so Prisma client is valid (`Case` would emit `prisma.case`).
 model CoinCase {
-  userId          String
-  caseId          String
-  state           String
-  cooldownUntil   DateTime?
-  lastReward      Json?
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  updatedAt       DateTime  @updatedAt
+  userId        String
+  caseId        String
+  state         String
+  cooldownUntil DateTime?
+  lastReward    Json?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt     DateTime  @updatedAt
 
   @@id([userId, caseId])
   @@index([userId])
@@ -257,11 +257,11 @@ model UserStats {
 
 // Nadle stream round snapshot; participant userId strings match gameStore (session id or Twitch IRC id).
 model GameRound {
-  id           String        @id @default(cuid())
-  streamerId String?
-  streamer     Streamer?   @relation(fields: [streamerId], references: [id], onDelete: SetNull)
+  id           String       @id @default(cuid())
+  streamerId   String?
+  streamer     Streamer?    @relation(fields: [streamerId], references: [id], onDelete: SetNull)
   winnerUserId String
-  createdAt    DateTime      @default(now())
+  createdAt    DateTime     @default(now())
   results      GameResult[]
 
   @@index([streamerId])
@@ -338,36 +338,36 @@ model NadrawLiveRoom {
 /// Activation of `Subscription` is allowed only from `auto_matched` (matcher) or
 /// `approved` (admin); never from `created`/`waiting_payment`/`checking`/`rejected`/`expired`.
 model PaymentRequest {
-  id                          String          @id @default(cuid())
-  userId                      String
-  user                        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                     String           @id @default(cuid())
+  userId                 String
+  user                   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Acquirer-style identifier for the payment surface. MVP: always `mono_jar`.
-  provider                    String          @default("mono_jar")
+  provider               String           @default("mono_jar")
   /// Smallest currency unit (kopecks for UAH).
-  amount                      Int
+  amount                 Int
   /// ISO-4217 alphabetic currency code (UAH only in MVP).
-  currency                    String
-  status                      String          @default("waiting_payment")
+  currency               String
+  status                 String           @default("waiting_payment")
   /// Optional internal correlation reference (kept for future "comment-based"
   /// disambiguation; intentionally not required by matcher).
-  internalReference           String?         @unique
-  adminNote                   String?
-  expiresAt                   DateTime
-  markedPaidAt                DateTime?
-  checkedAt                   DateTime?
-  autoMatchedAt               DateTime?
-  approvedAt                  DateTime?
-  rejectedAt                  DateTime?
+  internalReference      String?          @unique
+  adminNote              String?
+  expiresAt              DateTime
+  markedPaidAt           DateTime?
+  checkedAt              DateTime?
+  autoMatchedAt          DateTime?
+  approvedAt             DateTime?
+  rejectedAt             DateTime?
   /// Only set on `auto_matched` (matcher attached transaction). Manual `approved`
   /// does not consume a specific transaction in the MVP.
-  matchedTransactionId        String?         @unique
-  matchedTransaction          MonoTransaction? @relation(fields: [matchedTransactionId], references: [id], onDelete: SetNull)
-  autoMatchedEmailSentAt      DateTime?
-  needsReviewEmailSentAt      DateTime?
-  approvedEmailSentAt         DateTime?
-  rejectedEmailSentAt         DateTime?
-  createdAt                   DateTime        @default(now())
-  updatedAt                   DateTime        @updatedAt
+  matchedTransactionId   String?          @unique
+  matchedTransaction     MonoTransaction? @relation(fields: [matchedTransactionId], references: [id], onDelete: SetNull)
+  autoMatchedEmailSentAt DateTime?
+  needsReviewEmailSentAt DateTime?
+  approvedEmailSentAt    DateTime?
+  rejectedEmailSentAt    DateTime?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
 
   @@index([userId, status])
   @@index([status, expiresAt])
@@ -379,25 +379,25 @@ model PaymentRequest {
 /// by `monoTransactionId`. Amount is normalized to kopecks (positive integer)
 /// alongside a sign flag so we never auto-match negative/outgoing operations.
 model MonoTransaction {
-  id                       String          @id @default(cuid())
+  id                      String          @id @default(cuid())
   /// Monobank `StatementItem.id` — guaranteed unique by monobank; webhook idempotency.
-  monoTransactionId        String          @unique
+  monoTransactionId       String          @unique
   /// Monobank account id from `MONO_ACCOUNT_ID`. Used to scope matching.
-  accountId                String
+  accountId               String
   /// Always positive kopecks (absolute value). `direction` records the sign.
-  amount                   Int
+  amount                  Int
   /// `"incoming"` for credits (positive monobank `amount`), `"outgoing"` for debits.
-  direction                String
+  direction               String
   /// ISO-4217 alphabetic; matcher only auto-matches when `"UAH"`.
-  currency                 String
-  description              String?
-  operationTime            DateTime
+  currency                String
+  description             String?
+  operationTime           DateTime
   /// Original StatementItem JSON for forensic admin review.
-  rawPayload               Json
+  rawPayload              Json
   /// Set by the matcher (or admin tooling) when this transaction is consumed.
-  matchedPaymentRequestId  String?
-  matchedPaymentRequest    PaymentRequest?
-  createdAt                DateTime        @default(now())
+  matchedPaymentRequestId String?
+  matchedPaymentRequest   PaymentRequest?
+  createdAt               DateTime        @default(now())
 
   @@index([accountId, operationTime])
   @@index([matchedPaymentRequestId])
@@ -408,14 +408,14 @@ model MonoTransaction {
 /// `status` is `"active"` while `expiresAt > now`; `"inactive"` after manual deactivation
 /// (not used in MVP); `"expired"` after the window passes (reconciled lazily on read).
 model Subscription {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// MVP: always `"pro"`.
-  plan      String
-  status    String
-  startsAt  DateTime
-  expiresAt DateTime
+  plan                 String
+  status               String
+  startsAt             DateTime
+  expiresAt            DateTime
   /// Single-flight claim for the user-facing "Pro доступ скасовано" email.
   /// Set the moment `cancelAdminSubscription` performs the active→inactive
   /// transition; repeated cancels collapse to a no-op without re-emailing.
@@ -425,8 +425,8 @@ model Subscription {
   /// `expiresAt`. Not driven by a cron — fired the next time the user's UI
   /// (or the global notifier tick) hits `subscription/me` after expiry.
   expiredEmailSentAt   DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@index([expiresAt])
 }
@@ -442,26 +442,72 @@ model Subscription {
 /// `eat:<base>`. Session-bucket reports (`session:<sid>`) are NOT persisted
 /// in D1.3 by design; they remain admin-fetchable from the live in-memory
 /// snapshot for the lifetime of the tab's session.
+/// Durable inbox for monobank webhook deliveries. The webhook handler
+/// inserts the raw payload BEFORE attempting `ingestStatementWebhook`, so
+/// even if downstream processing throws (DB blip, parse drift, matcher
+/// crash) the raw payload survives and can be replayed by admin tooling
+/// or a future scheduler. Idempotency at the activation layer comes from
+/// `MonoTransaction.monoTransactionId @unique`, so double-processing one
+/// inbox row is safe (the second `persistAndMatchStatementItem` call is
+/// an upsert-no-op + matcher reread inside a Serializable txn).
+model MonoWebhookInbox {
+  id          String    @id @default(cuid())
+  payloadJson Json
+  receivedAt  DateTime  @default(now())
+  attempts    Int       @default(0)
+  processedAt DateTime?
+  lastError   String?
+
+  @@index([processedAt, receivedAt])
+}
+
+/// Durable Mafia "ведучий" host owner with TTL. Persists across server restarts
+/// so the original streamer keeps host ownership of an active room even after
+/// the process is replaced (deploy, OOM, etc.). Lazy-expiring: a row whose
+/// `expiresAt` has passed is treated as missing on read and dropped opportunistically.
+/// The in-memory `mafiaRoomOwnerStore` cache stays the fast path; this table is
+/// the durability backstop populated on host claim/transfer and read on join.
+model MafiaRoomOwner {
+  roomId    String   @id
+  userId    String
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+/// Same shape as `MafiaRoomOwner` but for the `gameroom:*` namespace; the two
+/// tables are kept separate so claiming Mafia ownership does not grant
+/// game-room ownership and vice versa (matches the in-memory store split).
+model GameRoomOwner {
+  roomId    String   @id
+  userId    String
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
 model RoomDiagnosticReport {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   roomId           String
   gameType         String?
   startedAt        DateTime
   endedAt          DateTime?
   durationMs       Int?
   eventCount       Int
-  warningCount     Int      @default(0)
-  errorCount       Int      @default(0)
-  criticalCount    Int      @default(0)
-  hasErrors        Boolean  @default(false)
-  hasWarnings      Boolean  @default(false)
-  truncated        Boolean  @default(false)
+  warningCount     Int       @default(0)
+  errorCount       Int       @default(0)
+  criticalCount    Int       @default(0)
+  hasErrors        Boolean   @default(false)
+  hasWarnings      Boolean   @default(false)
+  truncated        Boolean   @default(false)
   hostUserId       String?
   hostDisplayName  String?
   participantCount Int?
   finalizedReason  String?
   reportJson       Json
-  createdAt        DateTime @default(now())
+  createdAt        DateTime  @default(now())
 
   @@index([createdAt])
   @@index([roomId, createdAt])

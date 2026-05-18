@@ -62,7 +62,7 @@ WebSocket upgrade routing is centralized in `apps/server/src/index.ts`:
 - `apps/client/src/components/StreamVideo.vue`
 - `apps/client/src/components/StreamAudio.vue`
 - `apps/client/src/components/call/useMediaStallRecovery.ts`
-- `apps/client/src/components/call/videoPlaybackBudgetPolicy.ts`
+- `apps/client/src/composables/game-room/useRemoteTileBudget.ts` (runtime SSOT for the remote-tile budget; viewport visibility + server-side `setPeerVisible` hysteresis)
 
 ### Server signaling (HIGH RISK)
 
@@ -72,6 +72,8 @@ WebSocket upgrade routing is centralized in `apps/server/src/index.ts`:
 - `apps/server/src/signaling/clientMessageSchema.ts`
 - `apps/server/src/signaling/mafiaWsProtocol.ts`
 - `apps/server/src/signaling/gameRoomWsProtocol.ts`
+- `apps/server/src/signaling/mafiaRoomOwnerStore.ts` (in-memory owner identity per `roomId` — owner-lock SSOT across `Room` finalization)
+- `apps/server/src/signaling/gameRoomOwnerStore.ts` (same shape for the generic game-room namespace)
 - `apps/server/src/rooms/Room.ts` (also owns Mafia host state)
 - `apps/server/src/mediasoup/*`
 - `apps/server/src/peers/*`
@@ -91,7 +93,8 @@ WebSocket upgrade routing is centralized in `apps/server/src/index.ts`:
 
 | Game | Client | Server | WS path |
 |------|--------|--------|---------|
-| Mafia | `pages/MafiaPage.vue`, `stores/mafiaGame.ts`, `stores/mafiaPlayers.ts`, `composables/mafiaWsProtocol.ts`, `components/mafia/*` | `rooms/Room.ts` Mafia state, `signaling/mafiaWsProtocol.ts` | shares `/ws` |
+| Mafia | `pages/MafiaPage.vue`, `stores/mafiaGame.ts`, `stores/mafiaPlayers.ts`, `composables/mafiaWsProtocol.ts`, `components/mafia/*` | `rooms/Room.ts` Mafia state, `signaling/mafiaWsProtocol.ts`, `signaling/mafiaRoomOwnerStore.ts` | shares `/ws` |
+| Game Template (Mafia fork) | `pages/GameTemplatePage.vue`, `stores/gameTemplateGame.ts`, `stores/gameTemplatePlayers.ts`, `composables/gameRoomWsProtocol.ts`, `components/game-template/*`, `components/game-room/*` | shares `Room.ts` game-room state, `signaling/gameRoomWsProtocol.ts`, `signaling/gameRoomOwnerStore.ts` | shares `/ws` (`gameroom:*` namespace) |
 | Eat First | `eat-first/` sub-app | `apps/server/src/eatFirst/*` | `/eat-first-ws` |
 | Nadle | `pages/NadleStreamPage.vue`, `nadle/`, `packages/nadle-core` | `apps/server/src/nadle/*` | `/nadle-ws` |
 | Nadraw Show | `features/nadraw-show/`, `pages/NadrawShowPage.vue` | `apps/server/src/nadraw-show/*` | `/nadraw-show-ws` |
@@ -139,8 +142,8 @@ WebSocket upgrade routing is centralized in `apps/server/src/index.ts`:
 
 Three items look settled in the code but are not — confirm before relying on them:
 
-- **Simulcast / spatial-layer signaling.** Files like `packages/call-core/src/media/videoSimulcast.ts` and `adaptiveSimulcastFeatureFlags.ts` exist, but the wire path may not be fully active in the current runtime. Verify the layer-select messages are actually sent and respected before assuming simulcast is on.
-- **`videoPlaybackBudgetPolicy.ts`.** The policy is pure and unit-tested. Its runtime wiring into `StreamVideo` / `ParticipantTile` is the bit that needs verification before any change relies on "the budget will catch this".
+- **Simulcast / spatial-layer signaling.** Confirmed active as of 2026-05-18: `packages/call-core/src/media/adaptiveSimulcastFeatureFlags.ts` exports `ENABLE_PUBLISHER_SIMULCAST = true`, `useRemoteMedia` sends `set-consumer-preferred-layers`, the Zod schema in `apps/server/src/signaling/clientMessageSchema.ts` accepts it, and the server dispatches to `handleSetConsumerPreferredLayers`. Before changing layer policy, still verify by sniffing one room's WS frames — feature flags can flip.
+- **Client-side remote-tile playback budget.** Retired. The pure module `apps/client/src/components/call/videoPlaybackBudgetPolicy.ts` was removed in `fix/full-audit-remediation`; it had a passing unit test but no runtime importer. The runtime SSOT is `apps/client/src/composables/game-room/useRemoteTileBudget.ts`, which today actively manages viewport visibility + server-side `setPeerVisible` consumer pause (with 500 ms hide-hysteresis). Its `videoPlaybackSuppressedForPeer` getter currently always returns `false` — element-level `<video>.pause()` suppression is dormant by design. If you reintroduce a budget, wire it through `useRemoteTileBudget`, never a parallel module.
 - **`playbackSuppressed` semantics.** This flag is meant to pause/suppress playback at the element level only. It must not stop consumers, close producers, tear down transport, or unsubscribe — those are media-lifecycle actions. If a change makes `playbackSuppressed` trigger any of those, push back.
 
 ## 6. Testing surface

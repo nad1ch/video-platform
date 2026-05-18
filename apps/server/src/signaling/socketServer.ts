@@ -347,6 +347,41 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
 
         const parsed = clientMessageSchema.safeParse(data)
         if (!parsed.success) {
+          // Sampled diagnostic so client/server contract drift becomes visible in
+          // admin diagnostics. Behavior is unchanged — the message is still dropped.
+          // Sampling 1/100 prevents amplification under flooders. We never emit the
+          // raw payload, only the claimed type + first Zod issue path + code.
+          if (Math.random() < 0.01) {
+            try {
+              const claimedType =
+                data && typeof data === 'object' && 'type' in (data as Record<string, unknown>)
+                  ? String((data as { type?: unknown }).type ?? 'unknown').slice(0, 80)
+                  : 'unknown'
+              const firstIssue = parsed.error.issues[0]
+              const issuePath = firstIssue ? firstIssue.path.join('.').slice(0, 80) : ''
+              const issueCode = firstIssue ? String(firstIssue.code).slice(0, 32) : 'unknown'
+              const peer = socketPeer.get(socket)
+              recordDiagnosticEvent({
+                id: newDiagnosticEventId(),
+                reportVersion: 1,
+                timestamp: Date.now(),
+                source: 'server',
+                level: 'warn',
+                area: 'ws',
+                type: 'ws_schema_drop',
+                roomId: peer?.roomId ?? null,
+                gameType: null,
+                peerId: peer?.id ?? null,
+                userId: null,
+                sessionId: null,
+                correlationId: null,
+                message: `ws schema-drop: ${claimedType} at ${issuePath} (${issueCode})`,
+                context: { claimedType, issuePath, issueCode },
+              })
+            } catch {
+              /* never throw from diagnostics */
+            }
+          }
           return
         }
 

@@ -11,6 +11,7 @@ import {
   markPaymentRequestAsPaid,
   setUserBillingEmail,
 } from './billingService'
+import { enqueueMonoWebhook, processMonoWebhookInboxRow } from './monoWebhookInbox'
 import { BillingHttpError } from './httpError'
 
 /**
@@ -198,13 +199,23 @@ export function mountBillingRoutes(app: Express): void {
   
   
   app.post(`${base}/mono-personal/webhook`, (req, res) => {
-    
     res.status(200).json({ ok: true })
     void (async () => {
       try {
         if (!verifyMonoWebhookSecret(req)) {
           return
         }
+        // Audit Batch G: durable-inbox-first. Persist the raw payload BEFORE
+        // attempting `ingestStatementWebhook`, so a downstream throw does not
+        // lose the event — the row stays with `processedAt IS NULL` and can
+        // be replayed by admin tooling or the polling path.
+        const enqueued = await enqueueMonoWebhook(req.body)
+        if (enqueued) {
+          await processMonoWebhookInboxRow(enqueued.id)
+          return
+        }
+        // No DB configured — fall back to legacy inline ingest so local dev
+        // against a monobank-personal sandbox / fixtures still works.
         await ingestStatementWebhook(req.body)
       } catch (err) {
         console.error('[billing] mono-personal webhook handler failed', err)

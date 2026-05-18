@@ -31,10 +31,12 @@ import type {
 import type { RoomManager } from '../rooms/RoomManager'
 import {
   getMafiaRoomOwnerUserId,
+  hydrateMafiaRoomOwnerFromDb,
   setMafiaRoomOwnerUserId,
 } from './mafiaRoomOwnerStore'
 import {
   getGameRoomOwnerUserId,
+  hydrateGameRoomOwnerFromDb,
   setGameRoomOwnerUserId,
 } from './gameRoomOwnerStore'
 import { MafiaWs } from './mafiaWsProtocol'
@@ -1046,15 +1048,18 @@ export async function handleJoinRoom(
   // Anonymous sockets get `''`, which every Mafia authority check already rejects.
   const sessionUserId = deps.socketSessionUserId?.get(socket) ?? ''
   const userId = sanitizeUserId(sessionUserId)
-  if (process.env.NODE_ENV !== 'production') {
-    const clientClaim = sanitizeUserId(userIdRaw)
-    if (clientClaim.length > 0 && clientClaim !== userId) {
-      console.warn('[signaling] join-room userId mismatch ignored', {
-        peerId,
-        clientClaim: clientClaim.slice(0, 16),
-        sessionUserIdPresent: userId.length > 0,
-      })
-    }
+  // Sampled production-visible diagnostic for client-side userId spoofing attempts.
+  // The server already ignores `userIdRaw` entirely (the session JWT id wins above), so
+  // this only surfaces the attack signal for ops — it changes no behavior. Sampling
+  // 1/100 prevents log amplification under scripted abuse. Never log the full claim
+  // (PII); only a short prefix and presence flag are emitted.
+  const clientClaim = sanitizeUserId(userIdRaw)
+  if (clientClaim.length > 0 && clientClaim !== userId && Math.random() < 0.01) {
+    diagEmit('userid_claim_mismatch', 'warn', 'auth', room.id, null, {
+      peerId,
+      clientClaimPrefix: clientClaim.slice(0, 8),
+      sessionUserIdPresent: userId.length > 0,
+    })
   }
   // Audit R3: resolve the Prisma `User.id` from the upgrade-stamped promise so
   // Eat First host authority can compare against `room.ownerUserId` (Prisma id)
@@ -1134,6 +1139,10 @@ export async function handleJoinRoom(
   const isGameRoom = isGameRoomId(room.id)
   let gameRoomHostAssignedOnJoin = false
   if (isGameRoom && userId.length > 0) {
+    // Audit Batch F: warm the cache from the durable backstop BEFORE the
+    // auto-promote branch reads `getGameRoomOwnerUserId`, so a server restart
+    // never silently demotes the original streamer.
+    await hydrateGameRoomOwnerFromDb(room.id)
     // Generic game-room (Phase 3A) host reload recovery + owner-lock auto
     // assign on join. Parallel of the Mafia block below; never reads or
     // writes Mafia fields. See `handleGameRoomClaimHost` for the
@@ -1166,6 +1175,10 @@ export async function handleJoinRoom(
   const isMafiaRoom = isMafiaRoomId(room.id)
   let mafiaHostAssignedOnJoin = false
   if (isMafiaRoom && userId.length > 0) {
+    // Audit Batch F: warm the cache from the durable backstop BEFORE the
+    // auto-promote branch reads `getMafiaRoomOwnerUserId`, so a server restart
+    // never silently demotes the original streamer.
+    await hydrateMafiaRoomOwnerFromDb(room.id)
     const hostUserId = room.getMafiaHostUserId()
     const hostPeerId = room.getMafiaHostPeerId()
     const hostPeerOnline = hostPeerId != null && room.getPeer(hostPeerId) != null

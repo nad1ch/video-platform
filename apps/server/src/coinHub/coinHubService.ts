@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../prisma'
+import { isValidCaseRewardAmount } from './caseRewardValidator'
 import { CASE_OPEN_COOLDOWN_MS, caseSeedForCreate, CASE_OPEN_REWARD, HUB_CASE_IDS, pickDailySpinAmount } from './defaults'
 import { CoinHubHttpError } from './httpError'
 import type { ApiCoinCase, ApiCoinHub, CoinRewardJson, GetCoinHubResponse, OpenCaseResponse } from './types'
@@ -222,16 +223,14 @@ export async function openCase(
         throw new CoinHubHttpError(409, 'CASE_UNAVAILABLE', 'Case is not openable right now')
       }
     }
-    const n = CASE_OPEN_REWARD[caseId]
-    if (typeof n !== 'number' || n <= 0) {
-      if (!bypass) {
-        throw new CoinHubHttpError(409, 'CASE_LOCKED', 'Case cannot be opened')
-      }
-    }
-    const amount = typeof n === 'number' && n > 0 ? n : bypass ? 1 : 0
-    if (!bypass && amount <= 0) {
+    const rawReward = CASE_OPEN_REWARD[caseId]
+    if (!isValidCaseRewardAmount(rawReward)) {
+      // Audit: even with `bypass=true` we never mint a fallback amount. The bypass
+      // flag is for skipping cooldown/state checks in non-production dev — it must
+      // not invent a reward when the case config has none.
       throw new CoinHubHttpError(409, 'CASE_LOCKED', 'Case cannot be opened')
     }
+    const amount = rawReward
     const reward: CoinRewardJson = { kind: 'coins', amount: amount }
     await tx.coinBalance.update({
       where: { userId },

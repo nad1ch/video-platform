@@ -1,19 +1,13 @@
 /**
- * In-memory generic game-room → original-host-owner identity store.
+ * In-memory + DB-backed generic game-room → original-host-owner identity store.
  *
  * Parallel to {@link ./mafiaRoomOwnerStore.ts} but keyed by `gameroom:<base>`
- * room ids. The two stores are kept separate so a user who claims host of
- * `mafia:foo` does NOT auto-own `gameroom:foo` (and vice versa) — each
- * namespace has its own ownership lifetime.
+ * room ids. The two stores are kept separate (and the DB tables too) so a
+ * user who claims host of `mafia:foo` does NOT auto-own `gameroom:foo`
+ * (and vice versa) — each namespace has its own ownership lifetime.
  *
- * Same TTL semantics as the Mafia variant:
- *   - 24h default; refreshed on every claim / rejoin.
- *   - Lazy-expiring lookup (no global setInterval).
- *   - In-memory only; server restart drops ownership and the next first authed
- *     joiner of any namespaced room becomes the new owner.
- *
- * The store does NOT validate that the room belongs to a database row; it
- * only enforces ownership continuity for the current process lifetime.
+ * Storage layers, lifecycle, and dynamic Prisma load behavior match the
+ * Mafia variant — see that file for the full design notes.
  */
 
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000
@@ -29,11 +23,28 @@ function nowMs(): number {
   return Date.now()
 }
 
-/**
- * Lazy-expiring lookup: drops entries whose `expiresAt` has passed before
- * returning. Keeping the prune lazy avoids a global `setInterval` and the
- * map only ever holds rooms that have been touched recently.
- */
+function isDbConfigured(): boolean {
+  const u = process.env.DATABASE_URL
+  return typeof u === 'string' && u.trim().length > 0
+}
+
+let prismaModulePromise: Promise<typeof import('../prisma')> | null = null
+async function loadPrismaIfConfigured(): Promise<typeof import('../prisma') | null> {
+  if (!isDbConfigured()) return null
+  if (!prismaModulePromise) {
+    prismaModulePromise = import('../prisma')
+  }
+  try {
+    return await prismaModulePromise
+  } catch (err) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[gameroom-owner-store] prisma import failed; degrading to in-memory only', err)
+    }
+    return null
+  }
+}
+
+/** Synchronous cache lookup with lazy expiry. See Mafia variant for full docs. */
 export function getGameRoomOwnerUserId(roomId: string): string | null {
   const entry = ownerByRoomId.get(roomId)
   if (!entry) return null
@@ -45,11 +56,9 @@ export function getGameRoomOwnerUserId(roomId: string): string | null {
 }
 
 /**
- * Record `userId` as the original game-room owner for `roomId` (or refresh
- * the TTL if the same owner is asserting again). Use only after server-side
- * authority checks: the caller must have established that this `userId`
- * is allowed to become host (i.e., room had no prior owner OR matching
- * owner re-assertion OR validated transfer-host).
+ * Write-through: updates the cache synchronously and queues a best-effort
+ * Prisma upsert. Use only after server-side authority checks: the caller
+ * must have established that this `userId` is allowed to become host.
  */
 export function setGameRoomOwnerUserId(
   roomId: string,
@@ -58,12 +67,78 @@ export function setGameRoomOwnerUserId(
 ): void {
   if (typeof roomId !== 'string' || roomId.length === 0) return
   if (typeof userId !== 'string' || userId.length === 0) return
-  ownerByRoomId.set(roomId, { userId, expiresAt: nowMs() + Math.max(0, ttlMs) })
+  const expiresAt = nowMs() + Math.max(0, ttlMs)
+  ownerByRoomId.set(roomId, { userId, expiresAt })
+  void persistGameRoomOwner(roomId, userId, expiresAt)
+}
+
+async function persistGameRoomOwner(
+  roomId: string,
+  userId: string,
+  expiresAtMs: number,
+): Promise<void> {
+  const mod = await loadPrismaIfConfigured()
+  if (!mod) return
+  try {
+    const expiresAt = new Date(expiresAtMs)
+    await mod.prisma.gameRoomOwner.upsert({
+      where: { roomId },
+      create: { roomId, userId, expiresAt },
+      update: { userId, expiresAt },
+    })
+  } catch (err) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[gameroom-owner-store] persist upsert failed', { roomId, err })
+    }
+  }
+}
+
+/**
+ * Repopulate the in-memory cache for `roomId` from the durable backstop if
+ * the cache is cold. Must be called before any auto-promote-host decision
+ * after a server restart so the recorded owner re-asserts ownership.
+ */
+export async function hydrateGameRoomOwnerFromDb(roomId: string): Promise<void> {
+  if (typeof roomId !== 'string' || roomId.length === 0) return
+  if (ownerByRoomId.has(roomId)) return
+  const mod = await loadPrismaIfConfigured()
+  if (!mod) return
+  try {
+    const row = await mod.prisma.gameRoomOwner.findUnique({ where: { roomId } })
+    if (!row) return
+    const expiresAtMs = row.expiresAt.getTime()
+    if (expiresAtMs <= nowMs()) {
+      void mod.prisma.gameRoomOwner
+        .delete({ where: { roomId } })
+        .catch(() => {
+          /* best-effort lazy purge */
+        })
+      return
+    }
+    if (!ownerByRoomId.has(roomId)) {
+      ownerByRoomId.set(roomId, { userId: row.userId, expiresAt: expiresAtMs })
+    }
+  } catch (err) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[gameroom-owner-store] hydrate failed', { roomId, err })
+    }
+  }
 }
 
 /** Test/admin helper. No callers in the live signaling path today. */
 export function clearGameRoomOwner(roomId: string): void {
   ownerByRoomId.delete(roomId)
+  void persistGameRoomOwnerDelete(roomId)
+}
+
+async function persistGameRoomOwnerDelete(roomId: string): Promise<void> {
+  const mod = await loadPrismaIfConfigured()
+  if (!mod) return
+  try {
+    await mod.prisma.gameRoomOwner.delete({ where: { roomId } })
+  } catch {
+    /* row may not exist — best-effort */
+  }
 }
 
 /** Test-only helpers (not exported through any barrel). */
