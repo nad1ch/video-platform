@@ -558,6 +558,25 @@ model PredictionEntry {
   @@index([userId])
 }
 
+/// Per-streamer Viewer Economy settings. Owner-only writes (Streamer.ownerId
+/// or `StreamerMember.role='OWNER'`). Read by chat/participation/case
+/// rewarders to gate behavior per stream. A missing row implies safe
+/// defaults from `economyConfig` — operators never have to seed a row to
+/// keep earn flows working.
+model StreamerEconomySettings {
+  streamerId                 String   @id
+  chatRewardsEnabled         Boolean  @default(true)
+  predictionsEnabled         Boolean  @default(true)
+  caseDropsEnabled           Boolean  @default(true)
+  /// Per-viewer cap on coins earnable per stream (separate from per-day cap).
+  maxCoinsPerViewerPerStream Int      @default(500)
+  maxPredictionStake         Int      @default(10000)
+  maxActivePredictions       Int      @default(3)
+  metadata                   Json?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
 /// Catalog of badge cosmetics (visible chips earned via cases / events).
 model Badge {
   slug        String      @id

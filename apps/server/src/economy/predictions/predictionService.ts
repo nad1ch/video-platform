@@ -5,6 +5,7 @@ import { WalletInsufficientFundsError } from '../ledger/types'
 import { grantPending } from '../claims/claimService'
 import { PREDICTIONS, resolvePendingExpiryMs } from '../economyConfig'
 import { isStreamerOwner } from '../streamerOwnership'
+import { getStreamerSettings } from '../streamer/streamerSettingsService'
 
 const TX_SERIAL: { isolationLevel: Prisma.TransactionIsolationLevel } = {
   isolationLevel: 'Serializable',
@@ -90,6 +91,20 @@ export async function createPrediction(
     Math.max(60_000, Math.floor(input.durationMs)),
   )
 
+  const streamerSettings = await getStreamerSettings(input.streamerId)
+  if (!streamerSettings.predictionsEnabled) {
+    throw new PredictionError(
+      403,
+      'PREDICTIONS_DISABLED_FOR_STREAMER',
+      'This streamer has predictions disabled',
+    )
+  }
+  const maxActivePerStreamer = Math.min(
+    PREDICTIONS.maxActivePerStreamer,
+    streamerSettings.maxActivePredictions,
+  )
+  const effectiveMaxStake = Math.min(maxStake, streamerSettings.maxPredictionStake)
+
   return prisma.$transaction(async (tx) => {
     const active = await tx.prediction.count({
       where: {
@@ -97,11 +112,11 @@ export async function createPrediction(
         status: { in: ['open', 'locked'] },
       },
     })
-    if (active >= PREDICTIONS.maxActivePerStreamer) {
+    if (active >= maxActivePerStreamer) {
       throw new PredictionError(
         409,
         'TOO_MANY_ACTIVE',
-        `Streamer already has ${active} active predictions (max ${PREDICTIONS.maxActivePerStreamer})`,
+        `Streamer already has ${active} active predictions (max ${maxActivePerStreamer})`,
       )
     }
     const prediction = await tx.prediction.create({
@@ -112,7 +127,7 @@ export async function createPrediction(
         status: 'open',
         lockAt: new Date(Date.now() + duration),
         minStake,
-        maxStake,
+        maxStake: effectiveMaxStake,
       },
       select: { id: true },
     })

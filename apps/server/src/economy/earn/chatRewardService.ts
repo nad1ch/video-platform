@@ -5,6 +5,7 @@ import { CHAT_REWARD, resolvePendingExpiryMs } from '../economyConfig'
 import { grantPending } from '../claims/claimService'
 import { utcDayKey } from '../claims/dailyClaim'
 import { applyEarnBoost } from '../perks/subscriptionPerks'
+import { getStreamerSettings } from '../streamer/streamerSettingsService'
 
 /**
  * Chat-activity reward grantor. Called from the Twitch IRC ingest path
@@ -138,6 +139,13 @@ export async function awardChatActivity(
         lastTextAtMs: nowMs,
       })
       return { granted: false, reason: 'no_prisma_user' }
+    }
+
+    // Per-streamer override: when the streamer has explicitly disabled chat
+    // rewards (or has no row, falling back to default), respect the setting.
+    const settings = await getStreamerSettings(input.streamerId)
+    if (!settings.chatRewardsEnabled) {
+      return { granted: false, reason: 'disabled' }
     }
 
     const dayKey = utcDayKey(now)
