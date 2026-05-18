@@ -162,6 +162,19 @@ function summarizeActivity(
   }
 }
 
+/**
+ * Parse an ISO datetime query param. Returns `undefined` when the value
+ * is missing or invalid so callers can skip the where clause rather than
+ * crashing on `new Date(NaN)`.
+ */
+function parseAdminDateParam(value: unknown): Date | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const ms = Date.parse(trimmed)
+  return Number.isFinite(ms) ? new Date(ms) : undefined
+}
+
 export function mountAdminRoutes(app: Express): void {
   app.get('/api/admin/users', async (req: Request, res: Response) => {
     if (!(await requireAdmin(req, res))) {
@@ -172,8 +185,34 @@ export function mountAdminRoutes(app: Express): void {
       return
     }
     try {
+      /**
+       * Optional date range filters. Invalid values are ignored (not
+       * 400'd) so a half-typed `datetime-local` value in the admin UI
+       * never bricks the list. `createdAt`/`updatedAt` are both indexed
+       * via the User model; the existing `take: 250` + `orderBy: updatedAt`
+       * stays as-is so the page caps at the same size whether or not
+       * date filters are applied.
+       */
+      const createdFrom = parseAdminDateParam(req.query.createdFrom)
+      const createdTo = parseAdminDateParam(req.query.createdTo)
+      const updatedFrom = parseAdminDateParam(req.query.updatedFrom)
+      const updatedTo = parseAdminDateParam(req.query.updatedTo)
+      const where: Prisma.UserWhereInput = {}
+      if (createdFrom || createdTo) {
+        where.createdAt = {
+          ...(createdFrom ? { gte: createdFrom } : {}),
+          ...(createdTo ? { lte: createdTo } : {}),
+        }
+      }
+      if (updatedFrom || updatedTo) {
+        where.updatedAt = {
+          ...(updatedFrom ? { gte: updatedFrom } : {}),
+          ...(updatedTo ? { lte: updatedTo } : {}),
+        }
+      }
       const [rows, userStatsAgg] = await Promise.all([
         prisma.user.findMany({
+          where,
           take: 250,
           orderBy: { updatedAt: 'desc' },
           select: {
