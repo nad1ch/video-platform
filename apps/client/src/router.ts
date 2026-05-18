@@ -183,6 +183,30 @@ export const router = createRouter({
           component: () => import('./pages/CoinHubPage.vue'),
         },
         {
+          path: 'wallet',
+          name: 'economy-wallet',
+          meta: { appTitle: 'Wallet', footerContext: 'home', requiresAuth: true },
+          component: () => import('./features/economy/pages/EconomyWalletPage.vue'),
+        },
+        {
+          path: 'cases',
+          name: 'economy-cases',
+          meta: { appTitle: 'Cases', footerContext: 'home', requiresAuth: true },
+          component: () => import('./features/economy/pages/EconomyCasesPage.vue'),
+        },
+        {
+          path: 'predictions/:streamerId',
+          name: 'economy-predictions',
+          meta: { appTitle: 'Predictions', footerContext: 'home', requiresAuth: true },
+          component: () => import('./features/economy/pages/EconomyPredictionsPage.vue'),
+        },
+        {
+          path: 'streamer/:streamerId/economy',
+          name: 'economy-streamer-settings',
+          meta: { appTitle: 'Streamer economy', footerContext: 'home', requiresAuth: true },
+          component: () => import('./features/economy/pages/EconomyStreamerSettingsPage.vue'),
+        },
+        {
           path: 'billing',
           name: 'billing',
           meta: { appTitle: 'Stream Assist Pro', footerContext: 'home', requiresAuth: true },
@@ -232,6 +256,11 @@ export const router = createRouter({
               path: 'billing',
               name: 'admin-billing',
               component: () => import('./admin/ui/AdminBilling.vue'),
+            },
+            {
+              path: 'economy',
+              name: 'admin-economy',
+              component: () => import('./admin/ui/AdminEconomy.vue'),
             },
             {
               path: 'diagnostics',

@@ -1,5 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../prisma'
+import { applyDelta } from '../economy/ledger/walletService'
+import { claimAllPending, sumClaimablePending } from '../economy/claims/claimService'
 import { isValidCaseRewardAmount } from './caseRewardValidator'
 import { CASE_OPEN_COOLDOWN_MS, caseSeedForCreate, CASE_OPEN_REWARD, HUB_CASE_IDS, pickDailySpinAmount } from './defaults'
 import { CoinHubHttpError } from './httpError'
@@ -87,11 +89,16 @@ async function loadAndBuild(
   userId: string,
   now: Date,
 ): Promise<ApiCoinHub> {
-  const [bal, pen, sp, caseRows] = await Promise.all([
+  const [bal, pen, sp, caseRows, pendingRewardsSum] = await Promise.all([
     tx.coinBalance.findUniqueOrThrow({ where: { userId } }),
     tx.pending.findUniqueOrThrow({ where: { userId } }),
     tx.spin.findUniqueOrThrow({ where: { userId } }),
     tx.coinCase.findMany({ where: { userId } }),
+    // Phase 1: the `pending` field on the API contract is now the SUM of the
+    // legacy `Pending.amount` counter and the unexpired/unclaimed
+    // `PendingReward` rows. The existing CoinHub UI just reads a single
+    // integer, so this stays backward-compatible without any frontend edit.
+    sumClaimablePending(tx, userId, now),
   ])
   const nextSpin = sp.nextAvailableAt
   const spinAvailable = isSpinAvailable(nextSpin, now)
@@ -115,7 +122,7 @@ async function loadAndBuild(
   })
   return {
     balance: bal.amount,
-    pending: pen.amount,
+    pending: pen.amount + pendingRewardsSum.coinAmount,
     spin: {
       available: spinAvailable,
       nextAvailableAt: !spinAvailable && sp.nextAvailableAt ? sp.nextAvailableAt.toISOString() : null,
@@ -141,14 +148,22 @@ export async function claimPending(userId: string, now: Date = new Date()): Prom
   return prisma.$transaction(async (tx) => {
     await ensureUserCoinHub(tx, userId, now)
     await reconcileExpiredCaseCooldowns(tx, userId, now)
+    // Drain legacy `Pending.amount` counter through the ledger. New earn
+    // surfaces (Phase 1+) write typed `PendingReward` rows instead, but the
+    // counter is still consulted here to preserve historical claim behavior
+    // for any installation upgrading from a pre-Phase-1 schema.
     const pen = await tx.pending.findUniqueOrThrow({ where: { userId } })
     if (pen.amount > 0) {
-      await tx.coinBalance.update({
-        where: { userId },
-        data: { amount: { increment: pen.amount } },
+      await applyDelta(tx, userId, {
+        delta: pen.amount,
+        source: 'claim_pending',
+        sourceRef: 'legacy:Pending',
       })
       await tx.pending.update({ where: { userId }, data: { amount: 0 } })
     }
+    // Drain typed `PendingReward` rows (daily, chat, game, etc.). Each row's
+    // coin and XP amounts flow through the ledger inside this same txn.
+    await claimAllPending(tx, userId, now)
     const coinHub = await loadAndBuild(tx, userId, now)
     return { coinHub }
   }, TX_SERIAL)
@@ -175,9 +190,9 @@ export async function spin(
     }
     const amount = pickDailySpinAmount()
     const reward: CoinRewardJson = { kind: 'coins', amount }
-    await tx.coinBalance.update({
-      where: { userId },
-      data: { amount: { increment: reward.amount } },
+    await applyDelta(tx, userId, {
+      delta: reward.amount,
+      source: 'daily_spin',
     })
     const next = startOfNextUtcDay(now)
     await tx.spin.update({
@@ -232,9 +247,10 @@ export async function openCase(
     }
     const amount = rawReward
     const reward: CoinRewardJson = { kind: 'coins', amount: amount }
-    await tx.coinBalance.update({
-      where: { userId },
-      data: { amount: { increment: amount } },
+    await applyDelta(tx, userId, {
+      delta: amount,
+      source: 'case_open',
+      sourceRef: caseId,
     })
     const until = new Date(now.getTime() + CASE_OPEN_COOLDOWN_MS)
     await tx.coinCase.update({

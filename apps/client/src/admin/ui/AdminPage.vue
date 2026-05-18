@@ -11,6 +11,7 @@ const items = computed(() => [
   { name: 'admin-streamers' as const, label: t('adminPanel.navStreamers'), to: '/app/admin/streamers' },
   { name: 'admin-games' as const, label: t('adminPanel.navGames'), to: '/app/admin/games' },
   { name: 'admin-billing' as const, label: t('adminPanel.navBilling'), to: '/app/admin/billing' },
+  { name: 'admin-economy' as const, label: 'Economy', to: '/app/admin/economy' },
   { name: 'admin-stats' as const, label: t('adminPanel.navStats'), to: '/app/admin/stats' },
   { name: 'admin-debug' as const, label: t('adminPanel.navSession'), to: '/app/admin/debug' },
   { name: 'admin-diagnostics' as const, label: t('adminPanel.navDiagnostics'), to: '/app/admin/diagnostics' },

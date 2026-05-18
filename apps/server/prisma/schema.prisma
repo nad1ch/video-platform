@@ -89,6 +89,19 @@ model User {
   coinHubPending          Pending?
   coinHubSpin             Spin?
   coinHubCases            CoinCase[]
+  coinTransactions        CoinTransaction[]
+  pendingRewards          PendingReward[]
+  claims                  Claim[]
+  xpBalance               XpBalance?
+  xpTransactions          XpTransaction[]
+  caseInventory           UserCaseInventory[]
+  casePity                UserPity[]
+  caseOpenings            CaseOpening[]
+  predictionsCreated      Prediction[]             @relation("PredictionCreatedBy")
+  predictionEntries       PredictionEntry[]
+  userBadges              UserBadge[]
+  userCosmetics           UserCosmetic[]
+  equippedCosmetics       EquippedCosmetic[]
   activityEvents          UserActivityEvent[]
   clientErrors            ClientErrorEvent[]
   emailVerificationTokens EmailVerificationToken[]
@@ -211,6 +224,427 @@ model Spin {
   nextAvailableAt DateTime?
   lastReward      Json?
   updatedAt       DateTime  @updatedAt
+}
+
+/// Append-only ledger of every coin movement. The single source of truth for
+/// "did this user's balance change, when, and why?". Every mutation of
+/// `CoinBalance.amount` must write exactly one row here inside the same
+/// Prisma transaction (see `apps/server/src/economy/ledger/walletService.ts`).
+/// Invariant: `sum(CoinTransaction.delta WHERE userId = X) == CoinBalance.amount`
+/// for any user X (initial backfill seeds one `migration_seed` row per
+/// pre-existing non-zero `CoinBalance`).
+model CoinTransaction {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Signed integer; positive = credit, negative = future spend.
+  delta          Int
+  /// Snapshot of `CoinBalance.amount` immediately before this delta.
+  balanceBefore  Int
+  /// Snapshot of `CoinBalance.amount` immediately after this delta (== before + delta).
+  balanceAfter   Int
+  /// Coarse classification of the movement source. Known values include:
+  /// `daily_spin`, `case_open`, `claim_pending`, `migration_seed`. Future
+  /// branches add `chat_activity`, `prediction_stake`, `prediction_payout`,
+  /// `admin_grant`, `admin_revoke`, `spend_*`.
+  source         String
+  /// Free-form correlation token (e.g. `caseId`, `roundId`,
+  /// `predictionId:entryId`). Nullable when the source carries no natural ref.
+  sourceRef      String?
+  /// Optional unique idempotency token. When supplied, a second `applyDelta`
+  /// with the same key collapses to a no-op replay instead of writing a
+  /// duplicate ledger row. Null is allowed (current CoinHub call sites do
+  /// not supply one because cooldowns already gate retries).
+  idempotencyKey String?  @unique
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([source, createdAt])
+}
+
+/// Typed unclaimed grants. Replaces the flat `Pending.amount` counter for any
+/// new earn mechanic (daily, chat_activity, watch_time, game_participation,
+/// streak, event, prediction_payout, subscription_chest, streamer_loyalty,
+/// legacy). The flat `Pending` table is preserved so the existing CoinHub
+/// claim API stays backward-compatible — `claimPending` now consumes BOTH
+/// `Pending.amount` and unexpired `PendingReward` rows in one Serializable
+/// transaction. Rows are never deleted; `claimedAt` or `lostAt` is stamped
+/// so the row remains an auditable history line.
+model PendingReward {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// One of: `daily`, `chat_activity`, `watch_time`, `game_participation`,
+  /// `streak`, `event`, `prediction_payout`, `subscription_chest`,
+  /// `streamer_loyalty`, `legacy`. New kinds may be added by future branches;
+  /// the column is intentionally `String` (not enum) so additions do not need
+  /// a schema migration.
+  kind           String
+  coinAmount     Int       @default(0)
+  xpAmount       Int       @default(0)
+  /// Optional streamer context (e.g. chat reward earned in a specific stream).
+  streamerId     String?
+  /// Free-form correlation token (roundId, predictionId:entryId, etc.).
+  sourceRef      String?
+  /// Unique idempotency token. The unique constraint is the guarantor that
+  /// retries of an earn event (chat redelivery, duplicate round persistence,
+  /// repeated daily grant on the same UTC day) do not create duplicate rows.
+  idempotencyKey String?   @unique
+  metadata       Json?
+  /// Hard expiry; an expired row is no longer claimable. Defaults set by the
+  /// grantor (chat = 7d, daily/game/event = 30d by current config).
+  expiresAt      DateTime
+  /// Single-flight claim marker. Once set, the row is consumed and the wallet
+  /// has been credited via `walletService.applyDelta` inside the same txn.
+  claimedAt      DateTime?
+  /// Set when a sweeper observes `expiresAt < now` AND `claimedAt IS NULL`.
+  /// Kept for audit; never reused.
+  lostAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId, claimedAt, lostAt, expiresAt])
+  @@index([expiresAt, claimedAt])
+  @@index([kind, createdAt])
+}
+
+/// Per-user XP total + materialized level. The single source of truth for
+/// "XP progress and current level". Mutated only by
+/// `apps/server/src/economy/ledger/xpService.applyXpDelta`. Invariant:
+/// `sum(XpTransaction.delta WHERE userId = X) == XpBalance.amount`. `level`
+/// is denormalized from `amount` via `levelCurve.levelFromXp` and recomputed
+/// on every write so reads don't need to recompute.
+model XpBalance {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Int      @default(0)
+  level     Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+/// Append-only XP ledger — same shape as `CoinTransaction` but for XP. Kept
+/// as a separate table (not a `kind` column on `CoinTransaction`) so coin
+/// and XP grants stay clearly identifiable in queries and so future
+/// `level_up`-style derived sources don't pollute the coin ledger.
+model XpTransaction {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  delta          Int
+  balanceBefore  Int
+  balanceAfter   Int
+  /// Coarse classification: `claim_pending`, `admin_grant`, `admin_revoke`,
+  /// `case_open`, `daily_spin`, etc. Tracks the same source vocabulary as
+  /// `CoinTransaction.source`.
+  source         String
+  sourceRef      String?
+  idempotencyKey String?  @unique
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([source, createdAt])
+}
+
+/// Audit trail of claim events. One row per `claimAll` / `claimById` call
+/// that consumed at least one `PendingReward`. The `consumedPendingIds`
+/// JSON array carries the ids of the rows that were claimed in this event
+/// so a future "transaction history" UI can show a single coalesced row.
+model Claim {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Coarse classification (`all` when the user invoked claim-all; otherwise
+  /// the `PendingReward.kind` that was claimed by id).
+  kind               String
+  /// Sum of `coinAmount` across consumed pending rows.
+  coinTotal          Int
+  /// Sum of `xpAmount` across consumed pending rows.
+  xpTotal            Int      @default(0)
+  /// JSON array of consumed `PendingReward.id` values.
+  consumedPendingIds Json
+  createdAt          DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+/// Catalog of openable cases (the public set of "loot boxes"). The legacy
+/// CoinHub case ids (`luck-0`..`luck-3`, `free`, `subscriber`) are NOT
+/// required to exist in this catalog — the open-case path falls back to the
+/// hard-coded legacy table when a slug is absent here, preserving today's
+/// UI. New cases are introduced by inserting rows here (admin tooling /
+/// seeded migration / streamer-specific cases via `streamerId`).
+model CaseCatalog {
+  /// Stable URL/API slug. Matches `CoinCase.caseId` for legacy ids.
+  slug               String       @id
+  displayName        String
+  /// `common` | `rare` | `epic` | `legendary` — drives visible odds tier UI.
+  rarityTier         String       @default("common")
+  isActive           Boolean      @default(true)
+  /// Guarantee that the rolled reward is at least this many coins. Even on
+  /// a "junk" weight the user never opens an empty case.
+  guaranteedMinCoins Int          @default(1)
+  /// After this many opens without a non-minimum result, the next open is
+  /// forced to the highest-weight non-minimum reward (pity).
+  pityFloorCount     Int          @default(10)
+  /// Optional streamer scope for "streamer-only" cases. Null = global.
+  streamerId         String?
+  metadata           Json?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  rewards            CaseReward[]
+
+  @@index([streamerId])
+  @@index([isActive])
+}
+
+/// Possible rewards inside a case + weights. Weighted random selection;
+/// `weight` is relative (sum across rewards for a case need not equal 100).
+/// `minPityCount` floors a reward to only fire after the user accumulated
+/// at least that many "bad pulls"; if the catalog row has any reward with
+/// `minPityCount > 0`, normal rolls below the threshold draw from the
+/// other rewards only.
+model CaseReward {
+  id           String      @id @default(cuid())
+  caseSlug     String
+  case         CaseCatalog @relation(fields: [caseSlug], references: [slug], onDelete: Cascade)
+  weight       Int
+  /// `coins` | `xp` | `badge` | `cosmetic` | `fragment` — see CaseReward kinds
+  /// in the cases module. Coin/xp rewards encode `value`; inventory rewards
+  /// encode `referenceId` (badge / cosmetic slug).
+  kind         String
+  value        Int         @default(0)
+  referenceId  String?
+  /// Pity threshold; 0 means "always eligible". Used to back the "guaranteed
+  /// after N opens" UI.
+  minPityCount Int         @default(0)
+  metadata     Json?
+  createdAt    DateTime    @default(now())
+
+  @@index([caseSlug])
+}
+
+/// Per-user case inventory (count of unopened cases per slug). The legacy
+/// `CoinCase` table (state machine for the static six hub cases) is preserved
+/// untouched; this table covers the new "earned cases" model where a viewer
+/// can stack multiple of the same case.
+model UserCaseInventory {
+  userId    String
+  caseSlug  String
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, caseSlug])
+  @@index([userId])
+}
+
+/// Per-user per-case pity counter. Incremented when a roll lands on the
+/// minimum reward, reset when it lands on anything higher. Independent of
+/// inventory: opening a case decrements inventory and may bump pity.
+model UserPity {
+  userId    String
+  caseSlug  String
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, caseSlug])
+  @@index([userId])
+}
+
+/// Auditable history of one case open. Records the chosen `CaseReward` and
+/// links to the coin/xp ledger rows produced (when the reward was coin/xp).
+model CaseOpening {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  caseSlug          String
+  rewardId          String?
+  rewardKind        String
+  rewardValue       Int      @default(0)
+  rewardReferenceId String?
+  coinTransactionId String?
+  xpTransactionId   String?
+  pityCountBefore   Int      @default(0)
+  pityCountAfter    Int      @default(0)
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([caseSlug, createdAt])
+}
+
+/// Internal-only Twitch-style prediction. Backed by viewer-earned coins —
+/// never real money, never cashable. The streamer/host (verified by
+/// `Streamer.ownerId`) creates a prediction, viewers stake earned coins
+/// from their `CoinBalance`, and the host resolves it. Payouts land as
+/// `PendingReward(kind='prediction_payout')` so viewers see them in the
+/// normal claim flow.
+///
+/// Pool math (resolve):
+///   totalPool   = sum(PredictionEntry.stake)
+///   winningPool = sum(PredictionEntry.stake WHERE optionId == winningOptionId)
+///   userReward  = floor(entry.stake / winningPool * totalPool)
+/// Cancellation refunds each entry its `stake` via the coin ledger.
+model Prediction {
+  id              String             @id @default(cuid())
+  streamerId      String
+  createdByUserId String
+  createdBy       User               @relation("PredictionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  title           String
+  /// `open` | `locked` | `resolved` | `cancelled`.
+  status          String             @default("open")
+  lockAt          DateTime
+  resolvedAt      DateTime?
+  cancelledAt     DateTime?
+  winningOptionId String?
+  minStake        Int
+  maxStake        Int
+  /// Denormalized — sum of all entry stakes. Updated inside the same
+  /// Serializable transaction that writes a `PredictionEntry`.
+  totalPool       Int                @default(0)
+  /// Denormalized — sum of `payout` across entries on the winning option.
+  totalPaidOut    Int                @default(0)
+  metadata        Json?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  options         PredictionOption[]
+  entries         PredictionEntry[]
+
+  @@index([streamerId, status])
+  @@index([status, lockAt])
+}
+
+/// One of the choices on a prediction (binary or multi-option).
+model PredictionOption {
+  id           String            @id @default(cuid())
+  predictionId String
+  prediction   Prediction        @relation(fields: [predictionId], references: [id], onDelete: Cascade)
+  label        String
+  /// Denormalized — sum of stakes on this option.
+  totalStakes  Int               @default(0)
+  /// Display order in the UI.
+  position     Int               @default(0)
+  entries      PredictionEntry[]
+
+  @@index([predictionId])
+}
+
+/// One stake by one user on one option. Constrained `(predictionId, userId)`
+/// unique — a viewer cannot split across multiple options in MVP. Linking
+/// the coin ledger row that performed the stake is recorded on
+/// `stakeCoinTransactionId`; on resolve the payout ledger row id is
+/// recorded on `payoutCoinTransactionId` (null for losing entries).
+model PredictionEntry {
+  id                      String           @id @default(cuid())
+  predictionId            String
+  prediction              Prediction       @relation(fields: [predictionId], references: [id], onDelete: Cascade)
+  optionId                String
+  option                  PredictionOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  userId                  String
+  user                    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stake                   Int
+  /// Filled in on resolve. 0 for losers, positive for winners.
+  payout                  Int              @default(0)
+  refunded                Boolean          @default(false)
+  stakeCoinTransactionId  String?          @unique
+  payoutPendingRewardId   String?          @unique
+  refundCoinTransactionId String?          @unique
+  createdAt               DateTime         @default(now())
+
+  @@unique([predictionId, userId])
+  @@index([optionId])
+  @@index([userId])
+}
+
+/// Per-streamer Viewer Economy settings. Owner-only writes (Streamer.ownerId
+/// or `StreamerMember.role='OWNER'`). Read by chat/participation/case
+/// rewarders to gate behavior per stream. A missing row implies safe
+/// defaults from `economyConfig` — operators never have to seed a row to
+/// keep earn flows working.
+model StreamerEconomySettings {
+  streamerId                 String   @id
+  chatRewardsEnabled         Boolean  @default(true)
+  predictionsEnabled         Boolean  @default(true)
+  caseDropsEnabled           Boolean  @default(true)
+  /// Per-viewer cap on coins earnable per stream (separate from per-day cap).
+  maxCoinsPerViewerPerStream Int      @default(500)
+  maxPredictionStake         Int      @default(10000)
+  maxActivePredictions       Int      @default(3)
+  metadata                   Json?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
+/// Catalog of badge cosmetics (visible chips earned via cases / events).
+model Badge {
+  slug        String      @id
+  displayName String
+  iconUrl     String?
+  rarityTier  String      @default("common")
+  isActive    Boolean     @default(true)
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  ownedBy     UserBadge[]
+}
+
+/// Per-user owned badges. Acquisition is idempotent — re-granting the same
+/// `(userId, badgeSlug)` is a no-op (composite PK).
+model UserBadge {
+  userId     String
+  badgeSlug  String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge      Badge    @relation(fields: [badgeSlug], references: [slug], onDelete: Cascade)
+  acquiredAt DateTime @default(now())
+
+  @@id([userId, badgeSlug])
+  @@index([userId])
+}
+
+/// Catalog of cosmetic items (chat colors, frames, chat effects, nickname
+/// colors, etc.). Cosmetics are distinct from badges so the inventory UI
+/// can render them with kind-specific affordances (equip vs display).
+model Cosmetic {
+  slug        String             @id
+  displayName String
+  /// `frame` | `chat_color` | `chat_effect` | `nickname_color` | `…`.
+  kind        String
+  rarityTier  String             @default("common")
+  isActive    Boolean            @default(true)
+  metadata    Json?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  ownedBy     UserCosmetic[]
+  equippedBy  EquippedCosmetic[]
+}
+
+model UserCosmetic {
+  userId       String
+  cosmeticSlug String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cosmetic     Cosmetic @relation(fields: [cosmeticSlug], references: [slug], onDelete: Cascade)
+  acquiredAt   DateTime @default(now())
+
+  @@id([userId, cosmeticSlug])
+  @@index([userId])
+}
+
+/// One row per (user, kind) — the cosmetic currently equipped in that slot
+/// (e.g. one chat color, one frame). A user equipping a different cosmetic
+/// in the same kind overwrites this row.
+model EquippedCosmetic {
+  userId       String
+  kind         String
+  cosmeticSlug String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cosmetic     Cosmetic @relation(fields: [cosmeticSlug], references: [slug], onDelete: Cascade)
+  updatedAt    DateTime @updatedAt
+
+  @@id([userId, kind])
+  @@index([userId])
+  @@index([cosmeticSlug])
 }
 
 /// One row per user per hub case (ids: `luck-0`…`luck-3`, `free`, `subscriber`). Named `CoinCase` so Prisma client is valid (`Case` would emit `prisma.case`).
