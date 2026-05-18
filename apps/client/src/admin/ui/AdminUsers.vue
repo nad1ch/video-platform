@@ -14,6 +14,14 @@ const { users, loading, errorKey, databaseConfigured, lastUpdated, load } = useA
 
 const searchQuery = ref('')
 const sortKey = ref<'name' | 'wins' | 'rating'>('name')
+/**
+ * `<input type="datetime-local">` values for the `createdAt` range filter.
+ * Converted to ISO and sent as `createdFrom`/`createdTo` server params.
+ * Invalid/empty values are dropped so the server-side default behavior
+ * (no date filter, `take: 250`, `orderBy: updatedAt desc`) is preserved.
+ */
+const createdFromInput = ref('')
+const createdToInput = ref('')
 const copyFeedbackId = ref<string | null>(null)
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 const rolePatchingId = ref<string | null>(null)
@@ -383,7 +391,7 @@ async function patchUserRoles(
       rolePatchError.value = t('adminPanel.usersRolePatchError')
       return false
     }
-    await load()
+    await load(currentUserFilters())
     return true
   } catch {
     rolePatchError.value = t('adminPanel.usersRolePatchError')
@@ -475,6 +483,31 @@ async function copyId(id: string) {
   }, 1600)
 }
 
+function localDateTimeToIsoOrNull(local: string): string | null {
+  if (!local) return null
+  const ms = Date.parse(local)
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null
+}
+
+function currentUserFilters(): { createdFrom?: string; createdTo?: string } {
+  const out: { createdFrom?: string; createdTo?: string } = {}
+  const from = localDateTimeToIsoOrNull(createdFromInput.value)
+  if (from) out.createdFrom = from
+  const to = localDateTimeToIsoOrNull(createdToInput.value)
+  if (to) out.createdTo = to
+  return out
+}
+
+async function applyUserDateFilters(): Promise<void> {
+  await load(currentUserFilters())
+}
+
+async function clearUserDateFilters(): Promise<void> {
+  createdFromInput.value = ''
+  createdToInput.value = ''
+  await load()
+}
+
 onMounted(() => {
   void load()
   document.addEventListener('keydown', onDocKeydown)
@@ -500,7 +533,7 @@ onUnmounted(() => {
         type="button"
         class="shrink-0 rounded-lg border border-slate-700/80 bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-100 shadow-sm transition hover:bg-slate-700/90 disabled:opacity-50"
         :disabled="loading"
-        @click="load"
+        @click="() => load(currentUserFilters())"
       >
         {{ t('adminPanel.usersRefreshList') }}
       </button>
@@ -520,7 +553,7 @@ onUnmounted(() => {
       <button
         type="button"
         class="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 ring-1 ring-slate-600 hover:bg-slate-700"
-        @click="load"
+        @click="() => load(currentUserFilters())"
       >
         {{ t('adminPanel.commonRetry') }}
       </button>
@@ -571,6 +604,38 @@ onUnmounted(() => {
           />
         </label>
         <div class="flex flex-wrap items-end gap-3">
+          <label class="flex flex-col gap-1.5">
+            <span class="text-[11px] font-medium uppercase tracking-wide text-slate-500">Created from</span>
+            <input
+              v-model="createdFromInput"
+              type="datetime-local"
+              class="rounded-lg border border-slate-700/80 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 focus:border-cyan-600/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
+              @keyup.enter="applyUserDateFilters"
+            />
+          </label>
+          <label class="flex flex-col gap-1.5">
+            <span class="text-[11px] font-medium uppercase tracking-wide text-slate-500">Created to</span>
+            <input
+              v-model="createdToInput"
+              type="datetime-local"
+              class="rounded-lg border border-slate-700/80 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 focus:border-cyan-600/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
+              @keyup.enter="applyUserDateFilters"
+            />
+          </label>
+          <button
+            type="button"
+            class="rounded-lg bg-cyan-900/70 px-3 py-2 text-xs font-semibold text-cyan-50 ring-1 ring-cyan-600/40 transition hover:bg-cyan-800/80"
+            @click="applyUserDateFilters"
+          >
+            Apply
+          </button>
+          <button
+            type="button"
+            class="rounded-lg bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-200 ring-1 ring-slate-600/40 transition hover:bg-slate-700/90"
+            @click="clearUserDateFilters"
+          >
+            Clear
+          </button>
           <label class="flex flex-col gap-1.5">
             <span class="text-[11px] font-medium uppercase tracking-wide text-slate-500">{{ t('adminPanel.usersSortLabel') }}</span>
             <select
