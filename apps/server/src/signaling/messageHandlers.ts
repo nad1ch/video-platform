@@ -98,7 +98,10 @@ import {
   setEatFirstSelectedTimerDurationMs,
   setEatFirstTimer,
   getEatFirstSelectedTimerDurationMs,
+  setEatFirstPageBackgroundsState,
+  getEatFirstPageBackgroundsState,
   type EatFirstTableSyncPayload,
+  type EatFirstPageBackgroundItem,
 } from '../eatFirst/tableState'
 import {
   EAT_FIRST_TRAIT_KEYS,
@@ -325,6 +328,14 @@ export type ServerMessage =
   | { type: 'eat:table-state-sync'; payload: EatFirstTableSyncPayload }
   | { type: 'eat:timer-preset-select'; payload: { durationMs: number } }
   | { type: 'eat:audio-mix-update'; payload: { entries: EatFirstAudioMixEntry[] } }
+  | {
+      type: 'eat:page-background-settings'
+      payload: {
+        backgrounds: MafiaPageBackgroundItem[]
+        selectedBackgroundId: string | null
+        forcedBackgroundId: string | null
+      }
+    }
 
 /**
  * Best-effort diagnostics emit from server signaling code. Type is `string`
@@ -740,6 +751,29 @@ async function broadcastEatFirstTableState(room: Room): Promise<void> {
   broadcastServerMessageToRoom(room, {
     type: 'eat:trait-state-sync',
     payload: eatFirstTraitStatePayloadFromTable(table),
+  })
+}
+
+/**
+ * Persist the latest host-shared page-background gallery + forced id in
+ * the EF in-memory table state, then broadcast the new state to every
+ * peer in the room. Mirrors Mafia's `broadcastMafiaPageBackgroundSettings`
+ * (`messageHandlers.ts` :3024). `selectedBackgroundId` is round-tripped
+ * for client UI convenience but not stored server-side (it's the host's
+ * local selection before they shared, not part of the room-wide state).
+ */
+function broadcastEatFirstPageBackgroundSettings(
+  room: Room,
+  payload: {
+    backgrounds: EatFirstPageBackgroundItem[]
+    selectedBackgroundId: string | null
+    forcedBackgroundId: string | null
+  },
+): void {
+  setEatFirstPageBackgroundsState(room.id, payload.backgrounds, payload.forcedBackgroundId)
+  broadcastServerMessageToRoom(room, {
+    type: 'eat:page-background-settings',
+    payload,
   })
 }
 
@@ -1283,6 +1317,23 @@ export async function handleJoinRoom(
       sendServerMessage(socket, {
         type: 'eat:timer-preset-select',
         payload: { durationMs: eSel },
+      })
+    }
+    // Replay current page-background gallery + host-forced background to
+    // this socket only so a late joiner / OBS reload immediately renders
+    // the host-shared page background. Only sent when the host has
+    // pushed at least one update (empty gallery → skip to keep the wire
+    // quiet for fresh rooms). Mirrors Mafia's init-time send at line
+    // ~1359 of this file.
+    const eatPageBg = getEatFirstPageBackgroundsState(room.id)
+    if (eatPageBg.backgrounds.length > 0) {
+      sendServerMessage(socket, {
+        type: 'eat:page-background-settings',
+        payload: {
+          backgrounds: eatPageBg.backgrounds,
+          selectedBackgroundId: null,
+          forcedBackgroundId: eatPageBg.forcedBackgroundId,
+        },
       })
     }
     // Replay host-controlled per-participant audio mix to this socket only.
@@ -2393,6 +2444,41 @@ export function handleEatFirstAudioMixUpdate(
     type: 'eat:audio-mix-update',
     payload: { entries: resolved },
   })
+}
+
+/**
+ * Host-only Eat First page-background-settings update. Validates EF host
+ * authority (mirrors Mafia's `handleMafiaPageBackgroundSettings` at
+ * ~line 3230), enforces unique background ids and a valid
+ * `forcedBackgroundId` reference, then persists in-memory + broadcasts.
+ * Phase 1: in-memory only, no DB write. The state survives only until
+ * server restart — same posture as Mafia's `Room.mafiaPageBackgrounds`.
+ */
+export function handleEatFirstPageBackgroundSettings(
+  socket: WsSocket,
+  payload: {
+    backgrounds: EatFirstPageBackgroundItem[]
+    selectedBackgroundId: string | null
+    forcedBackgroundId: string | null
+  },
+  deps: SignalingDeps,
+): void {
+  const rp = resolveEatFirstPeerAndRoom(socket, deps)
+  if (!rp) {
+    return
+  }
+  const { peer, room } = rp
+  if (!isEatFirstHostPeer(room, peer)) {
+    return
+  }
+  const ids = new Set(payload.backgrounds.map((background) => background.id))
+  if (ids.size !== payload.backgrounds.length) {
+    return
+  }
+  if (payload.forcedBackgroundId != null && !ids.has(payload.forcedBackgroundId)) {
+    return
+  }
+  broadcastEatFirstPageBackgroundSettings(room, payload)
 }
 
 /** Strip the `eat:` signaling prefix; the remainder is the persistent Eat First gameId. */

@@ -58,6 +58,18 @@ export type EatFirstTimerState = {
   duration: number
 } | null
 
+/**
+ * Page-background gallery item, mirrors `MafiaPageBackgroundItem` shape.
+ * Held in-memory only (Phase 1) — cleared on server restart, same posture
+ * as Mafia's `Room.mafiaPageBackgrounds`. The host's currently shared
+ * background is referenced by `forcedPageBackgroundId`.
+ */
+export type EatFirstPageBackgroundItem = {
+  id: string
+  url: string
+  type: 'default' | 'preset' | 'custom'
+}
+
 export type EatFirstTableState = {
   /** Stable slot order (slotIds, e.g. `['p1','p3','p2']`) — host editable. */
   playerOrder: string[]
@@ -80,6 +92,18 @@ export type EatFirstTableState = {
    * to each joining socket. `null` means "client uses its local default".
    */
   selectedTimerDurationMs: number | null
+  /**
+   * Host-shared page-background gallery (in-memory). Empty until the host
+   * sends its first `eat:page-background-settings` payload — clients see
+   * the default scoped page background until then.
+   */
+  pageBackgrounds: EatFirstPageBackgroundItem[]
+  /**
+   * Id of the background the host explicitly shared with the room. `null`
+   * means "no forced background"; clients fall back to their own local
+   * preference. Mirrors Mafia's `forcedBackgroundId` semantics.
+   */
+  forcedPageBackgroundId: string | null
   /** True once the lazy DB hydration has completed at least once. */
   hydrated: boolean
 }
@@ -96,7 +120,36 @@ function makeEmpty(): EatFirstTableState {
     lastUsedActionCard: null,
     timer: null,
     selectedTimerDurationMs: null,
+    pageBackgrounds: [],
+    forcedPageBackgroundId: null,
     hydrated: false,
+  }
+}
+
+/**
+ * Replace the in-memory page-background gallery + forced id for a room.
+ * Called from `handleEatFirstPageBackgroundSettings`. No DB persistence in
+ * Phase 1; state lives only until the server process exits.
+ */
+export function setEatFirstPageBackgroundsState(
+  roomId: string,
+  backgrounds: EatFirstPageBackgroundItem[],
+  forcedBackgroundId: string | null,
+): void {
+  const state = getEatFirstTableState(roomId)
+  state.pageBackgrounds = backgrounds.map((item) => ({ ...item }))
+  state.forcedPageBackgroundId = forcedBackgroundId
+}
+
+/** Snapshot copy for broadcast / init-send. */
+export function getEatFirstPageBackgroundsState(roomId: string): {
+  backgrounds: EatFirstPageBackgroundItem[]
+  forcedBackgroundId: string | null
+} {
+  const state = getEatFirstTableState(roomId)
+  return {
+    backgrounds: state.pageBackgrounds.map((item) => ({ ...item })),
+    forcedBackgroundId: state.forcedPageBackgroundId,
   }
 }
 

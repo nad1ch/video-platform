@@ -243,5 +243,13 @@ html:has(.app-shell-layout--obs-view) {
 }
 
 .app-shell-layout--obs-view .eat-first-call-page--view-mode .game-timer-overlay {
-  top: calc(max(0px, env(safe-area-inset-top, 0px)) * var(--sa-obs-ui-scale, 1));
+  /* Pull the chip up into the band where the AppLandingHeader used to be
+   * before OBS minimal-chrome shrank it. `.eat-first-call-timer` wrap is
+   * absolute-positioned at the top of the page-shell area (just below the
+   * minimal header) so a negative `top` lifts the chip into the original
+   * header strip. Multiplied by the shared `--sa-obs-ui-scale` so the
+   * lift stays proportional at every OBS resolution (−50 at 1080p,
+   * −100 at 4K). Logo stays at the header's `left: 14px`, chip stays at
+   * `left: 50%; translateX(-50%)`, so they never collide horizontally. */
+  top: calc((max(0px, env(safe-area-inset-top, 0px)) - 50px) * var(--sa-obs-ui-scale, 1));
 }

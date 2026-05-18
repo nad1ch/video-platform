@@ -501,6 +501,33 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
         .max(32),
     }).strict(),
   }),
+  /**
+   * Eat First host-broadcast page-background settings. Mirrors Mafia
+   * `mafia:page-background-settings`: host sends the current backgrounds
+   * gallery plus the currently-forced background id (the one shared with
+   * the whole room). Server validates host authority, stores the state
+   * on the EF table-state, broadcasts to every peer in the room, and
+   * sends the current state to every joining peer so late joiners and
+   * OBS reloads pick the forced background up immediately. The
+   * `selectedBackgroundId` field is per-client UI hint only (host's
+   * locally-selected background before they shared it) and is not
+   * persisted server-side; it round-trips through the broadcast for
+   * client compatibility with the Mafia payload shape.
+   */
+  z.object({
+    type: z.literal('eat:page-background-settings'),
+    payload: z.object({
+      backgrounds: z
+        .array(mafiaPageBackgroundItemSchema)
+        .min(1)
+        .max(20)
+        .refine(backgroundsArrayUnderTotalCap, {
+          message: 'backgrounds total URL bytes exceeds cap',
+        }),
+      selectedBackgroundId: z.string().min(1).max(128).nullable(),
+      forcedBackgroundId: z.string().min(1).max(128).nullable(),
+    }),
+  }),
   z.object({
     type: z.literal('eat:trait-reveal-request'),
     payload: z.object({

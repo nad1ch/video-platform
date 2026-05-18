@@ -57,6 +57,7 @@ import {
   handleGameRoomRequestSnapshot,
   handleEatFirstAudioMixUpdate,
   handleEatFirstForceMuteAll,
+  handleEatFirstPageBackgroundSettings,
   handleEatFirstSlotClaim,
   handleEatFirstTraitRevealRequest,
   handleEatFirstTraitRegenerateRequest,
@@ -106,6 +107,7 @@ const WS_AUDIO_MIX_TYPES: ReadonlySet<string> = new Set([
 const WS_SETTINGS_TYPES: ReadonlySet<string> = new Set([
   'mafia:settings-update',
   'mafia:page-background-settings',
+  'eat:page-background-settings',
 ])
 
 const WS_EAT_MUTATE_TYPES: ReadonlySet<string> = new Set([
@@ -634,6 +636,10 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'eat:audio-mix-update': {
               handleEatFirstAudioMixUpdate(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'eat:page-background-settings': {
+              handleEatFirstPageBackgroundSettings(socket, parsed.data.payload, deps)
               break
             }
             case 'eat:slot-claim': {
