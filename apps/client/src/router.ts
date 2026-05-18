@@ -258,6 +258,11 @@ export const router = createRouter({
               component: () => import('./admin/ui/AdminBilling.vue'),
             },
             {
+              path: 'economy',
+              name: 'admin-economy',
+              component: () => import('./admin/ui/AdminEconomy.vue'),
+            },
+            {
               path: 'diagnostics',
               name: 'admin-diagnostics',
               component: () => import('./admin/ui/AdminDiagnostics.vue'),
