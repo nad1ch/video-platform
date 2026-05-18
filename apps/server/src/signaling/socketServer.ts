@@ -21,6 +21,9 @@ import {
   handleJoinRoom,
   handleMafiaClaimHost,
   handleMafiaTransferHost,
+  handleMafiaTransferHostOffer,
+  handleMafiaTransferHostAccept,
+  handleMafiaTransferHostReject,
   handleMafiaQueueUpdate,
   handleMafiaReshuffle,
   handleMafiaPlayersUpdate,
@@ -575,6 +578,18 @@ export function attachSocketServer(wss: WebSocketServer, roomManager: RoomManage
             }
             case 'mafia:transfer-host': {
               handleMafiaTransferHost(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:transfer-host-offer': {
+              handleMafiaTransferHostOffer(socket, parsed.data.payload, deps)
+              break
+            }
+            case 'mafia:transfer-host-accept': {
+              handleMafiaTransferHostAccept(socket, deps)
+              break
+            }
+            case 'mafia:transfer-host-reject': {
+              handleMafiaTransferHostReject(socket, deps)
               break
             }
             case 'mafia:queue-update': {
