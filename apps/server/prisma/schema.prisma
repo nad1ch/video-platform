@@ -94,6 +94,9 @@ model User {
   claims                  Claim[]
   xpBalance               XpBalance?
   xpTransactions          XpTransaction[]
+  caseInventory           UserCaseInventory[]
+  casePity                UserPity[]
+  caseOpenings            CaseOpening[]
   activityEvents          UserActivityEvent[]
   clientErrors            ClientErrorEvent[]
   emailVerificationTokens EmailVerificationToken[]
@@ -358,6 +361,113 @@ model Claim {
   createdAt          DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+/// Catalog of openable cases (the public set of "loot boxes"). The legacy
+/// CoinHub case ids (`luck-0`..`luck-3`, `free`, `subscriber`) are NOT
+/// required to exist in this catalog — the open-case path falls back to the
+/// hard-coded legacy table when a slug is absent here, preserving today's
+/// UI. New cases are introduced by inserting rows here (admin tooling /
+/// seeded migration / streamer-specific cases via `streamerId`).
+model CaseCatalog {
+  /// Stable URL/API slug. Matches `CoinCase.caseId` for legacy ids.
+  slug               String       @id
+  displayName        String
+  /// `common` | `rare` | `epic` | `legendary` — drives visible odds tier UI.
+  rarityTier         String       @default("common")
+  isActive           Boolean      @default(true)
+  /// Guarantee that the rolled reward is at least this many coins. Even on
+  /// a "junk" weight the user never opens an empty case.
+  guaranteedMinCoins Int          @default(1)
+  /// After this many opens without a non-minimum result, the next open is
+  /// forced to the highest-weight non-minimum reward (pity).
+  pityFloorCount     Int          @default(10)
+  /// Optional streamer scope for "streamer-only" cases. Null = global.
+  streamerId         String?
+  metadata           Json?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  rewards            CaseReward[]
+
+  @@index([streamerId])
+  @@index([isActive])
+}
+
+/// Possible rewards inside a case + weights. Weighted random selection;
+/// `weight` is relative (sum across rewards for a case need not equal 100).
+/// `minPityCount` floors a reward to only fire after the user accumulated
+/// at least that many "bad pulls"; if the catalog row has any reward with
+/// `minPityCount > 0`, normal rolls below the threshold draw from the
+/// other rewards only.
+model CaseReward {
+  id           String      @id @default(cuid())
+  caseSlug     String
+  case         CaseCatalog @relation(fields: [caseSlug], references: [slug], onDelete: Cascade)
+  weight       Int
+  /// `coins` | `xp` | `badge` | `cosmetic` | `fragment` — see CaseReward kinds
+  /// in the cases module. Coin/xp rewards encode `value`; inventory rewards
+  /// encode `referenceId` (badge / cosmetic slug).
+  kind         String
+  value        Int         @default(0)
+  referenceId  String?
+  /// Pity threshold; 0 means "always eligible". Used to back the "guaranteed
+  /// after N opens" UI.
+  minPityCount Int         @default(0)
+  metadata     Json?
+  createdAt    DateTime    @default(now())
+
+  @@index([caseSlug])
+}
+
+/// Per-user case inventory (count of unopened cases per slug). The legacy
+/// `CoinCase` table (state machine for the static six hub cases) is preserved
+/// untouched; this table covers the new "earned cases" model where a viewer
+/// can stack multiple of the same case.
+model UserCaseInventory {
+  userId    String
+  caseSlug  String
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, caseSlug])
+  @@index([userId])
+}
+
+/// Per-user per-case pity counter. Incremented when a roll lands on the
+/// minimum reward, reset when it lands on anything higher. Independent of
+/// inventory: opening a case decrements inventory and may bump pity.
+model UserPity {
+  userId    String
+  caseSlug  String
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, caseSlug])
+  @@index([userId])
+}
+
+/// Auditable history of one case open. Records the chosen `CaseReward` and
+/// links to the coin/xp ledger rows produced (when the reward was coin/xp).
+model CaseOpening {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  caseSlug          String
+  rewardId          String?
+  rewardKind        String
+  rewardValue       Int      @default(0)
+  rewardReferenceId String?
+  coinTransactionId String?
+  xpTransactionId   String?
+  pityCountBefore   Int      @default(0)
+  pityCountAfter    Int      @default(0)
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([caseSlug, createdAt])
 }
 
 /// One row per user per hub case (ids: `luck-0`…`luck-3`, `free`, `subscriber`). Named `CoinCase` so Prisma client is valid (`Case` would emit `prisma.case`).

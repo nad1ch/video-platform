@@ -8,6 +8,7 @@ import {
   claimPendingById,
 } from '../claims/claimService'
 import { getWalletSnapshot } from '../wallet/walletSnapshot'
+import { CaseError, listActiveCatalog, openCatalogCase } from '../cases/caseService'
 
 /**
  * HTTP layer for the new Viewer Economy surfaces (wallet snapshot, claims,
@@ -32,6 +33,16 @@ const dailyLimiter = createRateLimiter({
   label: 'economy:daily',
   windowMs: 60_000,
   limit: 20,
+})
+const caseOpenLimiter = createRateLimiter({
+  label: 'economy:cases:open',
+  windowMs: 60_000,
+  limit: 30,
+})
+const catalogReadLimiter = createRateLimiter({
+  label: 'economy:cases:catalog',
+  windowMs: 60_000,
+  limit: 120,
 })
 const walletReadLimiter = createRateLimiter({
   label: 'economy:wallet:me',
@@ -158,6 +169,72 @@ export function mountEconomyRoutes(app: Express): void {
    * `POST /api/economy/claims/all`. Returns 200 with `granted: false` if
    * today's grant already exists (idempotent).
    */
+  /**
+   * Public-readable case catalog snapshot. Returns active cases + their
+   * rewards with approximate odds so the UI can show "what's in here".
+   * Auth-gated to keep odds out of search-engine indexes.
+   */
+  app.get(`${base}/cases/catalog`, (req, res) => {
+    void (async () => {
+      try {
+        const userId = await resolveUserIdOr401(req, res)
+        if (userId == null) return
+        const rl = catalogReadLimiter.tryConsume(`user:${userId}`)
+        if (!rl.allowed) {
+          denyRateLimited(res, rl.retryAfterSec)
+          return
+        }
+        const streamerId =
+          typeof req.query.streamerId === 'string' ? req.query.streamerId : null
+        const cases = await listActiveCatalog({ streamerId })
+        res.json({ cases })
+      } catch (err) {
+        sendError(res, err)
+      }
+    })()
+  })
+
+  /**
+   * Open one catalog case. The new path; the legacy
+   * `POST /api/coinhub/case/open` for `luck-*` / `free` / `subscriber`
+   * continues to work for slugs not present in the catalog.
+   */
+  app.post(`${base}/cases/:slug/open`, (req, res) => {
+    void (async () => {
+      try {
+        const userId = await resolveUserIdOr401(req, res)
+        if (userId == null) return
+        const rl = caseOpenLimiter.tryConsume(`user:${userId}`)
+        if (!rl.allowed) {
+          denyRateLimited(res, rl.retryAfterSec)
+          return
+        }
+        const slug = String(req.params.slug ?? '').trim()
+        if (!slug) {
+          res
+            .status(400)
+            .json({ error: { code: 'BAD_REQUEST', message: 'slug is required' } })
+          return
+        }
+        try {
+          const result = await openCatalogCase(userId, slug)
+          const wallet = await getWalletSnapshot(userId)
+          res.json({ result, wallet })
+        } catch (err) {
+          if (err instanceof CaseError) {
+            res
+              .status(err.status)
+              .json({ error: { code: err.code, message: err.message } })
+            return
+          }
+          throw err
+        }
+      } catch (err) {
+        sendError(res, err)
+      }
+    })()
+  })
+
   app.post(`${base}/claims/daily`, (req, res) => {
     void (async () => {
       try {
