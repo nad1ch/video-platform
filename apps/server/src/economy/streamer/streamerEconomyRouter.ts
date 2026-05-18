@@ -4,6 +4,7 @@ import { readSessionFromCookie } from '../../auth/session/sessionJwt'
 import { createRateLimiter } from '../../utils/rateLimit'
 import { isStreamerOwner } from '../streamerOwnership'
 import { getStreamerSettings, upsertStreamerSettings } from './streamerSettingsService'
+import { getStreamerEconomySummary } from '../analytics/analyticsService'
 
 const readLimiter = createRateLimiter({
   label: 'economy:streamer:settings:read',
@@ -42,6 +43,41 @@ function denyRateLimited(res: Response, retryAfterSec: number): void {
 
 export function mountStreamerEconomyRoutes(app: Express): void {
   const base = '/api/streamers/:streamerId/economy/settings'
+  const summaryBase = '/api/streamers/:streamerId/economy/summary'
+
+  /** Owner-only economy summary (top earners, recent predictions, last-30d totals). */
+  app.get(summaryBase, (req, res) => {
+    void (async () => {
+      try {
+        const userId = await resolveUserIdOr401(req, res)
+        if (userId == null) return
+        const streamerId = String(req.params.streamerId ?? '').trim()
+        if (!streamerId) {
+          res
+            .status(400)
+            .json({ error: { code: 'BAD_REQUEST', message: 'streamerId is required' } })
+          return
+        }
+        const rl = readLimiter.tryConsume(`user:${userId}`)
+        if (!rl.allowed) {
+          denyRateLimited(res, rl.retryAfterSec)
+          return
+        }
+        const owns = await isStreamerOwner(userId, streamerId)
+        if (!owns) {
+          res
+            .status(403)
+            .json({ error: { code: 'FORBIDDEN', message: 'Not the streamer owner' } })
+          return
+        }
+        const summary = await getStreamerEconomySummary(streamerId)
+        res.json({ summary })
+      } catch (err) {
+        console.error('[economy][streamer-summary] GET', err)
+        res.status(500).json({ error: { code: 'INTERNAL', message: 'Error' } })
+      }
+    })()
+  })
 
   app.get(base, (req, res) => {
     void (async () => {

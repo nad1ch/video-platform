@@ -9,6 +9,7 @@ import {
 } from '../claims/claimService'
 import { getWalletSnapshot } from '../wallet/walletSnapshot'
 import { CaseError, listActiveCatalog, openCatalogCase } from '../cases/caseService'
+import { getOwnTransactionHistory } from '../analytics/analyticsService'
 
 /**
  * HTTP layer for the new Viewer Economy surfaces (wallet snapshot, claims,
@@ -43,6 +44,11 @@ const catalogReadLimiter = createRateLimiter({
   label: 'economy:cases:catalog',
   windowMs: 60_000,
   limit: 120,
+})
+const txHistoryLimiter = createRateLimiter({
+  label: 'economy:tx-history',
+  windowMs: 60_000,
+  limit: 60,
 })
 const walletReadLimiter = createRateLimiter({
   label: 'economy:wallet:me',
@@ -169,6 +175,33 @@ export function mountEconomyRoutes(app: Express): void {
    * `POST /api/economy/claims/all`. Returns 200 with `granted: false` if
    * today's grant already exists (idempotent).
    */
+  /**
+   * Own transaction history (coin + xp merged). Cursor-based pagination.
+   */
+  app.get(`${base}/transactions`, (req, res) => {
+    void (async () => {
+      try {
+        const userId = await resolveUserIdOr401(req, res)
+        if (userId == null) return
+        const rl = txHistoryLimiter.tryConsume(`user:${userId}`)
+        if (!rl.allowed) {
+          denyRateLimited(res, rl.retryAfterSec)
+          return
+        }
+        const limitRaw = Number(req.query.limit)
+        const limit = Number.isFinite(limitRaw) ? limitRaw : 25
+        const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : null
+        const kindRaw = typeof req.query.kind === 'string' ? req.query.kind : 'all'
+        const kind: 'coin' | 'xp' | 'all' =
+          kindRaw === 'coin' || kindRaw === 'xp' ? kindRaw : 'all'
+        const out = await getOwnTransactionHistory(userId, { limit, cursor, kind })
+        res.json(out)
+      } catch (err) {
+        sendError(res, err)
+      }
+    })()
+  })
+
   /**
    * Public-readable case catalog snapshot. Returns active cases + their
    * rewards with approximate odds so the UI can show "what's in here".

@@ -9,6 +9,7 @@ import {
   adminRevoke,
   getUserEconomyHistory,
 } from './adminEconomyService'
+import { listAllPredictionsForAdmin } from '../analytics/analyticsService'
 
 const adminEconomyRateLimit = createIpRateLimitMiddleware({
   label: 'http:admin:economy',
@@ -110,6 +111,22 @@ export function mountAdminEconomyRoutes(app: Express): void {
               : null,
         })
         res.json(result)
+      } catch (err) {
+        sendError(res, err)
+      }
+    })()
+  })
+
+  app.get(`${base}/predictions`, (req, res) => {
+    void (async () => {
+      try {
+        if (!(await requireAdmin(req, res))) return
+        const status = typeof req.query.status === 'string' ? req.query.status : undefined
+        const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : null
+        const limitRaw = Number(req.query.limit)
+        const limit = Number.isFinite(limitRaw) ? limitRaw : 50
+        const out = await listAllPredictionsForAdmin({ status, cursor, limit })
+        res.json(out)
       } catch (err) {
         sendError(res, err)
       }
