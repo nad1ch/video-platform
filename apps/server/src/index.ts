@@ -322,6 +322,7 @@ async function bootstrap(): Promise<void> {
         roomCount: e.roomCount,
         dead: e.dead,
       })),
+      rooms: roomManager.snapshotRooms(),
     })
   })
 
@@ -365,6 +366,19 @@ async function bootstrap(): Promise<void> {
     }
     shuttingDown = true
     console.info('Server shutting down…')
+
+    /**
+     * Hard-fail fallback: if the graceful chain stalls (e.g. a WebSocket
+     * `close` callback never fires because a client refuses to close), exit
+     * before the container scheduler escalates to SIGKILL. `.unref()` so the
+     * timer never extends the process lifetime when graceful close completes
+     * normally — the existing `process.exit(0)` after `server.close()` fires
+     * first in the happy path.
+     */
+    setTimeout(() => {
+      console.error('Server shutdown fallback fired (15s); forcing exit')
+      process.exit(0)
+    }, 15_000).unref()
 
     void stopTwitchChatIngest().catch((err: unknown) => {
       console.error('[nadle] stopTwitchChatIngest failed', err)

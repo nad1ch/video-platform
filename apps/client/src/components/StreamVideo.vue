@@ -8,6 +8,7 @@ import {
 } from '@/utils/mediaDebugRuntime'
 import { emitDiagnosticEvent } from '@/diagnostics'
 import { onDocumentBecameVisible } from '@/utils/sharedDocumentVisibility'
+import { registerStallTick } from '@/utils/sharedStreamVideoStallTimer'
 
 const streamVideoLog = createLogger('stream-video')
 
@@ -703,9 +704,10 @@ function onDocumentVisibleTryPlay(): void {
  * The element-level `waiting` event fires on buffer underrun, but a key-frame
  * loss or a paused-by-server consumer can leave `currentTime` frozen with
  * `readyState >= 2`, no `waiting` event, and the track still `live`. We
- * sample every {@link STALL_SAMPLE_MS} and emit `videoStall` once when the
- * gap exceeds {@link STALL_THRESHOLD_MS}. Re-arms only after `currentTime`
- * advances again, so a single stall produces at most one event.
+ * sample every `STALL_SAMPLE_MS` (see `sharedStreamVideoStallTimer.ts`) and
+ * emit `videoStall` once when the gap exceeds {@link STALL_THRESHOLD_MS}.
+ * Re-arms only after `currentTime` advances again, so a single stall produces
+ * at most one event.
  *
  * Conditions to even sample:
  *   - This is a remote tile (`reportVideoUi === false`).
@@ -713,11 +715,15 @@ function onDocumentVisibleTryPlay(): void {
  *   - There is a usable video track and dimensions are present.
  *   - Playback is not intentionally suppressed (off-screen / hidden tile).
  */
-const STALL_SAMPLE_MS = 2000
 const STALL_THRESHOLD_MS = 6000
 const STALL_MIN_DELTA = 0.05
 
-let stallTimer: ReturnType<typeof setInterval> | null = null
+/**
+ * Audit Perf — shared cadence: per-tile timer replaced by a single driver
+ * (`sharedStreamVideoStallTimer.ts`); subscribers are ticked every
+ * `STALL_SAMPLE_MS`. Per-tile state below remains owned by this component.
+ */
+let detachStallTick: (() => void) | null = null
 let lastStallSampleCurrentTime = -1
 let lastStallSampleAt = 0
 let stallFiredAt = 0
@@ -813,7 +819,7 @@ onMounted(() => {
    * for the same intent. The helper fans out from one listener.
    */
   detachVisibilityListener = onDocumentBecameVisible(onDocumentVisibleTryPlay)
-  stallTimer = setInterval(tickStallWatchdog, STALL_SAMPLE_MS)
+  detachStallTick = registerStallTick(tickStallWatchdog)
 
   if (isMediaDebugEnabled()) {
     const peerId = typeof props.peerId === 'string' && props.peerId.length > 0 ? props.peerId : null
@@ -849,10 +855,8 @@ onUnmounted(() => {
   clearLocalVideoEndedListener()
   detachVisibilityListener?.()
   detachVisibilityListener = null
-  if (stallTimer != null) {
-    clearInterval(stallTimer)
-    stallTimer = null
-  }
+  detachStallTick?.()
+  detachStallTick = null
   detachVideoDebugReader?.()
   detachVideoDebugReader = null
 })

@@ -265,12 +265,25 @@ export class Room {
   }
 
   private async initAudioLevelObserver(): Promise<void> {
+    const threshold = envNumber('AUDIO_LEVEL_THRESHOLD', -70)
+    const intervalMs = envNumber('AUDIO_LEVEL_INTERVAL_MS', 800)
+    const silenceHoldMs = envNumber('AUDIO_SPEAKER_SILENCE_HOLD_MS', 1200)
     const observer = await this.router.createAudioLevelObserver({
       maxEntries: 1,
-      threshold: envNumber('AUDIO_LEVEL_THRESHOLD', -70),
-      interval: envNumber('AUDIO_LEVEL_INTERVAL_MS', 800),
+      threshold,
+      interval: intervalMs,
     })
     this.audioLevelObserver = observer
+
+    console.info(
+      {
+        roomId: this.id,
+        threshold,
+        intervalMs,
+        silenceHoldMs,
+      },
+      'audio level observer created',
+    )
 
     observer.on('volumes', (volumes: AudioLevelObserverVolume[]) => {
       this.onAudioVolumes(volumes)
@@ -278,11 +291,10 @@ export class Room {
 
     observer.on('silence', () => {
       this.clearSilenceHoldTimer()
-      const holdMs = envNumber('AUDIO_SPEAKER_SILENCE_HOLD_MS', 1200)
       this.silenceClearTimer = setTimeout(() => {
         this.silenceClearTimer = null
         this.emitActiveSpeakerIfChanged(null)
-      }, holdMs)
+      }, silenceHoldMs)
     })
   }
 

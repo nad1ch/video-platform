@@ -119,6 +119,23 @@ export class RoomManager {
   }
 
   /**
+   * Read-only snapshot of live rooms for `/health` (operator visibility into
+   * pool balance). Single-pass over the rooms Map; no identity data (no
+   * peerId, userId, displayName).
+   */
+  snapshotRooms(): ReadonlyArray<{ roomId: string; workerIndex: number; peerCount: number }> {
+    const out: { roomId: string; workerIndex: number; peerCount: number }[] = []
+    for (const room of this.rooms.values()) {
+      out.push({
+        roomId: room.id,
+        workerIndex: room.getPooledWorker().index,
+        peerCount: room.getPeers().length,
+      })
+    }
+    return out
+  }
+
+  /**
    * When a child mediasoup worker process crashes: evict all peers in rooms bound to that worker.
    * If signaling is not wired yet, only disposes mediasoup state (sockets may remain orphaned).
    * Also forgets any in-flight `getOrCreateRoom` whose `Room.create` is
