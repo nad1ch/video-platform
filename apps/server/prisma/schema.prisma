@@ -90,6 +90,10 @@ model User {
   coinHubSpin             Spin?
   coinHubCases            CoinCase[]
   coinTransactions        CoinTransaction[]
+  pendingRewards          PendingReward[]
+  claims                  Claim[]
+  xpBalance               XpBalance?
+  xpTransactions          XpTransaction[]
   activityEvents          UserActivityEvent[]
   clientErrors            ClientErrorEvent[]
   emailVerificationTokens EmailVerificationToken[]
@@ -249,6 +253,111 @@ model CoinTransaction {
 
   @@index([userId, createdAt])
   @@index([source, createdAt])
+}
+
+/// Typed unclaimed grants. Replaces the flat `Pending.amount` counter for any
+/// new earn mechanic (daily, chat_activity, watch_time, game_participation,
+/// streak, event, prediction_payout, subscription_chest, streamer_loyalty,
+/// legacy). The flat `Pending` table is preserved so the existing CoinHub
+/// claim API stays backward-compatible — `claimPending` now consumes BOTH
+/// `Pending.amount` and unexpired `PendingReward` rows in one Serializable
+/// transaction. Rows are never deleted; `claimedAt` or `lostAt` is stamped
+/// so the row remains an auditable history line.
+model PendingReward {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// One of: `daily`, `chat_activity`, `watch_time`, `game_participation`,
+  /// `streak`, `event`, `prediction_payout`, `subscription_chest`,
+  /// `streamer_loyalty`, `legacy`. New kinds may be added by future branches;
+  /// the column is intentionally `String` (not enum) so additions do not need
+  /// a schema migration.
+  kind           String
+  coinAmount     Int       @default(0)
+  xpAmount       Int       @default(0)
+  /// Optional streamer context (e.g. chat reward earned in a specific stream).
+  streamerId     String?
+  /// Free-form correlation token (roundId, predictionId:entryId, etc.).
+  sourceRef      String?
+  /// Unique idempotency token. The unique constraint is the guarantor that
+  /// retries of an earn event (chat redelivery, duplicate round persistence,
+  /// repeated daily grant on the same UTC day) do not create duplicate rows.
+  idempotencyKey String?   @unique
+  metadata       Json?
+  /// Hard expiry; an expired row is no longer claimable. Defaults set by the
+  /// grantor (chat = 7d, daily/game/event = 30d by current config).
+  expiresAt      DateTime
+  /// Single-flight claim marker. Once set, the row is consumed and the wallet
+  /// has been credited via `walletService.applyDelta` inside the same txn.
+  claimedAt      DateTime?
+  /// Set when a sweeper observes `expiresAt < now` AND `claimedAt IS NULL`.
+  /// Kept for audit; never reused.
+  lostAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId, claimedAt, lostAt, expiresAt])
+  @@index([expiresAt, claimedAt])
+  @@index([kind, createdAt])
+}
+
+/// Per-user XP total + materialized level. The single source of truth for
+/// "XP progress and current level". Mutated only by
+/// `apps/server/src/economy/ledger/xpService.applyXpDelta`. Invariant:
+/// `sum(XpTransaction.delta WHERE userId = X) == XpBalance.amount`. `level`
+/// is denormalized from `amount` via `levelCurve.levelFromXp` and recomputed
+/// on every write so reads don't need to recompute.
+model XpBalance {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Int      @default(0)
+  level     Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+/// Append-only XP ledger — same shape as `CoinTransaction` but for XP. Kept
+/// as a separate table (not a `kind` column on `CoinTransaction`) so coin
+/// and XP grants stay clearly identifiable in queries and so future
+/// `level_up`-style derived sources don't pollute the coin ledger.
+model XpTransaction {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  delta          Int
+  balanceBefore  Int
+  balanceAfter   Int
+  /// Coarse classification: `claim_pending`, `admin_grant`, `admin_revoke`,
+  /// `case_open`, `daily_spin`, etc. Tracks the same source vocabulary as
+  /// `CoinTransaction.source`.
+  source         String
+  sourceRef      String?
+  idempotencyKey String?  @unique
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([source, createdAt])
+}
+
+/// Audit trail of claim events. One row per `claimAll` / `claimById` call
+/// that consumed at least one `PendingReward`. The `consumedPendingIds`
+/// JSON array carries the ids of the rows that were claimed in this event
+/// so a future "transaction history" UI can show a single coalesced row.
+model Claim {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Coarse classification (`all` when the user invoked claim-all; otherwise
+  /// the `PendingReward.kind` that was claimed by id).
+  kind               String
+  /// Sum of `coinAmount` across consumed pending rows.
+  coinTotal          Int
+  /// Sum of `xpAmount` across consumed pending rows.
+  xpTotal            Int      @default(0)
+  /// JSON array of consumed `PendingReward.id` values.
+  consumedPendingIds Json
+  createdAt          DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 /// One row per user per hub case (ids: `luck-0`…`luck-3`, `free`, `subscriber`). Named `CoinCase` so Prisma client is valid (`Case` would emit `prisma.case`).
