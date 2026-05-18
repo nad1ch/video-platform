@@ -183,6 +183,12 @@ export const router = createRouter({
           component: () => import('./pages/CoinHubPage.vue'),
         },
         {
+          path: 'wallet',
+          name: 'economy-wallet',
+          meta: { appTitle: 'Wallet', footerContext: 'home', requiresAuth: true },
+          component: () => import('./features/economy/pages/EconomyWalletPage.vue'),
+        },
+        {
           path: 'billing',
           name: 'billing',
           meta: { appTitle: 'Stream Assist Pro', footerContext: 'home', requiresAuth: true },
