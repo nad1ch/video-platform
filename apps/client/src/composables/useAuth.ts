@@ -3,6 +3,7 @@ import { apiFetch } from '@/utils/apiFetch'
 import { apiBase, apiUrl } from '@/utils/apiUrl'
 import { createLogger } from '@/utils/logger'
 import { safeOAuthRedirectPath } from '@/utils/safeOAuthRedirectPath'
+import { readStorageJson, writeStorageJson } from '@/utils/storageJson.js'
 
 
 export type AppSystemRole = 'USER' | 'ADMIN' | 'STREAMER'
@@ -59,44 +60,46 @@ const DISPLAY_CACHE_TTL_MS = 5 * 60 * 1000
 
 const DEV_TWITCH_ID_LOG_KEY = 'streamassist_dev_twitch_id_logged'
 
+/**
+ * Audit #45: read / write the auth display cache through the shared
+ * `readStorageJson` / `writeStorageJson` helpers instead of touching
+ * `sessionStorage` directly. The helpers already swallow parse / quota /
+ * private-mode failures and short-circuit on missing storage, so this
+ * collapses the previous custom try/catch ladders and matches the
+ * pattern used by `CallPage.vue`, `useNadleState.ts`, and other
+ * client features.
+ */
+const storageOrNull: Storage | null = typeof sessionStorage !== 'undefined' ? sessionStorage : null
+
 function readDisplayCache(): AppUser | null {
-  if (typeof sessionStorage === 'undefined') {
-    return null
-  }
-  try {
-    const raw = sessionStorage.getItem(DISPLAY_CACHE_KEY)
-    if (!raw) {
-      return null
-    }
-    const o = JSON.parse(raw) as { t?: number; user?: unknown }
-    if (typeof o.t !== 'number' || Date.now() - o.t > DISPLAY_CACHE_TTL_MS) {
-      sessionStorage.removeItem(DISPLAY_CACHE_KEY)
-      return null
-    }
-    return parseUser(o.user)
-  } catch {
-    try {
-      sessionStorage.removeItem(DISPLAY_CACHE_KEY)
-    } catch {
-      /* ignore */
+  if (!storageOrNull) return null
+  const o = readStorageJson(storageOrNull, DISPLAY_CACHE_KEY, null) as
+    | { t?: number; user?: unknown }
+    | null
+  if (!o || typeof o.t !== 'number' || Date.now() - o.t > DISPLAY_CACHE_TTL_MS) {
+    if (o) {
+      try {
+        storageOrNull.removeItem(DISPLAY_CACHE_KEY)
+      } catch {
+        /* ignore */
+      }
     }
     return null
   }
+  return parseUser(o.user)
 }
 
 function writeDisplayCache(u: AppUser | null): void {
-  if (typeof sessionStorage === 'undefined') {
+  if (!storageOrNull) return
+  if (!u) {
+    try {
+      storageOrNull.removeItem(DISPLAY_CACHE_KEY)
+    } catch {
+      /* ignore */
+    }
     return
   }
-  try {
-    if (!u) {
-      sessionStorage.removeItem(DISPLAY_CACHE_KEY)
-      return
-    }
-    sessionStorage.setItem(DISPLAY_CACHE_KEY, JSON.stringify({ t: Date.now(), user: u }))
-  } catch {
-    /* ignore quota / private mode */
-  }
+  writeStorageJson(storageOrNull, DISPLAY_CACHE_KEY, { t: Date.now(), user: u })
 }
 
 function parseSystemRoles(raw: unknown): AppSystemRole[] | undefined {

@@ -9,6 +9,19 @@ import {
   listAdminSubscriptions,
 } from './billingService'
 import { BillingHttpError } from './httpError'
+import { createIpRateLimitMiddleware } from '../utils/rateLimitMiddleware'
+
+/**
+ * Defense-in-depth IP cap for the billing admin endpoints (audit S7).
+ * Admin auth gates these on its own, but the cap blunts a stolen-cookie
+ * scenario from being able to churn payment-request rows / cancel
+ * subscriptions at line rate. Real admin usage is single-digit ops/min.
+ */
+const billingAdminMutationRateLimit = createIpRateLimitMiddleware({
+  label: 'http:billing:admin-mutate',
+  windowMs: 60 * 1000,
+  limit: 60,
+}).middleware
 
 /**
  * Admin/operator endpoints for the Jar billing module. Gated by the same
@@ -62,7 +75,7 @@ export function mountBillingAdminRoutes(app: Express): void {
     })()
   })
 
-  app.post(`${base}/payment-requests/:id/approve`, (req, res) => {
+  app.post(`${base}/payment-requests/:id/approve`, billingAdminMutationRateLimit, (req, res) => {
     void (async () => {
       try {
         if (!(await requireAdmin(req, res))) return
@@ -79,7 +92,7 @@ export function mountBillingAdminRoutes(app: Express): void {
     })()
   })
 
-  app.post(`${base}/payment-requests/:id/reject`, (req, res) => {
+  app.post(`${base}/payment-requests/:id/reject`, billingAdminMutationRateLimit, (req, res) => {
     void (async () => {
       try {
         if (!(await requireAdmin(req, res))) return
@@ -119,7 +132,7 @@ export function mountBillingAdminRoutes(app: Express): void {
   
   
   
-  app.post(`${base}/poll-mono`, (req, res) => {
+  app.post(`${base}/poll-mono`, billingAdminMutationRateLimit, (req, res) => {
     void (async () => {
       try {
         if (!(await requireAdmin(req, res))) return
@@ -133,7 +146,7 @@ export function mountBillingAdminRoutes(app: Express): void {
 
   // Admin: cancel an active Pro subscription. Idempotent — repeated calls
   // collapse to no-ops at the service layer (`updateMany` single-flight).
-  app.post(`${base}/subscriptions/:id/cancel`, (req, res) => {
+  app.post(`${base}/subscriptions/:id/cancel`, billingAdminMutationRateLimit, (req, res) => {
     void (async () => {
       try {
         if (!(await requireAdmin(req, res))) return

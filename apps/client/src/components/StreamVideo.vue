@@ -7,6 +7,7 @@ import {
   type MediaDebugVideoSnapshot,
 } from '@/utils/mediaDebugRuntime'
 import { emitDiagnosticEvent } from '@/diagnostics'
+import { onDocumentBecameVisible } from '@/utils/sharedDocumentVisibility'
 
 const streamVideoLog = createLogger('stream-video')
 
@@ -802,11 +803,16 @@ function tickStallWatchdog(): void {
 }
 
 let detachVideoDebugReader: (() => void) | null = null
+let detachVisibilityListener: (() => void) | null = null
 
 onMounted(() => {
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', onDocumentVisibleTryPlay)
-  }
+  /**
+   * Audit Perf-C / M11: subscribe to the shared document-visibility helper
+   * instead of attaching a per-tile `visibilitychange` listener. With 8–12
+   * cameras open, the previous code added 8–12 separate document listeners
+   * for the same intent. The helper fans out from one listener.
+   */
+  detachVisibilityListener = onDocumentBecameVisible(onDocumentVisibleTryPlay)
   stallTimer = setInterval(tickStallWatchdog, STALL_SAMPLE_MS)
 
   if (isMediaDebugEnabled()) {
@@ -841,9 +847,8 @@ onUnmounted(() => {
   detachVideoUi()
   clearInboundVideoTrackListeners()
   clearLocalVideoEndedListener()
-  if (typeof document !== 'undefined') {
-    document.removeEventListener('visibilitychange', onDocumentVisibleTryPlay)
-  }
+  detachVisibilityListener?.()
+  detachVisibilityListener = null
   if (stallTimer != null) {
     clearInterval(stallTimer)
     stallTimer = null

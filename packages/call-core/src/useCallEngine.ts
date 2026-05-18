@@ -1282,6 +1282,15 @@ export function useCallEngine(options?: CallEngineOptions) {
     )
   }
 
+  /**
+   * Audit Perf-B: drop `deep: true` over `lastRoomState.value?.peers`.
+   * Every code path that mutates `lastRoomState` in `useRoomConnection`
+   * replaces the entire object and freshly spreads the peers array
+   * (`peer-joined`, `peer-display-name`, `peer-left`, `room-state`), so
+   * Vue's reference-identity check already fires the watcher on every
+   * meaningful change. `deep: true` was paying for per-property
+   * tracking we did not need.
+   */
   watch(
     () => lastRoomState.value?.peers,
     (list) => {
@@ -1289,7 +1298,6 @@ export function useCallEngine(options?: CallEngineOptions) {
         session.replaceRemoteDisplayNames(list)
       }
     },
-    { deep: true },
   )
 
   watch(selfDisplayName, (name) => {

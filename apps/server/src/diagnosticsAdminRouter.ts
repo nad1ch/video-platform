@@ -23,6 +23,19 @@ import type { Express, Request, Response } from 'express'
 import type { Prisma } from '@prisma/client'
 import { isDatabaseConfigured, prisma } from './prisma'
 import { isSessionAdminFromCookie } from './auth/session/isAdminRequest'
+import { createIpRateLimitMiddleware } from './utils/rateLimitMiddleware'
+
+/**
+ * Per-IP cap for diagnostics admin endpoints (audit S7). All three handlers
+ * are read-only, but the detail/download endpoints return `reportJson`
+ * (hundreds of kB per row). The cap blunts a stolen-cookie bulk scrape;
+ * legitimate admin UI navigation stays well under it.
+ */
+const diagnosticsAdminRateLimit = createIpRateLimitMiddleware({
+  label: 'http:diagnostics-admin',
+  windowMs: 60 * 1000,
+  limit: 120,
+}).middleware
 
 const DEFAULT_PAGE_LIMIT = 50
 const MAX_PAGE_LIMIT = 200
@@ -86,7 +99,7 @@ export function mountDiagnosticsAdminRoutes(app: Express): void {
    *   dateFrom    ISO datetime
    *   dateTo      ISO datetime
    */
-  app.get('/api/admin/diagnostics/reports', async (req: Request, res: Response) => {
+  app.get('/api/admin/diagnostics/reports', diagnosticsAdminRateLimit, async (req: Request, res: Response) => {
     if (!(await requireAdmin(req, res))) return
     if (!isDatabaseConfigured()) {
       res.status(503).json({ error: 'database_unconfigured' })
@@ -157,7 +170,7 @@ export function mountDiagnosticsAdminRoutes(app: Express): void {
    * GET /api/admin/diagnostics/reports/:id
    * Full row including `reportJson`.
    */
-  app.get('/api/admin/diagnostics/reports/:id', async (req: Request, res: Response) => {
+  app.get('/api/admin/diagnostics/reports/:id', diagnosticsAdminRateLimit, async (req: Request, res: Response) => {
     if (!(await requireAdmin(req, res))) return
     if (!isDatabaseConfigured()) {
       res.status(503).json({ error: 'database_unconfigured' })
@@ -190,7 +203,7 @@ export function mountDiagnosticsAdminRoutes(app: Express): void {
    * Returns the `reportJson` (only — not the metadata wrapper) as a JSON
    * attachment so it can be saved/pasted directly.
    */
-  app.get('/api/admin/diagnostics/reports/:id/download', async (req: Request, res: Response) => {
+  app.get('/api/admin/diagnostics/reports/:id/download', diagnosticsAdminRateLimit, async (req: Request, res: Response) => {
     if (!(await requireAdmin(req, res))) return
     if (!isDatabaseConfigured()) {
       res.status(503).json({ error: 'database_unconfigured' })

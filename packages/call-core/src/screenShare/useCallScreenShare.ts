@@ -20,7 +20,10 @@ export type UseCallScreenShareDeps = {
   localStream: ShallowRef<MediaStream | null>
   camEnabled: Ref<boolean>
   localPlayRev: Ref<number>
-  replaceOutboundVideoTrack: (track: MediaStreamTrack | null) => Promise<string>
+  replaceOutboundVideoTrack: (
+    track: MediaStreamTrack | null,
+    source?: 'camera' | 'screen',
+  ) => Promise<string>
   notifyProducerVideoSource: (producerId: string, source: 'camera' | 'screen') => void
   canShareScreen: () => boolean
   /**
@@ -245,7 +248,10 @@ export function useCallScreenShare(deps: UseCallScreenShareDeps) {
       bumpPlayRev()
       await nextTick()
 
-      const producerId = await deps.replaceOutboundVideoTrack(vt)
+      // Audit M6: thread `source: 'screen'` through so the sender parameters
+      // applied after `replaceTrack` use the display-capture encoding caps
+      // (2 Mbps / 30 fps) instead of the camera caps (1.15 Mbps / 20 fps).
+      const producerId = await deps.replaceOutboundVideoTrack(vt, 'screen')
       vt.enabled = true
       ensureDisplayCaptureVideoTrackEnabled(vt)
       await nextTick()

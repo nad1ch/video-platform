@@ -1761,12 +1761,17 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       mafiaGameLog.info('startTimer ignored: not mafia host')
       return
     }
-    if (!Number.isFinite(durationMs) || durationMs < MAFIA_TIMER_MIN_MS || durationMs > 90_000) {
-      mafiaGameLog.info('startTimer ignored: use 30s / 60s / 90s presets only', { durationMs })
+    const ms = Math.floor(durationMs)
+    if (
+      !Number.isFinite(durationMs) ||
+      ms < MAFIA_TIMER_MIN_MS ||
+      !MAFIA_TIMER_PRESET_MS.includes(ms as (typeof MAFIA_TIMER_PRESET_MS)[number])
+    ) {
+      mafiaGameLog.info('startTimer ignored: durationMs not in MAFIA_TIMER_PRESET_MS', { durationMs })
       return
     }
     const startedAt = Date.now()
-    const duration = Math.floor(durationMs)
+    const duration = ms
     const next: MafiaTimerState = { startedAt, duration, isRunning: true }
     mafiaTimer.value = next
     timerStartBroadcastPayload.value = next

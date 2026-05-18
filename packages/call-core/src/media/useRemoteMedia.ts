@@ -1025,6 +1025,7 @@ export function useRemoteMedia() {
     device: Device,
     room: SendTransportRoomApi,
     info: RemoteProducerInfo,
+    generationAtStart: number,
   ): Promise<void> {
     const { producerId, peerId, kind } = info
     if (consumeLifecycle.isAlreadyConsumed(producerId)) {
@@ -1035,6 +1036,16 @@ export function useRemoteMedia() {
     }
 
     const transport = await ensureRecvTransport(device, room)
+    /**
+     * Audit M8: bail before reserving / sending the `consume` request if a
+     * teardown already happened during `ensureRecvTransport`. Without this
+     * check, a stale post-teardown task would acquire a fresh reservation
+     * in the new generation, race against a legitimate consume, and rebuild
+     * the consumer for a peer that should be gone.
+     */
+    if (!consumeLifecycle.isCurrentGeneration(generationAtStart)) {
+      return
+    }
     if (!consumeLifecycle.tryReserveAfterTransport(producerId)) {
       return
     }
@@ -1063,12 +1074,36 @@ export function useRemoteMedia() {
         throw new Error(`consume-failed: ${msg.payload.reason}`)
       }
 
+      /**
+       * Audit M8: if teardown ran while we were waiting for the `consumed`
+       * envelope, do not call `transport.consume(...)` — the transport is
+       * closed or replaced. Throwing here routes through the rollback path
+       * which is now generation-guarded, so it will not mutate state from
+       * the new generation.
+       */
+      if (!consumeLifecycle.isCurrentGeneration(generationAtStart)) {
+        throw new Error('consume aborted: lifecycle generation changed')
+      }
+
       const consumer = await transport.consume({
         id: msg.payload.id,
         producerId: msg.payload.producerId,
         kind: msg.payload.kind,
         rtpParameters: msg.payload.rtpParameters,
       })
+
+      if (!consumeLifecycle.isCurrentGeneration(generationAtStart)) {
+        // Teardown happened between `transport.consume` resolution and our
+        // bookkeeping below. Close the consumer we just built and bail —
+        // we must never publish it into `consumersByProducerId` after a
+        // generation bump, or `stopRemoteMedia` will have leaked one.
+        try {
+          consumer.close()
+        } catch {
+          /* ignore */
+        }
+        throw new Error('consume aborted: lifecycle generation changed')
+      }
 
       if (import.meta.env.DEV) {
         console.log('[consumer]', {
@@ -1116,29 +1151,36 @@ export function useRemoteMedia() {
         }
       }
     } catch (err) {
-      consumeLifecycle.releaseReservation(producerId)
-      // M2: roll back the optimistic `producerInfoById.set` above. Without
-      // this, a failed consume leaves stale producer metadata, so
-      // `getVideoPeerIds()` and preferred-layer signaling treat the producer
-      // as live. Peer-level derived maps are cleared only when no other
-      // producer for this `peerId` remains — a sibling (e.g. audio surviving
-      // a failed video consume) keeps its peer state.
-      producerInfoById.delete(producerId)
-      let peerHasOtherProducer = false
-      for (const remaining of producerInfoById.values()) {
-        if (remaining.peerId === peerId) {
-          peerHasOtherProducer = true
-          break
+      /**
+       * Audit M8: only roll back state if we are still in the same lifecycle
+       * generation. After teardown the maps belong to the new lifecycle and
+       * deleting `producerId` could clobber legitimate fresh state.
+       */
+      if (consumeLifecycle.isCurrentGeneration(generationAtStart)) {
+        consumeLifecycle.releaseReservation(producerId)
+        // M2: roll back the optimistic `producerInfoById.set` above. Without
+        // this, a failed consume leaves stale producer metadata, so
+        // `getVideoPeerIds()` and preferred-layer signaling treat the
+        // producer as live. Peer-level derived maps are cleared only when
+        // no other producer for this `peerId` remains — a sibling (e.g.
+        // audio surviving a failed video consume) keeps its peer state.
+        producerInfoById.delete(producerId)
+        let peerHasOtherProducer = false
+        for (const remaining of producerInfoById.values()) {
+          if (remaining.peerId === peerId) {
+            peerHasOtherProducer = true
+            break
+          }
         }
-      }
-      if (!peerHasOtherProducer) {
-        const nextVideoSource = new Map(remoteVideoSourceByPeerId.value)
-        if (nextVideoSource.delete(peerId)) {
-          remoteVideoSourceByPeerId.value = nextVideoSource
-        }
-        const nextOutboundPaused = new Map(remoteOutboundVideoPausedByPeerId.value)
-        if (nextOutboundPaused.delete(peerId)) {
-          remoteOutboundVideoPausedByPeerId.value = nextOutboundPaused
+        if (!peerHasOtherProducer) {
+          const nextVideoSource = new Map(remoteVideoSourceByPeerId.value)
+          if (nextVideoSource.delete(peerId)) {
+            remoteVideoSourceByPeerId.value = nextVideoSource
+          }
+          const nextOutboundPaused = new Map(remoteOutboundVideoPausedByPeerId.value)
+          if (nextOutboundPaused.delete(peerId)) {
+            remoteOutboundVideoPausedByPeerId.value = nextOutboundPaused
+          }
         }
       }
       throw err
@@ -1162,8 +1204,21 @@ export function useRemoteMedia() {
       return
     }
 
+    /**
+     * Audit M8: capture the lifecycle generation at task start. If
+     * `stopRemoteMedia()` (or any other path that calls `resetAllLifecycle`)
+     * fires while we are awaiting the consume round-trip, the generation
+     * bumps and the post-await mutation paths bail out. Without this,
+     * `runConsumeProducer` could resolve after teardown and rebuild
+     * `consumersByProducerId` / `producerInfoById` for a peer that has
+     * already left or a transport that has already closed.
+     */
+    const generationAtStart = consumeLifecycle.getGeneration()
     const task = (async (): Promise<void> => {
       if (consumeLifecycle.isAlreadyConsumed(producerId)) {
+        return
+      }
+      if (!consumeLifecycle.isCurrentGeneration(generationAtStart)) {
         return
       }
       consumeLifecycle.markConsuming(producerId)
@@ -1171,12 +1226,16 @@ export function useRemoteMedia() {
         if (import.meta.env.DEV) {
           console.log('[consume] CONSUMING PRODUCER', producerId, info.peerId, info.kind)
         }
-        await runConsumeProducer(device, room, info)
+        await runConsumeProducer(device, room, info, generationAtStart)
       } catch (e) {
-        consumeLifecycle.releaseReservation(producerId)
+        if (consumeLifecycle.isCurrentGeneration(generationAtStart)) {
+          consumeLifecycle.releaseReservation(producerId)
+        }
         throw e
       } finally {
-        consumeLifecycle.unmarkConsuming(producerId)
+        if (consumeLifecycle.isCurrentGeneration(generationAtStart)) {
+          consumeLifecycle.unmarkConsuming(producerId)
+        }
       }
     })()
 
@@ -1184,7 +1243,9 @@ export function useRemoteMedia() {
     try {
       await task
     } finally {
-      consumeLifecycle.unregisterInflightTask(producerId)
+      if (consumeLifecycle.isCurrentGeneration(generationAtStart)) {
+        consumeLifecycle.unregisterInflightTask(producerId)
+      }
     }
   }
 

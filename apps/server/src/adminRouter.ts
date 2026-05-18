@@ -12,6 +12,19 @@ import {
   snapshotRoomDiagnostics,
 } from './signaling/roomDiagnosticsBus'
 import { buildGameSessionReport } from './signaling/roomDiagnosticsReport'
+import { createIpRateLimitMiddleware } from './utils/rateLimitMiddleware'
+
+/**
+ * Per-IP cap for admin mutations (audit S7). All three handlers gate on
+ * `requireAdmin`; this cap is defense-in-depth against stolen cookies and
+ * audit-log spam. 60/min comfortably covers legitimate role-promotion
+ * batches and streamer-list curation; abnormal bursts get a 429.
+ */
+const adminMutationRateLimit = createIpRateLimitMiddleware({
+  label: 'http:admin:mutate',
+  windowMs: 60 * 1000,
+  limit: 60,
+}).middleware
 
 /**
  * Max length of the `roomId` slug used in the `Content-Disposition`
@@ -295,7 +308,7 @@ export function mountAdminRoutes(app: Express): void {
     }
   })
 
-  app.patch('/api/admin/users/:userId/role', async (req: Request, res: Response) => {
+  app.patch('/api/admin/users/:userId/role', adminMutationRateLimit, async (req: Request, res: Response) => {
     if (!(await requireAdmin(req, res))) {
       return
     }
@@ -487,7 +500,7 @@ export function mountAdminRoutes(app: Express): void {
     }
   })
 
-  app.post('/api/admin/streamers', async (req: Request, res: Response) => {
+  app.post('/api/admin/streamers', adminMutationRateLimit, async (req: Request, res: Response) => {
     if (!(await requireAdmin(req, res))) {
       return
     }
@@ -583,7 +596,7 @@ export function mountAdminRoutes(app: Express): void {
     }
   })
 
-  app.delete('/api/admin/streamers/:id', async (req: Request, res: Response) => {
+  app.delete('/api/admin/streamers/:id', adminMutationRateLimit, async (req: Request, res: Response) => {
     if (!(await requireAdmin(req, res))) {
       return
     }
