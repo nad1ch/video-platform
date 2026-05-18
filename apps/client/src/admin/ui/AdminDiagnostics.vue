@@ -73,6 +73,15 @@ const errorKey = ref<string | null>(null)
 const filterGameType = ref<string>('')
 const filterRoomId = ref<string>('')
 const filterHasErrors = ref<'' | '1' | '0'>('')
+/**
+ * `<input type="datetime-local">` values (`YYYY-MM-DDTHH:mm`) in the
+ * admin's local timezone. Converted to a UTC ISO string via
+ * `localDateTimeToIsoOrNull` before being sent to the API; invalid /
+ * empty values are simply omitted so the existing default behavior
+ * (no date filter) is preserved.
+ */
+const filterDateFrom = ref<string>('')
+const filterDateTo = ref<string>('')
 
 const detail = ref<ReportDetail | null>(null)
 const detailLoading = ref(false)
@@ -82,6 +91,12 @@ let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 
 const hasNext = computed(() => offset.value + items.value.length < total.value)
 const hasPrev = computed(() => offset.value > 0)
+
+function localDateTimeToIsoOrNull(local: string): string | null {
+  if (!local) return null
+  const ms = Date.parse(local)
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null
+}
 
 async function loadList(): Promise<void> {
   loading.value = true
@@ -93,6 +108,10 @@ async function loadList(): Promise<void> {
     if (filterGameType.value) qs.set('gameType', filterGameType.value)
     if (filterRoomId.value) qs.set('roomId', filterRoomId.value)
     if (filterHasErrors.value) qs.set('hasErrors', filterHasErrors.value)
+    const dateFromIso = localDateTimeToIsoOrNull(filterDateFrom.value)
+    if (dateFromIso) qs.set('dateFrom', dateFromIso)
+    const dateToIso = localDateTimeToIsoOrNull(filterDateTo.value)
+    if (dateToIso) qs.set('dateTo', dateToIso)
     const res = await apiFetch(`/api/admin/diagnostics/reports?${qs.toString()}`)
     if (!res.ok) {
       errorKey.value = `error_${res.status}`
@@ -201,6 +220,15 @@ function applyFilters(): void {
   void loadList()
 }
 
+function clearFilters(): void {
+  filterGameType.value = ''
+  filterRoomId.value = ''
+  filterHasErrors.value = ''
+  filterDateFrom.value = ''
+  filterDateTo.value = ''
+  applyFilters()
+}
+
 function nextPage(): void {
   if (!hasNext.value) return
   offset.value += DEFAULT_LIMIT
@@ -268,12 +296,37 @@ watch(filterHasErrors, () => applyFilters())
           <option value="0">Clean</option>
         </select>
       </label>
+      <label class="flex flex-col gap-1 text-xs text-slate-400">
+        From (created)
+        <input
+          v-model="filterDateFrom"
+          type="datetime-local"
+          class="rounded-md border border-white/10 bg-slate-900/60 px-2 py-1 text-sm text-slate-100"
+          @keyup.enter="applyFilters"
+        />
+      </label>
+      <label class="flex flex-col gap-1 text-xs text-slate-400">
+        To (created)
+        <input
+          v-model="filterDateTo"
+          type="datetime-local"
+          class="rounded-md border border-white/10 bg-slate-900/60 px-2 py-1 text-sm text-slate-100"
+          @keyup.enter="applyFilters"
+        />
+      </label>
       <button
         type="button"
         class="rounded-md border border-white/10 bg-violet-600/30 px-3 py-1.5 text-sm font-medium text-violet-50 hover:bg-violet-600/40"
         @click="applyFilters"
       >
         Apply
+      </button>
+      <button
+        type="button"
+        class="rounded-md border border-white/10 bg-slate-800/70 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700/70"
+        @click="clearFilters"
+      >
+        Clear
       </button>
       <span v-if="copyFeedback" class="ml-auto text-xs text-emerald-300">{{ copyFeedback }}</span>
     </section>
