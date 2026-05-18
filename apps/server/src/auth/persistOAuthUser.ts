@@ -6,8 +6,33 @@ import type { TwitchProfileForSession, TwitchStreamStatus } from './twitchClient
 
 const STREAMER_OWNER_ROLE = 'OWNER'
 
+/** Default Twitch follower threshold for auto Streamer creation/reactivation. */
+const TWITCH_STREAMER_DEFAULT_MIN_FOLLOWERS = 100
+
+/**
+ * Resolved threshold for Twitch auto-streamer assignment. Read once from
+ * `TWITCH_STREAMER_MIN_FOLLOWERS` (default {@link TWITCH_STREAMER_DEFAULT_MIN_FOLLOWERS});
+ * invalid / negative values fall back to the default. Kept as a function
+ * so a test or runtime config swap can re-read without restarting.
+ */
+function resolveTwitchStreamerMinFollowers(): number {
+  const raw = process.env.TWITCH_STREAMER_MIN_FOLLOWERS?.trim()
+  if (!raw) return TWITCH_STREAMER_DEFAULT_MIN_FOLLOWERS
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n) || n < 0) return TWITCH_STREAMER_DEFAULT_MIN_FOLLOWERS
+  return n
+}
+
 export type PersistTwitchOAuthUserOptions = {
   streamStatus?: TwitchStreamStatus | null
+  /**
+   * Follower count fetched server-side by the OAuth callback (see
+   * `twitchFetchFollowerCount`). `null` when the Twitch API failed or
+   * the helper short-circuited; this routes to the fail-closed branch
+   * (no auto-create, no reactivation). Never the access token, never
+   * the raw Twitch response.
+   */
+  followerCount?: number | null
 }
 
 
@@ -74,14 +99,49 @@ export async function persistTwitchOAuthUser(
     })
     const existingStreamerByTwitch = await prisma.streamer.findUnique({
       where: { twitchId: profile.id },
-      select: { id: true },
+      select: { id: true, isActive: true },
     })
     const existingStreamer =
       existingStreamerByTwitch ??
       (await prisma.streamer.findFirst({
         where: { OR: [{ username: login }, { name: login }] },
-        select: { id: true },
+        select: { id: true, isActive: true },
       }))
+    /**
+     * Follower-threshold gate. Block auto Streamer **creation** and
+     * **reactivation** when the OAuth probe yielded fewer than
+     * `TWITCH_STREAMER_MIN_FOLLOWERS` followers (default 100), OR when
+     * the probe failed entirely (`followerCount == null` ⇒ fail-closed
+     * per spec — login still succeeds as plain USER).
+     *
+     * Existing **already-active** Streamer rows are grandfathered: we
+     * still run the refresh-fields path so display name / avatar /
+     * `lastSyncAt` stay current, and `isActive: true` is preserved.
+     * This protects admin-approved or previously-qualified streamers
+     * whose follower count later drops below the threshold.
+     */
+    const followerThreshold = resolveTwitchStreamerMinFollowers()
+    const followerCount = options.followerCount ?? null
+    const meetsThreshold = followerCount != null && followerCount >= followerThreshold
+    const isFreshCreate = existingStreamer == null
+    const isReactivation = existingStreamer != null && existingStreamer.isActive !== true
+    if ((isFreshCreate || isReactivation) && !meetsThreshold) {
+      const reason =
+        followerCount == null
+          ? 'follower_probe_unavailable'
+          : 'below_threshold'
+      console.info(
+        '[auth][twitch] streamer auto-assignment skipped',
+        {
+          twitchId: profile.id,
+          followerCount,
+          threshold: followerThreshold,
+          decision: isFreshCreate ? 'no_create' : 'no_reactivate',
+          reason,
+        },
+      )
+      return
+    }
     const streamerData = {
       twitchId: profile.id,
       username: login,

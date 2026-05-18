@@ -17,7 +17,12 @@ import {
 import { handleGetApiAuthMe, handleGetApiMeLegacy } from './session/me'
 import { clientPublicOrigin } from './clientOrigin'
 import { exchangeCodeForToken, getGoogleAuthUrl, getUserProfile, resolveGoogleOAuthRedirectUri } from './googleOAuth'
-import { twitchExchangeCode, twitchFetchSessionUser, twitchFetchStreamStatus } from './twitchClient'
+import {
+  twitchExchangeCode,
+  twitchFetchFollowerCount,
+  twitchFetchSessionUser,
+  twitchFetchStreamStatus,
+} from './twitchClient'
 import { handleEmailLogin, handleEmailRegister } from './email/emailAuthHandlers'
 import { handleSendEmailVerification, handleVerifyEmail } from './email/emailVerificationHandlers'
 import { handleConfirmPasswordReset, handleSendPasswordReset } from './email/passwordResetHandlers'
@@ -185,7 +190,19 @@ oauthRouter.get('/twitch/callback', oauthRateLimit, async (req: Request, res: Re
       console.warn('[auth][twitch] live status sync skipped', e)
       return null
     })
-    await persistTwitchOAuthUser(profile, { streamStatus })
+    /**
+     * Follower-count probe gates auto Streamer creation/reactivation in
+     * `persistTwitchOAuthUser`. The helper never throws; on any failure
+     * we pass `null` so `persistTwitchOAuthUser` fail-closes (no new
+     * Streamer, no reactivation). Login itself is never blocked.
+     */
+    const followerCount = await twitchFetchFollowerCount(accessToken, profile.id)
+      .then((r) => (r.ok ? r.total : null))
+      .catch((e) => {
+        console.warn('[auth][twitch] follower count probe failed', e)
+        return null
+      })
+    await persistTwitchOAuthUser(profile, { streamStatus, followerCount })
 
     const finalUser = withSessionRole(profile)
     const token = signSession(finalUser, NADLE_SESSION_MAX_AGE_SEC)
