@@ -136,6 +136,17 @@ export async function claimAllPending(
 ): Promise<ClaimSummary> {
   await markExpiredAsLost(tx, now)
 
+  // Ensure the CoinBalance scaffold row exists before any applyDelta call.
+  // First-time claimers (e.g. a Twitch viewer who earned chat-activity
+  // PendingRewards but has never opened the legacy CoinHub UI) have no
+  // CoinBalance row yet; applyDelta uses findUniqueOrThrow and would
+  // otherwise reject the claim with P2025.
+  await tx.coinBalance.upsert({
+    where: { userId },
+    create: { userId, amount: 0 },
+    update: {},
+  })
+
   const rows = await tx.pendingReward.findMany({
     where: {
       userId,
@@ -249,6 +260,13 @@ export async function claimPendingById(
     if (stamp.count === 0) {
       return { coinTotal: 0, xpTotal: 0, consumedPendingIds: [], claimId: null }
     }
+    // Same first-time-claimer safety net as `claimAllPending`: ensure the
+    // CoinBalance scaffold exists before applyDelta runs.
+    await tx.coinBalance.upsert({
+      where: { userId },
+      create: { userId, amount: 0 },
+      update: {},
+    })
     if (row.coinAmount > 0) {
       await applyDelta(tx, userId, {
         delta: row.coinAmount,
