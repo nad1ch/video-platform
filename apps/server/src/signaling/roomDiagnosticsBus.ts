@@ -423,6 +423,18 @@ export type RoomDiagnosticsFinalizationReason =
    * via this path are distinguishable from the natural-expiry shape.
    */
   | 'lru_eviction'
+  /**
+   * Bucket persisted because the periodic idle reaper found no events for
+   * {@link ROOM_IDLE_REAP_MS}. Previously the reaper called
+   * `rooms.delete(roomId)` directly, silently dropping every accumulated
+   * event for a long-quiet room — so a multi-hour call that only emitted
+   * `room_joined` at the start and `room_closed` at the end would land in
+   * admin diagnostics as a ~1-minute report whose `firstAt`/`lastAt` came
+   * from the late `room_closed` marker. Finalizing before drop preserves
+   * the timeline; the row's `finalizedReason` distinguishes reaper
+   * persistence from the empty-grace natural path.
+   */
+  | 'idle_reap'
 
 export interface RoomDiagnosticsFinalizationMeta {
   bucketKey: string
@@ -620,10 +632,30 @@ export function _pendingFinalizationCountForTests(): number {
 const reaper = setInterval(() => {
   try {
     const now = Date.now()
+    /**
+     * Snapshot idle keys before mutating `rooms`. `finalizeRoomBucket` calls
+     * `emitGraceMarker` → `recordDiagnosticEvent` → `touchAndPromote` which
+     * delete-and-reinserts the bucket, then `finalizeRoomBucket` itself
+     * deletes it. Iterating the live Map while finalizing is observably
+     * correct on V8 but the snapshot keeps this loop trivially safe — same
+     * pattern as `finalizeAllPendingRoomDiagnostics`.
+     */
+    const idleKeys: string[] = []
     for (const [roomId, buffer] of rooms) {
       if (now - buffer.lastTouchedAt > ROOM_IDLE_REAP_MS) {
-        rooms.delete(roomId)
+        idleKeys.push(roomId)
       }
+    }
+    /**
+     * Mirror the LRU-eviction path (audit R18): finalize before drop so a
+     * long-quiet room's accumulated events are persisted instead of
+     * silently lost. `cancelRoomFinalization` is a no-op when no grace
+     * timer is armed (the common case for a bucket reaped after 30 min of
+     * silence without `room_closed`).
+     */
+    for (const roomId of idleKeys) {
+      cancelRoomFinalization(roomId, 'idle_reap')
+      finalizeRoomBucket(roomId, 'idle_reap')
     }
   } catch {
     // ignore
