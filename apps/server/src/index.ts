@@ -25,6 +25,7 @@ import { attachNadrawShowSocketServer } from './nadraw-show/nadrawSocket'
 import { mountNadrawShowRoutes } from './nadraw-show/nadrawRouter'
 import { mountCoinHubRoutes } from './coinHub/coinHubRouter'
 import { mountEconomyRoutes } from './economy/router/economyRouter'
+import { mountAdminEconomyRoutes } from './economy/admin/adminEconomyRouter'
 import { attachCheckersSocketServer } from './checkers/checkersSocket'
 import { mountCheckersMatchmakingRoutes } from './checkers/checkersMatchmaking'
 import { mountBillingRoutes } from './billing/billingRouter'
@@ -311,6 +312,7 @@ async function bootstrap(): Promise<void> {
   mountNadrawShowRoutes(app)
   mountCoinHubRoutes(app)
   mountEconomyRoutes(app)
+  mountAdminEconomyRoutes(app)
   mountCheckersMatchmakingRoutes(app)
   mountBillingRoutes(app)
   mountBillingAdminRoutes(app)
