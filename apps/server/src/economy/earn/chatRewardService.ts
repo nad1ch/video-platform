@@ -4,6 +4,7 @@ import { isDatabaseConfigured, prisma } from '../../prisma'
 import { CHAT_REWARD, resolvePendingExpiryMs } from '../economyConfig'
 import { grantPending } from '../claims/claimService'
 import { utcDayKey } from '../claims/dailyClaim'
+import { applyEarnBoost } from '../perks/subscriptionPerks'
 
 /**
  * Chat-activity reward grantor. Called from the Twitch IRC ingest path
@@ -149,12 +150,20 @@ export async function awardChatActivity(
     if (counter.count >= CHAT_REWARD.maxMessagesPerStreamerPerDay) {
       return { granted: false, reason: 'message_cap' }
     }
-    const coinAmount = CHAT_REWARD.coinsPerMessage
+    const boosted = await applyEarnBoost(
+      user.id,
+      {
+        coinAmount: CHAT_REWARD.coinsPerMessage,
+        xpAmount: CHAT_REWARD.xpPerMessage,
+      },
+      now,
+    )
+    const coinAmount = boosted.coinAmount
     if (counter.coins + coinAmount > CHAT_REWARD.maxCoinsPerStreamerPerDay) {
       return { granted: false, reason: 'coin_cap' }
     }
 
-    const xpAmount = CHAT_REWARD.xpPerMessage
+    const xpAmount = boosted.xpAmount
     const idempotencyKey = `chat:${input.streamerId}:${user.id}:${dayKey}:${counter.count + 1}`
 
     const result = await prisma.$transaction(

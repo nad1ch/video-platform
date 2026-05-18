@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '../../prisma'
 import { DAILY_CLAIM } from '../economyConfig'
 import { grantPending } from './claimService'
+import { applyEarnBoost } from '../perks/subscriptionPerks'
 
 const TX_SERIAL: { isolationLevel: Prisma.TransactionIsolationLevel } = {
   isolationLevel: 'Serializable',
@@ -45,8 +46,15 @@ export async function grantDailyClaim(
 ): Promise<DailyClaimResult> {
   const day = utcDayKey(now)
   const idempotencyKey = `daily:${userId}:${day}`
-  const coinAmount = DAILY_CLAIM.coins
-  const xpAmount = DAILY_CLAIM.xp
+  // Apply subscription earn boost so a Pro viewer's daily is bigger than a
+  // non-subscriber's. Multiplier is folded in at grant-time so the
+  // PendingReward stores the boosted value the user will actually receive.
+  const boosted = await applyEarnBoost(userId, {
+    coinAmount: DAILY_CLAIM.coins,
+    xpAmount: DAILY_CLAIM.xp,
+  }, now)
+  const coinAmount = boosted.coinAmount
+  const xpAmount = boosted.xpAmount
 
   return prisma.$transaction(async (tx) => {
     const result = await grantPending(

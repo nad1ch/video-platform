@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '../../prisma'
 import { sumClaimablePending } from '../claims/claimService'
 import { deriveLevelSnapshot } from '../ledger/levelCurve'
+import { resolveActiveBoosts } from '../perks/subscriptionPerks'
 
 export type PendingRewardDto = {
   id: string
@@ -33,6 +34,12 @@ export type WalletSnapshotDto = {
   pendingXp: number
   /** Per-row pending rewards (capped — for UI list / breakdown). */
   pending: PendingRewardDto[]
+  /** Active subscription boost snapshot — `plan: null` when not subscribed. */
+  boosts: {
+    plan: 'basic' | 'pro' | null
+    coinsMultiplier: number
+    xpMultiplier: number
+  }
 }
 
 const PENDING_LIST_LIMIT = 50
@@ -50,7 +57,7 @@ export async function getWalletSnapshot(
   userId: string,
   now: Date = new Date(),
 ): Promise<WalletSnapshotDto> {
-  const [bal, xp, claimable, pendingRows] = await Promise.all([
+  const [bal, xp, claimable, pendingRows, boosts] = await Promise.all([
     prisma.coinBalance.findUnique({
       where: { userId },
       select: { amount: true },
@@ -80,6 +87,7 @@ export async function getWalletSnapshot(
         createdAt: true,
       },
     }),
+    resolveActiveBoosts(userId, now),
   ])
 
   const xpAmount = xp?.amount ?? 0
@@ -103,5 +111,10 @@ export async function getWalletSnapshot(
       expiresAt: r.expiresAt.toISOString(),
       createdAt: r.createdAt.toISOString(),
     })),
+    boosts: {
+      plan: boosts.plan,
+      coinsMultiplier: boosts.coinsMultiplier,
+      xpMultiplier: boosts.xpMultiplier,
+    },
   }
 }

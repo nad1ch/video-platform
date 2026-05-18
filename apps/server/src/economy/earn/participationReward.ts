@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { PARTICIPATION_REWARD, resolvePendingExpiryMs } from '../economyConfig'
 import { grantPending } from '../claims/claimService'
+import { applyEarnBoost } from '../perks/subscriptionPerks'
 
 export type ParticipationGrant = {
   /** Round id from `GameRound.id` — keys the idempotency token. */
@@ -32,12 +33,19 @@ export async function grantParticipationReward(
   now: Date = new Date(),
 ): Promise<{ pendingRewardId: string; idempotentReplay: boolean } | null> {
   if (!PARTICIPATION_REWARD.enabled) return null
-  const coinAmount = input.isWinner
+  const baseCoins = input.isWinner
     ? PARTICIPATION_REWARD.coinsWin
     : PARTICIPATION_REWARD.coinsPlay
-  const xpAmount = input.isWinner
+  const baseXp = input.isWinner
     ? PARTICIPATION_REWARD.xpWin
     : PARTICIPATION_REWARD.xpPlay
+  if (baseCoins <= 0 && baseXp <= 0) return null
+  const boosted = await applyEarnBoost(input.userId, {
+    coinAmount: baseCoins,
+    xpAmount: baseXp,
+  }, now)
+  const coinAmount = boosted.coinAmount
+  const xpAmount = boosted.xpAmount
   if (coinAmount <= 0 && xpAmount <= 0) return null
 
   const result = await grantPending(
