@@ -37,13 +37,37 @@ export type AdminUserRow = {
   updatedAt?: string
 }
 
+/**
+ * Optional date-range filters for `/api/admin/users`. Each value is an
+ * ISO datetime string; invalid / empty strings are dropped before the
+ * query is built so the server-side default behavior (no date filter)
+ * is preserved.
+ */
+export type AdminUserFilters = {
+  createdFrom?: string
+  createdTo?: string
+  updatedFrom?: string
+  updatedTo?: string
+}
+
+function buildAdminUsersQuery(filters?: AdminUserFilters): string {
+  if (!filters) return ''
+  const qs = new URLSearchParams()
+  if (filters.createdFrom) qs.set('createdFrom', filters.createdFrom)
+  if (filters.createdTo) qs.set('createdTo', filters.createdTo)
+  if (filters.updatedFrom) qs.set('updatedFrom', filters.updatedFrom)
+  if (filters.updatedTo) qs.set('updatedTo', filters.updatedTo)
+  const s = qs.toString()
+  return s ? `?${s}` : ''
+}
+
 export function useAdminUsersState(): {
   users: Ref<AdminUserRow[]>
   loading: Ref<boolean>
   errorKey: Ref<'load' | 'forbidden' | null>
   databaseConfigured: Ref<boolean>
   lastUpdated: Ref<Date | null>
-  load: () => Promise<void>
+  load: (filters?: AdminUserFilters) => Promise<void>
 } {
   const users = ref<AdminUserRow[]>([])
   const loading = ref(true)
@@ -51,11 +75,13 @@ export function useAdminUsersState(): {
   const databaseConfigured = ref(true)
   const lastUpdated = ref<Date | null>(null)
 
-  async function load(): Promise<void> {
+  async function load(filters?: AdminUserFilters): Promise<void> {
     loading.value = true
     errorKey.value = null
     try {
-      const res = await adminGetJson<{ databaseConfigured?: boolean; users?: AdminUserRow[] }>('/api/admin/users')
+      const res = await adminGetJson<{ databaseConfigured?: boolean; users?: AdminUserRow[] }>(
+        `/api/admin/users${buildAdminUsersQuery(filters)}`,
+      )
       const out = interpretAdminGetJson(res)
       if (out.tag === 'forbidden') {
         errorKey.value = 'forbidden'
