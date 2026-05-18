@@ -221,6 +221,20 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     }),
   }),
   z.object({
+    type: z.literal(MafiaWs.transferHostOffer),
+    payload: z.object({
+      targetUserId: z.string().min(1).max(128),
+    }),
+  }),
+  z.object({
+    type: z.literal(MafiaWs.transferHostAccept),
+    payload: z.object({}).optional(),
+  }),
+  z.object({
+    type: z.literal(MafiaWs.transferHostReject),
+    payload: z.object({}).optional(),
+  }),
+  z.object({
     type: z.literal(MafiaWs.queueUpdate),
     payload: z.object({
       

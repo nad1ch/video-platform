@@ -17,8 +17,43 @@ export const MafiaWs = {
   hostUpdated: 'mafia:host-updated',
   
   claimHost: 'mafia:claim-host',
-  
+
+  /**
+   * Legacy single-phase transfer-host wire name. Retained for backward
+   * compatibility with any deployed client that may emit it; the server now
+   * routes it through the two-phase consent path (see {@link transferHostOffer})
+   * so consent cannot be bypassed.
+   */
   transferHost: 'mafia:transfer-host',
+  /**
+   * Two-phase transfer-host consent (audit Finding I).
+   *
+   * Client → server: current host requests transfer to `targetUserId`.
+   * Server validates host authority + target presence, creates a pending
+   * offer in `mafiaTransferOfferStore`, and unicasts {@link transferHostPending}
+   * to the target. The host change is applied only after the target sends
+   * {@link transferHostAccept}.
+   */
+  transferHostOffer: 'mafia:transfer-host-offer',
+  /**
+   * Server → target peer: a pending transfer is awaiting accept/reject.
+   * Payload carries the requesting host's userId, optional display name, and
+   * the absolute `expiresAt` ms timestamp. The target peer surfaces this to
+   * the user and replies with {@link transferHostAccept} or
+   * {@link transferHostReject}. Auto-cancelled on disconnect or timeout.
+   */
+  transferHostPending: 'mafia:transfer-host-pending',
+  /** Target → server: accept the pending offer (no payload). */
+  transferHostAccept: 'mafia:transfer-host-accept',
+  /** Target → server: reject the pending offer (no payload). */
+  transferHostReject: 'mafia:transfer-host-reject',
+  /**
+   * Server → original host: outcome of a pending offer. `accepted` fires
+   * alongside the normal {@link hostUpdated} broadcast; the host's tile loses
+   * host UI as a side effect of the host-updated apply. `rejected` / `expired`
+   * / `cancelled` leave host unchanged.
+   */
+  transferHostResult: 'mafia:transfer-host-result',
   
   queueUpdate: 'mafia:queue-update',
   

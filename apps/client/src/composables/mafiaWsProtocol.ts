@@ -13,7 +13,25 @@
 export const MafiaWs = {
   hostUpdated: 'mafia:host-updated',
   claimHost: 'mafia:claim-host',
+  /**
+   * Legacy single-phase transfer-host wire name. The server now routes it
+   * through the two-phase consent path; new client UI must use
+   * {@link transferHostOffer} instead.
+   */
   transferHost: 'mafia:transfer-host',
+  /**
+   * Two-phase transfer-host consent (paired with server `MafiaWs.transferHostOffer`).
+   * Client → server: current host requests transfer to `targetUserId`.
+   */
+  transferHostOffer: 'mafia:transfer-host-offer',
+  /** Server → target peer: pending offer awaiting accept/reject. */
+  transferHostPending: 'mafia:transfer-host-pending',
+  /** Target → server: accept the pending offer. */
+  transferHostAccept: 'mafia:transfer-host-accept',
+  /** Target → server: reject the pending offer. */
+  transferHostReject: 'mafia:transfer-host-reject',
+  /** Server → original host: outcome of a pending offer. */
+  transferHostResult: 'mafia:transfer-host-result',
   queueUpdate: 'mafia:queue-update',
   reshuffle: 'mafia:reshuffle',
   playersUpdate: 'mafia:players-update',

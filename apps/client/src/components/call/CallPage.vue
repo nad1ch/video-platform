@@ -65,6 +65,7 @@ import { generateCallRoomCode } from '@/utils/callRoomUi'
 import { readStorageJson, writeStorageJson } from '@/utils/storageJson'
 import { useCallRoomHeaderJoinStore } from '@/stores/callRoomHeaderJoin'
 import { useMafiaHostSignaling } from '@/composables/useMafiaHostSignaling'
+import { useMafiaTransferHostConsent } from '@/composables/useMafiaTransferHostConsent'
 import { useMafiaCallHostUi } from '@/composables/useMafiaCallHostUi'
 import { useEatFirstCallSignaling } from '@/composables/useEatFirstCallSignaling'
 import {
@@ -330,6 +331,15 @@ if (import.meta.env.DEV) {
 }
 
 useMafiaHostSignaling(sendSignalingMessage, subscribeSignalingMessage, wsStatus)
+// Audit Finding I — FOUNDATION ONLY: subscribe the two-phase Mafia
+// transfer-host consent flow on the wire. The return value is intentionally
+// discarded; no template binds to `pendingIncomingOffer` /
+// `pendingOutgoingOffer` / `lastTransferResult`, no host button calls
+// `sendTransferHostOffer`, no accept/reject prompt is rendered. Mounting
+// here only ensures the new `mafia:transfer-host-pending` /
+// `mafia:transfer-host-result` frames are parsed instead of silently
+// dropped, and that the client send helpers exist for any future UI.
+useMafiaTransferHostConsent(sendSignalingMessage, subscribeSignalingMessage, wsStatus)
 
 // Diagnostics-only WS / signaling counters + probes + env-info stamp +
 // optional `__MEDIA_DEBUG__` global install live in `useCallMediaDebugTaps`

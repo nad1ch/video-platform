@@ -35,6 +35,12 @@ import {
   setMafiaRoomOwnerUserId,
 } from './mafiaRoomOwnerStore'
 import {
+  clearTransferOffer,
+  clearTransferOfferForPeer,
+  createTransferOffer,
+  getTransferOffer,
+} from './mafiaTransferOfferStore'
+import {
   getGameRoomOwnerUserId,
   hydrateGameRoomOwnerFromDb,
   setGameRoomOwnerUserId,
@@ -211,6 +217,14 @@ export type ServerMessage =
   | { type: 'server-pong'; payload: Record<string, never> }
   | { type: 'signaling-auth'; payload: { userId: string | null } }
   | { type: 'mafia:host-updated'; payload: { hostPeerId: string | null; hostUserId: string | null; hostSessionId: string | null } }
+  | {
+      type: 'mafia:transfer-host-pending'
+      payload: { fromUserId: string; fromDisplayName: string | null; expiresAt: number }
+    }
+  | {
+      type: 'mafia:transfer-host-result'
+      payload: { outcome: 'accepted' | 'rejected' | 'expired' | 'cancelled' }
+    }
   | { type: 'mafia:queue-update'; payload: { speakingQueue: number[] } }
   | { type: 'mafia:mode-update'; payload: { mode: 'old' | 'new' } }
   | {
@@ -876,6 +890,11 @@ export function removePeerFromNetwork(peer: Peer, deps: SignalingDeps): void {
   
   // queue so UIs do not render a seat that no longer has a player.
   if (isMafiaRoomId(room.id)) {
+    // Audit Finding I: clear any pending transfer-host offer this peer was
+    // party to (as host or as target) and notify the surviving side. Done
+    // before the other Mafia per-peer cleanups so the offer's recorded peer
+    // ids are still resolvable inside `room.getPeer`.
+    clearMafiaTransferOfferOnPeerLeave(room, peer.id)
     // Genuine peer-left: drop per-peer Mafia kill enforcement and life-state
     // for the leaver so OBS / late joiners do not see ghost dead overlays
     // or paused-producer flags for peerIds that no longer exist. Tab-reload
@@ -1744,45 +1763,170 @@ export function handleMafiaClaimHost(
   })
 }
 
+/**
+ * Legacy single-phase entry point. The old `mafia:transfer-host` wire name is
+ * kept (no current client invokes it, but the schema entry remains) and the
+ * handler delegates to the two-phase offer path so consent cannot be bypassed
+ * by any future caller. See {@link handleMafiaTransferHostOffer} for the real
+ * flow.
+ *
+ * Foundation-only: no UI in this branch invokes either the legacy or the new
+ * wire. The change is an invariant guard for any future UI that may attempt
+ * an immediate transfer — it will instead produce a pending offer that the
+ * target must accept.
+ */
 export function handleMafiaTransferHost(
   socket: WsSocket,
   payload: { userId: string },
   deps: SignalingDeps,
 ): void {
+  handleMafiaTransferHostOffer(socket, { targetUserId: payload.userId }, deps)
+}
+
+/**
+ * Two-phase transfer-host offer (audit Finding I). Host requests transfer to
+ * `targetUserId`; the server validates host authority + target presence and
+ * creates a pending offer. The host change is applied only on
+ * {@link handleMafiaTransferHostAccept}. Reject / expire / disconnect keep the
+ * current host unchanged. OBS / view-only peers can never be a target (they
+ * have an empty `mafiaSessionId` and `getFirstMafiaSessionIdForUser` returns
+ * `null`).
+ */
+export function handleMafiaTransferHostOffer(
+  socket: WsSocket,
+  payload: { targetUserId: string },
+  deps: SignalingDeps,
+): void {
   const rp = resolveMafiaPeerAndRoom(socket, deps)
-  if (!rp) {
-    return
-  }
+  if (!rp) return
   const { peer, room } = rp
-  if (!isMafiaHostPeer(room, peer)) {
-    return
+  if (!isMafiaHostPeer(room, peer)) return
+  const targetUserId = sanitizeUserId(payload.targetUserId)
+  if (targetUserId.length < 1) return
+  // Self-transfer is a no-op footgun (rebinds mafiaSessionId to a possibly
+  // stale value); reject explicitly.
+  if (targetUserId === peer.userId) return
+  // R5 guard: target must have an active Mafia session on at least one peer,
+  // which excludes OBS / `?mode=view` tabs whose `mafiaSessionId` is empty.
+  const targetSessionId = room.getFirstMafiaSessionIdForUser(targetUserId)
+  if (targetSessionId == null || targetSessionId.length === 0) return
+  const targetPeerId = room.getFirstMafiaPeerIdForUserSession(targetUserId, targetSessionId)
+  if (targetPeerId == null || targetPeerId.length === 0) return
+  const targetPeer = room.getPeer(targetPeerId)
+  if (targetPeer == null) return
+
+  const fromPeerId = peer.id
+  const fromUserId = peer.userId
+  const fromSessionId = peer.mafiaSessionId
+  const fromDisplayNameRaw = typeof peer.displayName === 'string' ? peer.displayName : ''
+  const fromDisplayName = fromDisplayNameRaw.length > 0 ? fromDisplayNameRaw : null
+
+  const prior = createTransferOffer(
+    room.id,
+    { fromUserId, fromPeerId, fromSessionId, fromDisplayName, targetUserId, targetPeerId, targetSessionId },
+    (expired) => {
+      notifyTransferOutcome(room, expired.fromPeerId, 'expired')
+      notifyTransferOutcome(room, expired.targetPeerId, 'expired')
+    },
+  )
+  if (prior != null) {
+    // Replaced a still-pending offer. Notify both sides of the prior so any
+    // open UI dismisses; the new offer is delivered below.
+    notifyTransferOutcome(room, prior.fromPeerId, 'cancelled')
+    notifyTransferOutcome(room, prior.targetPeerId, 'cancelled')
   }
-  const nextUserId = sanitizeUserId(payload.userId)
-  if (nextUserId.length < 1) {
-    return
-  }
-  /**
-   * Owner-lock guard (P0 Bug 3): only transfer host to a userId that is
-   * actually present in the room. Rejects transfers to OBS/view tabs that
-   * are not currently in-room as participants, and to stale identities.
-   *
-   * Audit R5: additionally require the target user to have a non-empty
-   * `mafiaSessionId` on at least one of their peers. Without this guard
-   * a host could blindly hand ownership to an OBS / spectator peer that
-   * has never opened the Mafia UI, who would then receive the host
-   * panel out of the blue. This is the minimal safe server-side guard
-   * — the full two-phase offer/accept consent flow is a follow-up.
-   */
-  const nextSessionId = room.getFirstMafiaSessionIdForUser(nextUserId)
-  if (nextSessionId == null) {
-    return
-  }
-  room.setMafiaHostUserId(nextUserId)
-  room.setMafiaHostSessionId(nextSessionId)
-  room.setMafiaHostPeerId(room.getFirstMafiaPeerIdForUserSession(nextUserId, nextSessionId))
+
+  const offer = getTransferOffer(room.id)
+  if (offer == null) return // unreachable defensive guard
+  sendServerMessage(targetPeer.socket, {
+    type: 'mafia:transfer-host-pending',
+    payload: {
+      fromUserId: offer.fromUserId,
+      fromDisplayName: offer.fromDisplayName,
+      expiresAt: offer.expiresAt,
+    },
+  })
+}
+
+/**
+ * Target accepts the pending offer. Requires the sender's userId AND
+ * Mafia session id to match the offer; otherwise drop silently. On success
+ * applies the same authority writes as the legacy single-phase handler
+ * (setMafiaHost* + setMafiaRoomOwnerUserId + broadcast) and emits
+ * `transfer-host-result: accepted` to the prior host.
+ */
+export function handleMafiaTransferHostAccept(
+  socket: WsSocket,
+  deps: SignalingDeps,
+): void {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  const offer = getTransferOffer(room.id)
+  if (offer == null) return
+  if (peer.userId !== offer.targetUserId) return
+  if (peer.mafiaSessionId.length === 0 || peer.mafiaSessionId !== offer.targetSessionId) return
+  // Resolve the live target peer for the host-peer write. Prefer the recorded
+  // `targetPeerId`; fall back to the accepting peer's id (same userId+session)
+  // so a fresh-tab rebind of the target still completes the transfer.
+  const resolvedPeerId = room.getPeer(offer.targetPeerId) != null ? offer.targetPeerId : peer.id
+  room.setMafiaHostUserId(offer.targetUserId)
+  room.setMafiaHostSessionId(offer.targetSessionId)
+  room.setMafiaHostPeerId(resolvedPeerId)
   // Persist the new owner identity so it survives `Room` finalization.
-  setMafiaRoomOwnerUserId(room.id, nextUserId)
+  setMafiaRoomOwnerUserId(room.id, offer.targetUserId)
+  clearTransferOffer(room.id)
   broadcastMafiaHostUpdated(room)
+  notifyTransferOutcome(room, offer.fromPeerId, 'accepted')
+}
+
+/**
+ * Target rejects the pending offer. Same identity gate as accept. Host
+ * remains unchanged; the prior host receives `transfer-host-result: rejected`.
+ */
+export function handleMafiaTransferHostReject(
+  socket: WsSocket,
+  deps: SignalingDeps,
+): void {
+  const rp = resolveMafiaPeerAndRoom(socket, deps)
+  if (!rp) return
+  const { peer, room } = rp
+  const offer = getTransferOffer(room.id)
+  if (offer == null) return
+  if (peer.userId !== offer.targetUserId) return
+  if (peer.mafiaSessionId.length === 0 || peer.mafiaSessionId !== offer.targetSessionId) return
+  clearTransferOffer(room.id)
+  notifyTransferOutcome(room, offer.fromPeerId, 'rejected')
+}
+
+/**
+ * Best-effort unicast of `mafia:transfer-host-result` to `peerId`'s socket if
+ * the peer is still in the room. No-op when the peer has left (offer already
+ * carries the role information for the caller's bookkeeping).
+ */
+function notifyTransferOutcome(
+  room: Room,
+  peerId: string,
+  outcome: 'accepted' | 'rejected' | 'expired' | 'cancelled',
+): void {
+  const target = room.getPeer(peerId)
+  if (target == null) return
+  sendServerMessage(target.socket, {
+    type: 'mafia:transfer-host-result',
+    payload: { outcome },
+  })
+}
+
+/**
+ * Disconnect hook. Called from `removePeerFromNetwork` (Mafia branch). If the
+ * leaving peer was either side of the pending offer, drop the offer and notify
+ * the surviving party with `cancelled` so their UI dismisses.
+ */
+function clearMafiaTransferOfferOnPeerLeave(room: Room, peerId: string): void {
+  const result = clearTransferOfferForPeer(room.id, peerId)
+  if (result.role == null || result.offer == null) return
+  const survivorPeerId = result.role === 'host' ? result.offer.targetPeerId : result.offer.fromPeerId
+  notifyTransferOutcome(room, survivorPeerId, 'cancelled')
 }
 
 
