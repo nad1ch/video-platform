@@ -183,16 +183,17 @@ export const router = createRouter({
           component: () => import('./pages/CoinHubPage.vue'),
         },
         {
+          // Coin Hub is the single user-facing economy surface. Legacy
+          // `/app/wallet` is preserved as a redirect so any old link or
+          // bookmark lands on the canonical hub.
           path: 'wallet',
-          name: 'economy-wallet',
-          meta: { appTitle: 'Wallet', footerContext: 'home', requiresAuth: true },
-          component: () => import('./features/economy/pages/EconomyWalletPage.vue'),
+          redirect: { name: 'coin-hub' },
         },
         {
+          // Same rationale: `/app/cases` redirects into Coin Hub, which
+          // hosts the catalog section in its economy deck.
           path: 'cases',
-          name: 'economy-cases',
-          meta: { appTitle: 'Cases', footerContext: 'home', requiresAuth: true },
-          component: () => import('./features/economy/pages/EconomyCasesPage.vue'),
+          redirect: { name: 'coin-hub' },
         },
         {
           path: 'predictions/:streamerId',

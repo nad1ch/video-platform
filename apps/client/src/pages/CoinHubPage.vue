@@ -16,6 +16,12 @@ const CaseOpeningModal = defineAsyncComponent(
 import BoostCard from '@/components/coinhub/BoostCard.vue'
 import StreamerCard from '@/components/coinhub/StreamerCard.vue'
 import CoinHubUpgradePanel from '@/components/coinhub/CoinHubUpgradePanel.vue'
+// Viewer Economy deck — XP/level, pending rewards, daily bonus, catalog
+// cases, predictions entry, and recent transactions. Composed below the
+// existing CoinHub hero/spin/cases.
+const CoinHubEconomyDeck = defineAsyncComponent(
+  () => import('@/features/economy/components/CoinHubEconomyDeck.vue'),
+)
 import { useAdminMode } from '@/composables/useAdminMode'
 import { useCoinHubAdminUi } from '@/composables/useCoinHubAdminUi'
 import { useCoinHubPageRuntime } from '@/composables/useCoinHubPageRuntime'
@@ -499,6 +505,8 @@ function luckCaseTitle(index: number): string {
             </div>
           </section>
         </div>
+
+        <CoinHubEconomyDeck />
     </AppContainer>
 
     <AppFullPageLoader
