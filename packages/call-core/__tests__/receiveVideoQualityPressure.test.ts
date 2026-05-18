@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   applyReceiveQualityPressureToLayers,
   evaluateInboundVideoStatsForPressure,
+  getReceivePressurePollInterval,
   RECEIVE_PRESSURE_BAD_STREAK_DOWN,
   RECEIVE_PRESSURE_GOOD_STREAK_UP,
   RECEIVE_PRESSURE_POLL_MS,
+  RECEIVE_PRESSURE_POLL_MS_FPS_ONLY,
   RECEIVE_PRESSURE_UPGRADE_COOLDOWN_MS,
 } from '../src/media/receiveVideoQualityPressure'
 import { resolveReceiverBaselineLayer } from '../src/media/receiverBaselineLayerPolicy'
@@ -133,6 +135,31 @@ describe('Phase 1 hysteresis timing constants', () => {
       RECEIVE_PRESSURE_UPGRADE_COOLDOWN_MS,
     )
     expect(upgradeMs).toBeGreaterThan(downgradeMs)
+  })
+})
+
+describe('getReceivePressurePollInterval', () => {
+  it('returns the fast cadence when adaptive layer signaling is enabled', () => {
+    expect(getReceivePressurePollInterval(true)).toBe(RECEIVE_PRESSURE_POLL_MS)
+  })
+
+  it('returns the slower cadence when adaptive layer signaling is disabled', () => {
+    expect(getReceivePressurePollInterval(false)).toBe(RECEIVE_PRESSURE_POLL_MS_FPS_ONLY)
+  })
+
+  it('slower cadence is strictly larger than the fast cadence', () => {
+    expect(RECEIVE_PRESSURE_POLL_MS_FPS_ONLY).toBeGreaterThan(RECEIVE_PRESSURE_POLL_MS)
+  })
+
+  it('disabled-adaptive cadence preserves the downgrade-streak invariant when ON (no flap)', () => {
+    // When adaptive layers are ON, the downgrade timing still uses
+    // `RECEIVE_PRESSURE_POLL_MS`. The new constant is only chosen when the
+    // verdict path is short-circuited, so the existing 6–9 s downgrade
+    // contract is unaffected. This guard prevents accidental swaps of the
+    // helper to return the slow value while ON.
+    const downgradeMs = RECEIVE_PRESSURE_BAD_STREAK_DOWN * getReceivePressurePollInterval(true)
+    expect(downgradeMs).toBeGreaterThanOrEqual(6_000)
+    expect(downgradeMs).toBeLessThanOrEqual(9_000)
   })
 })
 
