@@ -201,6 +201,12 @@ export const router = createRouter({
           component: () => import('./features/economy/pages/EconomyPredictionsPage.vue'),
         },
         {
+          path: 'streamer/:streamerId/economy',
+          name: 'economy-streamer-settings',
+          meta: { appTitle: 'Streamer economy', footerContext: 'home', requiresAuth: true },
+          component: () => import('./features/economy/pages/EconomyStreamerSettingsPage.vue'),
+        },
+        {
           path: 'billing',
           name: 'billing',
           meta: { appTitle: 'Stream Assist Pro', footerContext: 'home', requiresAuth: true },
