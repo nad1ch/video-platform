@@ -19,6 +19,7 @@ import { isAdminTwitchUserId } from './adminConfig'
 import { readTwitchChatGuessCooldownMs, tryConsumeTwitchGuessThrottle } from './tmiGuessThrottle'
 import { ingestNadrawTwitchLine } from '../nadraw-show/nadrawTwitchIngest'
 import { getStreamerActiveGame } from '../streamerActiveGame'
+import { awardChatActivity } from '../economy/earn/chatRewardService'
 
 type IngestRow = { id: string; username: string; twitchId: string }
 
@@ -115,10 +116,14 @@ async function wireClient(h: Holder): Promise<void> {
       }
       const displayName = displayNameFromTags(tags)
       const text = message.trim()
-      
-      
-      
-      
+
+      // Viewer Economy chat-activity reward. Fire-and-forget — the rewarder
+      // is self-contained (never throws into this callback) and has its own
+      // caps/cooldowns/dedupe, so even very chatty streams do not back up
+      // the IRC handler. Skipping `await` keeps message dispatch lock-step
+      // with tmi.js's per-message timing.
+      void awardChatActivity({ streamerId, twitchUserId: userId, text })
+
       if (getStreamerActiveGame(streamerId) === 'nadraw-show') {
         ingestNadrawTwitchLine({ streamerId, userId, displayName, text })
         return
