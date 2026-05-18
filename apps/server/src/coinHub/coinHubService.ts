@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../prisma'
+import { applyDelta } from '../economy/ledger/walletService'
 import { isValidCaseRewardAmount } from './caseRewardValidator'
 import { CASE_OPEN_COOLDOWN_MS, caseSeedForCreate, CASE_OPEN_REWARD, HUB_CASE_IDS, pickDailySpinAmount } from './defaults'
 import { CoinHubHttpError } from './httpError'
@@ -143,9 +144,9 @@ export async function claimPending(userId: string, now: Date = new Date()): Prom
     await reconcileExpiredCaseCooldowns(tx, userId, now)
     const pen = await tx.pending.findUniqueOrThrow({ where: { userId } })
     if (pen.amount > 0) {
-      await tx.coinBalance.update({
-        where: { userId },
-        data: { amount: { increment: pen.amount } },
+      await applyDelta(tx, userId, {
+        delta: pen.amount,
+        source: 'claim_pending',
       })
       await tx.pending.update({ where: { userId }, data: { amount: 0 } })
     }
@@ -175,9 +176,9 @@ export async function spin(
     }
     const amount = pickDailySpinAmount()
     const reward: CoinRewardJson = { kind: 'coins', amount }
-    await tx.coinBalance.update({
-      where: { userId },
-      data: { amount: { increment: reward.amount } },
+    await applyDelta(tx, userId, {
+      delta: reward.amount,
+      source: 'daily_spin',
     })
     const next = startOfNextUtcDay(now)
     await tx.spin.update({
@@ -232,9 +233,10 @@ export async function openCase(
     }
     const amount = rawReward
     const reward: CoinRewardJson = { kind: 'coins', amount: amount }
-    await tx.coinBalance.update({
-      where: { userId },
-      data: { amount: { increment: amount } },
+    await applyDelta(tx, userId, {
+      delta: amount,
+      source: 'case_open',
+      sourceRef: caseId,
     })
     const until = new Date(now.getTime() + CASE_OPEN_COOLDOWN_MS)
     await tx.coinCase.update({

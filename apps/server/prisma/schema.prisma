@@ -89,6 +89,7 @@ model User {
   coinHubPending          Pending?
   coinHubSpin             Spin?
   coinHubCases            CoinCase[]
+  coinTransactions        CoinTransaction[]
   activityEvents          UserActivityEvent[]
   clientErrors            ClientErrorEvent[]
   emailVerificationTokens EmailVerificationToken[]
@@ -211,6 +212,43 @@ model Spin {
   nextAvailableAt DateTime?
   lastReward      Json?
   updatedAt       DateTime  @updatedAt
+}
+
+/// Append-only ledger of every coin movement. The single source of truth for
+/// "did this user's balance change, when, and why?". Every mutation of
+/// `CoinBalance.amount` must write exactly one row here inside the same
+/// Prisma transaction (see `apps/server/src/economy/ledger/walletService.ts`).
+/// Invariant: `sum(CoinTransaction.delta WHERE userId = X) == CoinBalance.amount`
+/// for any user X (initial backfill seeds one `migration_seed` row per
+/// pre-existing non-zero `CoinBalance`).
+model CoinTransaction {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Signed integer; positive = credit, negative = future spend.
+  delta          Int
+  /// Snapshot of `CoinBalance.amount` immediately before this delta.
+  balanceBefore  Int
+  /// Snapshot of `CoinBalance.amount` immediately after this delta (== before + delta).
+  balanceAfter   Int
+  /// Coarse classification of the movement source. Known values include:
+  /// `daily_spin`, `case_open`, `claim_pending`, `migration_seed`. Future
+  /// branches add `chat_activity`, `prediction_stake`, `prediction_payout`,
+  /// `admin_grant`, `admin_revoke`, `spend_*`.
+  source         String
+  /// Free-form correlation token (e.g. `caseId`, `roundId`,
+  /// `predictionId:entryId`). Nullable when the source carries no natural ref.
+  sourceRef      String?
+  /// Optional unique idempotency token. When supplied, a second `applyDelta`
+  /// with the same key collapses to a no-op replay instead of writing a
+  /// duplicate ledger row. Null is allowed (current CoinHub call sites do
+  /// not supply one because cooldowns already gate retries).
+  idempotencyKey String?  @unique
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([source, createdAt])
 }
 
 /// One row per user per hub case (ids: `luck-0`…`luck-3`, `free`, `subscriber`). Named `CoinCase` so Prisma client is valid (`Case` would emit `prisma.case`).
