@@ -2383,7 +2383,9 @@ watch(joining, (j) => {
                       : undefined
                 "
                 :mafia-visible-role="
-                  isMafiaRoute && !mafiaViewUi ? mafiaGameStore.getMafiaRoleVisibleForTile(row.tile.peerId) : undefined
+                  isMafiaRoute && !mafiaViewUi && !mafiaGameStore.oldMafiaMode
+                    ? mafiaGameStore.getMafiaRoleVisibleForTile(row.tile.peerId)
+                    : undefined
                 "
                 :stream-view-mode="mafiaViewUi || eatFirstViewUi"
                 :stream="row.tile.stream"

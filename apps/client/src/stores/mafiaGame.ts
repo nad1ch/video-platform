@@ -1690,6 +1690,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
       hostInteractionMode.value === 'night' &&
       hostSeatSwapSelectionPeerId.value === null &&
       playersUpdateBroadcastPayload.value === null &&
+      modeUpdateBroadcastPayload.value === null &&
       settingsUpdateBroadcastPayload.value === null &&
       pageBackgroundSettingsBroadcastPayload.value === null &&
       forcedPageBackgroundId.value === null &&
@@ -1714,6 +1715,7 @@ export const useMafiaGameStore = defineStore('mafiaGame', () => {
     clearSpeakingNominationDraft()
     hostSeatSwapSelectionPeerId.value = null
     playersUpdateBroadcastPayload.value = null
+    modeUpdateBroadcastPayload.value = null
     settingsUpdateBroadcastPayload.value = null
     pageBackgroundSettingsBroadcastPayload.value = null
     forcedPageBackgroundId.value = null
