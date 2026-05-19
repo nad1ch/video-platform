@@ -317,16 +317,98 @@ export function useLocalMedia(options?: UseLocalMediaOptions) {
     syncFlagsFromStream()
   }
 
-  function toggleCam(): void {
+  /**
+   * Privacy-correct camera toggle.
+   *
+   *   - OFF: stop AND remove the local video track(s). `MediaStreamTrack.enabled = false`
+   *     alone keeps the device capture loop running and the laptop camera LED ON; only
+   *     `track.stop()` (with no other live consumers of the device) releases the LED.
+   *     Audio is left untouched.
+   *   - ON: acquire a fresh camera track via `getUserMedia` using the same constraints
+   *     and preferred-device logic as `startLocalMedia` / `swapLocalVideoInput`, attach
+   *     the content hint + ended listener, and add it to the existing `localStream`
+   *     so the outbound producer's `replaceTrack` path picks it up via the existing
+   *     `useCallEngine` watcher (camEnabled change → applyCamStateForOutbound → replaceOutboundVideoTrack).
+   *
+   * Remotes still see the avatar correctly because `set-outbound-video-paused` is emitted
+   * server-side from a separate watcher on `camEnabled` — that decoupling means we can
+   * release the device locally without leaving the "frozen last frame" artifact the
+   * original `enabled=false` design was avoiding.
+   *
+   * Async: the ON path awaits `getUserMedia`. Callers in `useCallEngine` already run
+   * inside async wrappers and must `await` this to keep `applyCamStateForOutbound`
+   * ordering correct.
+   */
+  async function toggleCam(): Promise<void> {
     const stream = localStream.value
     if (!stream) {
       return
     }
-    for (const t of stream.getVideoTracks()) {
-      t.enabled = !t.enabled
+    const liveVideo = stream.getVideoTracks().find((t) => t.readyState === 'live')
+    if (liveVideo) {
+      // OFF: release the device.
+      for (const t of stream.getVideoTracks()) {
+        try {
+          stream.removeTrack(t)
+        } catch {
+          /* already detached */
+        }
+        try {
+          t.stop()
+        } catch {
+          /* already stopped */
+        }
+      }
+      camEnabled.value = false
+      localPlayRev.value += 1
+      if (import.meta.env.DEV) {
+        console.log('[local] camera off — track stopped + removed (LED should release)')
+      }
+      return
     }
-    syncFlagsFromStream()
+    // ON: reacquire camera with the same constraints `startLocalMedia` would have used.
+    const tier = resolveTier()
+    const videoConstraints = {
+      ...getCallVideoConstraintsForRuntime(tier, detectMobileForLocalCapture()),
+    }
+    const devices = await safeEnumerateDevices()
+    const preferred = selectPreferredVideoInputDeviceId(devices, readPreferredVideoInputDeviceId())
+    let tmp: MediaStream
+    try {
+      tmp =
+        preferred !== undefined
+          ? await getUserMediaWithDeviceIdExactThenIdeal(
+              { video: { ...videoConstraints, deviceId: { ideal: preferred } } },
+              'video',
+            )
+          : await navigator.mediaDevices.getUserMedia({ video: videoConstraints })
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn('[local] toggleCam ON: getUserMedia failed', e)
+      }
+      // Leave camEnabled false; UI stays consistent.
+      return
+    }
+    const nt = tmp.getVideoTracks()[0]
+    if (!nt) {
+      for (const t of tmp.getTracks()) {
+        t.stop()
+      }
+      return
+    }
+    applyWebcamContentHint(nt)
+    // Discard any non-video tracks (we asked for video-only above, but defend in depth).
+    for (const t of tmp.getTracks()) {
+      if (t !== nt) {
+        t.stop()
+      }
+    }
+    stream.addTrack(nt)
+    attachLocalTrackEndedListener(nt)
+    persistVideoInputDeviceIdFromTrack(nt)
+    camEnabled.value = true
     localPlayRev.value += 1
+    await refreshMediaDevices()
   }
 
   /**

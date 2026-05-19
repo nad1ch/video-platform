@@ -347,8 +347,17 @@ export function useCallEngine(options?: CallEngineOptions) {
   /**
    * Refreshes local camera capture if there is no live track (fresh `getUserMedia` via {@link swapLocalVideoInput}),
    * so screen-share stop can always `replaceTrack` with a valid track when a device is available.
+   *
+   * Privacy gate: when the user has the camera explicitly OFF (`camEnabled === false`),
+   * do NOT reacquire the device on screen-share stop. Otherwise stopping screen share
+   * would silently relight the laptop camera LED while the UI still says "camera off".
+   * `stopScreenShareBody` then falls through to `replaceOutboundVideoTrack(null)` and
+   * `outboundVideoSource = 'none'`, matching the user's intent.
    */
   async function ensureOutboundCameraTrackForScreenShareRestore(): Promise<void> {
+    if (!camEnabled.value) {
+      return
+    }
     const picked = pickOutboundCameraVideoTrack(localStream.value)
     if (picked && picked.readyState === 'live') {
       return
@@ -400,7 +409,7 @@ export function useCallEngine(options?: CallEngineOptions) {
     if (readEngineRole(options) === 'participant' && inCall.value && outboundVideoSource.value === 'screen') {
       await stopScreenShare()
     }
-    toggleLocalCam()
+    await toggleLocalCam()
     applyCamStateForOutbound()
   }
 
@@ -418,7 +427,7 @@ export function useCallEngine(options?: CallEngineOptions) {
       return
     }
     if (camEnabled.value) {
-      toggleLocalCam()
+      await toggleLocalCam()
     }
     applyCamStateForOutbound()
     await nextTick()
