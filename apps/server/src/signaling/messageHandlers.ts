@@ -2091,6 +2091,12 @@ export async function handleMafiaReshuffle(
   room.setMafiaReshuffleSnapshot({
     players: payload.players.map((p) => ({ peerId: p.peerId, seat: p.seat, role: p.role })),
   })
+  // A role-bearing reshuffle is the implicit signal that this room is in
+  // `'new'` Mafia mode. Re-assert it so a lost-then-replayed snapshot can
+  // never serve roles to a peer that thinks the room is `'old'`.
+  // Mirrors the explicit `setMafiaMode` write in `handleMafiaPlayersUpdate`
+  // for the OLD-mode reshuffle path.
+  room.setMafiaMode('new')
   broadcastMafiaReshuffle(room, payload)
 }
 

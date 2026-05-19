@@ -708,21 +708,13 @@ export function useMafiaHostSignaling(
   )
 
   watch(
-    modeUpdateBroadcastPayload,
-    (p) => {
+    [modeUpdateBroadcastPayload, inCall, wsStatus, isMafiaHost],
+    ([p, inCallNow, wsNow, isHostNow]) => {
       if (p == null) {
         return
       }
-      if (!inCall.value) {
-        mafia.clearModeUpdateBroadcastPayload()
-        return
-      }
-      if (wsStatus.value !== 'open') {
-        mafia.clearModeUpdateBroadcastPayload()
-        return
-      }
-      if (!isMafiaHost.value) {
-        mafia.clearModeUpdateBroadcastPayload()
+      if (!inCallNow || wsNow !== 'open' || !isHostNow) {
+        // Keep pending payload: send after reconnect/focus resync when socket reopens.
         return
       }
       sendSignalingMessage({ type: MafiaWs.modeUpdate, payload: p })
