@@ -4,6 +4,8 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/composables/useAuth'
 import { useNadleStreamerRoom } from '@/composables/useNadleStreamerRoom'
+import { useNadleStatusBanners } from '@/composables/useNadleStatusBanners'
+import type { NadleIrcRelayState } from '@/nadle/ws'
 import TwitchRelayChatPanel from '@/components/twitch/TwitchRelayChatPanel.vue'
 import type { TwitchRelayChatWsStatus } from '@/components/twitch/twitchRelayChatTypes'
 import {
@@ -70,6 +72,15 @@ const {
   onCanvasClear,
   onRemoteDraw,
 } = orch
+
+const nadrawIrcRelayStatus = ref<NadleIrcRelayState>('idle')
+
+const { wsStatusLabel, ircRelayBanner } = useNadleStatusBanners({
+  streamerLoadError,
+  lastError: lastWsError,
+  wsStatus,
+  ircRelayStatus: nadrawIrcRelayStatus,
+})
 
 const boardRef = useTemplateRef<{ clearBoard: () => void; applyRemote: (p: RemoteDrawPayload) => void }>('boardRef')
 const pageRef = useTemplateRef<HTMLElement>('pageRef')
@@ -532,13 +543,13 @@ watch(
             :show-ws-pill="true"
             :show-guess-hints="false"
             :ws-status="nadrawChatWsPillStatus"
-            :ws-status-label="'live'"
-            chat-title="Stream chat;"
+            :ws-status-label="wsStatusLabel"
+            :chat-title="t('nadleUi.chatTitle')"
             guess-len-hint=""
             :channel-display="effectiveTwitchChannel"
             :twitch-watch-url="twitchWatchUrl"
-            open-twitch-label="open twitch"
-            irc-relay-banner=""
+            :open-twitch-label="t('nadleUi.chatOpenTwitch')"
+            :irc-relay-banner="ircRelayBanner"
             :relay-aria-label="t('nadleUi.chatRelayAria')"
             :chat-empty-text="t('nadleUi.chatEmpty', { channel: effectiveTwitchChannel })"
             :guess-badge-label="t('nadleUi.chatGuessBadge')"

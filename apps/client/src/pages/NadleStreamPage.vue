@@ -166,7 +166,7 @@ const {
   wordGraphemeCount,
 } = useNadleState({ storageScope: nadleStorageScope, lastError })
 
-const { topBanner } = useNadleStatusBanners({
+const { topBanner, wsStatusLabel, ircRelayBanner } = useNadleStatusBanners({
   streamerLoadError,
   lastError,
   wsStatus,
@@ -686,13 +686,13 @@ onBeforeUnmount(() => {
             flex-rail
             :show-guess-hints="false"
             :ws-status="wsStatus"
-            ws-status-label="live"
-            chat-title="Stream chat;"
+            :ws-status-label="wsStatusLabel"
+            :chat-title="t('nadleUi.chatTitle')"
             :guess-len-hint="t('nadleUi.chatGuessLenHint', { n: chatTargetWordLength })"
             :channel-display="effectiveTwitchChannel"
             :twitch-watch-url="twitchWatchUrl"
-            open-twitch-label="open twitch"
-            irc-relay-banner=""
+            :open-twitch-label="t('nadleUi.chatOpenTwitch')"
+            :irc-relay-banner="ircRelayBanner"
             :relay-aria-label="t('nadleUi.chatRelayAria')"
             :chat-empty-text="t('nadleUi.chatEmpty', { channel: effectiveTwitchChannel })"
             :guess-badge-label="t('nadleUi.chatGuessBadge')"
