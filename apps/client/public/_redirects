@@ -7,17 +7,22 @@
 #   - /twitch-nadle-game/
 #   - /stream-overlay-tools/
 # Static files (and /assets/*) always take precedence over these rules in Pages.
+#
+# Destination is `/` (not `/index.html`) because Pages auto-308-redirects any
+# request resolving to `/index.html` back to `/` for canonicalisation — that
+# 308 leaked through on `/app` refresh and bounced authed users to the landing.
+# `/` serves `index.html` as the default index without triggering normalisation.
 
-/app           /index.html  200
-/app/*         /index.html  200
-/auth          /index.html  200
-/auth/*        /index.html  200
-/call          /index.html  200
-/nadle         /index.html  200
-/nadle/*       /index.html  200
-/nadraw-show   /index.html  200
-/nadraw-show/* /index.html  200
-/eat           /index.html  200
-/eat/*         /index.html  200
-/admin         /index.html  200
-/admin/*       /index.html  200
+/app           /  200
+/app/*         /  200
+/auth          /  200
+/auth/*        /  200
+/call          /  200
+/nadle         /  200
+/nadle/*       /  200
+/nadraw-show   /  200
+/nadraw-show/* /  200
+/eat           /  200
+/eat/*         /  200
+/admin         /  200
+/admin/*       /  200
